@@ -1,4 +1,8 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using FurinaArchive.App.ViewModels;
+using FurinaArchive.Services.Abstractions;
+using FurinaArchive.Services.Wishes;
+using FurinaArchive.Infrastructure.Persistence;
+using Microsoft.Extensions.Logging;
 
 namespace FurinaArchive.App
 {
@@ -18,6 +22,15 @@ namespace FurinaArchive.App
 #if DEBUG
     		builder.Logging.AddDebug();
 #endif
+
+            builder.Services.AddSingleton<
+                IWishRecordRepository,
+                InMemoryWishRecordRepository>();
+
+            builder.Services.AddTransient<GetRecentWishRecords>();
+
+            builder.Services.AddTransient<MainPageViewModel>();
+            builder.Services.AddTransient<MainPage>();
 
             return builder.Build();
         }
