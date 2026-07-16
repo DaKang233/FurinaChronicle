@@ -1,0 +1,9 @@
+<Solution>
+  <Project Path="FurinaArchive.App/FurinaArchive.App.csproj">
+    <Deploy Solution="Debug|*" />
+  </Project>
+  <Project Path="FurinaArchive.Core/FurinaArchive.Core.csproj" Id="93e103df-e448-4247-bf96-338bad4c57f0" />
+  <Project Path="FurinaArchive.Infrastructure/FurinaArchive.Infrastructure.csproj" />
+  <Project Path="FurinaArchive.Services/FurinaArchive.Services.csproj" />
+  <Project Path="FurinaArchive.Tests/FurinaArchive.Tests.csproj" Id="ff6e1ff9-85c1-430b-9b9b-ff2ebce40092" />
+</Solution>
