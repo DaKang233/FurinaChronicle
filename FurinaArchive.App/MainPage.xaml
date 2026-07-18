@@ -12,28 +12,62 @@
     <Grid
         Padding="24"
         RowDefinitions="Auto,Auto,*"
-        RowSpacing="16">
+        RowSpacing="12">
 
-        <Button
-            Text="加载模拟祈愿记录"
-            Command="{Binding LoadCommand}" />
+        <HorizontalStackLayout
+            Grid.Row="0"
+            Spacing="12">
+
+            <Button
+                Text="导入内置示例"
+                Command="{Binding ImportSampleCommand}" />
+
+            <Button
+                Text="刷新记录"
+                Command="{Binding LoadCommand}" />
+
+            <ActivityIndicator
+                IsRunning="{Binding IsBusy}"
+                IsVisible="{Binding IsBusy}"
+                VerticalOptions="Center" />
+
+        </HorizontalStackLayout>
 
         <Label
             Grid.Row="1"
+            Text="{Binding ImportSummary}"
+            LineBreakMode="WordWrap" />
+
+        <Label
+            Grid.Row="2"
             Text="{Binding ErrorMessage}"
-            TextColor="Red" />
+            TextColor="Red"
+            LineBreakMode="WordWrap" />
 
         <CollectionView
-            Grid.Row="2"
+            Grid.Row="3"
             ItemsSource="{Binding WishRecords}">
+
+            <CollectionView.EmptyView>
+                <VerticalStackLayout
+                    Padding="16"
+                    HorizontalOptions="Center">
+
+                    <Label
+                        Text="暂无祈愿记录，请先导入内置示例。"
+                        HorizontalTextAlignment="Center" />
+
+                </VerticalStackLayout>
+            </CollectionView.EmptyView>
 
             <CollectionView.ItemTemplate>
                 <DataTemplate x:DataType="core:WishRecord">
 
                     <Grid
                         Padding="12"
-                        ColumnDefinitions="*,Auto,Auto"
-                        ColumnSpacing="16">
+                        RowDefinitions="Auto,Auto"
+                        ColumnDefinitions="*,Auto"
+                        ColumnSpacing="12">
 
                         <Label
                             FontAttributes="Bold"
@@ -41,13 +75,18 @@
 
                         <Label
                             Grid.Column="1"
-                            Text="{Binding RankType, StringFormat='{}{0} 星'}" />
+                            Text="{Binding RankType,
+                                StringFormat='{}{0} 星'}" />
 
                         <Label
-                            Grid.Column="2"
-                            Text="{Binding Time, StringFormat='{}{0:yyyy-MM-dd HH:mm}'}" />
+                            Grid.Row="1"
+                            Grid.ColumnSpan="2"
+                            FontSize="12"
+                            Text="{Binding Time,
+                                StringFormat='{}{0:yyyy-MM-dd HH:mm:ss zzz}'}" />
 
                     </Grid>
+
                 </DataTemplate>
             </CollectionView.ItemTemplate>
 

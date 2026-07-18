@@ -5,6 +5,7 @@ using FurinaArchive.Services.Abstractions;
 using FurinaArchive.Services.Wishes.Importing;
 using FurinaArchive.Services.Wishes;
 using Microsoft.Extensions.Logging;
+using FurinaArchive.Core.Wishes;
 
 namespace FurinaArchive.App
 {
@@ -25,9 +26,7 @@ namespace FurinaArchive.App
     		builder.Logging.AddDebug();
 #endif
 
-            builder.Services.AddSingleton<
-                IWishRecordRepository,
-                InMemoryWishRecordRepository>();
+            builder.Services.AddSingleton<IWishRecordRepository>(_ => new InMemoryWishRecordRepository(Array.Empty<WishRecord>()));
 
             builder.Services.AddTransient<GetRecentWishRecords>();
             builder.Services.AddSingleton<IWishRecordReader, JsonWishRecordReader>();
