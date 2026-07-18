@@ -1,7 +1,9 @@
 ﻿using FurinaArchive.App.ViewModels;
-using FurinaArchive.Services.Abstractions;
-using FurinaArchive.Services.Wishes;
+using FurinaArchive.Infrastructure.Importing.Json;
 using FurinaArchive.Infrastructure.Persistence;
+using FurinaArchive.Services.Abstractions;
+using FurinaArchive.Services.Wishes.Importing;
+using FurinaArchive.Services.Wishes;
 using Microsoft.Extensions.Logging;
 
 namespace FurinaArchive.App
@@ -28,6 +30,8 @@ namespace FurinaArchive.App
                 InMemoryWishRecordRepository>();
 
             builder.Services.AddTransient<GetRecentWishRecords>();
+            builder.Services.AddSingleton<IWishRecordReader, JsonWishRecordReader>();
+            builder.Services.AddTransient<ImportWishRecords>();
 
             builder.Services.AddTransient<MainPageViewModel>();
             builder.Services.AddTransient<MainPage>();

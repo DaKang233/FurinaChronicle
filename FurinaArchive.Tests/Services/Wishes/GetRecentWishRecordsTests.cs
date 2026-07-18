@@ -7,8 +7,7 @@ namespace FurinaArchive.Tests.Services.Wishes;
 
 public sealed class GetRecentWishRecordsTests
 {
-    private static readonly Guid AccountId =
-        Guid.Parse("90ca2f7f-327b-47bb-9562-0fdb3217dd26");
+    private static readonly Guid AccountId = Guid.Parse("90ca2f7f-327b-47bb-9562-0fdb3217dd26");
 
     [Fact]
     public async Task ExecuteAsync_ReturnsRecordsProvidedByRepository()
@@ -108,8 +107,7 @@ public sealed class GetRecentWishRecordsTests
     /// 只为 GetRecentWishRecords 测试服务的仓储替身。
     /// 它不进行真实存储，只记录上层传入了什么。
     /// </summary>
-    private sealed class StubWishRecordRepository
-        : IWishRecordRepository
+    private sealed class StubWishRecordRepository : IWishRecordRepository
     {
         public IReadOnlyList<WishRecord> Result { get; init; } = [];
 
@@ -129,6 +127,11 @@ public sealed class GetRecentWishRecordsTests
             ReceivedCancellationToken = cancellationToken;
 
             return Task.FromResult(Result);
+        }
+
+        public Task<WishSaveResult> SaveBatchAsync(IReadOnlyCollection<WishRecord> records, CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException("该测试替身只用于测试查询功能。");
         }
     }
 }

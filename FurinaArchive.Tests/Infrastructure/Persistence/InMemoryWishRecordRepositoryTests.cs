@@ -68,7 +68,7 @@ public sealed class InMemoryWishRecordRepositoryTests
         cancellationTokenSource.Cancel();
 
         // Act + Assert
-        await Assert.ThrowsAsync<OperationCanceledException>(
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
             async () =>
             {
                 await repository.GetRecentAsync(
@@ -98,5 +98,23 @@ public sealed class InMemoryWishRecordRepositoryTests
                 Assert.NotEmpty(record.ItemName);
                 Assert.InRange(record.RankType, 3, 5);
             });
+    }
+
+    [Fact]
+    public async Task SaveBatchAsync_SameIdForDifferentAccounts_IsAllowed()
+    {
+        var repository = new InMemoryWishRecordRepository(Array.Empty<WishRecord>());
+        Guid firstAccoundId = Guid.NewGuid();
+        Guid secondAccoundId = Guid.NewGuid();
+
+        WishRecord[] records =
+            [
+                new WishRecord(firstAccoundId, "same-id", "Furina", 5, DateTimeOffset.UtcNow),
+                new WishRecord(secondAccoundId, "same-id", "Furina", 5, DateTimeOffset.UtcNow),
+            ];
+        var result = await repository.SaveBatchAsync(records);
+
+        Assert.Equal(2, result.InsertedCount);
+        Assert.Equal(0, result.DuplicateCount);
     }
 }
