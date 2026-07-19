@@ -1,7 +1,9 @@
-﻿using System.Text;
+﻿using System.Diagnostics;
+using System.Text;
 using FurinaArchive.Core.Wishes;
 using FurinaArchive.Infrastructure.Importing.Json;
 using FurinaArchive.Infrastructure.Persistence;
+using FurinaArchive.Infrastructure.Persistence.Sqlite;
 using FurinaArchive.Services.Wishes.Importing;
 using Xunit;
 
@@ -96,4 +98,36 @@ public sealed class ImportWishRecordsTests
           ]
         }
         """;
+
+    [Fact]
+    public async Task ExecuteAsync_WithSqliteRepository_SecondImportIsDuplicatedAndDataPersists()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "FurinaArchiveTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        string databasePath = Path.Combine(directory, "test.db3");
+        var database = new FurinaDatabase(new SqliteDatabaseOptions(databasePath));
+        try
+        {
+            var repository = new SqliteWishRecordRepository(database);
+            var reader = new JsonWishRecordReader();
+            var service = new ImportWishRecords(reader, repository);
+            await using MemoryStream firstStream = CreateStream(SampleJson);
+            WishImportResult firstResult = await service.ExecuteAsync(firstStream, AccountId);
+            Assert.Equal(3, firstResult.ImportedCount);
+            Assert.Equal(1, firstResult.DuplicateCount);
+            Assert.Equal(1, firstResult.InvalidCount);
+            await using MemoryStream secondStream = CreateStream(SampleJson);
+            WishImportResult secondResult = await service.ExecuteAsync(secondStream, AccountId);
+            Assert.Equal(0, secondResult.ImportedCount);
+            Assert.Equal(4, secondResult.DuplicateCount);
+            Assert.Equal(1, secondResult.InvalidCount);
+            IReadOnlyList<WishRecord> stored = await repository.GetRecentAsync(20);
+            Assert.Equal(3, stored.Count);
+        }
+        finally
+        {
+            await database.DisposeAsync();
+            Directory.Delete(directory, true);
+        }
+    }
 }

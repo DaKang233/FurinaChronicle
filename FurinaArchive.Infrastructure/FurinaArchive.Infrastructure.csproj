@@ -11,4 +11,8 @@
     <ProjectReference Include="..\FurinaArchive.Core\FurinaArchive.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="sqlite-net-pcl" Version="1.11.285" />
+  </ItemGroup>
+
 </Project>
