@@ -6,6 +6,7 @@ using FurinaChronicle.Infrastructure.Importing.Json;
 using FurinaChronicle.Infrastructure.Persistence;
 using FurinaChronicle.Infrastructure.Persistence.Sqlite;
 using FurinaChronicle.Services.Wishes.Importing;
+using FurinaChronicle.Tests.TestDoubles;
 using Xunit;
 
 namespace FurinaChronicle.Tests.Services.Wishes.Importing;
@@ -23,8 +24,10 @@ public sealed class ImportWishRecordsTests
     {
         // Arrange
         var repository = new InMemoryWishRecordRepository(Array.Empty<WishRecord>());
+        var accountRepository = new InMemoryGameAccountRepository();
+        await accountRepository.AddAsync(Account);
         var reader = new JsonWishRecordReader();
-        var service = new ImportWishRecords(reader, repository);
+        var service = new ImportWishRecords(reader, repository, accountRepository);
 
         // Act：第一次导入
         await using MemoryStream firstStream = CreateStream(SampleJson);
@@ -116,7 +119,7 @@ public sealed class ImportWishRecordsTests
             var archiveRepository = new SqlitePlayerArchiveRepository(database);
             var accountRepository = new SqliteGameAccountRepository(database);
             var reader = new JsonWishRecordReader();
-            var service = new ImportWishRecords(reader, wishRepository);
+            var service = new ImportWishRecords(reader, wishRepository, accountRepository);
             await archiveRepository.AddAsync(Archive);
             await accountRepository.AddAsync(Account);
             await using MemoryStream firstStream = CreateStream(SampleJson);
@@ -137,5 +140,20 @@ public sealed class ImportWishRecordsTests
             await database.DisposeAsync();
             Directory.Delete(directory, true);
         }
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_UnknownAccount_ThrowsBeforeReadingSource()
+    {
+        var wishRepository =
+            new InMemoryWishRecordRepository(Array.Empty<WishRecord>());
+        var service = new ImportWishRecords(
+            new JsonWishRecordReader(),
+            wishRepository,
+            new InMemoryGameAccountRepository());
+        await using var invalidJson = new MemoryStream([0xFF]);
+
+        await Assert.ThrowsAsync<KeyNotFoundException>(
+            () => service.ExecuteAsync(invalidJson, Guid.NewGuid()));
     }
 }
