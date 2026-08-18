@@ -35,7 +35,9 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
                         TimeUtcTicks DESC,
                         Id DESC
                     LIMIT ?
-                    """,count);
+                    """,
+                    gameAccountId.ToString("D"),
+                    count);
 
             cancellationToken.ThrowIfCancellationRequested();
             return rows.Select(row => row.ToDomain()).ToArray();

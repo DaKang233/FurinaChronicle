@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using System.Text;
+using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Wishes;
 using FurinaChronicle.Infrastructure.Importing.Json;
 using FurinaChronicle.Infrastructure.Persistence;
@@ -13,6 +14,9 @@ public sealed class ImportWishRecordsTests
 {
     private static readonly Guid AccountId =
         Guid.Parse("11ec0244-0f33-450a-988a-029b805cbb20");
+    private static readonly Guid ArchiveId = Guid.Parse("11ec0244-0f33-450a-988a-029b805cbb21");
+    private static readonly PlayerArchive Archive = new PlayerArchive(ArchiveId, "测试存档", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
+    private static readonly GameAccount Account = new GameAccount(AccountId, ArchiveId, "123456789", GameServerRegion.Asia, "测试账号", false, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
 
     [Fact]
     public async Task ExecuteAsync_FirstAndSecondImport_ReturnExpectedResults()
@@ -108,9 +112,13 @@ public sealed class ImportWishRecordsTests
         var database = new FurinaDatabase(new SqliteDatabaseOptions(databasePath));
         try
         {
-            var repository = new SqliteWishRecordRepository(database);
+            var wishRepository = new SqliteWishRecordRepository(database);
+            var archiveRepository = new SqlitePlayerArchiveRepository(database);
+            var accountRepository = new SqliteGameAccountRepository(database);
             var reader = new JsonWishRecordReader();
-            var service = new ImportWishRecords(reader, repository);
+            var service = new ImportWishRecords(reader, wishRepository);
+            await archiveRepository.AddAsync(Archive);
+            await accountRepository.AddAsync(Account);
             await using MemoryStream firstStream = CreateStream(SampleJson);
             WishImportResult firstResult = await service.ExecuteAsync(firstStream, AccountId);
             Assert.Equal(3, firstResult.ImportedCount);
@@ -121,7 +129,7 @@ public sealed class ImportWishRecordsTests
             Assert.Equal(0, secondResult.ImportedCount);
             Assert.Equal(4, secondResult.DuplicateCount);
             Assert.Equal(1, secondResult.InvalidCount);
-            IReadOnlyList<WishRecord> stored = await repository.GetRecentAsync(AccountId, 20);
+            IReadOnlyList<WishRecord> stored = await wishRepository.GetRecentAsync(AccountId, 20);
             Assert.Equal(3, stored.Count);
         }
         finally

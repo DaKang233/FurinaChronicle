@@ -1,4 +1,5 @@
-﻿using FurinaChronicle.Core.Wishes;
+﻿using FurinaChronicle.Core.Archives;
+using FurinaChronicle.Core.Wishes;
 using FurinaChronicle.Services.Abstractions;
 using System;
 using System.Collections.Generic;
@@ -6,7 +7,7 @@ using System.Text;
 
 namespace FurinaChronicle.Services.Wishes.Importing
 {
-    public sealed class ImportWishRecords(IWishRecordReader reader, IWishRecordRepository repository)
+    public sealed class ImportWishRecords(IWishRecordReader reader, IWishRecordRepository wishRepository)
     {
         public async Task<WishImportResult> ExecuteAsync(Stream source, Guid gameAccountId, CancellationToken cancellationToken = default)
         {
@@ -21,7 +22,7 @@ namespace FurinaChronicle.Services.Wishes.Importing
             WishRecord[] distinctRecords = readResult.Records.DistinctBy(record => (record.GameAccountId, record.ExternalRecordId)).ToArray();
 
             int duplicatesInsideSource = readResult.Records.Count - distinctRecords.Length;
-            WishSaveResult saveResult = await repository.SaveBatchAsync(distinctRecords, cancellationToken);
+            WishSaveResult saveResult = await wishRepository.SaveBatchAsync(distinctRecords, cancellationToken);
             return new WishImportResult(
                 TotalCount: readResult.Records.Count + readResult.Errors.Count,
                 ImportedCount: saveResult.InsertedCount,

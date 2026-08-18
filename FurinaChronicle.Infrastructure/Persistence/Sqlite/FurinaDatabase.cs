@@ -102,7 +102,22 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
                 connection =>
                 {
                     connection.CreateTable<PlayerArchiveRow>();
-                    connection.CreateTable<GameAccountRow>();
+                    connection.Execute("""
+                        CREATE TABLE GameAccounts
+                        (
+                            Id TEXT PRIMARY KEY NOT NULL,
+                            PlayerArchiveId TEXT NOT NULL,
+                            Uid TEXT NOT NULL,
+                            ServerRegion INTEGER NOT NULL,
+                            DisplayName TEXT,
+                            IsPlaceholder BOOLEAN NOT NULL,
+                            CreatedAtUtcTicks INTEGER NOT NULL,
+                            UpdatedAtUtcTicks INTEGER NOT NULL,
+                            FOREIGN KEY(PlayerArchiveId)
+                                REFERENCES PlayerArchives(Id)
+                                ON DELETE CASCADE
+                        );
+                        """);
 
                     connection.CreateIndex(
                         "IX_GameAccounts_PlayerArchiveId",
