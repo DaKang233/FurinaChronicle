@@ -16,6 +16,8 @@ namespace FurinaChronicle.App.ViewModels
         private readonly GetRecentWishRecords getRecentWishRecords;
         private readonly ImportWishRecords importWishRecords;
 
+        private readonly Guid AccountId = SampleWishData.GameAccountId; // temporary hardcoded account ID for demo purposes
+
         public MainPageViewModel(GetRecentWishRecords getRecentWishRecords, ImportWishRecords importWishRecords)
         {
             this.getRecentWishRecords = getRecentWishRecords;
@@ -60,7 +62,7 @@ namespace FurinaChronicle.App.ViewModels
 
         private async Task ReloadRecordsAsync()
         {
-            IReadOnlyList<WishRecord> records = await getRecentWishRecords.ExecuteAsync(count: 20);
+            IReadOnlyList<WishRecord> records = await getRecentWishRecords.ExecuteAsync(AccountId, count: 20);
             WishRecords.Clear();
             foreach (WishRecord record in records)
             {

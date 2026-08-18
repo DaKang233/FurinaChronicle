@@ -51,7 +51,7 @@ public sealed class ImportWishRecordsTests
                 InvalidCount: 1),
             secondResult);
 
-        IReadOnlyList<WishRecord> storedRecords = await repository.GetRecentAsync(20);
+        IReadOnlyList<WishRecord> storedRecords = await repository.GetRecentAsync(AccountId, 20);
 
         Assert.Equal(3, storedRecords.Count);
     }
@@ -121,7 +121,7 @@ public sealed class ImportWishRecordsTests
             Assert.Equal(0, secondResult.ImportedCount);
             Assert.Equal(4, secondResult.DuplicateCount);
             Assert.Equal(1, secondResult.InvalidCount);
-            IReadOnlyList<WishRecord> stored = await repository.GetRecentAsync(20);
+            IReadOnlyList<WishRecord> stored = await repository.GetRecentAsync(AccountId, 20);
             Assert.Equal(3, stored.Count);
         }
         finally

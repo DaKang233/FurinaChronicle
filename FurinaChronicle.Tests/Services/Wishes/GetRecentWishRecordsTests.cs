@@ -34,7 +34,7 @@ public sealed class GetRecentWishRecordsTests
 
         // Act：执行被测试的代码
         IReadOnlyList<WishRecord> actualRecords =
-            await service.ExecuteAsync(1);
+            await service.ExecuteAsync(AccountId, 1);
 
         // Assert：检查结果
         Assert.Equal(expectedRecords, actualRecords);
@@ -55,6 +55,7 @@ public sealed class GetRecentWishRecordsTests
 
         // Act
         await service.ExecuteAsync(
+            gameAccountId: AccountId,
             count: 7,
             cancellationToken);
 
@@ -79,7 +80,7 @@ public sealed class GetRecentWishRecordsTests
         // Act + Assert
         ArgumentOutOfRangeException exception =
             await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
-                () => service.ExecuteAsync(count));
+                () => service.ExecuteAsync(AccountId, count));
 
         Assert.Equal("count", exception.ParamName);
     }
@@ -97,7 +98,7 @@ public sealed class GetRecentWishRecordsTests
 
         // Act
         IReadOnlyList<WishRecord> records =
-            await service.ExecuteAsync();
+            await service.ExecuteAsync(AccountId);
 
         // Assert
         Assert.Empty(records);
@@ -111,6 +112,8 @@ public sealed class GetRecentWishRecordsTests
     {
         public IReadOnlyList<WishRecord> Result { get; init; } = [];
 
+        public Guid ReceviedGameAccountId { get; private set; }
+
         public int? ReceivedCount { get; private set; }
 
         public CancellationToken ReceivedCancellationToken
@@ -120,9 +123,11 @@ public sealed class GetRecentWishRecordsTests
         }
 
         public Task<IReadOnlyList<WishRecord>> GetRecentAsync(
+            Guid gameAccountId,
             int count,
             CancellationToken cancellationToken = default)
         {
+            ReceviedGameAccountId = gameAccountId;
             ReceivedCount = count;
             ReceivedCancellationToken = cancellationToken;
 

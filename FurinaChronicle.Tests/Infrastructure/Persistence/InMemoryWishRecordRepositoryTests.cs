@@ -6,6 +6,9 @@ namespace FurinaChronicle.Tests.Infrastructure.Persistence;
 
 public sealed class InMemoryWishRecordRepositoryTests
 {
+    private static readonly Guid AccountId1 = Guid.Parse("90ca2f7f-327b-47bb-9562-0fdb3217dd26");
+    private static readonly Guid AccountId2 = Guid.Parse("f3e1c8a0-4b5d-4c9e-9f7a-1d2e3f4b5c6d");
+
     [Fact]
     public async Task GetRecentAsync_ReturnsRequestedNumberOfRecords()
     {
@@ -15,7 +18,7 @@ public sealed class InMemoryWishRecordRepositoryTests
 
         // Act
         IReadOnlyList<WishRecord> records =
-            await repository.GetRecentAsync(2);
+            await repository.GetRecentAsync(AccountId1, 2);
 
         // Assert
         Assert.Equal(2, records.Count);
@@ -30,7 +33,7 @@ public sealed class InMemoryWishRecordRepositoryTests
 
         // Act
         IReadOnlyList<WishRecord> records =
-            await repository.GetRecentAsync(20);
+            await repository.GetRecentAsync(AccountId1, 20);
 
         // Assert
         WishRecord[] expectedOrder = records
@@ -49,7 +52,7 @@ public sealed class InMemoryWishRecordRepositoryTests
 
         // Act
         IReadOnlyList<WishRecord> records =
-            await repository.GetRecentAsync(100);
+            await repository.GetRecentAsync(AccountId1, 100);
 
         // Assert
         Assert.Equal(3, records.Count);
@@ -72,6 +75,7 @@ public sealed class InMemoryWishRecordRepositoryTests
             async () =>
             {
                 await repository.GetRecentAsync(
+                    AccountId1,
                     20,
                     cancellationTokenSource.Token);
             });
@@ -86,7 +90,7 @@ public sealed class InMemoryWishRecordRepositoryTests
 
         // Act
         IReadOnlyList<WishRecord> records =
-            await repository.GetRecentAsync(20);
+            await repository.GetRecentAsync(AccountId1, 20);
 
         // Assert
         Assert.All(
@@ -98,6 +102,20 @@ public sealed class InMemoryWishRecordRepositoryTests
                 Assert.NotEmpty(record.ItemName);
                 Assert.InRange(record.RankType, 3, 5);
             });
+    }
+
+    [Fact]
+    public async Task GetRecentAsync_ReturnsDifferentWishRecordsWhenIdIsNotSame()
+    {
+        var repository = new InMemoryWishRecordRepository();
+
+        IReadOnlyList<WishRecord> records1 = await repository.GetRecentAsync(AccountId1, 20);
+        IReadOnlyList<WishRecord> records2 = await repository.GetRecentAsync(AccountId2, 20);
+
+        Assert.NotEqual(records1, records2);
+        Assert.NotEqual(records1.Count, records2.Count);
+        Assert.All(records1, record => Assert.Equal(AccountId1, record.GameAccountId));
+        Assert.All(records2, record => Assert.Equal(AccountId2, record.GameAccountId));
     }
 
     [Fact]

@@ -10,6 +10,7 @@ namespace FurinaChronicle.Services.Wishes
         IWishRecordRepository repository)
     {
         public Task<IReadOnlyList<WishRecord>> ExecuteAsync(
+            Guid gameAccountId,
             int count = 20,
             CancellationToken cancellationToken = default)
         {
@@ -20,7 +21,7 @@ namespace FurinaChronicle.Services.Wishes
                     "查询数量必须大于零。");
             }
 
-            return repository.GetRecentAsync(count, cancellationToken);
+            return repository.GetRecentAsync(gameAccountId, count, cancellationToken);
         }
     }
 }

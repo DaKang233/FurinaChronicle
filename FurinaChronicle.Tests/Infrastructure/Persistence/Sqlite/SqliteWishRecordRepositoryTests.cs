@@ -47,7 +47,7 @@ namespace FurinaChronicle.Tests.Infrastructure.Persistence.Sqlite
                 // 模拟应用重新启动
                 secondDatabase = new FurinaDatabase(new SqliteDatabaseOptions(databasePath));
                 var secondRepository = new SqliteWishRecordRepository(secondDatabase);
-                IReadOnlyList<WishRecord> loadedRecords = await secondRepository.GetRecentAsync(20);
+                IReadOnlyList<WishRecord> loadedRecords = await secondRepository.GetRecentAsync(accountId, 20);
                 Assert.Equal("芙宁娜", loadedRecords[0].ItemName);
                 Assert.Equal(TimeSpan.FromHours(8), loadedRecords[0].Time.Offset);
             }

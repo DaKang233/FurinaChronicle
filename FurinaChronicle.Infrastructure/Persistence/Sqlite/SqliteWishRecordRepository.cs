@@ -9,7 +9,7 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
 {
     public sealed class SqliteWishRecordRepository(FurinaDatabase database) : IWishRecordRepository
     {
-        public async Task<IReadOnlyList<WishRecord>> GetRecentAsync(int count, CancellationToken cancellationToken = default)
+        public async Task<IReadOnlyList<WishRecord>> GetRecentAsync(Guid gameAccountId, int count, CancellationToken cancellationToken = default)
         {
             if (count <= 0)
             {
@@ -30,6 +30,7 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
                         TimeUtcTicks,
                         TimeOffsetMinutes
                     FROM {WishRecordRow.TableName}
+                    WHERE GameAccountId = ?
                     ORDER BY
                         TimeUtcTicks DESC,
                         Id DESC
