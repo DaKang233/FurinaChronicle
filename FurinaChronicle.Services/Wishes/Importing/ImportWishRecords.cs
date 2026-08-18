@@ -7,7 +7,7 @@ using System.Text;
 
 namespace FurinaChronicle.Services.Wishes.Importing
 {
-    public sealed class ImportWishRecords(IWishRecordReader reader, IWishRecordRepository wishRepository)
+    public sealed class ImportWishRecords(IWishRecordReader reader, IWishRecordRepository wishRepository, IGameAccountRepository accountRepository)
     {
         public async Task<WishImportResult> ExecuteAsync(Stream source, Guid gameAccountId, CancellationToken cancellationToken = default)
         {
@@ -17,6 +17,8 @@ namespace FurinaChronicle.Services.Wishes.Importing
             {
                 throw new ArgumentException("游戏账号 ID 不能为空",nameof(gameAccountId));
             }
+            var gameAccount = await accountRepository.GetByIdAsync(gameAccountId, cancellationToken);
+            if (gameAccount == null) { throw new KeyNotFoundException("指定的游戏账号不存在。"); }
 
             WishReadResult readResult = await reader.ReadAsync(source, gameAccountId, cancellationToken);
             WishRecord[] distinctRecords = readResult.Records.DistinctBy(record => (record.GameAccountId, record.ExternalRecordId)).ToArray();
