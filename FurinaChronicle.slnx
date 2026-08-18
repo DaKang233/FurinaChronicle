@@ -1,0 +1,9 @@
+<Solution>
+  <Project Path="FurinaChronicle.App/FurinaChronicle.App.csproj">
+    <Deploy Solution="Debug|*" />
+  </Project>
+  <Project Path="FurinaChronicle.Core/FurinaChronicle.Core.csproj" Id="93e103df-e448-4247-bf96-338bad4c57f0" />
+  <Project Path="FurinaChronicle.Infrastructure/FurinaChronicle.Infrastructure.csproj" />
+  <Project Path="FurinaChronicle.Services/FurinaChronicle.Services.csproj" />
+  <Project Path="FurinaChronicle.Tests/FurinaChronicle.Tests.csproj" Id="ff6e1ff9-85c1-430b-9b9b-ff2ebce40092" />
+</Solution>
