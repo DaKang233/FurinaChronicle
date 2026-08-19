@@ -19,7 +19,9 @@ public partial class MainPageViewModel(
     AddGameAccount addGameAccount,
     ArchiveSelectionService archiveSelectionService,
     UpdateGameAccount updateGameAccount,
-    RenamePlayerArchive renamePlayerArchive)
+    RenamePlayerArchive renamePlayerArchive,
+    DeleteGameAccount deleteGameAccount,
+    DeletePlayerArchive deletePlayerArchive)
     : ObservableObject
 {
     private bool initialized;
@@ -273,6 +275,64 @@ public partial class MainPageViewModel(
 
             await LoadArchivesCoreAsync(updated.Id);
             StatusMessage = $"已将档案重命名为“{updated.Name}”。";
+        });
+    }
+
+    public async Task DeleteSelectedArchiveAsync()
+    {
+        await ExecuteBusyAsync(async () =>
+        {
+            if (SelectedArchive is null)
+            {
+                throw new InvalidOperationException("请先选择要删除的档案。");
+            }
+
+            Guid deletedArchiveId = SelectedArchive.Id;
+            string deletedArchiveName = SelectedArchive.Name;
+
+            await deletePlayerArchive.ExecuteAsync(deletedArchiveId);
+
+            SelectedArchive = null;
+            SelectedAccount = null;
+            Accounts.Clear();
+            WishRecords.Clear();
+
+            await LoadArchivesCoreAsync();
+            SelectedArchive = Archives.FirstOrDefault();
+
+            if (SelectedArchive is not null)
+            {
+                await LoadSelectedArchiveCoreAsync();
+            }
+
+            StatusMessage =
+                $"已删除档案“{deletedArchiveName}”。";
+        });
+    }
+
+    public async Task DeleteSelectedAccountAsync()
+    {
+        await ExecuteBusyAsync(async () =>
+        {
+            if (SelectedAccount is null)
+            {
+                throw new InvalidOperationException("请先选择要删除的账号。");
+            }
+            Guid deletedAccountId = SelectedAccount.Id;
+            string deletedAccountUid = SelectedAccount.Uid;
+            await deleteGameAccount.ExecuteAsync(deletedAccountId);
+            SelectedAccount = null;
+            WishRecords.Clear();
+            await RefreshAccountsCoreAsync();
+            SelectedAccount = Accounts.FirstOrDefault();
+
+            if (SelectedAccount is not null)
+            {
+                await archiveSelectionService.SelectAsync(SelectedAccount.Id);
+
+                await ReloadRecordsCoreAsync();
+            }
+            StatusMessage = $"已删除账号 {deletedAccountUid}。";
         });
     }
 

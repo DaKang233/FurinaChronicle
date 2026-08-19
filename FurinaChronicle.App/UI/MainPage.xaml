@@ -72,6 +72,11 @@
                             Grid.Row="2"
                             Text="重命名当前档案"
                             Clicked="OnRenameArchiveClicked"/>
+                        <Button
+                            Grid.Row="2"
+                            Grid.Column="1"
+                            Text="删除当前档案"
+                            Clicked="OnDeleteArchiveClicked"/>
                     </Grid>
 
                     <Label
@@ -111,7 +116,7 @@
                         Text="{Binding NewAccountDisplayName}" />
 
                     <Grid
-                        ColumnDefinitions="*,*,*"
+                        ColumnDefinitions="*,*,*,*"
                         ColumnSpacing="8">
                         <Button
                             Text="创建账号"
@@ -121,6 +126,7 @@
                             Text="导入到所选账号"
                             Command="{Binding ImportIntoSelectedAccountCommand}" />
                         <Button Grid.Column="2" Text="重命名所选账号" Clicked="OnRenameAccountClicked"/>
+                        <Button Grid.Column="3" Text="删除所选账号" Clicked="OnDeleteAccountClicked"/>
                     </Grid>
 
                     <Label

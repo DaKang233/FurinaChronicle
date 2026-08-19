@@ -59,6 +59,8 @@ namespace FurinaChronicle.App
             builder.Services.AddTransient<AddGameAccount>();
             builder.Services.AddTransient<UpdateGameAccount>();
             builder.Services.AddTransient<RenamePlayerArchive>();
+            builder.Services.AddTransient<DeletePlayerArchive>();
+            builder.Services.AddTransient<DeleteGameAccount>();
             builder.Services.AddSingleton<AppShell>();
             builder.Services.AddTransient<ArchiveSelectionService>();
 

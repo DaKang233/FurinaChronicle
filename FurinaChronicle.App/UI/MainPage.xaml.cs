@@ -94,5 +94,27 @@ public partial class MainPage : ContentPage
         if (name is null) return;
         await ViewModel.RenameSelectedArchiveAsync(name);
     }
+
+    private async void OnDeleteAccountClicked(object? sender, EventArgs e)
+    {
+        bool confirm = await DisplayAlertAsync(
+            title: "删除账号",
+            message: "确定要删除选中的账号吗？该账号的全部祈愿记录也会被永久删除。",
+            accept: "删除",
+            cancel: "取消");
+        if (!confirm) return;
+        await ViewModel.DeleteSelectedAccountAsync();
+    }
+
+    private async void OnDeleteArchiveClicked(object? sender, EventArgs e)
+    {
+        bool confirm = await DisplayAlertAsync(
+            title: "删除档案",
+            message: "确定要删除选中的档案吗？档案内的全部账号和祈愿记录也会被永久删除。",
+            accept: "删除",
+            cancel: "取消");
+        if (!confirm) return;
+        await ViewModel.DeleteSelectedArchiveAsync();
+    }
 }
 
