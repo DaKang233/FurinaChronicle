@@ -1,9 +1,11 @@
 ﻿using FurinaChronicle.App.ViewModels;
+using FurinaChronicle.App.Persistence;
 using FurinaChronicle.Infrastructure.Importing.Json;
 using FurinaChronicle.Infrastructure.Persistence.Sqlite;
 using FurinaChronicle.Services.Abstractions;
 using FurinaChronicle.Services.Wishes.Importing;
 using FurinaChronicle.Services.Wishes;
+using FurinaChronicle.Services.Archives;
 using Microsoft.Extensions.Logging;
 using FurinaChronicle.Core.Wishes;
 using System.Diagnostics;
@@ -42,6 +44,23 @@ namespace FurinaChronicle.App
 
             builder.Services.AddTransient<MainPageViewModel>();
             builder.Services.AddTransient<MainPage>();
+
+            // Phase 5
+            builder.Services.AddSingleton<IPlayerArchiveRepository, SqlitePlayerArchiveRepository>();
+            builder.Services.AddSingleton<IGameAccountRepository, SqliteGameAccountRepository>();
+            builder.Services.AddSingleton<IPreferences>(Preferences.Default);
+            builder.Services.AddSingleton<
+                IArchiveSelectionStore,
+                PreferencesArchiveSelectionStore>();
+
+            builder.Services.AddTransient<CreatePlayerArchive>();
+            builder.Services.AddTransient<GetPlayerArchives>();
+            builder.Services.AddTransient<GetGameAccounts>();
+            builder.Services.AddTransient<AddGameAccount>();
+            builder.Services.AddTransient<UpdateGameAccount>();
+            builder.Services.AddTransient<RenamePlayerArchive>();
+            builder.Services.AddSingleton<AppShell>();
+            builder.Services.AddTransient<ArchiveSelectionService>();
 
             return builder.Build();
         }

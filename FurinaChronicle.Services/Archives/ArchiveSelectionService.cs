@@ -11,6 +11,58 @@ public sealed class ArchiveSelectionService(
     IPlayerArchiveRepository archiveRepository,
     IGameAccountRepository accountRepository)
 {
+    public async Task<ArchiveSelection?> GetForArchiveAsync(
+        Guid playerArchiveId,
+        CancellationToken cancellationToken = default)
+    {
+        if (playerArchiveId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "玩家档案 ID 不能为空。",
+                nameof(playerArchiveId));
+        }
+
+        PlayerArchive? archive = await archiveRepository.GetByIdAsync(
+            playerArchiveId,
+            cancellationToken);
+        if (archive is null)
+        {
+            throw new KeyNotFoundException(
+                "要选择的玩家档案不存在。");
+        }
+
+        ArchiveSelection? savedSelection =
+            await selectionStore.LoadForArchiveAsync(
+                playerArchiveId,
+                cancellationToken);
+        if (savedSelection is not null &&
+            savedSelection.PlayerArchiveId == playerArchiveId)
+        {
+            GameAccount? savedAccount = await accountRepository.GetByIdAsync(
+                savedSelection.GameAccountId,
+                cancellationToken);
+            if (savedAccount?.PlayerArchiveId == playerArchiveId)
+            {
+                await selectionStore.SaveAsync(savedSelection, cancellationToken);
+                return savedSelection;
+            }
+        }
+
+        IReadOnlyList<GameAccount> accounts =
+            await accountRepository.GetByArchiveIdAsync(
+                playerArchiveId,
+                cancellationToken);
+        GameAccount? firstAccount = accounts.FirstOrDefault();
+        if (firstAccount is null)
+        {
+            return null;
+        }
+
+        var repairedSelection =
+            new ArchiveSelection(playerArchiveId, firstAccount.Id);
+        await selectionStore.SaveAsync(repairedSelection, cancellationToken);
+        return repairedSelection;
+    }
     public async Task<ArchiveSelection?> GetCurrentAsync(CancellationToken cancellationToken = default)
     {
         ArchiveSelection? savedSelection = await selectionStore.LoadAsync(cancellationToken);

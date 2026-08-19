@@ -6,7 +6,9 @@ namespace FurinaChronicle.App.Demo
 {
     internal static class SampleWishData
     {
-        public static Guid GameAccountId { get; } = Guid.Parse("11ec0244-0f33-450a-988a-029b805cbb20");
+        public const string Uid = "800000001";
+        public const int SourceRecordCount = 5;
+
         public static Stream OpenStream()
         {
             return new MemoryStream(Encoding.UTF8.GetBytes(Json));
@@ -14,6 +16,7 @@ namespace FurinaChronicle.App.Demo
         private const string Json =
                     """
         {
+          "uid": "800000001",
           "list": [
             {
               "id": "200000000000000001",

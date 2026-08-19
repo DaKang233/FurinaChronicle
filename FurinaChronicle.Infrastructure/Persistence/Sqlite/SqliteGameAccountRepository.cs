@@ -37,9 +37,10 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
             return rows.FirstOrDefault()?.ToDomain();
         }
 
-        public async Task<GameAccount?> FindByUidAsync(GameServerRegion serverRegion, string uid, CancellationToken cancellationToken = default)
+        public async Task<GameAccount?> GetByArchiveIdAndUidAsync(Guid archiveId, string uid, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(uid);
+            if (archiveId == Guid.Empty) throw new ArgumentException("存档 ID 不能为空。", nameof(archiveId));
             await database.InitializeAsync(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -54,9 +55,9 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
                         CreatedAtUtcTicks,
                         UpdatedAtUtcTicks
                     FROM {GameAccountRow.TableName}
-                    WHERE ServerRegion = ? AND Uid = ?
+                    WHERE PlayerArchiveId = ? AND Uid = ?
                     LIMIT 1
-                    """, (int)serverRegion, uid);
+                    """, archiveId.ToString("D"), uid.Trim());
 
             return rows.FirstOrDefault()?.ToDomain();
         }
@@ -133,6 +134,7 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
                         UpdatedAtUtcTicks
                     FROM {GameAccountRow.TableName}
                     WHERE PlayerArchiveId = ?
+                    ORDER BY CreatedAtUtcTicks
                     """, archiveId.ToString("D"));
 
             return rows.Select(row => row.ToDomain()).ToArray();

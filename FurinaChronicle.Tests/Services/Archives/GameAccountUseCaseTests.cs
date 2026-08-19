@@ -94,8 +94,9 @@ public sealed class GameAccountUseCaseTests
     public async Task Update_ExistingPlaceholder_NormalizesAndPersistsFields()
     {
         var accounts = new InMemoryGameAccountRepository();
+        var archiveId = Guid.NewGuid();
         GameAccount original = ArchiveTestData.Account(
-            Guid.NewGuid(),
+            archiveId,
             uid: "legacy-id",
             region: GameServerRegion.Unknown,
             isPlaceholder: true);
@@ -116,11 +117,12 @@ public sealed class GameAccountUseCaseTests
     }
 
     [Fact]
-    public async Task Update_ConflictingRegionAndUid_ThrowsInvalidOperationException()
+    public async Task Update_ConflictingArchiveAndUid_ThrowsInvalidOperationException()
     {
         var accounts = new InMemoryGameAccountRepository();
-        GameAccount first = ArchiveTestData.Account(Guid.NewGuid(), uid: "100000001");
-        GameAccount second = ArchiveTestData.Account(Guid.NewGuid(), uid: "100000002");
+        var archiveId = Guid.NewGuid();
+        GameAccount first = ArchiveTestData.Account(archiveId, uid: "100000001");
+        GameAccount second = ArchiveTestData.Account(archiveId, uid: "100000002");
         await accounts.AddAsync(first);
         await accounts.AddAsync(second);
         var service = new UpdateGameAccount(accounts);

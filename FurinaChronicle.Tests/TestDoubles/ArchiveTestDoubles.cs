@@ -89,14 +89,14 @@ internal sealed class InMemoryGameAccountRepository : IGameAccountRepository
         return Task.FromResult(account);
     }
 
-    public Task<GameAccount?> FindByUidAsync(
-        GameServerRegion serverRegion,
+    public Task<GameAccount?> GetByArchiveIdAndUidAsync(
+        Guid archiveId,
         string uid,
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         GameAccount? result = accounts.Values.FirstOrDefault(
-            account => account.ServerRegion == serverRegion && account.Uid == uid);
+            account => account.PlayerArchiveId == archiveId && account.Uid == uid);
         return Task.FromResult(result);
     }
 
@@ -143,6 +143,8 @@ internal sealed class InMemoryGameAccountRepository : IGameAccountRepository
 
 internal sealed class InMemoryArchiveSelectionStore : IArchiveSelectionStore
 {
+    private readonly Dictionary<Guid, ArchiveSelection> selectionsByArchive = [];
+
     public ArchiveSelection? Current { get; set; }
 
     public int SaveCallCount { get; private set; }
@@ -156,12 +158,24 @@ internal sealed class InMemoryArchiveSelectionStore : IArchiveSelectionStore
         return Task.FromResult(Current);
     }
 
+    public Task<ArchiveSelection?> LoadForArchiveAsync(
+        Guid playerArchiveId,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        selectionsByArchive.TryGetValue(
+            playerArchiveId,
+            out ArchiveSelection? selection);
+        return Task.FromResult(selection);
+    }
+
     public Task SaveAsync(
         ArchiveSelection selection,
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         Current = selection;
+        selectionsByArchive[selection.PlayerArchiveId] = selection;
         SaveCallCount++;
         return Task.CompletedTask;
     }

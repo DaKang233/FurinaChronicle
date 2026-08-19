@@ -140,4 +140,71 @@ public sealed class ArchiveSelectionServiceTests
         Assert.Null(store.Current);
         Assert.Equal(1, store.ClearCallCount);
     }
+    [Fact]
+    public async Task GetForArchive_RestoresThatArchivesLastSelectedAccount()
+    {
+        var archives = new InMemoryPlayerArchiveRepository();
+        var accounts = new InMemoryGameAccountRepository();
+        PlayerArchive firstArchive = ArchiveTestData.Archive("Archive A");
+        PlayerArchive secondArchive = ArchiveTestData.Archive("Archive B");
+        GameAccount firstAccount = ArchiveTestData.Account(
+            firstArchive.Id,
+            uid: "800000001");
+        GameAccount lastFirstArchiveAccount = ArchiveTestData.Account(
+            firstArchive.Id,
+            uid: "800000002");
+        GameAccount secondAccount = ArchiveTestData.Account(
+            secondArchive.Id,
+            uid: "800000003");
+        await archives.AddAsync(firstArchive);
+        await archives.AddAsync(secondArchive);
+        await accounts.AddAsync(firstAccount);
+        await accounts.AddAsync(lastFirstArchiveAccount);
+        await accounts.AddAsync(secondAccount);
+        var store = new InMemoryArchiveSelectionStore();
+        await store.SaveAsync(
+            new ArchiveSelection(firstArchive.Id, lastFirstArchiveAccount.Id));
+        await store.SaveAsync(
+            new ArchiveSelection(secondArchive.Id, secondAccount.Id));
+        var service = new ArchiveSelectionService(store, archives, accounts);
+
+        ArchiveSelection? restored =
+            await service.GetForArchiveAsync(firstArchive.Id);
+
+        var expected =
+            new ArchiveSelection(firstArchive.Id, lastFirstArchiveAccount.Id);
+        Assert.Equal(expected, restored);
+        Assert.Equal(expected, store.Current);
+    }
+
+    [Fact]
+    public async Task GetForArchive_DeletedSavedAccount_FallsBackToAvailableAccount()
+    {
+        var archives = new InMemoryPlayerArchiveRepository();
+        var accounts = new InMemoryGameAccountRepository();
+        PlayerArchive archive = ArchiveTestData.Archive();
+        GameAccount available = ArchiveTestData.Account(
+            archive.Id,
+            uid: "800000001");
+        GameAccount deleted = ArchiveTestData.Account(
+            archive.Id,
+            uid: "800000002");
+        await archives.AddAsync(archive);
+        await accounts.AddAsync(available);
+        await accounts.AddAsync(deleted);
+        var store = new InMemoryArchiveSelectionStore();
+        await store.SaveAsync(new ArchiveSelection(archive.Id, deleted.Id));
+        await accounts.DeleteAsync(deleted.Id);
+        var service = new ArchiveSelectionService(store, archives, accounts);
+
+        ArchiveSelection? restored =
+            await service.GetForArchiveAsync(archive.Id);
+
+        Assert.Equal(
+            new ArchiveSelection(archive.Id, available.Id),
+            restored);
+        Assert.Equal(restored, store.Current);
+    }
+
+
 }

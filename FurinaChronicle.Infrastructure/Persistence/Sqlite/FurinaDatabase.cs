@@ -125,11 +125,10 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
                         nameof(GameAccountRow.PlayerArchiveId));
 
                     connection.CreateIndex(
-                        "UX_GameAccounts_Region_Uid",
+                        "UX_GameAccounts_PlayerArchiveId_Uid",
                         GameAccountRow.TableName,
                         [
-                            nameof(GameAccountRow.ServerRegion),
-                    nameof(GameAccountRow.Uid)
+                            nameof(GameAccountRow.PlayerArchiveId), nameof(GameAccountRow.Uid)
                         ],
                         unique: true);
 

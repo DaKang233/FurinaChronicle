@@ -4,14 +4,17 @@ namespace FurinaChronicle.App
 {
     public partial class App : Application
     {
-        public App()
+        private readonly AppShell appShell;
+
+        public App(AppShell appShell)
         {
             InitializeComponent();
+            this.appShell = appShell;
         }
 
         protected override Window CreateWindow(IActivationState? activationState)
         {
-            return new Window(new AppShell());
+            return new Window(appShell);
         }
     }
 }

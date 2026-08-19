@@ -21,8 +21,8 @@ namespace FurinaChronicle.Services.Archives
             if (!normalizedUid.All(char.IsAsciiDigit)) throw new ArgumentException("UID 只能包含数字", nameof(uid));
             if (serverRegion == GameServerRegion.Unknown) throw new ArgumentException("必须选择服务器区域",nameof(serverRegion));
 
-            GameAccount? existing = await accountRepository.FindByUidAsync(serverRegion, normalizedUid, cancellationToken);
-            if (existing is not null) throw new InvalidOperationException("该服务器区域下已存在相同 UID 的账号");
+            GameAccount? existing = await accountRepository.GetByArchiveIdAndUidAsync(playerArchiveId, normalizedUid, cancellationToken);
+            if (existing is not null) throw new InvalidOperationException("该档案下已存在相同 UID 的账号");
             string? normalizedDisplayName = string.IsNullOrWhiteSpace(displayName) ? null : displayName.Trim();
             DateTimeOffset now = DateTimeOffset.UtcNow;
 

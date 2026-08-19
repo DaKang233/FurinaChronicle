@@ -6,9 +6,5 @@
     xmlns:local="clr-namespace:FurinaChronicle.App"
     Title="FurinaChronicle.App">
 
-    <ShellContent
-        Title="Home"
-        ContentTemplate="{DataTemplate local:MainPage}"
-        Route="MainPage" />
 
 </Shell>

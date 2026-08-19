@@ -8,6 +8,9 @@ namespace FurinaChronicle.Services.Abstractions
     public interface IArchiveSelectionStore
     {
         Task<ArchiveSelection?> LoadAsync(CancellationToken cancellationToken = default);
+        Task<ArchiveSelection?> LoadForArchiveAsync(
+            Guid playerArchiveId,
+            CancellationToken cancellationToken = default);
 
         Task SaveAsync(ArchiveSelection selection, CancellationToken cancellationToken = default);
 

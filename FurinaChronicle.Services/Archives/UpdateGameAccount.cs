@@ -46,11 +46,11 @@ public sealed class UpdateGameAccount(IGameAccountRepository repository)
             throw new ArgumentException("账号备注不能超过 50 个字符。", nameof(displayName));
         }
 
-        GameAccount? conflictingAccount = await repository.FindByUidAsync(serverRegion, normalizedUid, cancellationToken);
+        GameAccount? conflictingAccount = await repository.GetByArchiveIdAndUidAsync(current.PlayerArchiveId, normalizedUid, cancellationToken);
 
         if (conflictingAccount is not null && conflictingAccount.Id != current.Id)
         {
-            throw new InvalidOperationException("该服务器区域下已经存在相同 UID 的账号。");
+            throw new InvalidOperationException("该档案下已经存在相同 UID 的账号。");
         }
 
         GameAccount updated = current with

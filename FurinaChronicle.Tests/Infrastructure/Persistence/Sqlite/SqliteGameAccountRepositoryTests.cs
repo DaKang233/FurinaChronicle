@@ -39,35 +39,37 @@ public sealed class SqliteGameAccountRepositoryTests
     }
 
     [Fact]
-    public async Task FindByUidAsync_MatchesBothRegionAndUid()
+    public async Task GetByArchiveIdAndUidAsync_MatchesBothArchiveIdAndUid()
     {
         await using var context = SqliteRepositoryTestContext.Create();
-        PlayerArchive archive = await AddArchiveAsync(context);
-        GameAccount asiaAccount = SqliteRepositoryTestContext.CreateAccount(
-            archive.Id,
+        PlayerArchive archive1 = await AddArchiveAsync(context);
+        PlayerArchive archive2 = await AddArchiveAsync(context);
+        GameAccount account1 = SqliteRepositoryTestContext.CreateAccount(
+            archive1.Id,
             uid: "123456789",
             region: GameServerRegion.Asia);
-        GameAccount americaAccount = SqliteRepositoryTestContext.CreateAccount(
-            archive.Id,
+        GameAccount account2 = SqliteRepositoryTestContext.CreateAccount(
+            archive2.Id,
             uid: "123456789",
-            region: GameServerRegion.America);
-        await context.Accounts.AddAsync(asiaAccount);
-        await context.Accounts.AddAsync(americaAccount);
+            region: GameServerRegion.Asia);
+        await context.Accounts.AddAsync(account1);
+        await context.Accounts.AddAsync(account2);
 
-        GameAccount? loaded = await context.Accounts.FindByUidAsync(
-            GameServerRegion.America,
+        GameAccount? loaded = await context.Accounts.GetByArchiveIdAndUidAsync(
+            archive1.Id,
             "123456789");
 
-        Assert.Equal(americaAccount, loaded);
+        Assert.Equal(account1, loaded);
     }
 
     [Fact]
     public async Task FindByUidAsync_UnknownUid_ReturnsNull()
     {
         await using var context = SqliteRepositoryTestContext.Create();
+        var archive = await AddArchiveAsync(context);
 
-        GameAccount? loaded = await context.Accounts.FindByUidAsync(
-            GameServerRegion.Asia,
+        GameAccount? loaded = await context.Accounts.GetByArchiveIdAndUidAsync(
+            archive.Id,
             "999999999");
 
         Assert.Null(loaded);
@@ -117,7 +119,7 @@ public sealed class SqliteGameAccountRepositoryTests
     }
 
     [Fact]
-    public async Task AddAsync_SameRegionAndUidTwice_ThrowsSqliteException()
+    public async Task AddAsync_SameArchiveAndUidTwice_ThrowsSqliteException()
     {
         await using var context = SqliteRepositoryTestContext.Create();
         PlayerArchive archive = await AddArchiveAsync(context);
@@ -130,23 +132,24 @@ public sealed class SqliteGameAccountRepositoryTests
     }
 
     [Fact]
-    public async Task AddAsync_SameUidInDifferentRegions_IsAllowed()
+    public async Task AddAsync_SameUidInDifferentArchives_IsAllowed()
     {
         await using var context = SqliteRepositoryTestContext.Create();
-        PlayerArchive archive = await AddArchiveAsync(context);
+        PlayerArchive archive1 = await AddArchiveAsync(context);
+        PlayerArchive archive2 = await AddArchiveAsync(context);
         await context.Accounts.AddAsync(SqliteRepositoryTestContext.CreateAccount(
-            archive.Id,
+            archive1.Id,
             uid: "123456789",
             region: GameServerRegion.Asia));
         await context.Accounts.AddAsync(SqliteRepositoryTestContext.CreateAccount(
-            archive.Id,
+            archive2.Id,
             uid: "123456789",
             region: GameServerRegion.America));
 
-        IReadOnlyList<GameAccount> loaded =
-            await context.Accounts.GetByArchiveIdAsync(archive.Id);
+        IReadOnlyList<GameAccount> loaded1 = await context.Accounts.GetByArchiveIdAsync(archive1.Id);
+        IReadOnlyList<GameAccount> loaded2 = await context.Accounts.GetByArchiveIdAsync(archive2.Id);
 
-        Assert.Equal(2, loaded.Count);
+        Assert.Equal(2, loaded1.Count + loaded2.Count);
     }
 
     [Fact]
