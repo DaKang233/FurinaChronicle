@@ -69,7 +69,7 @@
                             Grid.Column="1"
                             Text="重新加载当前档案"
                             Command="{Binding ReloadSelectedArchiveCommand}" />
-                        <Button 
+                        <Button
                             Grid.Row="2"
                             Text="重命名当前档案"
                             Clicked="OnRenameArchiveClicked"/>
