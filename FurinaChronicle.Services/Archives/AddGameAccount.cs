@@ -23,6 +23,7 @@ namespace FurinaChronicle.Services.Archives
             GameAccount? existing = await accountRepository.GetByArchiveIdAndUidAsync(playerArchiveId, normalizedUid, cancellationToken);
             if (existing is not null) throw new InvalidOperationException("该档案下已存在相同 UID 的账号");
             string? normalizedDisplayName = string.IsNullOrWhiteSpace(displayName) ? null : displayName.Trim();
+            if (!string.IsNullOrEmpty(normalizedDisplayName) && normalizedDisplayName.Length - uid.Length - 3 > 50) throw new ArgumentException("显示名称不能超过 50 个字符", nameof(displayName));
             DateTimeOffset now = DateTimeOffset.UtcNow;
 
             var account = new GameAccount(Guid.NewGuid(), playerArchiveId, normalizedUid, serverRegion, normalizedDisplayName, IsPlaceholder: false, now, now);

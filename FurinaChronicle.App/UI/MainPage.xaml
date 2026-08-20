@@ -55,29 +55,35 @@
                         RowSpacing="8">
                         <Button
                             Text="创建档案"
-                            Clicked="OnCreateArchiveClicked" />
+                            Clicked="OnCreateArchiveClicked"
+                            IsEnabled="{Binding IsNotBusy}"/>
                         <Button
                             Grid.Column="1"
                             Text="重新加载档案"
-                            Command="{Binding ReloadArchivesCommand}" />
+                            Command="{Binding ReloadArchivesCommand}"
+                            IsEnabled="{Binding IsNotBusy}"/>
                         <Button
                             Grid.Row="1"
                             Text="档案层导入内置数据"
-                            Command="{Binding ImportIntoArchiveCommand}" />
+                            Command="{Binding ImportIntoArchiveCommand}"
+                            IsEnabled="{Binding IsNotBusy}"/>
                         <Button
                             Grid.Row="1"
                             Grid.Column="1"
                             Text="重新加载当前档案"
-                            Command="{Binding ReloadSelectedArchiveCommand}" />
+                            Command="{Binding ReloadSelectedArchiveCommand}"
+                            IsEnabled="{Binding IsNotBusy}"/>
                         <Button
                             Grid.Row="2"
                             Text="重命名当前档案"
-                            Clicked="OnRenameArchiveClicked"/>
+                            Clicked="OnRenameArchiveClicked"
+                            IsEnabled="{Binding IsNotBusy}"/>
                         <Button
                             Grid.Row="2"
                             Grid.Column="1"
                             Text="删除当前档案"
-                            Clicked="OnDeleteArchiveClicked"/>
+                            Clicked="OnDeleteArchiveClicked"
+                            IsEnabled="{Binding IsNotBusy}"/>
                     </Grid>
 
                     <Label
@@ -122,13 +128,15 @@
                         ColumnSpacing="8">
                         <Button
                             Text="创建账号"
-                            Command="{Binding CreateAccountCommand}" />
+                            Command="{Binding CreateAccountCommand}"
+                            IsEnabled="{Binding IsNotBusy}"/>
                         <Button
                             Grid.Column="1"
                             Text="导入到所选账号"
-                            Command="{Binding ImportIntoSelectedAccountCommand}" />
-                        <Button Grid.Column="2" Text="编辑所选账号" Clicked="OnEditAccountClicked"/>
-                        <Button Grid.Column="3" Text="删除所选账号" Clicked="OnDeleteAccountClicked"/>
+                            Command="{Binding ImportIntoSelectedAccountCommand}"
+                            IsEnabled="{Binding IsNotBusy}"/>
+                        <Button Grid.Column="2" Text="编辑所选账号" Clicked="OnEditAccountClicked" IsEnabled="{Binding IsNotBusy}"/>
+                        <Button Grid.Column="3" Text="删除所选账号" Clicked="OnDeleteAccountClicked" IsEnabled="{Binding IsNotBusy}"/>
                     </Grid>
 
                     <Label

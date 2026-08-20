@@ -45,7 +45,7 @@ public sealed class UpdateGameAccount(IGameAccountRepository repository)
 
         string? normalizedDisplayName = string.IsNullOrWhiteSpace(displayName) ? null : displayName.Trim();
 
-        if (normalizedDisplayName?.Length > 50)
+        if (normalizedDisplayName?.Length - uid.Length - 3 > 50)
         {
             throw new ArgumentException("账号备注不能超过 50 个字符。", nameof(displayName));
         }
