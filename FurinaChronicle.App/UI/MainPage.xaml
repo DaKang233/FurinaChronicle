@@ -1,0 +1,201 @@
+<?xml version="1.0" encoding="utf-8" ?>
+
+<ContentPage
+    x:Class="FurinaChronicle.App.MainPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:viewModels="clr-namespace:FurinaChronicle.App.ViewModels"
+    xmlns:archives="clr-namespace:FurinaChronicle.Core.Archives;assembly=FurinaChronicle.Core"
+    xmlns:wishes="clr-namespace:FurinaChronicle.Core.Wishes;assembly=FurinaChronicle.Core"
+    x:DataType="viewModels:MainPageViewModel"
+    Title="FurinaChronicle">
+
+    <ScrollView>
+        <VerticalStackLayout
+            Padding="20"
+            Spacing="16">
+
+            <Grid ColumnDefinitions="*,Auto">
+                <VerticalStackLayout>
+                    <Label
+                        FontAttributes="Bold"
+                        FontSize="24"
+                        Text="FurinaChronicle" />
+                    <Label
+                        FontSize="13"
+                        Text="{Binding StatusMessage}" />
+                </VerticalStackLayout>
+
+                <ActivityIndicator
+                    Grid.Column="1"
+                    IsRunning="{Binding IsBusy}"
+                    IsVisible="{Binding IsBusy}"
+                    VerticalOptions="Center" />
+            </Grid>
+
+            <Border Padding="16">
+                <VerticalStackLayout Spacing="10">
+                    <Label
+                        FontAttributes="Bold"
+                        FontSize="18"
+                        Text="1. 档案" />
+
+                    <Picker
+                        Title="选择档案后才加载账号和祈愿记录"
+                        ItemsSource="{Binding Archives}"
+                        ItemDisplayBinding="{Binding Name}"
+                        SelectedIndexChanged="OnArchiveSelectionChanged"
+                        SelectedItem="{Binding SelectedArchive, Mode=TwoWay}"
+                        IsEnabled="{Binding IsNotBusy}"/>
+
+                    <Grid
+                        ColumnDefinitions="*,*"
+                        RowDefinitions="Auto,Auto,Auto"
+                        ColumnSpacing="8"
+                        RowSpacing="8">
+                        <Button
+                            Text="创建档案"
+                            Clicked="OnCreateArchiveClicked"
+                            IsEnabled="{Binding IsNotBusy}"/>
+                        <Button
+                            Grid.Column="1"
+                            Text="重新加载档案"
+                            Command="{Binding ReloadArchivesCommand}"
+                            IsEnabled="{Binding IsNotBusy}"/>
+                        <Button
+                            Grid.Row="1"
+                            Text="档案层导入内置数据"
+                            Command="{Binding ImportIntoArchiveCommand}"
+                            IsEnabled="{Binding IsNotBusy}"/>
+                        <Button
+                            Grid.Row="1"
+                            Grid.Column="1"
+                            Text="重新加载当前档案"
+                            Command="{Binding ReloadSelectedArchiveCommand}"
+                            IsEnabled="{Binding IsNotBusy}"/>
+                        <Button
+                            Grid.Row="2"
+                            Text="重命名当前档案"
+                            Clicked="OnRenameArchiveClicked"
+                            IsEnabled="{Binding IsNotBusy}"/>
+                        <Button
+                            Grid.Row="2"
+                            Grid.Column="1"
+                            Text="删除当前档案"
+                            Clicked="OnDeleteArchiveClicked"
+                            IsEnabled="{Binding IsNotBusy}"/>
+                    </Grid>
+
+                    <Label
+                        FontSize="12"
+                        Text="未选择档案时执行档案层导入，会自动创建“未命名档案”；再次导入会复用相同 UID 的账号。" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border Padding="16">
+                <VerticalStackLayout Spacing="10">
+                    <Label
+                        FontAttributes="Bold"
+                        FontSize="18"
+                        Text="2. 账号" />
+
+                    <Picker
+                        Title="选择游戏账号"
+                        ItemsSource="{Binding Accounts}"
+                        ItemDisplayBinding="{Binding DisplayName}"
+                        SelectedIndexChanged="OnAccountSelectionChanged"
+                        SelectedItem="{Binding SelectedAccount, Mode=TwoWay}"
+                        IsEnabled="{Binding IsNotBusy}"/>
+
+                    <Entry
+                        Keyboard="Numeric"
+                        MaxLength="12"
+                        Placeholder="UID（必填）"
+                        Text="{Binding NewAccountUid}" />
+
+                    <Picker
+                        Title="服务器区域（根据 UID 自动预填，可修改）"
+                        ItemsSource="{Binding ServerRegions}"
+                        SelectedItem="{Binding SelectedServerRegion, Mode=TwoWay}" />
+
+                    <Entry
+                        MaxLength="50"
+                        Placeholder="账号备注（可选）"
+                        Text="{Binding NewAccountDisplayName}" />
+
+                    <Grid
+                        ColumnDefinitions="*,*,*,*"
+                        ColumnSpacing="8">
+                        <Button
+                            Text="创建账号"
+                            Command="{Binding CreateAccountCommand}"
+                            IsEnabled="{Binding IsNotBusy}"/>
+                        <Button
+                            Grid.Column="1"
+                            Text="导入到所选账号"
+                            Command="{Binding ImportIntoSelectedAccountCommand}"
+                            IsEnabled="{Binding IsNotBusy}"/>
+                        <Button Grid.Column="2" Text="编辑所选账号" Clicked="OnEditAccountClicked" IsEnabled="{Binding IsNotBusy}"/>
+                        <Button Grid.Column="3" Text="删除所选账号" Clicked="OnDeleteAccountClicked" IsEnabled="{Binding IsNotBusy}"/>
+                    </Grid>
+
+                    <Label
+                        FontSize="12"
+                        Text="账号层导入只接受 UID 与所选账号一致的内置记录；不一致的记录会被忽略。" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border Padding="16">
+                <VerticalStackLayout Spacing="10">
+                    <Label
+                        FontAttributes="Bold"
+                        FontSize="18"
+                        Text="3. 导入结果与祈愿记录" />
+
+                    <Label
+                        LineBreakMode="WordWrap"
+                        Text="{Binding ImportSummary}" />
+
+                    <Label
+                        LineBreakMode="WordWrap"
+                        Text="{Binding ErrorMessage}"
+                        TextColor="Red" />
+
+                    <CollectionView
+                        HeightRequest="360"
+                        ItemsSource="{Binding WishRecords}">
+
+                        <CollectionView.EmptyView>
+                            <Label
+                                Padding="16"
+                                HorizontalTextAlignment="Center"
+                                Text="当前账号暂无祈愿记录。" />
+                        </CollectionView.EmptyView>
+
+                        <CollectionView.ItemTemplate>
+                            <DataTemplate x:DataType="wishes:WishRecord">
+                                <Grid
+                                    Padding="10"
+                                    ColumnDefinitions="*,Auto"
+                                    RowDefinitions="Auto,Auto">
+                                    <Label
+                                        FontAttributes="Bold"
+                                        Text="{Binding ItemName}" />
+                                    <Label
+                                        Grid.Column="1"
+                                        Text="{Binding RankType, StringFormat='{}{0} 星'}" />
+                                    <Label
+                                        Grid.Row="1"
+                                        Grid.ColumnSpan="2"
+                                        FontSize="12"
+                                        Text="{Binding Time, StringFormat='{}{0:yyyy-MM-dd HH:mm:ss zzz}'}" />
+                                </Grid>
+                            </DataTemplate>
+                        </CollectionView.ItemTemplate>
+                    </CollectionView>
+                </VerticalStackLayout>
+            </Border>
+
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

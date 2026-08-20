@@ -1,0 +1,46 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Text;
+using System.Threading.Tasks.Sources;
+
+namespace FurinaChronicle.Core.Archives
+{
+    public static class GameServerRegionResolver
+    {
+        public static GameServerRegion Resolve(string uid)
+        {
+            if (string.IsNullOrWhiteSpace(uid))
+            {
+                return GameServerRegion.Unknown;
+            }
+
+            string normalizedUid = uid.Trim();
+
+            if (!normalizedUid.All(char.IsAsciiDigit))
+            {
+                return GameServerRegion.Unknown;
+            }
+
+            return ResolveNormalizedLocally(normalizedUid);
+        }
+
+        private static GameServerRegion ResolveNormalizedLocally(string uid)
+        {
+            var CelestiaMark = (uid.StartsWith("1") || uid.StartsWith("2") || uid.StartsWith("3")) && uid.Length <= 9;
+            var IrminsulMark = uid.StartsWith("5") && uid.Length <= 9;
+            var AmericaMark = uid.StartsWith("6") && uid.Length <= 9;
+            var EuropeMark = uid.StartsWith("7") && uid.Length <= 9;
+            var AsiaMark = uid.StartsWith("8") && uid.Length <= 9 || uid.StartsWith("18") && uid.Length > 9;
+            var SARMark = uid.StartsWith("9") && uid.Length <= 9;
+
+            if (CelestiaMark) return GameServerRegion.ChinaOfficial;
+            if (IrminsulMark) return GameServerRegion.ChinaBilibili;
+            if (AmericaMark) return GameServerRegion.America;
+            if (EuropeMark) return GameServerRegion.Europe;
+            if (AsiaMark) return GameServerRegion.Asia;
+            if (SARMark) return GameServerRegion.TaiwanHongKongMacao;
+
+            return GameServerRegion.Unknown;
+        }
+    }
+}
