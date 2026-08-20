@@ -45,7 +45,8 @@
                         ItemsSource="{Binding Archives}"
                         ItemDisplayBinding="{Binding Name}"
                         SelectedIndexChanged="OnArchiveSelectionChanged"
-                        SelectedItem="{Binding SelectedArchive, Mode=TwoWay}" />
+                        SelectedItem="{Binding SelectedArchive, Mode=TwoWay}"
+                        IsEnabled="{Binding IsNotBusy}"/>
 
                     <Grid
                         ColumnDefinitions="*,*"
@@ -97,7 +98,8 @@
                         ItemsSource="{Binding Accounts}"
                         ItemDisplayBinding="{Binding DisplayName}"
                         SelectedIndexChanged="OnAccountSelectionChanged"
-                        SelectedItem="{Binding SelectedAccount, Mode=TwoWay}" />
+                        SelectedItem="{Binding SelectedAccount, Mode=TwoWay}"
+                        IsEnabled="{Binding IsNotBusy}"/>
 
                     <Entry
                         Keyboard="Numeric"
@@ -125,7 +127,7 @@
                             Grid.Column="1"
                             Text="导入到所选账号"
                             Command="{Binding ImportIntoSelectedAccountCommand}" />
-                        <Button Grid.Column="2" Text="重命名所选账号" Clicked="OnRenameAccountClicked"/>
+                        <Button Grid.Column="2" Text="编辑所选账号" Clicked="OnEditAccountClicked"/>
                         <Button Grid.Column="3" Text="删除所选账号" Clicked="OnDeleteAccountClicked"/>
                     </Grid>
 
@@ -189,4 +191,3 @@
         </VerticalStackLayout>
     </ScrollView>
 </ContentPage>
-

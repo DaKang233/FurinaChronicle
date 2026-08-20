@@ -12,59 +12,59 @@ using System.Diagnostics;
 
 namespace FurinaChronicle.App
 {
-    public static class MauiProgram
-    {
-        public static MauiApp CreateMauiApp()
-        {
-            var builder = MauiApp.CreateBuilder();
-            builder
-                .UseMauiApp<App>()
-                .ConfigureFonts(fonts =>
-                {
-                    fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
-                    fonts.AddFont("OpenSans-Semibold.ttf", "OpenSansSemibold");
-                });
+	public static class MauiProgram
+	{
+		public static MauiApp CreateMauiApp()
+		{
+			var builder = MauiApp.CreateBuilder();
+			builder
+				.UseMauiApp<App>()
+				.ConfigureFonts(fonts =>
+				{
+					fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
+					fonts.AddFont("OpenSans-Semibold.ttf", "OpenSansSemibold");
+				});
 
 #if DEBUG
-    		builder.Logging.AddDebug();
+			builder.Logging.AddDebug();
 #endif
-            // Phase 3
-            // builder.Services.AddSingleton<IWishRecordRepository>(_ => new InMemoryWishRecordRepository(Array.Empty<WishRecord>()));
+			// Phase 3
+			// builder.Services.AddSingleton<IWishRecordRepository>(_ => new InMemoryWishRecordRepository(Array.Empty<WishRecord>()));
 
-            // Phase 4
-            string databasePath = Path.Combine(FileSystem.AppDataDirectory, "furinachronicle.db3");
-            Debug.WriteLine($"FurinaChronicle database: {databasePath}");
-            builder.Services.AddSingleton(new SqliteDatabaseOptions(databasePath));
-            builder.Services.AddSingleton<FurinaDatabase>();
-            builder.Services.AddSingleton<IWishRecordRepository, SqliteWishRecordRepository>();
+			// Phase 4
+			string databasePath = Path.Combine(FileSystem.AppDataDirectory, "furinachronicle.db3");
+			Debug.WriteLine($"FurinaChronicle database: {databasePath}");
+			builder.Services.AddSingleton(new SqliteDatabaseOptions(databasePath));
+			builder.Services.AddSingleton<FurinaDatabase>();
+			builder.Services.AddSingleton<IWishRecordRepository, SqliteWishRecordRepository>();
 
-            builder.Services.AddSingleton<IWishRecordReader, JsonWishRecordReader>();
-            builder.Services.AddTransient<GetRecentWishRecords>();
-            builder.Services.AddTransient<ImportWishRecords>();
+			builder.Services.AddSingleton<IWishRecordReader, JsonWishRecordReader>();
+			builder.Services.AddTransient<GetRecentWishRecords>();
+			builder.Services.AddTransient<ImportWishRecords>();
 
-            builder.Services.AddTransient<MainPageViewModel>();
-            builder.Services.AddTransient<MainPage>();
+			builder.Services.AddTransient<MainPageViewModel>();
+			builder.Services.AddTransient<MainPage>();
 
-            // Phase 5
-            builder.Services.AddSingleton<IPlayerArchiveRepository, SqlitePlayerArchiveRepository>();
-            builder.Services.AddSingleton<IGameAccountRepository, SqliteGameAccountRepository>();
-            builder.Services.AddSingleton<IPreferences>(Preferences.Default);
-            builder.Services.AddSingleton<
-                IArchiveSelectionStore,
-                PreferencesArchiveSelectionStore>();
+			// Phase 5
+			builder.Services.AddSingleton<IPlayerArchiveRepository, SqlitePlayerArchiveRepository>();
+			builder.Services.AddSingleton<IGameAccountRepository, SqliteGameAccountRepository>();
+			builder.Services.AddSingleton<IPreferences>(Preferences.Default);
+			builder.Services.AddSingleton<
+				IArchiveSelectionStore,
+				PreferencesArchiveSelectionStore>();
 
-            builder.Services.AddTransient<CreatePlayerArchive>();
-            builder.Services.AddTransient<GetPlayerArchives>();
-            builder.Services.AddTransient<GetGameAccounts>();
-            builder.Services.AddTransient<AddGameAccount>();
-            builder.Services.AddTransient<UpdateGameAccount>();
-            builder.Services.AddTransient<RenamePlayerArchive>();
-            builder.Services.AddTransient<DeletePlayerArchive>();
-            builder.Services.AddTransient<DeleteGameAccount>();
-            builder.Services.AddSingleton<AppShell>();
-            builder.Services.AddTransient<ArchiveSelectionService>();
+			builder.Services.AddTransient<CreatePlayerArchive>();
+			builder.Services.AddTransient<GetPlayerArchives>();
+			builder.Services.AddTransient<GetGameAccounts>();
+			builder.Services.AddTransient<AddGameAccount>();
+			builder.Services.AddTransient<UpdateGameAccount>();
+			builder.Services.AddTransient<RenamePlayerArchive>();
+			builder.Services.AddTransient<DeletePlayerArchive>();
+			builder.Services.AddTransient<DeleteGameAccount>();
+			builder.Services.AddSingleton<AppShell>();
+			builder.Services.AddTransient<ArchiveSelectionService>();
 
-            return builder.Build();
-        }
-    }
+			return builder.Build();
+		}
+	}
 }

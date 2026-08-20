@@ -6,106 +6,106 @@ using System.Text;
 
 namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
 {
-    public sealed class SqlitePlayerArchiveRepository(FurinaDatabase database) : IPlayerArchiveRepository
-    {
-        public async Task<PlayerArchive?> GetByIdAsync(Guid archiveId, CancellationToken cancellationToken = default)
-        {
-            if (archiveId == Guid.Empty)
-            {
-                throw new ArgumentException("存档 ID 不能为空。", nameof(archiveId));
-            }
-            await database.InitializeAsync(cancellationToken);
-            cancellationToken.ThrowIfCancellationRequested();
-            
-            var rows = await database.Connection.QueryAsync<PlayerArchiveRow>($"""
-                SELECT
-                    Id,
-                    Name,
-                    CreatedAtUtcTicks,
-                    UpdatedAtUtcTicks
-                FROM {PlayerArchiveRow.TableName}
-                WHERE Id = ?
-                LIMIT 1
-                """, archiveId.ToString("D"));
+	public sealed class SqlitePlayerArchiveRepository(FurinaDatabase database) : IPlayerArchiveRepository
+	{
+		public async Task<PlayerArchive?> GetByIdAsync(Guid archiveId, CancellationToken cancellationToken = default)
+		{
+			if (archiveId == Guid.Empty)
+			{
+				throw new ArgumentException("存档 ID 不能为空。", nameof(archiveId));
+			}
+			await database.InitializeAsync(cancellationToken);
+			cancellationToken.ThrowIfCancellationRequested();
 
-            cancellationToken.ThrowIfCancellationRequested();
+			var rows = await database.Connection.QueryAsync<PlayerArchiveRow>($"""
+				SELECT
+					Id,
+					Name,
+					CreatedAtUtcTicks,
+					UpdatedAtUtcTicks
+				FROM {PlayerArchiveRow.TableName}
+				WHERE Id = ?
+				LIMIT 1
+				""", archiveId.ToString("D"));
 
-            var row = rows.FirstOrDefault();
-            if (row == null) { return null; }
-            var createdAtUtc = new DateTimeOffset(row.CreatedAtUtcTicks, TimeSpan.Zero);
-            var updatedAtUtc = new DateTimeOffset(row.UpdatedAtUtcTicks, TimeSpan.Zero);
+			cancellationToken.ThrowIfCancellationRequested();
 
-            return new PlayerArchive(archiveId, row.Name, createdAtUtc, updatedAtUtc);
-        }
+			var row = rows.FirstOrDefault();
+			if (row == null) { return null; }
+			var createdAtUtc = new DateTimeOffset(row.CreatedAtUtcTicks, TimeSpan.Zero);
+			var updatedAtUtc = new DateTimeOffset(row.UpdatedAtUtcTicks, TimeSpan.Zero);
 
-        public async Task UpdateAsync(PlayerArchive playerArchive, CancellationToken cancellationToken = default)
-        {
-            ArgumentNullException.ThrowIfNull(playerArchive);
+			return new PlayerArchive(archiveId, row.Name, createdAtUtc, updatedAtUtc);
+		}
 
-            await database.InitializeAsync(cancellationToken);
+		public async Task UpdateAsync(PlayerArchive playerArchive, CancellationToken cancellationToken = default)
+		{
+			ArgumentNullException.ThrowIfNull(playerArchive);
 
-            cancellationToken.ThrowIfCancellationRequested();
+			await database.InitializeAsync(cancellationToken);
 
-            int affected = await database.Connection.UpdateAsync(PlayerArchiveRow.FromDomain(playerArchive));
+			cancellationToken.ThrowIfCancellationRequested();
 
-            if (affected == 0)
-            {
-                throw new KeyNotFoundException("要更新的玩家档案不存在。");
-            }
-        }
+			int affected = await database.Connection.UpdateAsync(PlayerArchiveRow.FromDomain(playerArchive));
 
-        public async Task AddAsync(PlayerArchive playerArchive, CancellationToken cancellationToken = default)
-        {
-            ArgumentNullException.ThrowIfNull(playerArchive);
-            await database.InitializeAsync(cancellationToken);
-            cancellationToken.ThrowIfCancellationRequested();
+			if (affected == 0)
+			{
+				throw new KeyNotFoundException("要更新的玩家档案不存在。");
+			}
+		}
 
-            await database.Connection.RunInTransactionAsync((connection) =>
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                connection.Insert(PlayerArchiveRow.FromDomain(playerArchive));
-            });
-        }
+		public async Task AddAsync(PlayerArchive playerArchive, CancellationToken cancellationToken = default)
+		{
+			ArgumentNullException.ThrowIfNull(playerArchive);
+			await database.InitializeAsync(cancellationToken);
+			cancellationToken.ThrowIfCancellationRequested();
 
-        public async Task DeleteAsync(Guid archiveId, CancellationToken cancellationToken = default)
-        {
-            if (archiveId == Guid.Empty)
-            {
-                throw new ArgumentException("存档 ID 不能为空。", nameof(archiveId));
-            }
-            await database.InitializeAsync(cancellationToken);
-            cancellationToken.ThrowIfCancellationRequested();
-            await database.Connection.RunInTransactionAsync((connection) =>
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                int affected = connection.Execute($"""
-                    DELETE FROM {PlayerArchiveRow.TableName}
-                    WHERE Id = ?
-                    """, archiveId.ToString("D"));
-                if (affected == 0)
-                {
-                    throw new KeyNotFoundException("要删除的玩家档案不存在。");
-                }
-                else Console.WriteLine($"Deleted {affected} rows from PlayerArchiveRow.");
-            });
-        }
+			await database.Connection.RunInTransactionAsync((connection) =>
+			{
+				cancellationToken.ThrowIfCancellationRequested();
+				connection.Insert(PlayerArchiveRow.FromDomain(playerArchive));
+			});
+		}
 
-        public async Task<IReadOnlyList<PlayerArchive>> GetAllAsync(CancellationToken cancellationToken = default)
-        {
-            await database.InitializeAsync(cancellationToken);
-            cancellationToken.ThrowIfCancellationRequested();
-            PlayerArchive[] result = [];
+		public async Task DeleteAsync(Guid archiveId, CancellationToken cancellationToken = default)
+		{
+			if (archiveId == Guid.Empty)
+			{
+				throw new ArgumentException("存档 ID 不能为空。", nameof(archiveId));
+			}
+			await database.InitializeAsync(cancellationToken);
+			cancellationToken.ThrowIfCancellationRequested();
+			await database.Connection.RunInTransactionAsync((connection) =>
+			{
+				cancellationToken.ThrowIfCancellationRequested();
+				int affected = connection.Execute($"""
+					DELETE FROM {PlayerArchiveRow.TableName}
+					WHERE Id = ?
+					""", archiveId.ToString("D"));
+				if (affected == 0)
+				{
+					throw new KeyNotFoundException("要删除的玩家档案不存在。");
+				}
+				else Console.WriteLine($"Deleted {affected} rows from PlayerArchiveRow.");
+			});
+		}
 
-            var rows = await database.Connection.QueryAsync<PlayerArchiveRow>($"""
-                SELECT
-                    Id,
-                    Name,
-                    CreatedAtUtcTicks,
-                    UpdatedAtUtcTicks
-                FROM {PlayerArchiveRow.TableName}
-                """);
+		public async Task<IReadOnlyList<PlayerArchive>> GetAllAsync(CancellationToken cancellationToken = default)
+		{
+			await database.InitializeAsync(cancellationToken);
+			cancellationToken.ThrowIfCancellationRequested();
+			PlayerArchive[] result = [];
 
-            return rows.Select(row => row.ToDomain()).ToArray();
-        }
-    }
+			var rows = await database.Connection.QueryAsync<PlayerArchiveRow>($"""
+				SELECT
+					Id,
+					Name,
+					CreatedAtUtcTicks,
+					UpdatedAtUtcTicks
+				FROM {PlayerArchiveRow.TableName}
+				""");
+
+			return rows.Select(row => row.ToDomain()).ToArray();
+		}
+	}
 }

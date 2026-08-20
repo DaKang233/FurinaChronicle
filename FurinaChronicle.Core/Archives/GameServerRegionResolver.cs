@@ -26,14 +26,12 @@ namespace FurinaChronicle.Core.Archives
 
         private static GameServerRegion ResolveNormalizedLocally(string uid)
         {
-            var CelestiaMark =
-                uid.StartsWith("1") && uid.Length <= 9 ||
-                uid.StartsWith("2") || uid.StartsWith("3");
-            var IrminsulMark = uid.StartsWith("5");
-            var AmericaMark = uid.StartsWith("6");
-            var EuropeMark = uid.StartsWith("7");
-            var AsiaMark = uid.StartsWith("8") || uid.StartsWith("18") && uid.Length > 9;
-            var SARMark = uid.StartsWith("9");
+            var CelestiaMark = (uid.StartsWith("1") || uid.StartsWith("2") || uid.StartsWith("3")) && uid.Length <= 9;
+            var IrminsulMark = uid.StartsWith("5") && uid.Length <= 9;
+            var AmericaMark = uid.StartsWith("6") && uid.Length <= 9;
+            var EuropeMark = uid.StartsWith("7") && uid.Length <= 9;
+            var AsiaMark = uid.StartsWith("8") && uid.Length <= 9 || uid.StartsWith("18") && uid.Length > 9;
+            var SARMark = uid.StartsWith("9") && uid.Length <= 9;
 
             if (CelestiaMark) return GameServerRegion.ChinaOfficial;
             if (IrminsulMark) return GameServerRegion.ChinaBilibili;

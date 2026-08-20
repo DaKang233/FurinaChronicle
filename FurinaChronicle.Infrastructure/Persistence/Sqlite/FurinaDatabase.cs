@@ -176,7 +176,7 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
                                         (int)GameServerRegion.Unknown,
 
                                     DisplayName =
-                                        "旧数据账号（待补全）",
+                                        $"legacy-{accountId:N} [旧数据账号（待补全）]",
 
                                     IsPlaceholder = true,
 

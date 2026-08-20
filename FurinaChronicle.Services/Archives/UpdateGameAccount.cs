@@ -38,6 +38,10 @@ public sealed class UpdateGameAccount(IGameAccountRepository repository)
         {
             throw new ArgumentException("必须选择有效的服务器区域。", nameof(serverRegion));
         }
+        if (!GameUidValidation.IsValidUid(normalizedUid))
+        {
+            throw new ArgumentException("无效的 UID。有效的 UID 是长度为 9~10 个的数字。", nameof(uid));
+        }
 
         string? normalizedDisplayName = string.IsNullOrWhiteSpace(displayName) ? null : displayName.Trim();
 

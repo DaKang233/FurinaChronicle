@@ -67,10 +67,15 @@ public partial class MainPage : ContentPage
             picker.SelectedItem as GameAccount);
     }
 
-    private async void OnRenameAccountClicked(object? sender, EventArgs e)
+    private async void OnEditAccountClicked(object? sender, EventArgs e)
     {
+        if (ViewModel.SelectedAccount is null)
+        {
+            await DisplayAlertAsync("错误", "请先选择账号。", "确定");
+            return;
+        }
         string name = await DisplayPromptAsync(
-            title: "重命名账号",
+            title: "编辑账号",
             message: "请输入名称",
             accept: "重命名",
             cancel: "取消",
@@ -78,11 +83,33 @@ public partial class MainPage : ContentPage
             maxLength: 50,
             keyboard: Keyboard.Text);
         if (name is null) return;
-        await ViewModel.RenameSelectedAccountAsync(name);
+        string uid = await DisplayPromptAsync(
+            title: "编辑账号",
+            message: "请输入账号的 UID。留空并提交表示不更改。UID 应为符合游戏账号规则的 9~10 位数字。",
+            accept: "更改",
+            cancel: "取消",
+            placeholder: "在这里输入 UID",
+            maxLength: 50,
+            keyboard: Keyboard.Numeric);
+        if (uid is null) return;
+        if (uid != string.Empty && !GameUidValidation.IsValidUid(uid))
+        {
+            await DisplayAlertAsync(
+                title: "无效的 UID",
+                message: "请输入有效的 UID。有效的 UID 是长度为 9~10 个的数字，并且符合游戏账号规则。",
+                cancel: "确定");
+            return;
+        }
+        await ViewModel.EditSelectedAccountAsync(name, uid);
     }
 
     private async void OnRenameArchiveClicked(object? sender, EventArgs e)
     {
+        if (ViewModel.SelectedArchive is null)
+        {
+            await DisplayAlertAsync("错误", "请先选择档案。", "确定");
+            return;
+        }
         string name = await DisplayPromptAsync(
             title: "重命名档案",
             message: "请输入名称",
@@ -117,4 +144,3 @@ public partial class MainPage : ContentPage
         await ViewModel.DeleteSelectedArchiveAsync();
     }
 }
-

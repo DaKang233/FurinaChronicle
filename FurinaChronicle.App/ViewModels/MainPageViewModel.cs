@@ -40,7 +40,9 @@ public partial class MainPageViewModel(
     [NotifyCanExecuteChangedFor(nameof(CreateAccountCommand))]
     [NotifyCanExecuteChangedFor(nameof(ImportIntoArchiveCommand))]
     [NotifyCanExecuteChangedFor(nameof(ImportIntoSelectedAccountCommand))]
+    [NotifyPropertyChangedFor(nameof(IsNotBusy))]
     public partial bool IsBusy { get; set; }
+    public bool IsNotBusy => !IsBusy;
 
     [ObservableProperty]
     public partial PlayerArchive? SelectedArchive { get; set; }
@@ -246,21 +248,25 @@ public partial class MainPageViewModel(
         });
     }
 
-    public async Task RenameSelectedAccountAsync(string name)
+    public async Task EditSelectedAccountAsync(string displayName, string uid)
     {
         await ExecuteBusyAsync(async () =>
         {
-            if (SelectedAccount is null) throw new InvalidOperationException("请先选择要重命名的账号。");
-            string finaleName = $"{SelectedAccount.Uid} ({name})";
-            if (string.IsNullOrEmpty(name)) finaleName = SelectedAccount.Uid;
+            if (SelectedAccount is null) throw new InvalidOperationException("请先选择要编辑的账号。");
+            var previousUid = SelectedAccount.Uid;
+            var finalUid = uid == string.Empty ? previousUid : uid;
+            string finalName = $"{finalUid} ({displayName})";
+            if (string.IsNullOrEmpty(displayName)) finalName = finalUid;
+            GameServerRegion gameServerRegion = GameServerRegionResolver.Resolve(finalUid);
             GameAccount updated = await updateGameAccount.ExecuteAsync(
                 SelectedAccount.Id,
-                SelectedAccount.Uid,
-                SelectedAccount.ServerRegion,
-                finaleName);
+                finalUid,
+                gameServerRegion,
+                finalName);
 
             await RefreshAccountsCoreAsync();
-            StatusMessage = $"已将账号重命名为“{updated.DisplayName}”。";
+            
+            StatusMessage = $"账号“{previousUid}”已编辑。";
         });
     }
 
