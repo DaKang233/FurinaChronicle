@@ -8,6 +8,11 @@ using FurinaChronicle.Services.Wishes;
 using FurinaChronicle.Services.Archives;
 using Microsoft.Extensions.Logging;
 using FurinaChronicle.Core.Wishes;
+using FurinaChronicle.Infrastructure.Gacha.Metadata;
+using FurinaChronicle.Infrastructure.Gacha.Uigf.V4_2;
+using FurinaChronicle.Services.Gacha.Abstractions;
+using FurinaChronicle.Services.Gacha.Importing;
+
 using System.Diagnostics;
 
 namespace FurinaChronicle.App
@@ -41,6 +46,10 @@ namespace FurinaChronicle.App
 			builder.Services.AddSingleton<IWishRecordReader, JsonWishRecordReader>();
 			builder.Services.AddTransient<GetRecentWishRecords>();
 			builder.Services.AddTransient<ImportWishRecords>();
+			builder.Services.AddSingleton<IGachaImportReader, UigfV42GachaReader>();
+			builder.Services.AddSingleton<IGachaItemMetadataProvider, EmptyGachaItemMetadataProvider>();
+			builder.Services.AddTransient<ImportUigfGachaRecords>();
+
 
 			builder.Services.AddTransient<MainPageViewModel>();
 			builder.Services.AddTransient<MainPage>();

@@ -7,7 +7,7 @@ namespace FurinaChronicle.Tests.Infrastructure.Persistence.Sqlite;
 public sealed class FurinaDatabaseMigrationTests
 {
     [Fact]
-    public async Task InitializeAsync_NewDatabase_CreatesVersionTwoSchema()
+    public async Task InitializeAsync_NewDatabase_CreatesVersionThreeSchema()
     {
         await using var fixture = MigrationFixture.Create();
         await using (FurinaDatabase database = fixture.OpenDatabase())
@@ -16,7 +16,7 @@ public sealed class FurinaDatabaseMigrationTests
         }
 
         using SQLiteConnection connection = fixture.OpenRawConnection();
-        Assert.Equal(2, connection.ExecuteScalar<int>("PRAGMA user_version;"));
+        Assert.Equal(3, connection.ExecuteScalar<int>("PRAGMA user_version;"));
         string[] tables = connection.Query<NameRow>(
                 "SELECT name FROM sqlite_master WHERE type = 'table';")
             .Select(row => row.Name)
@@ -66,13 +66,13 @@ public sealed class FurinaDatabaseMigrationTests
         }
 
         using SQLiteConnection connection = fixture.OpenRawConnection();
-        Assert.Equal(2, connection.ExecuteScalar<int>("PRAGMA user_version;"));
+        Assert.Equal(3, connection.ExecuteScalar<int>("PRAGMA user_version;"));
         Assert.Equal(3, connection.ExecuteScalar<int>("SELECT COUNT(*) FROM WishRecords;"));
         AssertForeignKeysAreValid(connection);
     }
 
     [Fact]
-    public async Task InitializeAsync_VersionTwo_ReopeningDoesNotDuplicateMigratedData()
+    public async Task InitializeAsync_VersionThree_ReopeningDoesNotDuplicateMigratedData()
     {
         await using var fixture = MigrationFixture.Create();
         fixture.CreateVersionOneDatabase([new LegacyWish(Guid.NewGuid(), "wish-1", 30)]);
@@ -99,14 +99,14 @@ public sealed class FurinaDatabaseMigrationTests
         await using var fixture = MigrationFixture.Create();
         using (SQLiteConnection connection = fixture.OpenRawConnection())
         {
-            connection.Execute("PRAGMA user_version = 3;");
+            connection.Execute("PRAGMA user_version = 4;");
         }
 
         await using FurinaDatabase database = fixture.OpenDatabase();
         NotSupportedException exception = await Assert.ThrowsAsync<NotSupportedException>(
             () => database.InitializeAsync());
 
-        Assert.Contains("\u7248\u672c 3", exception.Message);
+        Assert.Contains("\u7248\u672c 4", exception.Message);
     }
 
     private static void AssertForeignKeysAreValid(SQLiteConnection connection)

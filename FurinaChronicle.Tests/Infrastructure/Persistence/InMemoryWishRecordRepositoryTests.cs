@@ -99,8 +99,8 @@ public sealed class InMemoryWishRecordRepositoryTests
             {
                 Assert.NotEqual(Guid.Empty, record.GameAccountId);
                 Assert.NotEmpty(record.ExternalRecordId);
-                Assert.NotEmpty(record.ItemName);
-                Assert.InRange(record.RankType, 3, 5);
+                Assert.NotEmpty(record.ItemName!);
+                Assert.InRange(record.RankType!.Value, 3, 5);
             });
     }
 

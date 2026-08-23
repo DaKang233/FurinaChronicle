@@ -8,7 +8,7 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
 {
     public sealed class FurinaDatabase : IAsyncDisposable
     {
-        private const int CurrentSchemaVersion = 2;
+        private const int CurrentSchemaVersion = 3;
         private readonly SemaphoreSlim initializeGate = new(1, 1);
         private bool initialized;
         internal SQLiteAsyncConnection Connection { get; }
@@ -57,6 +57,10 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
                         case 1:
                             await MigrateFrom1To2Async(cancellationToken);
                             schemaVersion = 2;
+                            break;
+                        case 2:
+                            await MigrateFrom2To3Async(cancellationToken);
+                            schemaVersion = 3;
                             break;
                         default:
                             throw new NotSupportedException($"无法从数据库版本 {schemaVersion} 进行升级。");
@@ -194,6 +198,85 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
                     connection.Execute(
                         "PRAGMA user_version = 2;");
                 });
+        }
+
+        private async Task MigrateFrom2To3Async(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            await Connection.RunInTransactionAsync(connection =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                connection.Execute("""
+                    ALTER TABLE WishRecords
+                    RENAME TO WishRecords_Old;
+                    """);
+
+                connection.Execute("""
+                    CREATE TABLE WishRecords
+                    (
+                        Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        GameAccountId TEXT NOT NULL,
+                        ExternalRecordId TEXT NOT NULL,
+                        ItemName TEXT,
+                        ItemId TEXT,
+                        ItemType TEXT,
+                        GachaType TEXT,
+                        UigfGachaType TEXT,
+                        RankType INTEGER,
+                        Count INTEGER NOT NULL,
+                        TimeUtcTicks INTEGER NOT NULL,
+                        TimeOffsetMinutes INTEGER NOT NULL,
+                        FOREIGN KEY (GameAccountId)
+                            REFERENCES GameAccounts(Id)
+                            ON DELETE CASCADE
+                    );
+                    """);
+
+                connection.Execute("""
+                    INSERT INTO WishRecords
+                    (
+                        Id,
+                        GameAccountId,
+                        ExternalRecordId,
+                        ItemName,
+                        RankType,
+                        Count,
+                        TimeUtcTicks,
+                        TimeOffsetMinutes
+                    )
+                    SELECT
+                        Id,
+                        GameAccountId,
+                        ExternalRecordId,
+                        ItemName,
+                        RankType,
+                        1,
+                        TimeUtcTicks,
+                        TimeOffsetMinutes
+                    FROM WishRecords_Old;
+                    """);
+
+                connection.Execute("DROP TABLE WishRecords_Old;");
+
+                connection.Execute("""
+                    CREATE UNIQUE INDEX UX_WishRecords_Account_ExternalId
+                    ON WishRecords(GameAccountId, ExternalRecordId);
+                    """);
+
+                connection.Execute("""
+                    CREATE INDEX IX_WishRecords_TimeUtcTicks
+                    ON WishRecords(TimeUtcTicks);
+                    """);
+
+                connection.Execute("""
+                    CREATE INDEX IX_WishRecords_GameAccountId
+                    ON WishRecords(GameAccountId);
+                    """);
+
+                connection.Execute("PRAGMA user_version = 3;");
+            });
         }
 
         private static void RebuildWishRecordsWithForeignKey(

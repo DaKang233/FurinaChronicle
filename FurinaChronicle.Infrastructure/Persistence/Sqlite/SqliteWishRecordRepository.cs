@@ -26,7 +26,12 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
                         GameAccountId,
                         ExternalRecordId,
                         ItemName,
+                        ItemId,
+                        ItemType,
+                        GachaType,
+                        UigfGachaType,
                         RankType,
+                        Count,
                         TimeUtcTicks,
                         TimeOffsetMinutes
                     FROM {WishRecordRow.TableName}
