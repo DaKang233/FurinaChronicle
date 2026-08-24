@@ -10,6 +10,16 @@ namespace FurinaChronicle.Services.Abstractions
     {
         Task<IReadOnlyList<WishRecord>> GetRecentAsync(Guid gameAccountId,int count, CancellationToken cancellationToken = default);
 
+        Task<IReadOnlyList<WishRecord>> GetPageAsync(
+            Guid gameAccountId,
+            int offset,
+            int count,
+            CancellationToken cancellationToken = default);
+
+        Task<int> CountAsync(
+            Guid gameAccountId,
+            CancellationToken cancellationToken = default);
+
         Task<WishSaveResult> SaveBatchAsync(IReadOnlyCollection<WishRecord> records, CancellationToken cancellationToken = default);
     }
 }

@@ -5,6 +5,7 @@ using FurinaChronicle.Core.Gacha.Metadata;
 using FurinaChronicle.Infrastructure.Gacha.Metadata.Abstractions;
 using FurinaChronicle.Infrastructure.Gacha.Metadata.Persistence;
 using FurinaChronicle.Services.Gacha.Abstractions;
+using FurinaChronicle.Services.Gacha.Metadata;
 
 namespace FurinaChronicle.Infrastructure.Gacha.Metadata;
 
@@ -146,7 +147,7 @@ public sealed class SqliteGachaItemMetadataProvider(
             {
                 throw;
             }
-            catch when (hasExistingCache)
+            catch (Exception) when (hasExistingCache)
             {
                 await database.MarkCheckedAsync(
                     game,
@@ -159,13 +160,11 @@ public sealed class SqliteGachaItemMetadataProvider(
                     UsedExistingCache: true,
                     state?.ContentSha256);
             }
-            catch
+            catch (Exception exception)
             {
-                return new GachaMetadataRefreshResult(
-                    CheckAttempted: true,
-                    ContentUpdated: false,
-                    UsedExistingCache: false,
-                    ContentSha256: null);
+                throw new GachaMetadataUnavailableException(
+                    "无法初始化原神角色和武器元数据。",
+                    exception);
             }
         }
         finally

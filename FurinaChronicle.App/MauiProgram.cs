@@ -1,5 +1,6 @@
 ﻿using FurinaChronicle.App.ViewModels;
 using FurinaChronicle.App.Persistence;
+using FurinaChronicle.App.Startup;
 using FurinaChronicle.Infrastructure.Importing.Json;
 using FurinaChronicle.Infrastructure.Persistence.Sqlite;
 using FurinaChronicle.Services.Abstractions;
@@ -46,6 +47,7 @@ namespace FurinaChronicle.App
 			builder.Services.AddSingleton(new SqliteDatabaseOptions(databasePath));
 			builder.Services.AddSingleton<FurinaDatabase>();
 			builder.Services.AddSingleton<IWishRecordRepository, SqliteWishRecordRepository>();
+			builder.Services.AddTransient<GetWishRecordPage>();
 
 			builder.Services.AddSingleton<IWishRecordReader, JsonWishRecordReader>();
 			builder.Services.AddTransient<GetRecentWishRecords>();
@@ -92,6 +94,9 @@ namespace FurinaChronicle.App
 			builder.Services.AddTransient<DeleteGameAccount>();
 			builder.Services.AddSingleton<AppShell>();
 			builder.Services.AddTransient<ArchiveSelectionService>();
+			builder.Services.AddSingleton<ApplicationStartupService>();
+			builder.Services.AddSingleton<StartupPageViewModel>();
+			builder.Services.AddSingleton<StartupPage>();
 
 			return builder.Build();
 		}

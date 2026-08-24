@@ -78,4 +78,10 @@
 	  <ProjectReference Include="..\FurinaChronicle.Infrastructure\FurinaChronicle.Infrastructure.csproj" />
 	</ItemGroup>
 
+	<ItemGroup>
+	  <MauiXaml Update="UI\StartupPage.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </MauiXaml>
+	</ItemGroup>
+
 </Project>

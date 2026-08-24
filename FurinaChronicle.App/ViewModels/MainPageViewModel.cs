@@ -1,18 +1,16 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FurinaChronicle.App.Demo;
 using FurinaChronicle.Core.Archives;
-using FurinaChronicle.Core.Wishes;
 using FurinaChronicle.Services.Archives;
+using FurinaChronicle.Services.Gacha.Importing;
 using FurinaChronicle.Services.Wishes;
-using FurinaChronicle.Services.Wishes.Importing;
 using System.Collections.ObjectModel;
 
 namespace FurinaChronicle.App.ViewModels;
 
 public partial class MainPageViewModel(
-	GetRecentWishRecords getRecentWishRecords,
-	ImportWishRecords importWishRecords,
+	GetWishRecordPage getWishRecordPage,
+	ImportUigfGachaRecords importUigfGachaRecords,
 	CreatePlayerArchive createPlayerArchive,
 	GetPlayerArchives getPlayerArchives,
 	GetGameAccounts getGameAccounts,
@@ -30,7 +28,7 @@ public partial class MainPageViewModel(
 
 	public ObservableCollection<GameAccount> Accounts { get; } = [];
 
-	public ObservableCollection<WishRecord> WishRecords { get; } = [];
+	public ObservableCollection<WishRecordDisplayItem> WishRecords { get; } = [];
 
 	public IReadOnlyList<GameServerRegion> ServerRegions { get; } = Enum.GetValues<GameServerRegion>().Where(region => region != GameServerRegion.Unknown).ToArray();
 
@@ -38,9 +36,11 @@ public partial class MainPageViewModel(
 	[NotifyCanExecuteChangedFor(nameof(ReloadArchivesCommand))]
 	[NotifyCanExecuteChangedFor(nameof(ReloadSelectedArchiveCommand))]
 	[NotifyCanExecuteChangedFor(nameof(CreateAccountCommand))]
-	[NotifyCanExecuteChangedFor(nameof(ImportIntoArchiveCommand))]
-	[NotifyCanExecuteChangedFor(nameof(ImportIntoSelectedAccountCommand))]
+	[NotifyCanExecuteChangedFor(nameof(PreviousPageCommand))]
+	[NotifyCanExecuteChangedFor(nameof(NextPageCommand))]
 	[NotifyPropertyChangedFor(nameof(IsNotBusy))]
+	[NotifyPropertyChangedFor(nameof(CanGoToPreviousPage))]
+	[NotifyPropertyChangedFor(nameof(CanGoToNextPage))]
 	public partial bool IsBusy { get; set; }
 	public bool IsNotBusy => !IsBusy;
 
@@ -48,6 +48,10 @@ public partial class MainPageViewModel(
 	public partial PlayerArchive? SelectedArchive { get; set; }
 
 	[ObservableProperty]
+	[NotifyCanExecuteChangedFor(nameof(PreviousPageCommand))]
+	[NotifyCanExecuteChangedFor(nameof(NextPageCommand))]
+	[NotifyPropertyChangedFor(nameof(CanGoToPreviousPage))]
+	[NotifyPropertyChangedFor(nameof(CanGoToNextPage))]
 	public partial GameAccount? SelectedAccount { get; set; }
 
 	[ObservableProperty]
@@ -67,6 +71,35 @@ public partial class MainPageViewModel(
 
 	[ObservableProperty]
 	public partial string StatusMessage { get; set; } = "请先选择档案。";
+	[ObservableProperty]
+	[NotifyCanExecuteChangedFor(nameof(PreviousPageCommand))]
+	[NotifyCanExecuteChangedFor(nameof(NextPageCommand))]
+	[NotifyPropertyChangedFor(nameof(PageSummary))]
+	[NotifyPropertyChangedFor(nameof(CanGoToPreviousPage))]
+	[NotifyPropertyChangedFor(nameof(CanGoToNextPage))]
+	public partial int CurrentPage { get; set; } = 1;
+
+	[ObservableProperty]
+	[NotifyCanExecuteChangedFor(nameof(PreviousPageCommand))]
+	[NotifyCanExecuteChangedFor(nameof(NextPageCommand))]
+	[NotifyPropertyChangedFor(nameof(PageSummary))]
+	[NotifyPropertyChangedFor(nameof(CanGoToPreviousPage))]
+	[NotifyPropertyChangedFor(nameof(CanGoToNextPage))]
+	public partial int TotalPages { get; set; } = 1;
+
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(PageSummary))]
+	public partial int TotalRecordCount { get; set; }
+
+	public string PageSummary =>
+		$"第 {CurrentPage} / {TotalPages} 页，共 {TotalRecordCount} 条";
+
+	public bool CanGoToPreviousPage =>
+		!IsBusy && SelectedAccount is not null && CurrentPage > 1;
+
+	public bool CanGoToNextPage =>
+		!IsBusy && SelectedAccount is not null && CurrentPage < TotalPages;
+
 
 	public async Task InitializeAsync()
 	{
@@ -112,6 +145,7 @@ public partial class MainPageViewModel(
 			{
 				SelectedAccount = null;
 				WishRecords.Clear();
+				ResetPagination();
 				StatusMessage = "当前档案尚未选择账号。";
 				return;
 			}
@@ -189,63 +223,81 @@ public partial class MainPageViewModel(
 		});
 	}
 
-	[RelayCommand(CanExecute = nameof(CanRun))]
-	private async Task ImportIntoArchiveAsync()
+	public async Task ImportUigfIntoArchiveAsync(
+		Stream source,
+		string fileName)
 	{
+		ArgumentNullException.ThrowIfNull(source);
+
 		await ExecuteBusyAsync(async () =>
 		{
 			PlayerArchive archive = await EnsureImportArchiveAsync();
+			GachaImportResult result =
+				await importUigfGachaRecords.ExecuteAsync(
+					source,
+					archive.Id);
+
 			await RefreshAccountsCoreAsync();
+			SelectedAccount ??= Accounts.FirstOrDefault();
 
-			GameAccount? account = Accounts.FirstOrDefault(
-				candidate => candidate.Uid == SampleWishData.Uid);
-
-			if (account is null)
+			if (SelectedAccount is not null)
 			{
-				GameServerRegion region =
-					GameServerRegionResolver.Resolve(SampleWishData.Uid);
-				if (region == GameServerRegion.Unknown)
-				{
-					throw new InvalidOperationException("无法根据导入 UID 推断服务器区域。");
-				}
-
-				account = await addGameAccount.ExecuteAsync(
-					archive.Id,
-					SampleWishData.Uid,
-					region,
-					SampleWishData.Uid + " (内置示例账号)");
+				await archiveSelectionService.SelectAsync(
+					SelectedAccount.Id);
+				await ReloadRecordsCoreAsync(pageNumber: 1);
 			}
 
-			await ImportIntoAccountCoreAsync(account);
-			await RefreshAccountsCoreAsync();
-			SelectedAccount = Accounts.First(candidate => candidate.Id == account.Id);
-			await ReloadRecordsCoreAsync();
-			StatusMessage = $"档案 {archive.Name} 已完成导入。";
+			ImportSummary = FormatImportSummary(
+				fileName,
+				result);
+			StatusMessage =
+				$"已将 UIGF 文件导入档案“{archive.Name}”。";
 		});
 	}
 
-	[RelayCommand(CanExecute = nameof(CanRun))]
-	private async Task ImportIntoSelectedAccountAsync()
+	public async Task ImportUigfIntoSelectedAccountAsync(
+		Stream source,
+		string fileName)
 	{
+		ArgumentNullException.ThrowIfNull(source);
+
 		await ExecuteBusyAsync(async () =>
 		{
-			if (SelectedAccount is null)
+			if (SelectedArchive is null ||
+				SelectedAccount is null)
 			{
-				throw new InvalidOperationException("请先选择要导入的账号。");
+				throw new InvalidOperationException(
+					"请先选择要导入的档案和账号。");
 			}
 
-			if (!string.Equals(SelectedAccount.Uid, SampleWishData.Uid, StringComparison.Ordinal))
-			{
-				ImportSummary =
-					$"内置数据 UID {SampleWishData.Uid} " +
-					$"与当前账号 UID {SelectedAccount.Uid} 不一致，" +
-					$"已忽略 {SampleWishData.SourceRecordCount} 条记录。";
-				return;
-			}
+			Guid archiveId = SelectedArchive.Id;
+			Guid accountId = SelectedAccount.Id;
 
-			await ImportIntoAccountCoreAsync(SelectedAccount);
-			await ReloadRecordsCoreAsync();
+			GachaImportResult result =
+				await importUigfGachaRecords.ExecuteAsync(
+					source,
+					archiveId,
+					accountId);
+
+			await ReloadRecordsCoreAsync(pageNumber: 1);
+			ImportSummary = FormatImportSummary(
+				fileName,
+				result);
+			StatusMessage =
+				$"已将 UIGF 文件导入账号 {SelectedAccount.Uid}。";
 		});
+	}
+
+	private static string FormatImportSummary(
+		string fileName,
+		GachaImportResult result)
+	{
+		return $"{fileName}：共读取 {result.TotalCount} 条，" +
+			$"导入 {result.ImportedCount} 条，" +
+			$"重复 {result.DuplicateCount} 条，" +
+			$"无效 {result.InvalidCount} 条，" +
+			$"忽略 {result.IgnoredCount} 条，" +
+			$"新建账号 {result.CreatedAccountCount} 个。";
 	}
 
 	public async Task EditSelectedAccountAsync(string displayName, string uid)
@@ -302,6 +354,7 @@ public partial class MainPageViewModel(
 			SelectedAccount = null;
 			Accounts.Clear();
 			WishRecords.Clear();
+			ResetPagination();
 
 			await LoadArchivesCoreAsync();
 			SelectedArchive = Archives.FirstOrDefault();
@@ -329,6 +382,7 @@ public partial class MainPageViewModel(
 			await deleteGameAccount.ExecuteAsync(deletedAccountId);
 			SelectedAccount = null;
 			WishRecords.Clear();
+			ResetPagination();
 			await RefreshAccountsCoreAsync();
 			SelectedAccount = Accounts.FirstOrDefault();
 
@@ -372,23 +426,6 @@ public partial class MainPageViewModel(
 		return $"未命名档案{suffix}";
 	}
 
-	private async Task ImportIntoAccountCoreAsync(GameAccount account)
-	{
-		await archiveSelectionService.SelectAsync(account.Id);
-		SelectedAccount = account;
-
-		await using Stream stream = SampleWishData.OpenStream();
-		WishImportResult result = await importWishRecords.ExecuteAsync(
-			stream,
-			account.Id);
-
-		ImportSummary =
-			$"共读取 {result.TotalCount} 条，" +
-			$"导入 {result.ImportedCount} 条，" +
-			$"重复 {result.DuplicateCount} 条，" +
-			$"无效 {result.InvalidCount} 条。";
-	}
-
 	private async Task LoadArchivesCoreAsync(Guid? selectedArchiveId = null)
 	{
 		IReadOnlyList<PlayerArchive> archives =
@@ -410,6 +447,7 @@ public partial class MainPageViewModel(
 			Accounts.Clear();
 			SelectedAccount = null;
 			WishRecords.Clear();
+			ResetPagination();
 			StatusMessage = "请先选择档案。";
 		}
 	}
@@ -419,6 +457,7 @@ public partial class MainPageViewModel(
 		Accounts.Clear();
 		SelectedAccount = null;
 		WishRecords.Clear();
+		ResetPagination();
 
 		if (SelectedArchive is null)
 		{
@@ -457,6 +496,8 @@ public partial class MainPageViewModel(
 		{
 			Accounts.Clear();
 			SelectedAccount = null;
+			WishRecords.Clear();
+			ResetPagination();
 			return;
 		}
 
@@ -476,24 +517,59 @@ public partial class MainPageViewModel(
 				account => account.Id == selectedAccountId);
 	}
 
-	private async Task ReloadRecordsCoreAsync()
+	[RelayCommand(CanExecute = nameof(CanMoveToPreviousPage))]
+	private async Task PreviousPageAsync()
+	{
+		await ExecuteBusyAsync(() =>
+			ReloadRecordsCoreAsync(CurrentPage - 1));
+	}
+
+	[RelayCommand(CanExecute = nameof(CanMoveToNextPage))]
+	private async Task NextPageAsync()
+	{
+		await ExecuteBusyAsync(() =>
+			ReloadRecordsCoreAsync(CurrentPage + 1));
+	}
+
+	private bool CanMoveToPreviousPage() =>
+		CanGoToPreviousPage;
+
+	private bool CanMoveToNextPage() =>
+		CanGoToNextPage;
+
+	private async Task ReloadRecordsCoreAsync(
+		int pageNumber = 1)
 	{
 		WishRecords.Clear();
 
 		if (SelectedAccount is null)
 		{
+			ResetPagination();
 			return;
 		}
 
-		IReadOnlyList<WishRecord> records =
-			await getRecentWishRecords.ExecuteAsync(
+		WishRecordPage page =
+			await getWishRecordPage.ExecuteAsync(
 				SelectedAccount.Id,
-				count: 20);
+				pageNumber,
+				pageSize: 50);
 
-		foreach (WishRecord record in records)
+		CurrentPage = page.PageNumber;
+		TotalPages = page.TotalPages;
+		TotalRecordCount = page.TotalCount;
+
+		foreach (var record in page.Records)
 		{
-			WishRecords.Add(record);
+			WishRecords.Add(
+				WishRecordDisplayItem.FromDomain(record));
 		}
+	}
+
+	private void ResetPagination()
+	{
+		CurrentPage = 1;
+		TotalPages = 1;
+		TotalRecordCount = 0;
 	}
 
 	private async Task ExecuteBusyAsync(Func<Task> operation)

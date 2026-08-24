@@ -4,6 +4,7 @@ using FurinaChronicle.Infrastructure.Gacha.Metadata;
 using FurinaChronicle.Infrastructure.Gacha.Metadata.Abstractions;
 using FurinaChronicle.Infrastructure.Gacha.Metadata.Persistence;
 using FurinaChronicle.Services.Gacha.Abstractions;
+using FurinaChronicle.Services.Gacha.Metadata;
 
 namespace FurinaChronicle.Tests.Infrastructure.Gacha.Metadata;
 
@@ -155,6 +156,33 @@ public sealed class SqliteGachaItemMetadataProviderTests
         {
             Directory.Delete(directory, recursive: true);
         }
+    }
+
+    [Fact]
+    public async Task RefreshIfNeededAsync_FirstDownloadFailure_Throws()
+    {
+        await using MetadataTestContext context = MetadataTestContext.Create();
+
+        context.RemoteSource.Exception = new HttpRequestException("network unavailable");
+
+        await Assert.ThrowsAsync<GachaMetadataUnavailableException>(() => context.Provider.RefreshIfNeededAsync(GachaGame.GenshinImpact));
+    }
+
+    [Fact]
+    public async Task RefreshIfNeededAsync_AfterFirstFailure_CanRetry()
+    {
+        await using MetadataTestContext context = MetadataTestContext.Create();
+
+        context.RemoteSource.Exception = new HttpRequestException("network unavailable");
+
+        await Assert.ThrowsAsync<GachaMetadataUnavailableException>(() => context.Provider.RefreshIfNeededAsync(GachaGame.GenshinImpact));
+
+        context.RemoteSource.Exception = null;
+
+        GachaMetadataRefreshResult result = await context.Provider.RefreshIfNeededAsync(GachaGame.GenshinImpact);
+
+        Assert.True(result.ContentUpdated);
+        Assert.False(result.UsedExistingCache);
     }
 
     private static SqliteGachaItemMetadataProvider CreateProvider(

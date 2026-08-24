@@ -9,18 +9,48 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
 {
     public sealed class SqliteWishRecordRepository(FurinaDatabase database) : IWishRecordRepository
     {
-        public async Task<IReadOnlyList<WishRecord>> GetRecentAsync(Guid gameAccountId, int count, CancellationToken cancellationToken = default)
+        public Task<IReadOnlyList<WishRecord>> GetRecentAsync(
+            Guid gameAccountId,
+            int count,
+            CancellationToken cancellationToken = default)
         {
+            return GetPageAsync(
+                gameAccountId,
+                offset: 0,
+                count,
+                cancellationToken);
+        }
+
+        public async Task<IReadOnlyList<WishRecord>> GetPageAsync(
+            Guid gameAccountId,
+            int offset,
+            int count,
+            CancellationToken cancellationToken = default)
+        {
+            if (gameAccountId == Guid.Empty)
+            {
+                throw new ArgumentException(
+                    "游戏账号 ID 不能为空。",
+                    nameof(gameAccountId));
+            }
+            if (offset < 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(offset),
+                    "查询偏移量不能小于零。");
+            }
             if (count <= 0)
             {
-                throw new ArgumentOutOfRangeException(nameof(count), "查询数量必须大于零。");
+                throw new ArgumentOutOfRangeException(
+                    nameof(count),
+                    "查询数量必须大于零。");
             }
 
             await database.InitializeAsync(cancellationToken);
-
             cancellationToken.ThrowIfCancellationRequested();
 
-            List<WishRecordRow> rows = await database.Connection.QueryAsync<WishRecordRow>($"""
+            List<WishRecordRow> rows =
+                await database.Connection.QueryAsync<WishRecordRow>($"""
                     SELECT
                         Id,
                         GameAccountId,
@@ -40,12 +70,34 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
                         TimeUtcTicks DESC,
                         Id DESC
                     LIMIT ?
+                    OFFSET ?
                     """,
                     gameAccountId.ToString("D"),
-                    count);
+                    count,
+                    offset);
 
             cancellationToken.ThrowIfCancellationRequested();
             return rows.Select(row => row.ToDomain()).ToArray();
+        }
+
+        public async Task<int> CountAsync(
+            Guid gameAccountId,
+            CancellationToken cancellationToken = default)
+        {
+            if (gameAccountId == Guid.Empty)
+            {
+                throw new ArgumentException(
+                    "游戏账号 ID 不能为空。",
+                    nameof(gameAccountId));
+            }
+
+            await database.InitializeAsync(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            return await database.Connection.ExecuteScalarAsync<int>(
+                $"SELECT COUNT(*) FROM {WishRecordRow.TableName} WHERE GameAccountId = ?;",
+
+                gameAccountId.ToString("D"));
         }
 
         public async Task<WishSaveResult> SaveBatchAsync(IReadOnlyCollection<WishRecord> records, CancellationToken cancellationToken = default)

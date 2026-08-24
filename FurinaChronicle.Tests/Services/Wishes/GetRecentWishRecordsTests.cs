@@ -130,9 +130,27 @@ public sealed class GetRecentWishRecordsTests
             ReceviedGameAccountId = gameAccountId;
             ReceivedCount = count;
             ReceivedCancellationToken = cancellationToken;
-
             return Task.FromResult(Result);
         }
+
+        public Task<IReadOnlyList<WishRecord>> GetPageAsync(
+            Guid gameAccountId,
+            int offset,
+            int count,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException(
+                "该测试替身只用于测试最近记录查询。");
+        }
+
+        public Task<int> CountAsync(
+            Guid gameAccountId,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException(
+                "该测试替身只用于测试最近记录查询。");
+        }
+
 
         public Task<WishSaveResult> SaveBatchAsync(IReadOnlyCollection<WishRecord> records, CancellationToken cancellationToken = default)
         {
