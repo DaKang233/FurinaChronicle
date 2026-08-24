@@ -5,5 +5,6 @@ public sealed record GachaItemMetadata(
     string ItemId,
     string Name,
     string ItemType,
-    int RankType,
-    string? IconKey = null);
+    int? RankType,
+    string? IconUrl = null,
+    IReadOnlyDictionary<string, string>? LocalizedNames = null);
