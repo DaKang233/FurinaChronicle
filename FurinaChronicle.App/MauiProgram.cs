@@ -16,6 +16,7 @@ using FurinaChronicle.Infrastructure.Gacha.Metadata.Localization;
 using FurinaChronicle.Infrastructure.Gacha.Metadata.Persistence;
 using FurinaChronicle.Infrastructure.Gacha.Metadata.Remote;
 using FurinaChronicle.Infrastructure.Gacha.Uigf.V4_2;
+using FurinaChronicle.Infrastructure.Gacha.Uigf.Compatibility;
 using FurinaChronicle.Services.Gacha.Abstractions;
 using FurinaChronicle.Services.Gacha.Exporting;
 using FurinaChronicle.Services.Gacha.Importing;
@@ -54,7 +55,8 @@ namespace FurinaChronicle.App
 			builder.Services.AddSingleton<IWishRecordReader, JsonWishRecordReader>();
 			builder.Services.AddTransient<GetRecentWishRecords>();
 			builder.Services.AddTransient<ImportWishRecords>();
-			builder.Services.AddSingleton<IGachaImportReader, UigfV42GachaReader>();
+			builder.Services.AddSingleton<UigfV42GachaReader>();
+			builder.Services.AddSingleton<IGachaImportReader, UigfCompatibleGachaReader>();
 
 			string metadataDatabasePath = Path.Combine(
 				FileSystem.AppDataDirectory,

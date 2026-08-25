@@ -1,5 +1,7 @@
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Infrastructure.Gacha.Metadata;
+using FurinaChronicle.Infrastructure.Gacha.Metadata.Localization;
+using FurinaChronicle.Infrastructure.Gacha.Uigf.Compatibility;
 using FurinaChronicle.Infrastructure.Gacha.Uigf.V4_2;
 using FurinaChronicle.Infrastructure.Persistence.Sqlite;
 using FurinaChronicle.Services.Gacha.Exporting;
@@ -47,7 +49,10 @@ public sealed class UigfV42ExternalFileSmokeTests
             var records =
                 new SqliteWishRecordRepository(database);
             var service = new ImportUigfGachaRecords(
-                new UigfV42GachaReader(),
+                new UigfCompatibleGachaReader(
+                    new UigfV42GachaReader(),
+                    new EmbeddedGachaLocalizationSource(),
+                    TimeProvider.System),
                 new EmptyGachaItemMetadataProvider(),
                 archives,
                 accounts,
@@ -92,6 +97,21 @@ public sealed class UigfV42ExternalFileSmokeTests
                         account.Id,
                         offset: 0,
                         count: 50)).Count);
+            }
+
+            await using (FileStream duplicateStream =
+                File.OpenRead(sourcePath))
+            {
+                GachaImportResult duplicate =
+                    await service.ExecuteAsync(
+                        duplicateStream,
+                        archiveId);
+
+                Assert.Equal(storedCount, duplicate.TotalCount);
+                Assert.Equal(0, duplicate.ImportedCount);
+                Assert.Equal(storedCount, duplicate.DuplicateCount);
+                Assert.Equal(0, duplicate.InvalidCount);
+                Assert.Equal(0, duplicate.CreatedAccountCount);
             }
 
             var loadData = new LoadGachaExportData(

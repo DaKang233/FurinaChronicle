@@ -206,7 +206,7 @@ public partial class MainPage : ContentPage
         FileResult? file = await FilePicker.Default.PickAsync(
             new PickOptions
             {
-                PickerTitle = "选择 UIGF 4.2 JSON 文件",
+                PickerTitle = "选择 UIGF JSON 文件",
                 FileTypes = jsonFileTypes
             });
 
