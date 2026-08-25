@@ -160,6 +160,13 @@ public partial class MainPage : ContentPage
                 exception.Message,
                 "确定");
         }
+        finally
+        {
+            if (!ViewModel.Accounts.Any() && ViewModel.SelectedArchive is not null) // 解决未选择档案时因导入失败而创建空档案的问题
+            {
+                await ViewModel.DeleteSelectedArchiveAsync();
+            }
+        }
     }
 
     private async void OnImportIntoSelectedAccountClicked(

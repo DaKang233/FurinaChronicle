@@ -1,379 +1,186 @@
-﻿using FurinaChronicle.Core.Archives;
 using SQLite;
-using System;
-using System.Collections.Generic;
-using System.Text;
 
-namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
+namespace FurinaChronicle.Infrastructure.Persistence.Sqlite;
+
+public sealed class FurinaDatabase : IAsyncDisposable
 {
-    public sealed class FurinaDatabase : IAsyncDisposable
-    {
-        private const int CurrentSchemaVersion = 3;
-        private readonly SemaphoreSlim initializeGate = new(1, 1);
-        private bool initialized;
-        internal SQLiteAsyncConnection Connection { get; }
+    // This is the first schema version that belongs to a released data model.
+    private const int CurrentSchemaVersion = 1;
 
-        public FurinaDatabase(SqliteDatabaseOptions options)
+    // "FUCH" distinguishes the current v1 generation from pre-release
+    // databases that also used PRAGMA user_version values such as 1.
+    private const int CurrentApplicationId = 0x46554348;
+
+    private readonly SemaphoreSlim initializeGate = new(1, 1);
+    private bool initialized;
+
+    internal SQLiteAsyncConnection Connection { get; }
+
+    public FurinaDatabase(SqliteDatabaseOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        string? directory = Path.GetDirectoryName(options.DatabasePath);
+        if (!string.IsNullOrWhiteSpace(directory))
         {
-            ArgumentNullException.ThrowIfNull(options);
-            string? directory = Path.GetDirectoryName(options.DatabasePath);
-            if (!string.IsNullOrWhiteSpace(directory))
-            {
-                Directory.CreateDirectory(directory);
-            }
-            SQLiteOpenFlags flags = SQLiteOpenFlags.ReadWrite | SQLiteOpenFlags.Create | SQLiteOpenFlags.FullMutex;
-            Connection = new SQLiteAsyncConnection(options.DatabasePath, flags, storeDateTimeAsTicks: true);
+            Directory.CreateDirectory(directory);
         }
 
-        public async Task InitializeAsync(CancellationToken cancellationToken = default)
+        SQLiteOpenFlags flags =
+            SQLiteOpenFlags.ReadWrite |
+            SQLiteOpenFlags.Create |
+            SQLiteOpenFlags.FullMutex;
+        Connection = new SQLiteAsyncConnection(
+            options.DatabasePath,
+            flags,
+            storeDateTimeAsTicks: true);
+    }
+
+    public async Task InitializeAsync(
+        CancellationToken cancellationToken = default)
+    {
+        if (initialized)
+        {
+            return;
+        }
+
+        await initializeGate.WaitAsync(cancellationToken);
+        try
         {
             if (initialized)
             {
                 return;
             }
-            await initializeGate.WaitAsync(cancellationToken);
-            try
+
+            await Connection.SetBusyTimeoutAsync(TimeSpan.FromSeconds(5));
+            cancellationToken.ThrowIfCancellationRequested();
+            await Connection.ExecuteAsync("PRAGMA foreign_keys = ON;");
+
+            int schemaVersion = await Connection.ExecuteScalarAsync<int>(
+                "PRAGMA user_version;");
+            int applicationId = await Connection.ExecuteScalarAsync<int>(
+                "PRAGMA application_id;");
+
+            if (schemaVersion != CurrentSchemaVersion ||
+                applicationId != CurrentApplicationId)
             {
-                if (initialized)
-                {
-                    return;
-                }
-                await Connection.SetBusyTimeoutAsync(TimeSpan.FromSeconds(5));
-                cancellationToken.ThrowIfCancellationRequested();
-                int schemaVersion = await Connection.ExecuteScalarAsync<int>("PRAGMA user_version;");
-                await Connection.ExecuteAsync("PRAGMA foreign_keys = ON;");
-                if (schemaVersion > CurrentSchemaVersion)
-                {
-                    throw new NotSupportedException($"数据库版本 {schemaVersion} 高于程序支持的版本 {CurrentSchemaVersion}。");
-                }
-                while (schemaVersion < CurrentSchemaVersion)
-                {
-                    switch (schemaVersion)
-                    {
-                        case 0:
-                            await MigrateFrom0To1Async(cancellationToken);
-                            schemaVersion = 1;
-                            break;
-                        case 1:
-                            await MigrateFrom1To2Async(cancellationToken);
-                            schemaVersion = 2;
-                            break;
-                        case 2:
-                            await MigrateFrom2To3Async(cancellationToken);
-                            schemaVersion = 3;
-                            break;
-                        default:
-                            throw new NotSupportedException($"无法从数据库版本 {schemaVersion} 进行升级。");
-                    }
-                }
-                initialized = true;
+                await RecreateCurrentSchemaAsync(cancellationToken);
             }
-            finally
-            {
-                initializeGate.Release();
-            }
-        }
 
-        private async Task MigrateFrom0To1Async(CancellationToken cancellationToken)
+            initialized = true;
+        }
+        finally
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            await Connection.RunInTransactionAsync(connection =>
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                connection.CreateTable<WishRecordRow>();
-                connection.CreateIndex(
-                    indexName: "UX_WishRecords_Account_ExternalId",
-                    tableName: WishRecordRow.TableName,
-                    columnNames:
-                        [
-                            nameof(WishRecordRow.GameAccountId),
-                            nameof(WishRecordRow.ExternalRecordId)
-                        ],
-                    unique: true);
-                connection.CreateIndex(
-                    indexName: "IX_WishRecords_TimeUtcTicks",
-                    tableName: WishRecordRow.TableName,
-                    columnName: nameof(WishRecordRow.TimeUtcTicks));
-                connection.Execute("PRAGMA user_version = 1;");
-            });
+            initializeGate.Release();
         }
+    }
 
-        private async Task MigrateFrom1To2Async(CancellationToken cancellationToken)
+    private async Task RecreateCurrentSchemaAsync(
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        await Connection.RunInTransactionAsync(connection =>
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            await Connection.RunInTransactionAsync(
-                connection =>
-                {
-                    connection.CreateTable<PlayerArchiveRow>();
-                    connection.Execute("""
-                        CREATE TABLE GameAccounts
-                        (
-                            Id TEXT PRIMARY KEY NOT NULL,
-                            PlayerArchiveId TEXT NOT NULL,
-                            Uid TEXT NOT NULL,
-                            ServerRegion INTEGER NOT NULL,
-                            DisplayName TEXT,
-                            IsPlaceholder BOOLEAN NOT NULL,
-                            CreatedAtUtcTicks INTEGER NOT NULL,
-                            UpdatedAtUtcTicks INTEGER NOT NULL,
-                            FOREIGN KEY(PlayerArchiveId)
-                                REFERENCES PlayerArchives(Id)
-                                ON DELETE CASCADE
-                        );
-                        """);
-
-                    connection.CreateIndex(
-                        "IX_GameAccounts_PlayerArchiveId",
-                        GameAccountRow.TableName,
-                        nameof(GameAccountRow.PlayerArchiveId));
-
-                    connection.CreateIndex(
-                        "UX_GameAccounts_PlayerArchiveId_Uid",
-                        GameAccountRow.TableName,
-                        [
-                            nameof(GameAccountRow.PlayerArchiveId), nameof(GameAccountRow.Uid)
-                        ],
-                        unique: true);
-
-                    List<LegacyAccountIdRow> legacyAccountIds =
-                        connection.Query<LegacyAccountIdRow>(
-                            """
-                    SELECT DISTINCT GameAccountId
-                    FROM WishRecords;
-                    """);
-
-                    if (legacyAccountIds.Count > 0)
-                    {
-                        Guid archiveId = Guid.NewGuid();
-                        DateTimeOffset now = DateTimeOffset.UtcNow;
-
-                        connection.Insert(
-                            new PlayerArchiveRow
-                            {
-                                Id = archiveId.ToString("D"),
-                                Name = "旧数据迁移档案",
-                                CreatedAtUtcTicks =
-                                    now.UtcDateTime.Ticks,
-                                UpdatedAtUtcTicks =
-                                    now.UtcDateTime.Ticks
-                            });
-
-                        foreach (LegacyAccountIdRow oldAccount
-                            in legacyAccountIds)
-                        {
-                            Guid accountId =
-                                Guid.Parse(oldAccount.GameAccountId);
-
-                            connection.Insert(
-                                new GameAccountRow
-                                {
-                                    Id = accountId.ToString("D"),
-
-                                    PlayerArchiveId =
-                                        archiveId.ToString("D"),
-
-                                    Uid =
-                                        $"legacy-{accountId:N}",
-
-                                    ServerRegion =
-                                        (int)GameServerRegion.Unknown,
-
-                                    DisplayName =
-                                        $"legacy-{accountId:N} [旧数据账号（待补全）]",
-
-                                    IsPlaceholder = true,
-
-                                    CreatedAtUtcTicks =
-                                        now.UtcDateTime.Ticks,
-
-                                    UpdatedAtUtcTicks =
-                                        now.UtcDateTime.Ticks
-                                });
-                        }
-                    }
-
-                    RebuildWishRecordsWithForeignKey(connection);
-
-                    connection.Execute(
-                        "PRAGMA user_version = 2;");
-                });
-        }
-
-        private async Task MigrateFrom2To3Async(CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            await Connection.RunInTransactionAsync(connection =>
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                connection.Execute("""
-                    ALTER TABLE WishRecords
-                    RENAME TO WishRecords_Old;
-                    """);
-
-                connection.Execute("""
-                    CREATE TABLE WishRecords
-                    (
-                        Id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        GameAccountId TEXT NOT NULL,
-                        ExternalRecordId TEXT NOT NULL,
-                        ItemName TEXT,
-                        ItemId TEXT,
-                        ItemType TEXT,
-                        GachaType TEXT,
-                        UigfGachaType TEXT,
-                        RankType INTEGER,
-                        Count INTEGER NOT NULL,
-                        TimeUtcTicks INTEGER NOT NULL,
-                        TimeOffsetMinutes INTEGER NOT NULL,
-                        FOREIGN KEY (GameAccountId)
-                            REFERENCES GameAccounts(Id)
-                            ON DELETE CASCADE
-                    );
-                    """);
-
-                connection.Execute("""
-                    INSERT INTO WishRecords
-                    (
-                        Id,
-                        GameAccountId,
-                        ExternalRecordId,
-                        ItemName,
-                        RankType,
-                        Count,
-                        TimeUtcTicks,
-                        TimeOffsetMinutes
-                    )
-                    SELECT
-                        Id,
-                        GameAccountId,
-                        ExternalRecordId,
-                        ItemName,
-                        RankType,
-                        1,
-                        TimeUtcTicks,
-                        TimeOffsetMinutes
-                    FROM WishRecords_Old;
-                    """);
-
-                connection.Execute("DROP TABLE WishRecords_Old;");
-
-                connection.Execute("""
-                    CREATE UNIQUE INDEX UX_WishRecords_Account_ExternalId
-                    ON WishRecords(GameAccountId, ExternalRecordId);
-                    """);
-
-                connection.Execute("""
-                    CREATE INDEX IX_WishRecords_TimeUtcTicks
-                    ON WishRecords(TimeUtcTicks);
-                    """);
-
-                connection.Execute("""
-                    CREATE INDEX IX_WishRecords_GameAccountId
-                    ON WishRecords(GameAccountId);
-                    """);
-
-                connection.Execute("PRAGMA user_version = 3;");
-            });
-        }
-
-        private static void RebuildWishRecordsWithForeignKey(
-    SQLite.SQLiteConnection connection)
-        {
-            connection.Execute(
-                """
-        ALTER TABLE WishRecords
-        RENAME TO WishRecords_Old;
-        """);
+            // Pre-release schemas are intentionally unsupported. Drop children
+            // before parents so the operation also works with foreign keys on.
+            connection.Execute("DROP TABLE IF EXISTS WishRecords;");
+            connection.Execute("DROP TABLE IF EXISTS GameAccounts;");
+            connection.Execute("DROP TABLE IF EXISTS PlayerArchives;");
 
             connection.Execute(
                 """
-        CREATE TABLE WishRecords
-        (
-            Id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-            GameAccountId TEXT NOT NULL,
-
-            ExternalRecordId TEXT NOT NULL,
-
-            ItemName TEXT NOT NULL,
-
-            RankType INTEGER NOT NULL,
-
-            TimeUtcTicks INTEGER NOT NULL,
-
-            TimeOffsetMinutes INTEGER NOT NULL,
-
-            FOREIGN KEY (GameAccountId)
-                REFERENCES GameAccounts(Id)
-                ON DELETE CASCADE
-        );
-        """);
+                CREATE TABLE PlayerArchives
+                (
+                    Id TEXT PRIMARY KEY NOT NULL,
+                    Name TEXT NOT NULL,
+                    CreatedAtUtcTicks INTEGER NOT NULL,
+                    UpdatedAtUtcTicks INTEGER NOT NULL
+                );
+                """);
 
             connection.Execute(
                 """
-        INSERT INTO WishRecords
-        (
-            Id,
-            GameAccountId,
-            ExternalRecordId,
-            ItemName,
-            RankType,
-            TimeUtcTicks,
-            TimeOffsetMinutes
-        )
-        SELECT
-            Id,
-            GameAccountId,
-            ExternalRecordId,
-            ItemName,
-            RankType,
-            TimeUtcTicks,
-            TimeOffsetMinutes
-        FROM WishRecords_Old;
-        """);
+                CREATE TABLE GameAccounts
+                (
+                    Id TEXT PRIMARY KEY NOT NULL,
+                    PlayerArchiveId TEXT NOT NULL,
+                    Uid TEXT NOT NULL,
+                    ServerRegion INTEGER NOT NULL,
+                    DisplayName TEXT,
+                    IsPlaceholder INTEGER NOT NULL,
+                    CreatedAtUtcTicks INTEGER NOT NULL,
+                    UpdatedAtUtcTicks INTEGER NOT NULL,
+                    FOREIGN KEY (PlayerArchiveId)
+                        REFERENCES PlayerArchives(Id)
+                        ON DELETE CASCADE
+                );
+                """);
 
             connection.Execute(
                 """
-        DROP TABLE WishRecords_Old;
-        """);
+                CREATE TABLE WishRecords
+                (
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    GameAccountId TEXT NOT NULL,
+                    ExternalRecordId TEXT NOT NULL,
+                    ItemName TEXT,
+                    ItemId TEXT,
+                    ItemType TEXT,
+                    GachaType TEXT,
+                    UigfGachaType TEXT,
+                    RankType INTEGER,
+                    Count INTEGER NOT NULL,
+                    TimeUtcTicks INTEGER NOT NULL,
+                    TimeOffsetMinutes INTEGER NOT NULL,
+                    FOREIGN KEY (GameAccountId)
+                        REFERENCES GameAccounts(Id)
+                        ON DELETE CASCADE
+                );
+                """);
 
             connection.Execute(
                 """
-        CREATE UNIQUE INDEX
-            UX_WishRecords_Account_ExternalId
-        ON WishRecords
-        (
-            GameAccountId,
-            ExternalRecordId
-        );
-        """);
+                CREATE INDEX IX_GameAccounts_PlayerArchiveId
+                ON GameAccounts(PlayerArchiveId);
+                """);
 
             connection.Execute(
                 """
-        CREATE INDEX IX_WishRecords_TimeUtcTicks
-        ON WishRecords(TimeUtcTicks);
-        """);
+                CREATE UNIQUE INDEX UX_GameAccounts_PlayerArchiveId_Uid
+                ON GameAccounts(PlayerArchiveId, Uid);
+                """);
 
             connection.Execute(
                 """
-        CREATE INDEX IX_WishRecords_GameAccountId
-        ON WishRecords(GameAccountId);
-        """);
-        }
+                CREATE UNIQUE INDEX UX_WishRecords_Account_ExternalId
+                ON WishRecords(GameAccountId, ExternalRecordId);
+                """);
 
-        private sealed class LegacyAccountIdRow
-        {
-            public string GameAccountId { get; set; } =
-                string.Empty;
-        }
+            connection.Execute(
+                """
+                CREATE INDEX IX_WishRecords_TimeUtcTicks
+                ON WishRecords(TimeUtcTicks);
+                """);
 
-        public async ValueTask DisposeAsync()
-        {
-            await Connection.CloseAsync();
-            initializeGate.Dispose();
-        }
+            connection.Execute(
+                """
+                CREATE INDEX IX_WishRecords_GameAccountId
+                ON WishRecords(GameAccountId);
+                """);
+
+            connection.Execute(
+                $"PRAGMA application_id = {CurrentApplicationId};");
+            connection.Execute(
+                $"PRAGMA user_version = {CurrentSchemaVersion};");
+        });
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await Connection.CloseAsync();
+        initializeGate.Dispose();
     }
 }
