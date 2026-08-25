@@ -9,6 +9,7 @@ using FurinaChronicle.Services.Wishes;
 using FurinaChronicle.Services.Archives;
 using Microsoft.Extensions.Logging;
 using FurinaChronicle.Core.Wishes;
+using FurinaChronicle.Infrastructure.Gacha.Exporting;
 using FurinaChronicle.Infrastructure.Gacha.Metadata;
 using FurinaChronicle.Infrastructure.Gacha.Metadata.Abstractions;
 using FurinaChronicle.Infrastructure.Gacha.Metadata.Localization;
@@ -16,6 +17,7 @@ using FurinaChronicle.Infrastructure.Gacha.Metadata.Persistence;
 using FurinaChronicle.Infrastructure.Gacha.Metadata.Remote;
 using FurinaChronicle.Infrastructure.Gacha.Uigf.V4_2;
 using FurinaChronicle.Services.Gacha.Abstractions;
+using FurinaChronicle.Services.Gacha.Exporting;
 using FurinaChronicle.Services.Gacha.Importing;
 
 using System.Diagnostics;
@@ -71,6 +73,15 @@ namespace FurinaChronicle.App
 			builder.Services.AddSingleton<IGachaMetadataRefreshService>(
 				services => services.GetRequiredService<SqliteGachaItemMetadataProvider>());
 			builder.Services.AddTransient<ImportUigfGachaRecords>();
+			builder.Services.AddSingleton<
+				IUigfV42ExportWriter,
+				UigfV42GachaWriter>();
+			builder.Services.AddSingleton<
+				IGachaTableExportWriter,
+				GachaTableExportWriter>();
+			builder.Services.AddTransient<LoadGachaExportData>();
+			builder.Services.AddTransient<ExportUigfV42GachaRecords>();
+			builder.Services.AddTransient<ExportGachaTable>();
 
 
 			builder.Services.AddTransient<MainPageViewModel>();

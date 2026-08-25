@@ -1,7 +1,9 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using FurinaChronicle.App.Exporting;
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Services.Archives;
+using FurinaChronicle.Services.Gacha.Exporting;
 using FurinaChronicle.Services.Gacha.Importing;
 using FurinaChronicle.Services.Wishes;
 using System.Collections.ObjectModel;
@@ -11,6 +13,8 @@ namespace FurinaChronicle.App.ViewModels;
 public partial class MainPageViewModel(
 	GetWishRecordPage getWishRecordPage,
 	ImportUigfGachaRecords importUigfGachaRecords,
+	ExportUigfV42GachaRecords exportUigfV42GachaRecords,
+	ExportGachaTable exportGachaTable,
 	CreatePlayerArchive createPlayerArchive,
 	GetPlayerArchives getPlayerArchives,
 	GetGameAccounts getGameAccounts,
@@ -68,6 +72,9 @@ public partial class MainPageViewModel(
 
 	[ObservableProperty]
 	public partial string? ImportSummary { get; set; }
+
+	[ObservableProperty]
+	public partial string? ExportSummary { get; set; }
 
 	[ObservableProperty]
 	public partial string StatusMessage { get; set; } = "请先选择档案。";
@@ -286,6 +293,100 @@ public partial class MainPageViewModel(
 			StatusMessage =
 				$"已将 UIGF 文件导入账号 {SelectedAccount.Uid}。";
 		});
+	}
+
+	public async Task<GachaExportFile?> CreateUigfExportAsync(
+		IReadOnlyCollection<Guid> gameAccountIds,
+		UigfV42ExportOptions options)
+	{
+		GachaExportFile? file = null;
+		await ExecuteBusyAsync(async () =>
+		{
+			if (SelectedArchive is null)
+			{
+				throw new InvalidOperationException(
+					"请先选择要导出的档案。");
+			}
+
+			var content = new MemoryStream();
+			try
+			{
+				GachaExportResult result =
+					await exportUigfV42GachaRecords.ExecuteAsync(
+						content,
+						SelectedArchive.Id,
+						gameAccountIds,
+						options);
+				content.Position = 0;
+				file = new GachaExportFile(
+					$"FurinaChronicle_UIGF_{DateTimeOffset.Now:yyyyMMdd_HHmmss}.json",
+					content,
+					result);
+				ExportSummary =
+					$"已生成 UIGF 4.2：{result.AccountCount} 个账号，" +
+					$"{result.RecordCount} 条记录。";
+				StatusMessage = "UIGF 导出文件已生成，请选择保存位置。";
+			}
+			catch
+			{
+				content.Dispose();
+				throw;
+			}
+		});
+		return file;
+	}
+
+	public async Task<GachaExportFile?> CreateTableExportAsync(
+		IReadOnlyCollection<Guid> gameAccountIds,
+		GachaTableExportOptions options)
+	{
+		GachaExportFile? file = null;
+		await ExecuteBusyAsync(async () =>
+		{
+			if (SelectedArchive is null)
+			{
+				throw new InvalidOperationException(
+					"请先选择要导出的档案。");
+			}
+
+			var content = new MemoryStream();
+			try
+			{
+				GachaExportResult result =
+					await exportGachaTable.ExecuteAsync(
+						content,
+						SelectedArchive.Id,
+						gameAccountIds,
+						options);
+				content.Position = 0;
+				string extension =
+					options.Format == GachaTableFormat.Csv
+						? "csv"
+						: "xlsx";
+				file = new GachaExportFile(
+					$"FurinaChronicle_Gacha_{DateTimeOffset.Now:yyyyMMdd_HHmmss}.{extension}",
+					content,
+					result);
+				ExportSummary =
+					$"已生成 {extension.ToUpperInvariant()} 表格：" +
+					$"{result.AccountCount} 个账号，" +
+					$"{result.RecordCount} 条记录。";
+				StatusMessage = "表格导出文件已生成，请选择保存位置。";
+			}
+			catch
+			{
+				content.Dispose();
+				throw;
+			}
+		});
+		return file;
+	}
+
+	public void NotifyExportSaved(string? filePath)
+	{
+		StatusMessage = string.IsNullOrWhiteSpace(filePath)
+			? "导出文件已保存。"
+			: $"导出文件已保存到 {filePath}。";
 	}
 
 	private static string FormatImportSummary(

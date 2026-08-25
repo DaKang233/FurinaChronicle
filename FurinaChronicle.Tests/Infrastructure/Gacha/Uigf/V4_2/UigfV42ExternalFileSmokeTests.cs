@@ -2,6 +2,7 @@ using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Infrastructure.Gacha.Metadata;
 using FurinaChronicle.Infrastructure.Gacha.Uigf.V4_2;
 using FurinaChronicle.Infrastructure.Persistence.Sqlite;
+using FurinaChronicle.Services.Gacha.Exporting;
 using FurinaChronicle.Services.Gacha.Importing;
 
 namespace FurinaChronicle.Tests.Infrastructure.Gacha.Uigf.V4_2;
@@ -73,33 +74,55 @@ public sealed class UigfV42ExternalFileSmokeTests
                 Assert.Equal(first.TotalCount, first.ImportedCount);
                 Assert.Equal(0, first.DuplicateCount);
                 Assert.Equal(0, first.InvalidCount);
-                Assert.Equal(1, first.CreatedAccountCount);
+                Assert.True(first.CreatedAccountCount > 0);
             }
 
-            GameAccount account = Assert.Single(
-                await accounts.GetByArchiveIdAsync(archiveId));
-            int storedCount =
-                await records.CountAsync(account.Id);
-            IReadOnlyList<FurinaChronicle.Core.Wishes.WishRecord> firstPage =
-                await records.GetPageAsync(
-                    account.Id,
-                    offset: 0,
-                    count: 50);
-            Assert.Equal(
-                Math.Min(50, storedCount),
-                firstPage.Count);
+            IReadOnlyList<GameAccount> storedAccounts =
+                await accounts.GetByArchiveIdAsync(archiveId);
+            Assert.NotEmpty(storedAccounts);
+            int storedCount = 0;
+            foreach (GameAccount account in storedAccounts)
+            {
+                int accountCount =
+                    await records.CountAsync(account.Id);
+                storedCount += accountCount;
+                Assert.Equal(
+                    Math.Min(50, accountCount),
+                    (await records.GetPageAsync(
+                        account.Id,
+                        offset: 0,
+                        count: 50)).Count);
+            }
 
-            await using FileStream secondStream =
-                File.OpenRead(sourcePath);
+            var loadData = new LoadGachaExportData(
+                archives,
+                accounts,
+                records,
+                TimeProvider.System);
+            var exportService = new ExportUigfV42GachaRecords(
+                loadData,
+                new UigfV42GachaWriter(
+                    new EmptyGachaItemMetadataProvider()));
+            await using var exportedStream = new MemoryStream();
+            GachaExportResult exported =
+                await exportService.ExecuteAsync(
+                    exportedStream,
+                    archiveId,
+                    storedAccounts.Select(account => account.Id).ToArray(),
+                    UigfV42ExportOptions.Compatible);
+            Assert.Equal(storedAccounts.Count, exported.AccountCount);
+            Assert.Equal(storedCount, exported.RecordCount);
+
+            exportedStream.Position = 0;
             GachaImportResult second =
                 await service.ExecuteAsync(
-                    secondStream,
+                    exportedStream,
                     archiveId);
 
             Assert.Equal(0, second.ImportedCount);
-            Assert.Equal(
-                second.TotalCount,
-                second.DuplicateCount);
+            Assert.Equal(storedCount, second.TotalCount);
+            Assert.Equal(storedCount, second.DuplicateCount);
+            Assert.Equal(0, second.InvalidCount);
             Assert.Equal(0, second.CreatedAccountCount);
         }
         finally
