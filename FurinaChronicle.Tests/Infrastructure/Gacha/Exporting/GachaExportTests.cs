@@ -309,6 +309,46 @@ public sealed class GachaExportTests
     }
 
     [Fact]
+    public async Task TableWriter_Xlsx_ReplacesInvalidXmlCharactersAndPreservesEmoji()
+    {
+        GachaExportDocument source = CreateDocument();
+        GachaExportAccount account = source.Accounts[0];
+        WishRecord record = account.Records[0] with
+        {
+            ItemId = "999999",
+            ItemName = "Furina\u0001😀"
+        };
+        var document = source with
+        {
+            Accounts = [account with { Records = [record] }]
+        };
+        var writer = new GachaTableExportWriter(
+            new EmptyGachaItemMetadataProvider());
+        await using var stream = new MemoryStream();
+
+        await writer.WriteAsync(
+            stream,
+            document,
+            new GachaTableExportOptions(
+                GachaTableFormat.Xlsx,
+                GachaExportLanguages.English));
+
+        stream.Position = 0;
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+        ZipArchiveEntry worksheet =
+            Assert.IsType<ZipArchiveEntry>(
+                archive.GetEntry("xl/worksheets/sheet1.xml"));
+        using var reader = new StreamReader(worksheet.Open());
+        string xml = await reader.ReadToEndAsync();
+
+        Assert.Contains("Furina�😀", xml);
+        Assert.DoesNotContain(
+            "\u0001",
+            xml,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task LoadData_AccountFromAnotherArchive_Throws()
     {
         var archives = new InMemoryPlayerArchiveRepository();

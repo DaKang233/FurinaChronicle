@@ -299,13 +299,49 @@ public sealed class GachaTableExportWriter(
                 "space",
                 "http://www.w3.org/XML/1998/namespace",
                 "preserve");
-            await writer.WriteStringAsync(values[column]);
+            await writer.WriteStringAsync(
+                SanitizeXmlText(values[column]));
             await writer.WriteEndElementAsync();
             await writer.WriteEndElementAsync();
             await writer.WriteEndElementAsync();
         }
 
         await writer.WriteEndElementAsync();
+    }
+
+    private static string SanitizeXmlText(string value)
+    {
+        StringBuilder? builder = null;
+
+        for (int index = 0; index < value.Length; index++)
+        {
+            char character = value[index];
+            if (XmlConvert.IsXmlChar(character))
+            {
+                builder?.Append(character);
+                continue;
+            }
+
+            if (char.IsHighSurrogate(character) &&
+                index + 1 < value.Length &&
+                char.IsLowSurrogate(value[index + 1]))
+            {
+                if (builder is not null)
+                {
+                    builder.Append(character);
+                    builder.Append(value[index + 1]);
+                }
+
+                index++;
+                continue;
+            }
+
+            builder ??= new StringBuilder(value.Length)
+                .Append(value, 0, index);
+            builder.Append('\uFFFD');
+        }
+
+        return builder?.ToString() ?? value;
     }
 
     private static string GetColumnName(int column)

@@ -152,6 +152,89 @@ public sealed class ImportUigfGachaRecordsTests
         Assert.Equal(new GachaImportResult(2, 0, 0, 2, 0, 0), result);
         Assert.Empty(await accounts.GetByArchiveIdAsync(archive.Id));
     }
+
+    [Fact]
+    public async Task ExecuteAsync_TargetAccount_InvalidTimezoneRejectsImport()
+    {
+        var archives = new InMemoryPlayerArchiveRepository();
+        var accounts = new InMemoryGameAccountRepository();
+        var records = new InMemoryWishRecordRepository(Array.Empty<WishRecord>());
+        var archive = ArchiveTestData.Archive();
+        await archives.AddAsync(archive);
+        var service = CreateService(archives, accounts, records);
+        var target = ArchiveTestData.Account(
+            archive.Id,
+            uid: "800000001",
+            region: GameServerRegion.Asia);
+        await accounts.AddAsync(target);
+
+        string json = TestUigfJson
+            .Create(TestUigfJson.Record("1", "10000089"))
+            .Replace(
+                "\"timezone\": 8",
+                "\"timezone\": 15",
+                StringComparison.Ordinal);
+
+        await Assert.ThrowsAsync<GachaImportFormatException>(() =>
+            ExecuteAsync(service, json, archive.Id, target.Id));
+
+        Assert.Empty(await records.GetRecentAsync(target.Id, 20));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_TargetAccount_UnsupportedLanguageRejectsImport()
+    {
+        var archives = new InMemoryPlayerArchiveRepository();
+        var accounts = new InMemoryGameAccountRepository();
+        var records = new InMemoryWishRecordRepository(Array.Empty<WishRecord>());
+        var archive = ArchiveTestData.Archive();
+        await archives.AddAsync(archive);
+        var service = CreateService(archives, accounts, records);
+        var target = ArchiveTestData.Account(
+            archive.Id,
+            uid: "800000001",
+            region: GameServerRegion.Asia);
+        await accounts.AddAsync(target);
+
+        string json = TestUigfJson
+            .Create(TestUigfJson.Record("1", "10000089"))
+            .Replace(
+                "\"lang\": \"zh-cn\"",
+                "\"lang\": \"xx-yy\"",
+                StringComparison.Ordinal);
+
+        await Assert.ThrowsAsync<GachaImportFormatException>(() =>
+            ExecuteAsync(service, json, archive.Id, target.Id));
+
+        Assert.Empty(await records.GetRecentAsync(target.Id, 20));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_TargetAccount_MissingListRejectsImport()
+    {
+        var archives = new InMemoryPlayerArchiveRepository();
+        var accounts = new InMemoryGameAccountRepository();
+        var records = new InMemoryWishRecordRepository(Array.Empty<WishRecord>());
+        var archive = ArchiveTestData.Archive();
+        await archives.AddAsync(archive);
+        var service = CreateService(archives, accounts, records);
+        var target = ArchiveTestData.Account(
+            archive.Id,
+            uid: "800000001",
+            region: GameServerRegion.Asia);
+        await accounts.AddAsync(target);
+
+        string json = TestUigfJson.Create().Replace(
+            "\"list\": []",
+            "\"not_list\": []",
+            StringComparison.Ordinal);
+
+        await Assert.ThrowsAsync<GachaImportFormatException>(() =>
+            ExecuteAsync(service, json, archive.Id, target.Id));
+
+        Assert.Empty(await records.GetRecentAsync(target.Id, 20));
+    }
+
     private static ImportUigfGachaRecords CreateService(
         InMemoryPlayerArchiveRepository archives,
         InMemoryGameAccountRepository accounts,

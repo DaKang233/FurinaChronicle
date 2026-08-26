@@ -55,6 +55,15 @@ public sealed class ImportUigfGachaRecords(
             .Where(error => !string.IsNullOrWhiteSpace(error.Uid))
             .ToLookup(error => error.Uid!, StringComparer.Ordinal);
 
+        if (targetAccount is not null &&
+            readErrorsByUid[targetAccount.Uid].FirstOrDefault()
+                is GachaReadError targetError)
+        {
+            throw AccountRejected(
+                targetAccount.Uid,
+                DescribeReadError(targetError));
+        }
+
         int createdAccountCount = 0;
         int ignoredCount = 0;
         int invalidCount = readResult.Errors.Count;
@@ -78,14 +87,6 @@ public sealed class ImportUigfGachaRecords(
             GachaReadError? readError = readErrorsByUid[uid].FirstOrDefault();
             if (readError is not null)
             {
-                if (targetAccount is not null)
-                {
-                    throw AccountRejected(
-                        uid,
-                        $"record {readError.RecordIndex?.ToString() ?? "unknown"} " +
-                        $"is invalid ({readError.Code})");
-                }
-
                 invalidCount += sourceRecords.Length;
                 continue;
             }
@@ -270,6 +271,16 @@ public sealed class ImportUigfGachaRecords(
             now);
         await accountRepository.AddAsync(account, cancellationToken);
         return account;
+    }
+
+    private static string DescribeReadError(GachaReadError error)
+    {
+        string location = error.RecordIndex is int index
+            ? $"record {index}"
+            : "account";
+
+        return $"{location} is invalid " +
+            $"({error.Code}): {error.Message}";
     }
 
     private sealed record PreparedGachaRecord(
