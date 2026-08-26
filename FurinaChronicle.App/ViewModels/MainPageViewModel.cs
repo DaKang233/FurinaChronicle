@@ -238,11 +238,36 @@ public partial class MainPageViewModel(
 
 		await ExecuteBusyAsync(async () =>
 		{
+			bool createdArchiveForImport = SelectedArchive is null;
 			PlayerArchive archive = await EnsureImportArchiveAsync();
-			GachaImportResult result =
-				await importUigfGachaRecords.ExecuteAsync(
+			GachaImportResult result;
+			try
+			{
+				result = await importUigfGachaRecords.ExecuteAsync(
 					source,
 					archive.Id);
+			}
+			catch
+			{
+				if (createdArchiveForImport)
+				{
+					await RemoveImportArchiveAsync(archive.Id);
+				}
+
+				throw;
+			}
+
+			ImportSummary = FormatImportSummary(
+				fileName,
+				result);
+
+			if (createdArchiveForImport && result.ImportedCount == 0)
+			{
+				await RemoveImportArchiveAsync(archive.Id);
+				StatusMessage =
+					"UIGF 文件没有可导入的有效记录，未创建档案。";
+				return;
+			}
 
 			await RefreshAccountsCoreAsync();
 			SelectedAccount ??= Accounts.FirstOrDefault();
@@ -254,9 +279,6 @@ public partial class MainPageViewModel(
 				await ReloadRecordsCoreAsync(pageNumber: 1);
 			}
 
-			ImportSummary = FormatImportSummary(
-				fileName,
-				result);
 			StatusMessage =
 				$"已将 UIGF 文件导入档案“{archive.Name}”。";
 		});
@@ -514,6 +536,22 @@ public partial class MainPageViewModel(
 		PlayerArchive archive = await createPlayerArchive.ExecuteAsync(GetNextUnnamedArchiveName());
 		await LoadArchivesCoreAsync(archive.Id);
 		return archive;
+	}
+
+	private async Task RemoveImportArchiveAsync(Guid archiveId)
+	{
+		await deletePlayerArchive.ExecuteAsync(archiveId);
+
+		if (SelectedArchive?.Id == archiveId)
+		{
+			SelectedArchive = null;
+		}
+
+		SelectedAccount = null;
+		Accounts.Clear();
+		WishRecords.Clear();
+		ResetPagination();
+		await LoadArchivesCoreAsync();
 	}
 
 	private string GetNextUnnamedArchiveName()

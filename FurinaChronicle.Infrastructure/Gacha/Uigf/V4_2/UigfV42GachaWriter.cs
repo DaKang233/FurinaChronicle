@@ -70,10 +70,9 @@ public sealed class UigfV42GachaWriter(
     {
         writer.WritePropertyName("info");
         writer.WriteStartObject();
-        writer.WriteString(
+        writer.WriteNumber(
             "export_timestamp",
-            document.ExportedAt.ToUnixTimeSeconds().ToString(
-                CultureInfo.InvariantCulture));
+            document.ExportedAt.ToUnixTimeSeconds());
         writer.WriteString("export_app", "FurinaChronicle");
         writer.WriteString("export_app_version", "1.0.0");
         writer.WriteString("version", "v4.2");

@@ -68,7 +68,7 @@ public sealed class GachaTableExportWriter(
             leaveOpen: true);
 
         await writer.WriteLineAsync(
-            string.Join(",", headers.Select(EscapeCsv)));
+            string.Join(",", headers.Select(value => EscapeCsv(value))));
 
         await ForEachRowAsync(
             document,
@@ -78,7 +78,10 @@ public sealed class GachaTableExportWriter(
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 await writer.WriteLineAsync(
-                    string.Join(",", row.Select(EscapeCsv)));
+                    string.Join(
+                        ",",
+                        row.Select((value, index) =>
+                            EscapeCsv(value, index is 4 or 5))));
             },
             cancellationToken);
         await writer.FlushAsync(cancellationToken);
@@ -241,17 +244,31 @@ public sealed class GachaTableExportWriter(
         return $"{sign}{offset.Hours:00}:{offset.Minutes:00}";
     }
 
-    private static string EscapeCsv(string value)
+    private static string EscapeCsv(
+        string value,
+        bool neutralizeFormula = false)
     {
-        if (!value.Contains(',') &&
-            !value.Contains('"') &&
-            !value.Contains('\r') &&
-            !value.Contains('\n'))
+        string safeValue =
+            neutralizeFormula && HasSpreadsheetFormulaPrefix(value)
+            ? $"'{value}"
+            : value;
+
+        if (!safeValue.Contains(',') &&
+            !safeValue.Contains('"') &&
+            !safeValue.Contains('\r') &&
+            !safeValue.Contains('\n'))
         {
-            return value;
+            return safeValue;
         }
 
-        return $"\"{value.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";
+        return $"\"{safeValue.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";
+    }
+
+    private static bool HasSpreadsheetFormulaPrefix(string value)
+    {
+        ReadOnlySpan<char> trimmed = value.AsSpan().TrimStart();
+        return !trimmed.IsEmpty &&
+            trimmed[0] is '=' or '+' or '-' or '@';
     }
 
     private static async Task WriteWorksheetRowAsync(

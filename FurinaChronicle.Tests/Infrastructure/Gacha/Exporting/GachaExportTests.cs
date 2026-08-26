@@ -34,6 +34,9 @@ public sealed class GachaExportTests
         JsonElement info = root.GetProperty("info");
         Assert.Equal("v4.2", info.GetProperty("version").GetString());
         Assert.Equal("zh-cn", info.GetProperty("lang").GetString());
+        JsonElement exportTimestamp = info.GetProperty("export_timestamp");
+        Assert.Equal(JsonValueKind.Number, exportTimestamp.ValueKind);
+        Assert.Equal(1787589041, exportTimestamp.GetInt64());
         Assert.Equal(JsonValueKind.Array, root.GetProperty("hk4e_ugc").ValueKind);
 
         JsonElement account = root.GetProperty("hk4e")[0];
@@ -159,6 +162,7 @@ public sealed class GachaExportTests
         Assert.Equal(5, lines.Length);
         Assert.Contains("保底内计数", lines[0]);
         Assert.StartsWith("800000001,", lines[1]);
+        Assert.Contains(",+08:00,", lines[1]);
         Assert.EndsWith(",1,1", lines[1]);
         Assert.StartsWith("800000001,", lines[2]);
         Assert.EndsWith(",2,2", lines[2]);
@@ -166,6 +170,43 @@ public sealed class GachaExportTests
         Assert.EndsWith(",3,1", lines[3]);
         Assert.StartsWith("600000001,", lines[4]);
         Assert.EndsWith(",1,1", lines[4]);
+    }
+
+    [Fact]
+    public async Task TableWriter_Csv_NeutralizesSpreadsheetFormulaPrefixes()
+    {
+        GachaExportDocument source = CreateDocument();
+        GachaExportAccount account = source.Accounts[0];
+        WishRecord template = account.Records[0];
+        string[] dangerousNames = ["=1+1", "+1+1", "-1+1", "@SUM", "  =1+1"];
+        WishRecord[] records = dangerousNames
+            .Select((name, index) => template with
+            {
+                ExternalRecordId = $"danger-{index}",
+                ItemName = name
+            })
+            .ToArray();
+        var document = source with
+        {
+            Accounts = [account with { Records = records }]
+        };
+        var writer = new GachaTableExportWriter(
+            new EmptyGachaItemMetadataProvider());
+        await using var stream = new MemoryStream();
+
+        await writer.WriteAsync(
+            stream,
+            document,
+            new GachaTableExportOptions(
+                GachaTableFormat.Csv,
+                GachaExportLanguages.SimplifiedChinese));
+
+        string text = Encoding.UTF8.GetString(stream.ToArray());
+        Assert.Contains(",'=1+1,", text);
+        Assert.Contains(",'+1+1,", text);
+        Assert.Contains(",'-1+1,", text);
+        Assert.Contains(",'@SUM,", text);
+        Assert.Contains(",'  =1+1,", text);
     }
 
     [Fact]

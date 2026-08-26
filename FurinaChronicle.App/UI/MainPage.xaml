@@ -190,6 +190,8 @@
                         Text="{Binding ErrorMessage}"
                         TextColor="Red" />
 
+                    <ScrollView HorizontalScrollBarVisibility="Always" Orientation="Horizontal">
+                        <VerticalStackLayout WidthRequest="680">
                     <Grid
                         Padding="10,8"
                         BackgroundColor="{AppThemeBinding Light=#EEEEEE, Dark=#303030}"
@@ -230,6 +232,8 @@
                             </DataTemplate>
                         </CollectionView.ItemTemplate>
                     </CollectionView>
+                        </VerticalStackLayout>
+                    </ScrollView>
 
                     <Grid
                         ColumnDefinitions="Auto,*,Auto"
