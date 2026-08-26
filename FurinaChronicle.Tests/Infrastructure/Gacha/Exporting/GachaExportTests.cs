@@ -2,12 +2,15 @@ using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 using FurinaChronicle.Core.Archives;
+using FurinaChronicle.Core.Gacha;
+using FurinaChronicle.Core.Gacha.Metadata;
 using FurinaChronicle.Core.Wishes;
 using FurinaChronicle.Infrastructure.Gacha.Exporting;
 using FurinaChronicle.Infrastructure.Gacha.Metadata;
 using FurinaChronicle.Infrastructure.Gacha.Uigf.V4_2;
 using FurinaChronicle.Infrastructure.Persistence;
 using FurinaChronicle.Services.Gacha.Exporting;
+using FurinaChronicle.Services.Gacha.Abstractions;
 using FurinaChronicle.Services.Gacha.Importing;
 using FurinaChronicle.Tests.TestDoubles;
 
@@ -209,6 +212,45 @@ public sealed class GachaExportTests
         Assert.Contains(",'  =1+1,", text);
     }
 
+    [Theory]
+    [InlineData(GachaExportLanguages.SimplifiedChinese, "角色")]
+    [InlineData(GachaExportLanguages.English, "Character")]
+    public async Task TableWriter_CanonicalMetadata_LocalizesForeignItemType(
+        string language,
+        string expectedType)
+    {
+        GachaExportDocument source = CreateDocument();
+        GachaExportAccount account = source.Accounts[0];
+        WishRecord record = account.Records[1] with
+        {
+            ItemType = "キャラクター"
+        };
+        var document = source with
+        {
+            Accounts = [account with { Records = [record] }]
+        };
+        var metadata = new GachaItemMetadata(
+            GachaGame.GenshinImpact,
+            "10000089",
+            "Furina",
+            "Avatar",
+            5);
+        var writer = new GachaTableExportWriter(
+            new FixedMetadataProvider(metadata));
+        await using var stream = new MemoryStream();
+
+        await writer.WriteAsync(
+            stream,
+            document,
+            new GachaTableExportOptions(
+                GachaTableFormat.Csv,
+                language));
+
+        string text = Encoding.UTF8.GetString(stream.ToArray());
+        Assert.Contains($",{expectedType},", text);
+        Assert.DoesNotContain("キャラクター", text);
+    }
+
     [Fact]
     public async Task TableWriter_Xlsx_WritesValidWorkbookParts()
     {
@@ -261,6 +303,24 @@ public sealed class GachaExportTests
             () => loader.ExecuteAsync(
                 firstArchive.Id,
                 [foreignAccount.Id]));
+    }
+
+    private sealed class FixedMetadataProvider(
+        GachaItemMetadata metadata) : IGachaItemMetadataProvider
+    {
+        public ValueTask<GachaItemMetadata?> FindByIdAsync(
+            GachaGame game,
+            string itemId,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            GachaItemMetadata? result =
+                game == metadata.Game &&
+                string.Equals(itemId, metadata.ItemId, StringComparison.Ordinal)
+                    ? metadata
+                    : null;
+            return ValueTask.FromResult(result);
+        }
     }
 
     private static GachaExportDocument CreateDocument()

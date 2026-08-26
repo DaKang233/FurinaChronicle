@@ -95,8 +95,8 @@ public sealed class GenshinCalculatorMetadataSource : IGachaMetadataRemoteSource
                     cancellationToken);
             }
             catch (Exception exception) when (
-                exception is (HttpRequestException or JsonException or InvalidDataException) &&
-                attempt < attemptCount - 1)
+                attempt < attemptCount - 1 &&
+                IsRetryable(exception, cancellationToken))
             {
                 lastException = exception;
                 TimeSpan delay = retryDelays[attempt];
@@ -109,6 +109,16 @@ public sealed class GenshinCalculatorMetadataSource : IGachaMetadataRemoteSource
 
         throw lastException ??
             new InvalidDataException("Unable to download calculator metadata.");
+    }
+
+    private static bool IsRetryable(
+        Exception exception,
+        CancellationToken cancellationToken)
+    {
+        return exception is
+                (HttpRequestException or JsonException or InvalidDataException) ||
+            exception is OperationCanceledException &&
+            !cancellationToken.IsCancellationRequested;
     }
 
     private async Task<IReadOnlyList<GachaMetadataSourceItem>> FetchListAsync(

@@ -80,6 +80,38 @@ public sealed class UigfV42GachaReaderTests
         Assert.Single(Assert.Single(result.Accounts).Records);
         Assert.Equal("invalid_id", Assert.Single(result.Errors).Code);
     }
+    [Fact]
+    public async Task ReadAsync_OffsetOverflowingTime_ReturnsRecordErrorAndContinues()
+    {
+        const string overflowingRecord =
+            """
+            {
+              "uigf_gacha_type": "301",
+              "gacha_type": "301",
+              "item_id": "10000089",
+              "time": "0001-01-01 00:00:00",
+              "id": "1"
+            }
+            """;
+        string json = TestUigfJson.Create(
+                overflowingRecord,
+                TestUigfJson.Record("2", "10000089"))
+            .Replace(
+                "\"timezone\": 8",
+                "\"timezone\": 14",
+                StringComparison.Ordinal);
+
+        GachaReadResult result = await ReadAsync(json);
+
+        Assert.Equal(2, result.TotalRecordCount);
+        GachaSourceRecord validRecord = Assert.Single(
+            Assert.Single(result.Accounts).Records);
+        Assert.Equal("2", validRecord.ExternalRecordId);
+        GachaReadError error = Assert.Single(result.Errors);
+        Assert.Equal("invalid_time", error.Code);
+        Assert.Equal(1, error.RecordIndex);
+    }
+
 
     [Fact]
     public async Task ReadAsync_UnsupportedVersion_ThrowsFormatException()

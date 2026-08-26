@@ -41,7 +41,8 @@ public partial class StartupPageViewModel(ApplicationStartupService startupServi
             StatusMessage = "初始化完成。";
             return true;
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (
+            cancellationToken.IsCancellationRequested)
         {
             return false;
         }

@@ -47,7 +47,7 @@ internal sealed class GachaExportValueResolver(
     {
         GachaItemMetadata? metadata =
             await GetMetadataAsync(record, cancellationToken);
-        string? sourceType = record.ItemType ?? metadata?.ItemType;
+        string? sourceType = metadata?.ItemType ?? record.ItemType;
         if (string.IsNullOrWhiteSpace(sourceType))
         {
             throw MissingValue(record, "item_type");

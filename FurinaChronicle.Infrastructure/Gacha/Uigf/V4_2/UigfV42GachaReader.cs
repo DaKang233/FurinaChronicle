@@ -247,14 +247,29 @@ public sealed class UigfV42GachaReader : IGachaImportReader
             rankType = parsedRank;
         }
 
+        TimeSpan timeOffset = TimeSpan.FromHours(timezone);
+        long utcTicks = localTime.Ticks - timeOffset.Ticks;
+        if (utcTicks < DateTime.MinValue.Ticks ||
+            utcTicks > DateTime.MaxValue.Ticks)
+        {
+            error = new(
+                uid,
+                recordIndex,
+                "invalid_time",
+                $"Time {dto.Time} cannot be represented with timezone {timezone}.");
+            return false;
+        }
+
+        var time = new DateTimeOffset(
+            DateTime.SpecifyKind(localTime, DateTimeKind.Unspecified),
+            timeOffset);
+
         record = new GachaSourceRecord(
             id,
             itemId,
             gachaType,
             uigfGachaType,
-            new DateTimeOffset(
-                DateTime.SpecifyKind(localTime, DateTimeKind.Unspecified),
-                TimeSpan.FromHours(timezone)),
+            time,
             NormalizeOptional(dto.Name),
             NormalizeOptional(dto.ItemType),
             rankType,

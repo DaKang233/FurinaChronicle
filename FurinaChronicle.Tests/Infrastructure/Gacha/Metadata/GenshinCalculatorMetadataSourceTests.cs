@@ -58,6 +58,80 @@ public sealed class GenshinCalculatorMetadataSourceTests
                 .ToArray());
     }
 
+    [Fact]
+    public async Task FetchAsync_HttpTimeout_RetriesBeforeFailing()
+    {
+        var handler = new TimeoutHandler();
+        using var httpClient = new HttpClient(handler)
+        {
+            Timeout = Timeout.InfiniteTimeSpan
+        };
+        using var source = new GenshinCalculatorMetadataSource(
+            httpClient,
+            retryDelays: [TimeSpan.Zero]);
+        using var callerCancellation = new CancellationTokenSource();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => source.FetchAsync(
+                GachaGame.GenshinImpact,
+                callerCancellation.Token));
+
+        Assert.False(callerCancellation.IsCancellationRequested);
+        Assert.Equal(2, handler.RequestCount);
+    }
+
+    [Fact]
+    public async Task FetchAsync_CallerCancellation_DoesNotRetry()
+    {
+        using var callerCancellation = new CancellationTokenSource();
+        var handler = new CallerCancellationHandler(callerCancellation);
+        using var httpClient = new HttpClient(handler)
+        {
+            Timeout = Timeout.InfiniteTimeSpan
+        };
+        using var source = new GenshinCalculatorMetadataSource(
+            httpClient,
+            retryDelays: [TimeSpan.Zero, TimeSpan.Zero]);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => source.FetchAsync(
+                GachaGame.GenshinImpact,
+                callerCancellation.Token));
+
+        Assert.True(callerCancellation.IsCancellationRequested);
+        Assert.Equal(1, handler.RequestCount);
+    }
+
+    private sealed class TimeoutHandler : HttpMessageHandler
+    {
+        public int RequestCount { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            RequestCount++;
+            return Task.FromException<HttpResponseMessage>(
+                new TaskCanceledException("Simulated HTTP timeout."));
+        }
+    }
+
+    private sealed class CallerCancellationHandler(
+        CancellationTokenSource cancellation) : HttpMessageHandler
+    {
+        public int RequestCount { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            RequestCount++;
+            cancellation.Cancel();
+            return Task.FromCanceled<HttpResponseMessage>(
+                cancellationToken);
+        }
+    }
+
     private sealed class CalculatorApiHandler : HttpMessageHandler
     {
         public List<CapturedRequest> Requests { get; } = [];
