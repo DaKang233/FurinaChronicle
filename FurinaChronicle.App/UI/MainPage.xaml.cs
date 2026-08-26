@@ -198,9 +198,7 @@ public partial class MainPage : ContentPage
             {
                 [DevicePlatform.WinUI] = [".json"],
                 [DevicePlatform.Android] =
-                    ["application/json", "text/json", "application/octet-stream"],
-                [DevicePlatform.iOS] = ["public.json"],
-                [DevicePlatform.MacCatalyst] = ["public.json"]
+                    ["application/json", "text/json", "application/octet-stream"]
             });
 
         FileResult? file = await FilePicker.Default.PickAsync(

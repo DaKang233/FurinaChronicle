@@ -252,6 +252,33 @@ public sealed class GachaExportTests
     }
 
     [Fact]
+    public async Task TableWriter_MissingRankAndMetadata_RejectsExport()
+    {
+        GachaExportDocument source = CreateDocument();
+        GachaExportAccount account = source.Accounts[0];
+        WishRecord record = account.Records[0] with
+        {
+            ItemId = "999999",
+            RankType = null
+        };
+        var document = source with
+        {
+            Accounts = [account with { Records = [record] }]
+        };
+        var writer = new GachaTableExportWriter(
+            new EmptyGachaItemMetadataProvider());
+        await using var stream = new MemoryStream();
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            writer.WriteAsync(
+                stream,
+                document,
+                new GachaTableExportOptions(
+                    GachaTableFormat.Csv,
+                    GachaExportLanguages.SimplifiedChinese)));
+    }
+
+    [Fact]
     public async Task TableWriter_Xlsx_WritesValidWorkbookParts()
     {
         var writer = new GachaTableExportWriter(

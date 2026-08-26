@@ -194,24 +194,6 @@ public sealed class PlatformExportFileSaver
             _ => "application/octet-stream"
         };
 #else
-    private static async Task<ExportSaveResult> SavePlatformAsync(
-        string fileName,
-        Stream source,
-        CancellationToken cancellationToken)
-    {
-        string filePath = Path.Combine(
-            FileSystem.CacheDirectory,
-            fileName);
-        await using (FileStream output = File.Create(filePath))
-        {
-            await source.CopyToAsync(output, cancellationToken);
-        }
-
-        await Share.Default.RequestAsync(
-            new ShareFileRequest(
-                "导出祈愿记录",
-                new ShareFile(filePath)));
-        return new ExportSaveResult(true, false, filePath);
-    }
+#error PlatformExportFileSaver supports only Windows and Android.
 #endif
 }

@@ -81,6 +81,77 @@ public sealed class ImportUigfGachaRecordsTests
         Assert.Single(await records.GetRecentAsync(target.Id, 20));
     }
 
+    [Fact]
+    public async Task ExecuteAsync_ArchiveImport_UnresolvableMetadataRejectsEntireAccount()
+    {
+        var archives = new InMemoryPlayerArchiveRepository();
+        var accounts = new InMemoryGameAccountRepository();
+        var records = new InMemoryWishRecordRepository(Array.Empty<WishRecord>());
+        PlayerArchive archive = ArchiveTestData.Archive();
+        await archives.AddAsync(archive);
+
+        var service = CreateService(archives, accounts, records);
+        string json = TestUigfJson.CreateTwoAccounts().Replace(
+            "\"11401\"",
+            "\"999999\"",
+            StringComparison.Ordinal);
+
+        GachaImportResult result = await ExecuteAsync(service, json, archive.Id);
+
+        Assert.Equal(new GachaImportResult(3, 1, 0, 2, 0, 1), result);
+        GameAccount storedAccount = Assert.Single(
+            await accounts.GetByArchiveIdAsync(archive.Id));
+        Assert.Equal("600000001", storedAccount.Uid);
+        Assert.Single(await records.GetRecentAsync(storedAccount.Id, 20));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_TargetAccount_UnresolvableMetadataRejectsWholeImport()
+    {
+        var archives = new InMemoryPlayerArchiveRepository();
+        var accounts = new InMemoryGameAccountRepository();
+        var records = new InMemoryWishRecordRepository(Array.Empty<WishRecord>());
+        PlayerArchive archive = ArchiveTestData.Archive();
+        GameAccount target = ArchiveTestData.Account(
+            archive.Id,
+            uid: "800000001",
+            region: GameServerRegion.Asia);
+        await archives.AddAsync(archive);
+        await accounts.AddAsync(target);
+
+        var service = CreateService(archives, accounts, records);
+        string json = TestUigfJson.Create(
+            TestUigfJson.Record("1", "10000089"),
+            """{"uigf_gacha_type":"301","gacha_type":"301","item_id":"999999","time":"2026-08-24 12:31:00","name":"Unknown item","item_type":"Avatar","id":"2"}""");
+
+        GachaImportFormatException exception =
+            await Assert.ThrowsAsync<GachaImportFormatException>(() =>
+                ExecuteAsync(service, json, archive.Id, target.Id));
+
+        Assert.Contains(target.Uid, exception.Message, StringComparison.Ordinal);
+        Assert.Empty(await records.GetRecentAsync(target.Id, 20));
+        Assert.Single(await accounts.GetByArchiveIdAsync(archive.Id));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ArchiveImport_InvalidRecordRejectsRemainingAccountRecords()
+    {
+        var archives = new InMemoryPlayerArchiveRepository();
+        var accounts = new InMemoryGameAccountRepository();
+        var records = new InMemoryWishRecordRepository(Array.Empty<WishRecord>());
+        PlayerArchive archive = ArchiveTestData.Archive();
+        await archives.AddAsync(archive);
+
+        var service = CreateService(archives, accounts, records);
+        string json = TestUigfJson.Create(
+            TestUigfJson.Record("1", "10000089"),
+            """{"uigf_gacha_type":"301","gacha_type":"301","item_id":"10000089","time":"2026-08-24 12:31:00","id":""}""");
+
+        GachaImportResult result = await ExecuteAsync(service, json, archive.Id);
+
+        Assert.Equal(new GachaImportResult(2, 0, 0, 2, 0, 0), result);
+        Assert.Empty(await accounts.GetByArchiveIdAsync(archive.Id));
+    }
     private static ImportUigfGachaRecords CreateService(
         InMemoryPlayerArchiveRepository archives,
         InMemoryGameAccountRepository accounts,

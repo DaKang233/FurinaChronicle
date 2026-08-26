@@ -159,6 +159,48 @@ public sealed class SqliteGachaItemMetadataProviderTests
     }
 
     [Fact]
+    public async Task FindByIdAsync_TimeoutWithStaleCache_UsesExistingCache()
+    {
+        await using MetadataTestContext context = MetadataTestContext.Create();
+        GachaItemMetadata? initial = await context.Provider.FindByIdAsync(
+            GachaGame.GenshinImpact,
+            "10000089");
+
+        context.Clock.Advance(TimeSpan.FromDays(8));
+        context.RemoteSource.Exception =
+            new TaskCanceledException("metadata request timed out");
+
+        GachaItemMetadata? loaded = await context.Provider.FindByIdAsync(
+            GachaGame.GenshinImpact,
+            "10000089");
+
+        Assert.NotNull(loaded);
+        Assert.Equal(initial!.ItemId, loaded.ItemId);
+        Assert.Equal(initial.RankType, loaded.RankType);
+        Assert.Equal(2, context.RemoteSource.CallCount);
+    }
+
+    [Fact]
+    public async Task FindByIdAsync_CallerCancellationWithStaleCache_Throws()
+    {
+        await using MetadataTestContext context = MetadataTestContext.Create();
+        Assert.NotNull(await context.Provider.FindByIdAsync(
+            GachaGame.GenshinImpact,
+            "10000089"));
+
+        context.Clock.Advance(TimeSpan.FromDays(8));
+        using var cancellationSource = new CancellationTokenSource();
+        context.RemoteSource.CancellationSourceToCancel = cancellationSource;
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            context.Provider.FindByIdAsync(
+                GachaGame.GenshinImpact,
+                "10000089",
+                cancellationSource.Token).AsTask());
+
+        Assert.Equal(2, context.RemoteSource.CallCount);
+    }
+    [Fact]
     public async Task RefreshIfNeededAsync_FirstDownloadFailure_Throws()
     {
         await using MetadataTestContext context = MetadataTestContext.Create();
@@ -281,6 +323,8 @@ public sealed class SqliteGachaItemMetadataProviderTests
 
         public Exception? Exception { get; set; }
 
+        public CancellationTokenSource? CancellationSourceToCancel { get; set; }
+
         public int CallCount { get; private set; }
 
         public Task<IReadOnlyList<GachaMetadataSourceItem>> FetchAsync(
@@ -289,6 +333,12 @@ public sealed class SqliteGachaItemMetadataProviderTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             CallCount++;
+            if (CancellationSourceToCancel is not null)
+            {
+                CancellationSourceToCancel.Cancel();
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
             if (Exception is not null)
             {
                 throw Exception;

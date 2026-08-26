@@ -143,7 +143,8 @@ public sealed class SqliteGachaItemMetadataProvider(
                     UsedExistingCache: false,
                     contentSha256);
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (
+                cancellationToken.IsCancellationRequested)
             {
                 throw;
             }

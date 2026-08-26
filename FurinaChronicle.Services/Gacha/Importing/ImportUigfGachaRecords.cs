@@ -51,23 +51,65 @@ public sealed class ImportUigfGachaRecords(
         Dictionary<Guid, List<WishRecord>> recordsByAccount = [];
         Dictionary<string, GameAccount> accountsByUid = new(StringComparer.Ordinal);
         Dictionary<string, GachaItemMetadata?> metadataByItemId = new(StringComparer.Ordinal);
+        ILookup<string, GachaReadError> readErrorsByUid = readResult.Errors
+            .Where(error => !string.IsNullOrWhiteSpace(error.Uid))
+            .ToLookup(error => error.Uid!, StringComparer.Ordinal);
 
         int createdAccountCount = 0;
         int ignoredCount = 0;
+        int invalidCount = readResult.Errors.Count;
 
-        foreach (GachaSourceAccount sourceAccount in readResult.Accounts)
+        foreach (IGrouping<string, GachaSourceAccount> accountGroup in
+            readResult.Accounts.GroupBy(account => account.Uid, StringComparer.Ordinal))
         {
             cancellationToken.ThrowIfCancellationRequested();
+            string uid = accountGroup.Key;
+            GachaSourceRecord[] sourceRecords = accountGroup
+                .SelectMany(account => account.Records)
+                .ToArray();
 
             if (targetAccount is not null &&
-                !string.Equals(sourceAccount.Uid, targetAccount.Uid, StringComparison.Ordinal))
+                !string.Equals(uid, targetAccount.Uid, StringComparison.Ordinal))
             {
-                ignoredCount += sourceAccount.Records.Count;
+                ignoredCount += sourceRecords.Length;
                 continue;
             }
 
-            if (sourceAccount.Records.Count == 0)
+            GachaReadError? readError = readErrorsByUid[uid].FirstOrDefault();
+            if (readError is not null)
             {
+                if (targetAccount is not null)
+                {
+                    throw AccountRejected(
+                        uid,
+                        $"record {readError.RecordIndex?.ToString() ?? "unknown"} " +
+                        $"is invalid ({readError.Code})");
+                }
+
+                invalidCount += sourceRecords.Length;
+                continue;
+            }
+
+            if (sourceRecords.Length == 0)
+            {
+                continue;
+            }
+
+            List<PreparedGachaRecord>? preparedRecords =
+                await PrepareAccountRecordsAsync(
+                    sourceRecords,
+                    metadataByItemId,
+                    cancellationToken);
+            if (preparedRecords is null)
+            {
+                if (targetAccount is not null)
+                {
+                    throw AccountRejected(
+                        uid,
+                        "one or more records have metadata that cannot be completed");
+                }
+
+                invalidCount += sourceRecords.Length;
                 continue;
             }
 
@@ -76,19 +118,19 @@ public sealed class ImportUigfGachaRecords(
             {
                 account = targetAccount;
             }
-            else if (!accountsByUid.TryGetValue(sourceAccount.Uid, out account!))
+            else if (!accountsByUid.TryGetValue(uid, out account!))
             {
                 GameAccount? existingAccount =
                     await accountRepository.GetByArchiveIdAndUidAsync(
                         playerArchiveId,
-                        sourceAccount.Uid,
+                        uid,
                         cancellationToken);
 
                 if (existingAccount is null)
                 {
                     account = await CreateAccountAsync(
                         playerArchiveId,
-                        sourceAccount.Uid,
+                        uid,
                         cancellationToken);
                     createdAccountCount++;
                 }
@@ -97,7 +139,7 @@ public sealed class ImportUigfGachaRecords(
                     account = existingAccount;
                 }
 
-                accountsByUid.Add(sourceAccount.Uid, account);
+                accountsByUid.Add(uid, account);
             }
 
             if (!recordsByAccount.TryGetValue(account.Id, out List<WishRecord>? records))
@@ -106,34 +148,18 @@ public sealed class ImportUigfGachaRecords(
                 recordsByAccount.Add(account.Id, records);
             }
 
-            foreach (GachaSourceRecord sourceRecord in sourceAccount.Records)
+            foreach (PreparedGachaRecord preparedRecord in preparedRecords)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                GachaItemMetadata? metadata = null;
-                if (sourceRecord.ItemName is null ||
-                    sourceRecord.ItemType is null ||
-                    sourceRecord.RankType is null)
-                {
-                    if (!metadataByItemId.TryGetValue(sourceRecord.ItemId, out metadata))
-                    {
-                        metadata = await metadataProvider.FindByIdAsync(
-                            GachaGame.GenshinImpact,
-                            sourceRecord.ItemId,
-                            cancellationToken);
-                        metadataByItemId.Add(sourceRecord.ItemId, metadata);
-                    }
-                }
-
+                GachaSourceRecord sourceRecord = preparedRecord.Source;
                 records.Add(new WishRecord(
                     account.Id,
                     sourceRecord.ExternalRecordId,
-                    sourceRecord.ItemName ?? metadata?.Name,
-                    sourceRecord.RankType ?? metadata?.RankType,
+                    preparedRecord.ItemName,
+                    preparedRecord.RankType,
                     sourceRecord.Time)
                 {
                     ItemId = sourceRecord.ItemId,
-                    ItemType = sourceRecord.ItemType ?? metadata?.ItemType,
+                    ItemType = preparedRecord.ItemType,
                     GachaType = sourceRecord.GachaType,
                     UigfGachaType = sourceRecord.UigfGachaType,
                     Count = sourceRecord.Count
@@ -162,9 +188,63 @@ public sealed class ImportUigfGachaRecords(
             readResult.TotalRecordCount,
             importedCount,
             duplicateCount,
-            readResult.Errors.Count,
+            invalidCount,
             ignoredCount,
             createdAccountCount);
+    }
+
+    private async Task<List<PreparedGachaRecord>?> PrepareAccountRecordsAsync(
+        IReadOnlyCollection<GachaSourceRecord> sourceRecords,
+        IDictionary<string, GachaItemMetadata?> metadataByItemId,
+        CancellationToken cancellationToken)
+    {
+        var preparedRecords = new List<PreparedGachaRecord>(sourceRecords.Count);
+        foreach (GachaSourceRecord sourceRecord in sourceRecords)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            GachaItemMetadata? metadata = null;
+            if (string.IsNullOrWhiteSpace(sourceRecord.ItemName) ||
+                string.IsNullOrWhiteSpace(sourceRecord.ItemType) ||
+                sourceRecord.RankType is null)
+            {
+                if (!metadataByItemId.TryGetValue(sourceRecord.ItemId, out metadata))
+                {
+                    metadata = await metadataProvider.FindByIdAsync(
+                        GachaGame.GenshinImpact,
+                        sourceRecord.ItemId,
+                        cancellationToken);
+                    metadataByItemId.Add(sourceRecord.ItemId, metadata);
+                }
+            }
+
+            string? itemName = sourceRecord.ItemName ?? metadata?.Name;
+            string? itemType = sourceRecord.ItemType ?? metadata?.ItemType;
+            int? rankType = sourceRecord.RankType ?? metadata?.RankType;
+            if (string.IsNullOrWhiteSpace(itemName) ||
+                string.IsNullOrWhiteSpace(itemType) ||
+                rankType is not (>= 3 and <= 5))
+            {
+                return null;
+            }
+
+            preparedRecords.Add(new PreparedGachaRecord(
+                sourceRecord,
+                itemName.Trim(),
+                itemType.Trim(),
+                rankType.Value));
+        }
+
+        return preparedRecords;
+    }
+
+    private static GachaImportFormatException AccountRejected(
+        string uid,
+        string reason)
+    {
+        return new GachaImportFormatException(
+            $"Cannot import UID {uid}: {reason}. " +
+            "No records for this account were saved.");
     }
 
     private async Task<GameAccount> CreateAccountAsync(
@@ -191,4 +271,10 @@ public sealed class ImportUigfGachaRecords(
         await accountRepository.AddAsync(account, cancellationToken);
         return account;
     }
+
+    private sealed record PreparedGachaRecord(
+        GachaSourceRecord Source,
+        string ItemName,
+        string ItemType,
+        int RankType);
 }
