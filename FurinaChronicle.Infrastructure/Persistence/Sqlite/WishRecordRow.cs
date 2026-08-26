@@ -21,10 +21,19 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
         [NotNull]
         public string ExternalRecordId { get; set; } = string.Empty;
 
-        [NotNull]
-        public string ItemName { get; set; } = string.Empty;
+        public string? ItemName { get; set; }
 
-        public int RankType { get; set; }
+        public string? ItemId { get; set; }
+
+        public string? ItemType { get; set; }
+
+        public string? GachaType { get; set; }
+
+        public string? UigfGachaType { get; set; }
+
+        public int? RankType { get; set; }
+
+        public int Count { get; set; }
 
         public long TimeUtcTicks { get; set; }
 
@@ -44,7 +53,8 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
                 throw new ArgumentException("外部记录 ID 不能为空。", nameof(record));
             }
 
-            if (string.IsNullOrWhiteSpace(record.ItemName))
+            if (string.IsNullOrWhiteSpace(record.ItemName) &&
+                string.IsNullOrWhiteSpace(record.ItemId))
             {
                 throw new ArgumentException("物品名称不能为空。", nameof(record));
             }
@@ -54,12 +64,22 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
                 throw new ArgumentOutOfRangeException(nameof(record), "星级必须处于 3 到 5 之间。");
             }
 
+            if (record.Count <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(record), "Count must be greater than zero.");
+            }
+
             return new WishRecordRow
             {
                 GameAccountId = record.GameAccountId.ToString("D"),
                 ExternalRecordId = record.ExternalRecordId,
                 ItemName = record.ItemName,
+                ItemId = record.ItemId,
+                ItemType = record.ItemType,
+                GachaType = record.GachaType,
+                UigfGachaType = record.UigfGachaType,
                 RankType = record.RankType,
+                Count = record.Count,
                 TimeUtcTicks = record.Time.UtcDateTime.Ticks,
                 TimeOffsetMinutes = checked((int)record.Time.Offset.TotalMinutes)
             };
@@ -79,7 +99,14 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
             DateTimeOffset utcTime = new DateTimeOffset(TimeUtcTicks, TimeSpan.Zero);
             DateTimeOffset originalTime = utcTime.ToOffset(offset);
 
-            return new WishRecord(gameAccountId, ExternalRecordId, ItemName, RankType, originalTime);
+            return new WishRecord(gameAccountId, ExternalRecordId, ItemName, RankType, originalTime)
+            {
+                ItemId = ItemId,
+                ItemType = ItemType,
+                GachaType = GachaType,
+                UigfGachaType = UigfGachaType,
+                Count = Count
+            };
         }
     }
 }

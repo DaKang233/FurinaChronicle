@@ -1,5 +1,6 @@
 ﻿using FurinaChronicle.App.ViewModels;
 using FurinaChronicle.App.Persistence;
+using FurinaChronicle.App.Startup;
 using FurinaChronicle.Infrastructure.Importing.Json;
 using FurinaChronicle.Infrastructure.Persistence.Sqlite;
 using FurinaChronicle.Services.Abstractions;
@@ -8,6 +9,18 @@ using FurinaChronicle.Services.Wishes;
 using FurinaChronicle.Services.Archives;
 using Microsoft.Extensions.Logging;
 using FurinaChronicle.Core.Wishes;
+using FurinaChronicle.Infrastructure.Gacha.Exporting;
+using FurinaChronicle.Infrastructure.Gacha.Metadata;
+using FurinaChronicle.Infrastructure.Gacha.Metadata.Abstractions;
+using FurinaChronicle.Infrastructure.Gacha.Metadata.Localization;
+using FurinaChronicle.Infrastructure.Gacha.Metadata.Persistence;
+using FurinaChronicle.Infrastructure.Gacha.Metadata.Remote;
+using FurinaChronicle.Infrastructure.Gacha.Uigf.V4_2;
+using FurinaChronicle.Infrastructure.Gacha.Uigf.Compatibility;
+using FurinaChronicle.Services.Gacha.Abstractions;
+using FurinaChronicle.Services.Gacha.Exporting;
+using FurinaChronicle.Services.Gacha.Importing;
+
 using System.Diagnostics;
 
 namespace FurinaChronicle.App
@@ -37,10 +50,41 @@ namespace FurinaChronicle.App
 			builder.Services.AddSingleton(new SqliteDatabaseOptions(databasePath));
 			builder.Services.AddSingleton<FurinaDatabase>();
 			builder.Services.AddSingleton<IWishRecordRepository, SqliteWishRecordRepository>();
+			builder.Services.AddTransient<GetWishRecordPage>();
 
 			builder.Services.AddSingleton<IWishRecordReader, JsonWishRecordReader>();
 			builder.Services.AddTransient<GetRecentWishRecords>();
 			builder.Services.AddTransient<ImportWishRecords>();
+			builder.Services.AddSingleton<UigfV42GachaReader>();
+			builder.Services.AddSingleton<IGachaImportReader, UigfCompatibleGachaReader>();
+
+			string metadataDatabasePath = Path.Combine(
+				FileSystem.AppDataDirectory,
+				"genshin-metadata.db3");
+			builder.Services.AddSingleton(new GachaMetadataOptions(metadataDatabasePath));
+			builder.Services.AddSingleton(TimeProvider.System);
+			builder.Services.AddSingleton<GachaMetadataDatabase>();
+			builder.Services.AddSingleton<IGachaMetadataRemoteSource>(
+				_ => new GenshinCalculatorMetadataSource());
+			builder.Services.AddSingleton<
+				IGachaLocalizationSource,
+				EmbeddedGachaLocalizationSource>();
+			builder.Services.AddSingleton<SqliteGachaItemMetadataProvider>();
+			builder.Services.AddSingleton<IGachaItemMetadataProvider>(
+				services => services.GetRequiredService<SqliteGachaItemMetadataProvider>());
+			builder.Services.AddSingleton<IGachaMetadataRefreshService>(
+				services => services.GetRequiredService<SqliteGachaItemMetadataProvider>());
+			builder.Services.AddTransient<ImportUigfGachaRecords>();
+			builder.Services.AddSingleton<
+				IUigfV42ExportWriter,
+				UigfV42GachaWriter>();
+			builder.Services.AddSingleton<
+				IGachaTableExportWriter,
+				GachaTableExportWriter>();
+			builder.Services.AddTransient<LoadGachaExportData>();
+			builder.Services.AddTransient<ExportUigfV42GachaRecords>();
+			builder.Services.AddTransient<ExportGachaTable>();
+
 
 			builder.Services.AddTransient<MainPageViewModel>();
 			builder.Services.AddTransient<MainPage>();
@@ -63,6 +107,9 @@ namespace FurinaChronicle.App
 			builder.Services.AddTransient<DeleteGameAccount>();
 			builder.Services.AddSingleton<AppShell>();
 			builder.Services.AddTransient<ArchiveSelectionService>();
+			builder.Services.AddSingleton<ApplicationStartupService>();
+			builder.Services.AddSingleton<StartupPageViewModel>();
+			builder.Services.AddSingleton<StartupPage>();
 
 			return builder.Build();
 		}

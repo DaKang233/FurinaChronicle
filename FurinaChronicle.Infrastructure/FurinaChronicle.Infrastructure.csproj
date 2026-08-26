@@ -15,4 +15,8 @@
     <PackageReference Include="sqlite-net-pcl" Version="1.11.285" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Gacha\Metadata\Assets\genshin-localizations.json" />
+  </ItemGroup>
+
 </Project>

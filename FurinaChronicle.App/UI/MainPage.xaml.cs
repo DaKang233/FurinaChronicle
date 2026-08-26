@@ -1,3 +1,4 @@
+using FurinaChronicle.App.Exporting;
 using FurinaChronicle.App.ViewModels;
 using FurinaChronicle.Core.Archives;
 
@@ -142,5 +143,271 @@ public partial class MainPage : ContentPage
             cancel: "取消");
         if (!confirm) return;
         await ViewModel.DeleteSelectedArchiveAsync();
+    }
+    private async void OnImportIntoArchiveClicked(
+        object? sender,
+        EventArgs e)
+    {
+        try
+        {
+            await PickAndImportUigfAsync(
+                importIntoSelectedAccount: false);
+        }
+        catch (Exception exception)
+        {
+            await DisplayAlertAsync(
+                "无法打开文件",
+                exception.Message,
+                "确定");
+        }
+    }
+
+    private async void OnImportIntoSelectedAccountClicked(
+        object? sender,
+        EventArgs e)
+    {
+        if (ViewModel.SelectedArchive is null ||
+            ViewModel.SelectedAccount is null)
+        {
+            await DisplayAlertAsync(
+                "无法导入",
+                "请先选择档案和游戏账号。",
+                "确定");
+            return;
+        }
+
+        try
+        {
+            await PickAndImportUigfAsync(
+                importIntoSelectedAccount: true);
+        }
+        catch (Exception exception)
+        {
+            await DisplayAlertAsync(
+                "无法打开文件",
+                exception.Message,
+                "确定");
+        }
+    }
+
+    private async Task PickAndImportUigfAsync(
+        bool importIntoSelectedAccount)
+    {
+        var jsonFileTypes = new FilePickerFileType(
+            new Dictionary<DevicePlatform, IEnumerable<string>>
+            {
+                [DevicePlatform.WinUI] = [".json"],
+                [DevicePlatform.Android] =
+                    ["application/json", "text/json", "application/octet-stream"]
+            });
+
+        FileResult? file = await FilePicker.Default.PickAsync(
+            new PickOptions
+            {
+                PickerTitle = "选择 UIGF JSON 文件",
+                FileTypes = jsonFileTypes
+            });
+
+        if (file is null)
+        {
+            return;
+        }
+
+        await using Stream stream = await file.OpenReadAsync();
+        if (importIntoSelectedAccount)
+        {
+            await ViewModel.ImportUigfIntoSelectedAccountAsync(
+                stream,
+                file.FileName);
+        }
+        else
+        {
+            await ViewModel.ImportUigfIntoArchiveAsync(
+                stream,
+                file.FileName);
+        }
+    }
+
+    private async void OnExportArchiveUigfClicked(
+        object? sender,
+        EventArgs e)
+    {
+        await ExportUigfAsync(lockedAccountId: null);
+    }
+
+    private async void OnExportAccountUigfClicked(
+        object? sender,
+        EventArgs e)
+    {
+        if (ViewModel.SelectedAccount is null)
+        {
+            await DisplayAlertAsync(
+                "无法导出",
+                "请先选择账号。",
+                "确定");
+            return;
+        }
+
+        await ExportUigfAsync(ViewModel.SelectedAccount?.Id);
+    }
+
+    private async void OnExportArchiveTableClicked(
+        object? sender,
+        EventArgs e)
+    {
+        await ExportTableAsync(lockedAccountId: null);
+    }
+
+    private async void OnExportAccountTableClicked(
+        object? sender,
+        EventArgs e)
+    {
+        if (ViewModel.SelectedAccount is null)
+        {
+            await DisplayAlertAsync(
+                "无法导出",
+                "请先选择账号。",
+                "确定");
+            return;
+        }
+
+        await ExportTableAsync(ViewModel.SelectedAccount?.Id);
+    }
+
+    private async Task ExportUigfAsync(Guid? lockedAccountId)
+    {
+        if (!await CanBeginExportAsync())
+        {
+            return;
+        }
+
+        try
+        {
+            var optionsPage = new UigfExportOptionsPage(
+                ViewModel.Accounts.ToArray(),
+                lockedAccountId);
+            await Navigation.PushModalAsync(
+                new NavigationPage(optionsPage));
+            UigfExportDialogResult? selection =
+                await optionsPage.WaitForResultAsync();
+            if (selection is null)
+            {
+                return;
+            }
+
+            using GachaExportFile? file =
+                await ViewModel.CreateUigfExportAsync(
+                    selection.GameAccountIds,
+                    selection.Options);
+            if (file is null)
+            {
+                return;
+            }
+
+            await SaveExportFileAsync(file);
+        }
+        catch (OperationCanceledException)
+        {
+            // The user canceled the system save picker.
+        }
+        catch (Exception exception)
+        {
+            await DisplayAlertAsync(
+                "导出失败",
+                exception.Message,
+                "确定");
+        }
+    }
+
+    private async Task ExportTableAsync(Guid? lockedAccountId)
+    {
+        if (!await CanBeginExportAsync())
+        {
+            return;
+        }
+
+        try
+        {
+            var optionsPage = new TableExportOptionsPage(
+                ViewModel.Accounts.ToArray(),
+                lockedAccountId);
+            await Navigation.PushModalAsync(
+                new NavigationPage(optionsPage));
+            TableExportDialogResult? selection =
+                await optionsPage.WaitForResultAsync();
+            if (selection is null)
+            {
+                return;
+            }
+
+            using GachaExportFile? file =
+                await ViewModel.CreateTableExportAsync(
+                    selection.GameAccountIds,
+                    selection.Options);
+            if (file is null)
+            {
+                return;
+            }
+
+            await SaveExportFileAsync(file);
+        }
+        catch (OperationCanceledException)
+        {
+            // The user canceled the system save picker.
+        }
+        catch (Exception exception)
+        {
+            await DisplayAlertAsync(
+                "导出失败",
+                exception.Message,
+                "确定");
+        }
+    }
+
+    private async Task<bool> CanBeginExportAsync()
+    {
+        if (ViewModel.SelectedArchive is null)
+        {
+            await DisplayAlertAsync(
+                "无法导出",
+                "请先选择档案。",
+                "确定");
+            return false;
+        }
+
+        if (ViewModel.Accounts.Count == 0)
+        {
+            await DisplayAlertAsync(
+                "无法导出",
+                "当前档案没有可导出的账号。",
+                "确定");
+            return false;
+        }
+
+        return true;
+    }
+
+    private async Task SaveExportFileAsync(GachaExportFile file)
+    {
+        ExportSaveResult result =
+            await PlatformExportFileSaver.Default.SaveAsync(
+                file.FileName,
+                file.Content);
+        if (result.IsCanceled)
+        {
+            return;
+        }
+        if (!result.IsSuccessful)
+        {
+            throw result.Exception ??
+                new IOException("无法保存导出文件。");
+        }
+
+        ViewModel.NotifyExportSaved(result.FilePath);
+        await DisplayAlertAsync(
+            "导出完成",
+            $"已导出 {file.Result.AccountCount} 个账号、" +
+            $"{file.Result.RecordCount} 条记录。\n{result.FilePath}",
+            "确定");
     }
 }

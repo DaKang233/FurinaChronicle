@@ -1,4 +1,3 @@
-using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Infrastructure.Persistence.Sqlite;
 using SQLite;
 
@@ -6,112 +5,217 @@ namespace FurinaChronicle.Tests.Infrastructure.Persistence.Sqlite;
 
 public sealed class FurinaDatabaseMigrationTests
 {
+    private const int CurrentApplicationId = 0x46554348;
+
     [Fact]
-    public async Task InitializeAsync_NewDatabase_CreatesVersionTwoSchema()
+    public async Task InitializeAsync_NewDatabase_CreatesCurrentVersionOneSchema()
     {
         await using var fixture = MigrationFixture.Create();
+
         await using (FurinaDatabase database = fixture.OpenDatabase())
         {
             await database.InitializeAsync();
         }
 
         using SQLiteConnection connection = fixture.OpenRawConnection();
-        Assert.Equal(2, connection.ExecuteScalar<int>("PRAGMA user_version;"));
-        string[] tables = connection.Query<NameRow>(
-                "SELECT name FROM sqlite_master WHERE type = 'table';")
+        AssertCurrentSchema(connection);
+
+        string[] wishColumns = connection
+            .Query<NameRow>("PRAGMA table_info(WishRecords);")
             .Select(row => row.Name)
             .ToArray();
-        Assert.Contains("PlayerArchives", tables);
-        Assert.Contains("GameAccounts", tables);
-        Assert.Contains("WishRecords", tables);
-        AssertForeignKeysAreValid(connection);
+        Assert.Contains("ItemId", wishColumns);
+        Assert.Contains("ItemType", wishColumns);
+        Assert.Contains("GachaType", wishColumns);
+        Assert.Contains("UigfGachaType", wishColumns);
+        Assert.Contains("Count", wishColumns);
+
+        string[] indexes = connection.Query<NameRow>(
+                """
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'index' AND name NOT LIKE 'sqlite_%';
+                """)
+            .Select(row => row.Name)
+            .ToArray();
+        Assert.Contains("IX_GameAccounts_PlayerArchiveId", indexes);
+        Assert.Contains("UX_GameAccounts_PlayerArchiveId_Uid", indexes);
+        Assert.Contains("UX_WishRecords_Account_ExternalId", indexes);
+        Assert.Contains("IX_WishRecords_TimeUtcTicks", indexes);
+        Assert.Contains("IX_WishRecords_GameAccountId", indexes);
     }
 
-    [Fact]
-    public async Task InitializeAsync_VersionOne_PreservesWishesAndCreatesPlaceholders()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(99)]
+    public async Task InitializeAsync_PreReleaseDatabase_DiscardsOldData(
+        int oldVersion)
     {
         await using var fixture = MigrationFixture.Create();
-        Guid firstAccountId = Guid.NewGuid();
-        Guid secondAccountId = Guid.NewGuid();
-        fixture.CreateVersionOneDatabase(
-            [
-                new LegacyWish(firstAccountId, "wish-1", 30),
-                new LegacyWish(firstAccountId, "wish-2", 29),
-                new LegacyWish(secondAccountId, "wish-3", 28)
-            ]);
+        fixture.CreatePreReleaseDatabase(oldVersion);
 
         await using (FurinaDatabase database = fixture.OpenDatabase())
         {
-            var archives = new SqlitePlayerArchiveRepository(database);
-            var accounts = new SqliteGameAccountRepository(database);
-            var wishes = new SqliteWishRecordRepository(database);
-
-            PlayerArchive archive = Assert.Single(await archives.GetAllAsync());
-            Assert.Equal("\u65e7\u6570\u636e\u8fc1\u79fb\u6863\u6848", archive.Name);
-
-            IReadOnlyList<GameAccount> migratedAccounts =
-                await accounts.GetByArchiveIdAsync(archive.Id);
-            Assert.Equal(2, migratedAccounts.Count);
-            Assert.All(migratedAccounts, account =>
-            {
-                Assert.True(account.IsPlaceholder);
-                Assert.Equal(GameServerRegion.Unknown, account.ServerRegion);
-                Assert.Equal(archive.Id, account.PlayerArchiveId);
-            });
-            Assert.Contains(migratedAccounts, account => account.Id == firstAccountId);
-            Assert.Contains(migratedAccounts, account => account.Id == secondAccountId);
-
-            Assert.Equal(2, (await wishes.GetRecentAsync(firstAccountId, 20)).Count);
-            Assert.Single(await wishes.GetRecentAsync(secondAccountId, 20));
+            await database.InitializeAsync();
         }
 
         using SQLiteConnection connection = fixture.OpenRawConnection();
-        Assert.Equal(2, connection.ExecuteScalar<int>("PRAGMA user_version;"));
-        Assert.Equal(3, connection.ExecuteScalar<int>("SELECT COUNT(*) FROM WishRecords;"));
-        AssertForeignKeysAreValid(connection);
+        AssertCurrentSchema(connection);
+        Assert.Equal(
+            0,
+            connection.ExecuteScalar<int>(
+                "SELECT COUNT(*) FROM PlayerArchives;"));
+        Assert.Equal(
+            0,
+            connection.ExecuteScalar<int>(
+                "SELECT COUNT(*) FROM GameAccounts;"));
+        Assert.Equal(
+            0,
+            connection.ExecuteScalar<int>(
+                "SELECT COUNT(*) FROM WishRecords;"));
     }
 
     [Fact]
-    public async Task InitializeAsync_VersionTwo_ReopeningDoesNotDuplicateMigratedData()
+    public async Task InitializeAsync_CurrentVersionOne_ReopeningPreservesData()
     {
         await using var fixture = MigrationFixture.Create();
-        fixture.CreateVersionOneDatabase([new LegacyWish(Guid.NewGuid(), "wish-1", 30)]);
+        Guid archiveId = Guid.NewGuid();
+        Guid accountId = Guid.NewGuid();
 
-        await using (FurinaDatabase first = fixture.OpenDatabase())
+        await using (FurinaDatabase database = fixture.OpenDatabase())
         {
-            await first.InitializeAsync();
-        }
-        await using (FurinaDatabase second = fixture.OpenDatabase())
-        {
-            await second.InitializeAsync();
+            await database.InitializeAsync();
         }
 
-        using SQLiteConnection connection = fixture.OpenRawConnection();
-        Assert.Equal(1, connection.ExecuteScalar<int>("SELECT COUNT(*) FROM PlayerArchives;"));
-        Assert.Equal(1, connection.ExecuteScalar<int>("SELECT COUNT(*) FROM GameAccounts;"));
-        Assert.Equal(1, connection.ExecuteScalar<int>("SELECT COUNT(*) FROM WishRecords;"));
-        AssertForeignKeysAreValid(connection);
-    }
-
-    [Fact]
-    public async Task InitializeAsync_NewerVersion_ThrowsNotSupportedException()
-    {
-        await using var fixture = MigrationFixture.Create();
         using (SQLiteConnection connection = fixture.OpenRawConnection())
         {
-            connection.Execute("PRAGMA user_version = 3;");
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+            connection.Execute(
+                """
+                INSERT INTO PlayerArchives
+                    (Id, Name, CreatedAtUtcTicks, UpdatedAtUtcTicks)
+                VALUES (?, ?, ?, ?);
+                """,
+                archiveId.ToString("D"),
+                "Preserved archive",
+                now.UtcDateTime.Ticks,
+                now.UtcDateTime.Ticks);
+            connection.Execute(
+                """
+                INSERT INTO GameAccounts
+                    (Id, PlayerArchiveId, Uid, ServerRegion, DisplayName,
+                     IsPlaceholder, CreatedAtUtcTicks, UpdatedAtUtcTicks)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                accountId.ToString("D"),
+                archiveId.ToString("D"),
+                "800000001",
+                1,
+                null,
+                false,
+                now.UtcDateTime.Ticks,
+                now.UtcDateTime.Ticks);
+            connection.Execute(
+                """
+                INSERT INTO WishRecords
+                    (GameAccountId, ExternalRecordId, ItemName, ItemId,
+                     ItemType, GachaType, UigfGachaType, RankType, Count,
+                     TimeUtcTicks, TimeOffsetMinutes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                accountId.ToString("D"),
+                "wish-1",
+                "Furina",
+                "10000089",
+                "Character",
+                "301",
+                "301",
+                5,
+                1,
+                now.UtcDateTime.Ticks,
+                480);
         }
 
-        await using FurinaDatabase database = fixture.OpenDatabase();
-        NotSupportedException exception = await Assert.ThrowsAsync<NotSupportedException>(
-            () => database.InitializeAsync());
+        await using (FurinaDatabase database = fixture.OpenDatabase())
+        {
+            await database.InitializeAsync();
+        }
 
-        Assert.Contains("\u7248\u672c 3", exception.Message);
+        using SQLiteConnection reopened = fixture.OpenRawConnection();
+        AssertCurrentSchema(reopened);
+        Assert.Equal(
+            1,
+            reopened.ExecuteScalar<int>(
+                "SELECT COUNT(*) FROM PlayerArchives;"));
+        Assert.Equal(
+            1,
+            reopened.ExecuteScalar<int>(
+                "SELECT COUNT(*) FROM GameAccounts;"));
+        Assert.Equal(
+            1,
+            reopened.ExecuteScalar<int>(
+                "SELECT COUNT(*) FROM WishRecords;"));
     }
 
-    private static void AssertForeignKeysAreValid(SQLiteConnection connection)
+    [Fact]
+    public async Task InitializeAsync_CanceledToken_DoesNotCreateSchema()
     {
-        Assert.Empty(connection.Query<ForeignKeyRow>("PRAGMA foreign_key_check;"));
+        await using var fixture = MigrationFixture.Create();
+        await using FurinaDatabase database = fixture.OpenDatabase();
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => database.InitializeAsync(cancellation.Token));
+
+        using SQLiteConnection connection = fixture.OpenRawConnection();
+        Assert.Equal(
+            0,
+            connection.ExecuteScalar<int>("PRAGMA user_version;"));
+        Assert.Equal(
+            0,
+            connection.ExecuteScalar<int>("PRAGMA application_id;"));
+    }
+
+    private static void AssertCurrentSchema(SQLiteConnection connection)
+    {
+        Assert.Equal(
+            1,
+            connection.ExecuteScalar<int>("PRAGMA user_version;"));
+        Assert.Equal(
+            CurrentApplicationId,
+            connection.ExecuteScalar<int>("PRAGMA application_id;"));
+
+        string[] tables = connection.Query<NameRow>(
+                """
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'table' AND name NOT LIKE 'sqlite_%';
+                """)
+            .Select(row => row.Name)
+            .ToArray();
+        Assert.Equal(
+            ["GameAccounts", "PlayerArchives", "WishRecords"],
+            tables.Order(StringComparer.Ordinal).ToArray());
+
+        Assert.Empty(
+            connection.Query<ForeignKeyCheckRow>(
+                "PRAGMA foreign_key_check;"));
+
+        ForeignKeyDefinitionRow accountForeignKey = Assert.Single(
+            connection.Query<ForeignKeyDefinitionRow>(
+                "PRAGMA foreign_key_list(GameAccounts);"));
+        Assert.Equal("PlayerArchives", accountForeignKey.Table);
+        Assert.Equal("CASCADE", accountForeignKey.OnDelete);
+
+        ForeignKeyDefinitionRow wishForeignKey = Assert.Single(
+            connection.Query<ForeignKeyDefinitionRow>(
+                "PRAGMA foreign_key_list(WishRecords);"));
+        Assert.Equal("GameAccounts", wishForeignKey.Table);
+        Assert.Equal("CASCADE", wishForeignKey.OnDelete);
     }
 
     private sealed class NameRow
@@ -119,13 +223,20 @@ public sealed class FurinaDatabaseMigrationTests
         public string Name { get; set; } = string.Empty;
     }
 
-    private sealed class ForeignKeyRow
+    private sealed class ForeignKeyCheckRow
     {
         [Column("table")]
         public string Table { get; set; } = string.Empty;
     }
 
-    private sealed record LegacyWish(Guid AccountId, string ExternalId, int Minute);
+    private sealed class ForeignKeyDefinitionRow
+    {
+        [Column("table")]
+        public string Table { get; set; } = string.Empty;
+
+        [Column("on_delete")]
+        public string OnDelete { get; set; } = string.Empty;
+    }
 
     private sealed class MigrationFixture : IAsyncDisposable
     {
@@ -160,50 +271,49 @@ public sealed class FurinaDatabaseMigrationTests
                 SQLiteOpenFlags.FullMutex,
                 storeDateTimeAsTicks: true);
 
-        public void CreateVersionOneDatabase(IReadOnlyCollection<LegacyWish> wishes)
+        public void CreatePreReleaseDatabase(int schemaVersion)
         {
             using SQLiteConnection connection = OpenRawConnection();
+            connection.Execute(
+                """
+                CREATE TABLE PlayerArchives
+                (
+                    Id TEXT PRIMARY KEY NOT NULL,
+                    Name TEXT
+                );
+                """);
+            connection.Execute(
+                """
+                CREATE TABLE GameAccounts
+                (
+                    Id TEXT PRIMARY KEY NOT NULL,
+                    PlayerArchiveId TEXT,
+                    Uid TEXT
+                );
+                """);
             connection.Execute(
                 """
                 CREATE TABLE WishRecords
                 (
                     Id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    GameAccountId TEXT NOT NULL,
-                    ExternalRecordId TEXT NOT NULL,
-                    ItemName TEXT NOT NULL,
-                    RankType INTEGER NOT NULL,
-                    TimeUtcTicks INTEGER NOT NULL,
-                    TimeOffsetMinutes INTEGER NOT NULL
+                    GameAccountId TEXT,
+                    ExternalRecordId TEXT
                 );
+                """);
+
+            connection.Execute(
+                "INSERT INTO PlayerArchives (Id, Name) VALUES ('old-archive', 'Old');");
+            connection.Execute(
+                """
+                INSERT INTO GameAccounts (Id, PlayerArchiveId, Uid)
+                VALUES ('old-account', 'old-archive', '800000001');
                 """);
             connection.Execute(
                 """
-                CREATE UNIQUE INDEX UX_WishRecords_Account_ExternalId
-                ON WishRecords(GameAccountId, ExternalRecordId);
+                INSERT INTO WishRecords (GameAccountId, ExternalRecordId)
+                VALUES ('old-account', 'old-wish');
                 """);
-            connection.Execute(
-                "CREATE INDEX IX_WishRecords_TimeUtcTicks ON WishRecords(TimeUtcTicks);");
-
-            foreach (LegacyWish wish in wishes)
-            {
-                DateTimeOffset time = new(
-                    2026, 7, 16, 18, wish.Minute, 0, TimeSpan.FromHours(8));
-                connection.Execute(
-                    """
-                    INSERT INTO WishRecords
-                    (GameAccountId, ExternalRecordId, ItemName, RankType,
-                     TimeUtcTicks, TimeOffsetMinutes)
-                    VALUES (?, ?, ?, ?, ?, ?);
-                    """,
-                    wish.AccountId.ToString("D"),
-                    wish.ExternalId,
-                    "Item",
-                    5,
-                    time.UtcDateTime.Ticks,
-                    (int)time.Offset.TotalMinutes);
-            }
-
-            connection.Execute("PRAGMA user_version = 1;");
+            connection.Execute($"PRAGMA user_version = {schemaVersion};");
         }
 
         public ValueTask DisposeAsync()
@@ -212,6 +322,7 @@ public sealed class FurinaDatabaseMigrationTests
             {
                 Directory.Delete(directory, recursive: true);
             }
+
             return ValueTask.CompletedTask;
         }
     }

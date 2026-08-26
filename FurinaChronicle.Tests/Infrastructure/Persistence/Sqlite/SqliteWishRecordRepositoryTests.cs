@@ -32,6 +32,14 @@ namespace FurinaChronicle.Tests.Infrastructure.Persistence.Sqlite
                 new WishRecord(accountId, "record-2", "夏洛蒂", 4, new DateTimeOffset(2026,7,16,18,29,0,TimeSpan.FromHours(8))),
                 new WishRecord(accountId, "record-3", "黎明神剑", 3, new DateTimeOffset(2026,7,16,18,28,0,TimeSpan.FromHours(8))),
                 ];
+            records[0] = records[0] with
+            {
+                ItemId = "10000089",
+                ItemType = "Avatar",
+                GachaType = "400",
+                UigfGachaType = "301",
+                Count = 1
+            };
 
             FurinaDatabase? firstDatabase = null;
             FurinaDatabase? secondDatabase = null;
@@ -65,6 +73,11 @@ namespace FurinaChronicle.Tests.Infrastructure.Persistence.Sqlite
                 Assert.Equal(3, loadedRecords.Count);
                 Assert.Equal("芙宁娜", loadedRecords[0].ItemName);
                 Assert.Equal(TimeSpan.FromHours(8), loadedRecords[0].Time.Offset);
+                Assert.Equal("10000089", loadedRecords[0].ItemId);
+                Assert.Equal("Avatar", loadedRecords[0].ItemType);
+                Assert.Equal("400", loadedRecords[0].GachaType);
+                Assert.Equal("301", loadedRecords[0].UigfGachaType);
+                Assert.Equal(1, loadedRecords[0].Count);
             }
             finally
             {
