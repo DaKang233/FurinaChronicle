@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using FurinaChronicle.Core.Passport;
 using FurinaChronicle.Infrastructure.Passport;
 using FurinaChronicle.Services.Passport;
@@ -194,6 +195,199 @@ public sealed class MiHoYoPassportClientTests
         Assert.Equal("mid-os", tokens.Mid);
         Assert.Equal("stoken-os", tokens.SToken);
         Assert.Equal("Traveler", tokens.DisplayName);
+    }
+
+    [Fact]
+    public async Task OverseaPasswordLogin_CompletesGeetestAndReplaysAigis()
+    {
+        int callCount = 0;
+        var handler = new StubHttpHandler(request =>
+        {
+            callCount++;
+            if (callCount == 1)
+            {
+                var response = JsonResponse(
+                    """
+                    {"retcode":-3101,"message":"Risk verification required","data":null}
+                    """);
+                response.Headers.TryAddWithoutValidation(
+                    "X-Rpc-Aigis",
+                    """
+                    {"session_id":"session-1","mmt_type":1,"data":"{\"success\":1,\"gt\":\"gt-1\",\"challenge\":\"challenge-1\",\"new_captcha\":1}"}
+                    """);
+                return Task.FromResult(response);
+            }
+
+            string aigis = request.Headers.GetValues("x-rpc-aigis").Single();
+            string[] parts = aigis.Split(';', 2);
+            Assert.Equal("session-1", parts[0]);
+            using JsonDocument proof = JsonDocument.Parse(
+                Convert.FromBase64String(parts[1]));
+            Assert.Equal(
+                "validated-challenge",
+                proof.RootElement.GetProperty("geetest_challenge").GetString());
+            Assert.Equal(
+                "validate-token|jordan",
+                proof.RootElement.GetProperty("geetest_seccode").GetString());
+            return Task.FromResult(SuccessfulOverseaLoginResponse());
+        });
+        using var httpClient = new HttpClient(handler);
+        using var client = new MiHoYoPassportClient(httpClient);
+        var device = new PassportDeviceIdentity("oversea-device", null);
+
+        OverseaPasswordLoginAttempt first =
+            await client.AttemptOverseaPasswordLoginAsync(
+                "traveler@example.com",
+                "secret-password",
+                device);
+
+        Assert.False(first.IsSuccess);
+        Assert.Equal("gt-1", first.GeetestChallenge!.Gt);
+        Assert.Equal("challenge-1", first.GeetestChallenge.Challenge);
+        string aigis = client.CompleteGeetestChallenge(
+            first.GeetestChallenge,
+            new PassportGeetestResult(
+                "validated-challenge",
+                "validate-token"));
+
+        OverseaPasswordLoginAttempt second =
+            await client.AttemptOverseaPasswordLoginAsync(
+                "traveler@example.com",
+                "secret-password",
+                device,
+                aigis);
+
+        Assert.True(second.IsSuccess);
+        Assert.Equal("stoken-os", second.Tokens!.SToken);
+        Assert.Equal(2, callCount);
+    }
+
+    [Fact]
+    public async Task OverseaPasswordLogin_VerifiesActionTicketAndReplaysVerify()
+    {
+        int ticketInfoCalls = 0;
+        bool verifyHeaderReplayed = false;
+        var handler = new StubHttpHandler(request =>
+        {
+            string url = request.RequestUri!.AbsoluteUri;
+            if (url == MiHoYoPassportClient.OverseaPasswordLoginUrl)
+            {
+                if (request.Headers.TryGetValues(
+                    "x-rpc-verify",
+                    out IEnumerable<string>? values))
+                {
+                    using JsonDocument proof = JsonDocument.Parse(values.Single());
+                    Assert.Equal(
+                        JsonValueKind.Null,
+                        proof.RootElement.GetProperty("verify_str").ValueKind);
+                    verifyHeaderReplayed = true;
+                    return Task.FromResult(SuccessfulOverseaLoginResponse());
+                }
+
+                var response = JsonResponse(
+                    """
+                    {"retcode":-3102,"message":"Account verification required","data":null}
+                    """);
+                response.Headers.TryAddWithoutValidation(
+                    "X-Rpc-Verify",
+                    """
+                    {"risk_ticket":"risk-1","verify_str":"{\"ticket\":\"action-1\",\"verify_type\":\"email\"}"}
+                    """);
+                return Task.FromResult(response);
+            }
+
+            if (url == MiHoYoPassportClient.OverseaGetActionTicketInfoUrl)
+            {
+                Assert.StartsWith(
+                    "https://sg-public-api.hoyoverse.com/account/ma-verifier/api/",
+                    url,
+                    StringComparison.Ordinal);
+                Assert.Equal(
+                    "5",
+                    request.Headers.GetValues("x-rpc-client_type").Single());
+                Assert.True(Guid.TryParse(
+                    request.Headers.GetValues("x-rpc-device_id").Single(),
+                    out _));
+                ticketInfoCalls++;
+                string status = ticketInfoCalls == 1
+                    ? "StatusNew"
+                    : "StatusVerified";
+                return Task.FromResult(JsonResponse($$"""
+                    {
+                      "retcode":0,
+                      "message":"OK",
+                      "data":{
+                        "action_ticket":"action-1",
+                        "captcha_sent":true,
+                        "user_info":{"email":"t***@example.com"},
+                        "verify_info":{"status":"{{status}}"}
+                      }
+                    }
+                    """));
+            }
+
+            Assert.Equal(
+                MiHoYoPassportClient.OverseaVerifyActionTicketUrl,
+                url);
+            Assert.StartsWith(
+                "https://sg-public-api.hoyoverse.com/account/ma-verifier/api/",
+                url,
+                StringComparison.Ordinal);
+            Assert.Equal(
+                "5",
+                request.Headers.GetValues("x-rpc-client_type").Single());
+            return Task.FromResult(JsonResponse(
+                """
+                {"retcode":0,"message":"OK","data":{}}
+                """));
+        });
+        using var httpClient = new HttpClient(handler);
+        using var client = new MiHoYoPassportClient(httpClient);
+        var device = new PassportDeviceIdentity("oversea-device", null);
+
+        OverseaPasswordLoginAttempt first =
+            await client.AttemptOverseaPasswordLoginAsync(
+                "traveler@example.com",
+                "secret-password",
+                device);
+        PassportAccountVerificationChallenge prepared =
+            await client.PrepareAccountVerificationAsync(
+                first.AccountVerificationChallenge!,
+                device);
+
+        Assert.Equal("action-1", prepared.Ticket);
+        Assert.Equal("t***@example.com", prepared.Destination);
+        await client.VerifyAccountAsync(prepared, "123456", device);
+        string verify = client.CompleteAccountVerificationChallenge(prepared);
+        OverseaPasswordLoginAttempt second =
+            await client.AttemptOverseaPasswordLoginAsync(
+                "traveler@example.com",
+                "secret-password",
+                device,
+                verify: verify);
+
+        Assert.True(second.IsSuccess);
+        Assert.True(verifyHeaderReplayed);
+        Assert.Equal(2, ticketInfoCalls);
+    }
+
+    private static HttpResponseMessage SuccessfulOverseaLoginResponse()
+    {
+        return JsonResponse(
+            """
+            {
+              "retcode":0,
+              "message":"OK",
+              "data":{
+                "token":{"token_type":2,"token":"stoken-os"},
+                "user_info":{
+                  "aid":"900001",
+                  "mid":"mid-os",
+                  "account_name":"Traveler"
+                }
+              }
+            }
+            """);
     }
 
     private static HttpResponseMessage JsonResponse(string json)

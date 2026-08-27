@@ -11,6 +11,42 @@ public sealed record PassportLoginTokens(
     string? DisplayName = null,
     string? DeviceFingerprint = null);
 
+public sealed record PassportGeetestChallenge(
+    string State,
+    string Gt,
+    string Challenge,
+    bool IsOversea = true);
+
+public sealed record PassportGeetestResult(
+    string Challenge,
+    string Validate);
+
+public sealed record PassportAccountVerificationChallenge(
+    string State,
+    string Ticket,
+    string? Destination = null);
+
+public sealed record OverseaPasswordLoginAttempt(
+    PassportLoginTokens? Tokens,
+    PassportGeetestChallenge? GeetestChallenge = null,
+    PassportAccountVerificationChallenge? AccountVerificationChallenge = null,
+    int Retcode = 0,
+    string? Message = null)
+{
+    public bool IsSuccess => Tokens is not null;
+}
+
+public interface IPassportSecurityVerificationHandler
+{
+    Task<PassportGeetestResult?> VerifyGeetestAsync(
+        PassportGeetestChallenge challenge,
+        CancellationToken cancellationToken = default);
+
+    Task<string?> RequestAccountVerificationCodeAsync(
+        PassportAccountVerificationChallenge challenge,
+        CancellationToken cancellationToken = default);
+}
+
 public sealed record PassportDerivedTokens(
     string? LToken,
     string? CookieToken);

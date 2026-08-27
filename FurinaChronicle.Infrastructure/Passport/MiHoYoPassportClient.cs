@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using FurinaChronicle.Core.Passport;
 using FurinaChronicle.Infrastructure.MiHoYo;
 using FurinaChronicle.Services.Passport;
@@ -23,6 +24,10 @@ public sealed class MiHoYoPassportClient : IMiHoYoPassportClient, IDisposable
         "https://passport-api.mihoyo.com/account/ma-cn-session/app/getTokenBySToken";
     public const string OverseaPasswordLoginUrl =
         "https://sg-public-api.hoyoverse.com/account/ma-passport/api/appLoginByPassword";
+    public const string OverseaGetActionTicketInfoUrl =
+        "https://sg-public-api.hoyoverse.com/account/ma-verifier/api/getActionTicketInfo";
+    public const string OverseaVerifyActionTicketUrl =
+        "https://sg-public-api.hoyoverse.com/account/ma-verifier/api/verifyActionTicketPartly";
     public const string OverseaGetLTokenUrl =
         "https://api-account-os.hoyoverse.com/account/auth/api/getLTokenBySToken";
     public const string OverseaGetCookieTokenUrl =
@@ -37,8 +42,10 @@ public sealed class MiHoYoPassportClient : IMiHoYoPassportClient, IDisposable
     private const string PassportAppId = "bll8iq97cem8";
     private const string SessionAppId = "ddxf5dufpuyo";
     private const string AppVersion = "2.95.1";
+    private const string OverseaAppVersion = "2.54.0";
     private readonly HttpClient httpClient;
     private readonly bool ownsHttpClient;
+    private readonly string overseaVerifierDeviceId = Guid.NewGuid().ToString("D");
 
     public MiHoYoPassportClient(HttpClient? httpClient = null)
     {
@@ -295,57 +302,175 @@ public sealed class MiHoYoPassportClient : IMiHoYoPassportClient, IDisposable
         PassportDeviceIdentity device,
         CancellationToken cancellationToken = default)
     {
+        OverseaPasswordLoginAttempt attempt =
+            await AttemptOverseaPasswordLoginAsync(
+                account,
+                password,
+                device,
+                cancellationToken: cancellationToken);
+        if (attempt.Tokens is { } tokens)
+        {
+            return tokens;
+        }
+
+        bool requiresSecurityVerification =
+            attempt.GeetestChallenge is not null ||
+            attempt.AccountVerificationChallenge is not null;
+        throw new InvalidOperationException(requiresSecurityVerification
+            ? "HoYoLAB 要求额外的安全验证，请完成 GeeTest/账号验证码后重试。"
+            : $"HoYoLAB 登录失败 ({attempt.Retcode}): {attempt.Message ?? "Unknown error"}");
+    }
+
+    public async Task<OverseaPasswordLoginAttempt> AttemptOverseaPasswordLoginAsync(
+        string account,
+        string password,
+        PassportDeviceIdentity device,
+        string? aigis = null,
+        string? verify = null,
+        CancellationToken cancellationToken = default)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(account);
         ArgumentException.ThrowIfNullOrWhiteSpace(password);
         ArgumentNullException.ThrowIfNull(device);
-        string body = JsonSerializer.Serialize(new
-        {
-            account = EncryptOversea(account),
-            password = EncryptOversea(password),
-            token_type = 2
-        });
-        using var request = new HttpRequestMessage(
-            HttpMethod.Post,
-            OverseaPasswordLoginUrl)
-        {
-            Content = new StringContent(body, Encoding.UTF8, "application/json")
-        };
-        request.Headers.TryAddWithoutValidation(
-            "User-Agent",
-            "HYPContainer/1.1.4.133");
-        request.Headers.TryAddWithoutValidation("Accept", "application/json");
-        request.Headers.TryAddWithoutValidation("x-rpc-app_id", "ddxf6vlr1reo");
-        request.Headers.TryAddWithoutValidation("x-rpc-client_type", "3");
-        request.Headers.TryAddWithoutValidation("x-rpc-device_id", device.DeviceId);
-
-        using HttpResponseMessage response = await httpClient.SendAsync(
-            request,
-            HttpCompletionOption.ResponseHeadersRead,
+        using HttpResponseMessage response = await SendOverseaPassportJsonAsync(
+            OverseaPasswordLoginUrl,
+            new
+            {
+                account = EncryptOversea(account),
+                password = EncryptOversea(password),
+                token_type = 2
+            },
+            device,
+            aigis,
+            verify,
             cancellationToken);
         using JsonDocument document = await ReadResponseAsync(
             response,
             cancellationToken);
         JsonElement root = document.RootElement;
         int retcode = root.GetProperty("retcode").GetInt32();
+        string? message = OptionalString(root, "message");
+        string? rawAigis = HeaderValue(response, "X-Rpc-Aigis");
+        string? rawVerify = HeaderValue(response, "X-Rpc-Verify");
         if (retcode != 0)
         {
-            string message = OptionalString(root, "message") ?? "Unknown error";
-            bool requiresSecurityVerification =
-                response.Headers.Contains("X-Rpc-Aigis") ||
-                response.Headers.Contains("X-Rpc-Verify");
-            throw new InvalidOperationException(requiresSecurityVerification
-                ? "HoYoLAB 要求额外的安全验证。请稍后重试，或先在官方 HoYoLAB 完成登录验证。"
-                : $"HoYoLAB 登录失败 ({retcode}): {message}");
+            PassportGeetestChallenge? geetestChallenge =
+                string.IsNullOrWhiteSpace(rawAigis)
+                    ? null
+                    : ParseGeetestChallenge(rawAigis);
+            PassportAccountVerificationChallenge? accountChallenge =
+                string.IsNullOrWhiteSpace(rawVerify)
+                    ? null
+                    : ParseAccountVerificationChallenge(rawVerify);
+            return new OverseaPasswordLoginAttempt(
+                Tokens: null,
+                geetestChallenge,
+                accountChallenge,
+                retcode,
+                message);
         }
 
         JsonElement data = root.GetProperty("data");
         JsonElement token = data.GetProperty("token");
         JsonElement userInfo = data.GetProperty("user_info");
-        return new PassportLoginTokens(
-            RequiredString(userInfo, "aid"),
-            RequiredString(userInfo, "mid"),
-            RequiredString(token, "token"),
-            DisplayName: OptionalString(userInfo, "account_name"));
+        return new OverseaPasswordLoginAttempt(
+            new PassportLoginTokens(
+                RequiredString(userInfo, "aid"),
+                RequiredString(userInfo, "mid"),
+                RequiredString(token, "token"),
+                DisplayName: OptionalString(userInfo, "account_name")));
+    }
+
+    public string CompleteGeetestChallenge(
+        PassportGeetestChallenge challenge,
+        PassportGeetestResult result)
+    {
+        ArgumentNullException.ThrowIfNull(challenge);
+        ArgumentNullException.ThrowIfNull(result);
+        ArgumentException.ThrowIfNullOrWhiteSpace(result.Challenge);
+        ArgumentException.ThrowIfNullOrWhiteSpace(result.Validate);
+        using JsonDocument state = JsonDocument.Parse(challenge.State);
+        string sessionId = RequiredString(state.RootElement, "session_id");
+        byte[] proof = JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            geetest_challenge = result.Challenge,
+            geetest_validate = result.Validate,
+            geetest_seccode = $"{result.Validate}|jordan"
+        });
+        return $"{sessionId};{Convert.ToBase64String(proof)}";
+    }
+
+    public async Task<PassportAccountVerificationChallenge> PrepareAccountVerificationAsync(
+        PassportAccountVerificationChallenge challenge,
+        PassportDeviceIdentity device,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(challenge);
+        using HttpResponseMessage response = await SendOverseaVerifierJsonAsync(
+            OverseaGetActionTicketInfoUrl,
+            CreateActionTicketRequest(challenge.Ticket),
+            aigis: null,
+            cancellationToken);
+        using JsonDocument document = await ReadSuccessAsync(
+            response,
+            cancellationToken);
+        JsonElement data = document.RootElement.GetProperty("data");
+        string? destination = null;
+        if (data.TryGetProperty("user_info", out JsonElement userInfo))
+        {
+            destination = OptionalString(userInfo, "email") ??
+                OptionalString(userInfo, "safe_mobile") ??
+                OptionalString(userInfo, "mobile");
+        }
+
+        return challenge with { Destination = destination };
+    }
+
+    public async Task VerifyAccountAsync(
+        PassportAccountVerificationChallenge challenge,
+        string captcha,
+        PassportDeviceIdentity device,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(challenge);
+        ArgumentException.ThrowIfNullOrWhiteSpace(captcha);
+        using HttpResponseMessage response = await SendOverseaVerifierJsonAsync(
+            OverseaVerifyActionTicketUrl,
+            CreateActionTicketRequest(
+                challenge.Ticket,
+                captcha.Trim(),
+                verifyMethod: 2),
+            aigis: null,
+            cancellationToken);
+        using JsonDocument _ = await ReadSuccessAsync(response, cancellationToken);
+
+        using HttpResponseMessage confirmResponse =
+            await SendOverseaVerifierJsonAsync(
+                OverseaGetActionTicketInfoUrl,
+                CreateActionTicketRequest(challenge.Ticket),
+                aigis: null,
+                cancellationToken);
+        using JsonDocument confirmDocument = await ReadSuccessAsync(
+            confirmResponse,
+            cancellationToken);
+        JsonElement data = confirmDocument.RootElement.GetProperty("data");
+        string? status = data.TryGetProperty("verify_info", out JsonElement info)
+            ? OptionalString(info, "status")
+            : null;
+        if (!string.Equals(status, "StatusVerified", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("账号安全验证码未通过验证。");
+        }
+    }
+
+    public string CompleteAccountVerificationChallenge(
+        PassportAccountVerificationChallenge challenge)
+    {
+        ArgumentNullException.ThrowIfNull(challenge);
+        JsonNode root = JsonNode.Parse(challenge.State)
+            ?? throw new FormatException("X-Rpc-Verify 内容为空。");
+        root["verify_str"] = null;
+        return root.ToJsonString();
     }
 
     public async Task<PassportDerivedTokens> GetDerivedTokensAsync(
@@ -443,7 +568,7 @@ public sealed class MiHoYoPassportClient : IMiHoYoPassportClient, IDisposable
             mid
         };
         string body = JsonSerializer.Serialize(payload);
-        using var request = new HttpRequestMessage(HttpMethod.Post, VerifySessionUrl)
+        var request = new HttpRequestMessage(HttpMethod.Post, VerifySessionUrl)
         {
             Content = new StringContent(body, Encoding.UTF8, "application/json")
         };
@@ -575,7 +700,7 @@ public sealed class MiHoYoPassportClient : IMiHoYoPassportClient, IDisposable
         CancellationToken cancellationToken)
     {
         string body = JsonSerializer.Serialize(payload);
-        var request = new HttpRequestMessage(HttpMethod.Post, url)
+        using var request = new HttpRequestMessage(HttpMethod.Post, url)
         {
             Content = new StringContent(body, Encoding.UTF8, "application/json")
         };
@@ -792,6 +917,144 @@ public sealed class MiHoYoPassportClient : IMiHoYoPassportClient, IDisposable
         }
 
         return null;
+    }
+
+    private async Task<HttpResponseMessage> SendOverseaPassportJsonAsync(
+        string url,
+        object payload,
+        PassportDeviceIdentity device,
+        string? aigis,
+        string? verify,
+        CancellationToken cancellationToken)
+    {
+        string body = JsonSerializer.Serialize(payload);
+        using var request = new HttpRequestMessage(HttpMethod.Post, url)
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/json")
+        };
+        request.Headers.TryAddWithoutValidation(
+            "User-Agent",
+            "HYPContainer/1.1.4.133");
+        request.Headers.TryAddWithoutValidation("Accept", "application/json");
+        request.Headers.TryAddWithoutValidation("x-rpc-app_id", "ddxf6vlr1reo");
+        request.Headers.TryAddWithoutValidation("x-rpc-client_type", "3");
+        request.Headers.TryAddWithoutValidation("x-rpc-device_id", device.DeviceId);
+        if (!string.IsNullOrWhiteSpace(aigis))
+        {
+            request.Headers.TryAddWithoutValidation("x-rpc-aigis", aigis);
+        }
+
+        if (!string.IsNullOrWhiteSpace(verify))
+        {
+            request.Headers.TryAddWithoutValidation("x-rpc-verify", verify);
+        }
+
+        return await httpClient.SendAsync(
+            request,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken);
+    }
+
+    private async Task<HttpResponseMessage> SendOverseaVerifierJsonAsync(
+        string url,
+        object payload,
+        string? aigis,
+        CancellationToken cancellationToken)
+    {
+        string body = JsonSerializer.Serialize(payload);
+        using var request = new HttpRequestMessage(HttpMethod.Post, url)
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/json")
+        };
+        request.Headers.TryAddWithoutValidation(
+            "User-Agent",
+            $"Mozilla/5.0 (Windows NT 10.0; Win64; x64) miHoYoBBSOversea/{OverseaAppVersion}");
+        request.Headers.TryAddWithoutValidation("Accept", "application/json");
+        request.Headers.TryAddWithoutValidation(
+            "x-rpc-app_version",
+            OverseaAppVersion);
+        request.Headers.TryAddWithoutValidation("x-rpc-client_type", "5");
+        request.Headers.TryAddWithoutValidation("x-rpc-language", "zh-cn");
+        request.Headers.TryAddWithoutValidation(
+            "x-rpc-device_id",
+            overseaVerifierDeviceId);
+        if (!string.IsNullOrWhiteSpace(aigis))
+        {
+            request.Headers.TryAddWithoutValidation("x-rpc-aigis", aigis);
+        }
+
+        return await httpClient.SendAsync(
+            request,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken);
+    }
+
+    private static object CreateActionTicketRequest(
+        string ticket,
+        string? captcha = null,
+        int? verifyMethod = null)
+    {
+        return new
+        {
+            action_type = "verify_for_component",
+            action_ticket = ticket,
+            email_captcha = captcha,
+            verify_method = verifyMethod
+        };
+    }
+
+    private static PassportGeetestChallenge ParseGeetestChallenge(string state)
+    {
+        try
+        {
+            using JsonDocument sessionDocument = JsonDocument.Parse(state);
+            JsonElement session = sessionDocument.RootElement;
+            string data = RequiredString(session, "data");
+            using JsonDocument verificationDocument = JsonDocument.Parse(data);
+            JsonElement verification = verificationDocument.RootElement;
+            return new PassportGeetestChallenge(
+                state,
+                RequiredString(verification, "gt"),
+                RequiredString(verification, "challenge"));
+        }
+        catch (JsonException exception)
+        {
+            throw new FormatException(
+                "HoYoLAB 返回了无法解析的 GeeTest 挑战。",
+                exception);
+        }
+    }
+
+    private static PassportAccountVerificationChallenge
+        ParseAccountVerificationChallenge(string state)
+    {
+        try
+        {
+            using JsonDocument riskDocument = JsonDocument.Parse(state);
+            string verifyString = RequiredString(
+                riskDocument.RootElement,
+                "verify_str");
+            using JsonDocument verificationDocument = JsonDocument.Parse(
+                verifyString);
+            return new PassportAccountVerificationChallenge(
+                state,
+                RequiredString(verificationDocument.RootElement, "ticket"));
+        }
+        catch (JsonException exception)
+        {
+            throw new FormatException(
+                "HoYoLAB 返回了无法解析的账号安全验证挑战。",
+                exception);
+        }
+    }
+
+    private static string? HeaderValue(
+        HttpResponseMessage response,
+        string name)
+    {
+        return response.Headers.TryGetValues(name, out IEnumerable<string>? values)
+            ? values.SingleOrDefault()
+            : null;
     }
 
     private static string EncryptCn(string value)

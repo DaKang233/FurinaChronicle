@@ -112,6 +112,38 @@ public sealed class PassportAccountServiceTests
     }
 
     [Fact]
+    public async Task OverseaPasswordLogin_CompletesGeetestWithSameDevice()
+    {
+        var store = new MemoryAccountStore();
+        var client = new StubPassportClient();
+        client.OverseaAttempts.Enqueue(new OverseaPasswordLoginAttempt(
+            Tokens: null,
+            GeetestChallenge: new PassportGeetestChallenge(
+                "opaque-state",
+                "gt-1",
+                "challenge-1"),
+            Retcode: -3101,
+            Message: "risk"));
+        client.OverseaAttempts.Enqueue(new OverseaPasswordLoginAttempt(
+            new PassportLoginTokens("900001", "mid-os", "stoken-os")));
+        var handler = new StubSecurityVerificationHandler();
+        var service = CreateService(store, client);
+
+        PassportAccount account = await service.LoginWithOverseaPasswordAsync(
+            "traveler@example.com",
+            "secret-password",
+            handler);
+
+        Assert.Equal("stoken-os", account.Credentials.SToken);
+        Assert.Equal(2, client.OverseaAttemptDeviceIds.Count);
+        Assert.Equal(
+            client.OverseaAttemptDeviceIds[0],
+            client.OverseaAttemptDeviceIds[1]);
+        Assert.Equal("completed-aigis", client.LastAigis);
+        Assert.Equal(1, handler.GeetestCallCount);
+    }
+
+    [Fact]
     public async Task MaintainAllAsync_RefreshesEveryStaleAccountAndPersistsRotatedSToken()
     {
         var store = new MemoryAccountStore();
@@ -286,6 +318,29 @@ public sealed class PassportAccountServiceTests
         }
     }
 
+    private sealed class StubSecurityVerificationHandler
+        : IPassportSecurityVerificationHandler
+    {
+        public int GeetestCallCount { get; private set; }
+
+        public Task<PassportGeetestResult?> VerifyGeetestAsync(
+            PassportGeetestChallenge challenge,
+            CancellationToken cancellationToken = default)
+        {
+            GeetestCallCount++;
+            return Task.FromResult<PassportGeetestResult?>(new(
+                "validated-challenge",
+                "validate-token"));
+        }
+
+        public Task<string?> RequestAccountVerificationCodeAsync(
+            PassportAccountVerificationChallenge challenge,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<string?>("123456");
+        }
+    }
+
     private sealed class StubPassportClient : IMiHoYoPassportClient
     {
         public PassportDerivedTokens DerivedTokens { get; set; } =
@@ -318,6 +373,12 @@ public sealed class PassportAccountServiceTests
         public string? OverseaPasswordAccount { get; private set; }
 
         public string? OverseaPasswordValue { get; private set; }
+
+        public Queue<OverseaPasswordLoginAttempt> OverseaAttempts { get; } = [];
+
+        public List<string> OverseaAttemptDeviceIds { get; } = [];
+
+        public string? LastAigis { get; private set; }
 
         public Task<PassportQrSession> CreateQrSessionAsync(
             PassportDeviceIdentity device,
@@ -378,6 +439,34 @@ public sealed class PassportAccountServiceTests
             OverseaPasswordAccount = account;
             OverseaPasswordValue = password;
             return Task.FromResult(OverseaPasswordTokens);
+        }
+
+        public Task<OverseaPasswordLoginAttempt> AttemptOverseaPasswordLoginAsync(
+            string account,
+            string password,
+            PassportDeviceIdentity device,
+            string? aigis = null,
+            string? verify = null,
+            CancellationToken cancellationToken = default)
+        {
+            OverseaPasswordAccount = account;
+            OverseaPasswordValue = password;
+            OverseaAttemptDeviceIds.Add(device.DeviceId);
+            LastAigis = aigis;
+            if (OverseaAttempts.Count > 0)
+            {
+                return Task.FromResult(OverseaAttempts.Dequeue());
+            }
+
+            return Task.FromResult(new OverseaPasswordLoginAttempt(
+                OverseaPasswordTokens));
+        }
+
+        public string CompleteGeetestChallenge(
+            PassportGeetestChallenge challenge,
+            PassportGeetestResult result)
+        {
+            return "completed-aigis";
         }
 
         public Task<PassportDerivedTokens> GetDerivedTokensAsync(

@@ -4,7 +4,8 @@ using FurinaChronicle.Services.Passport;
 
 namespace FurinaChronicle.App;
 
-public partial class OverseaPasswordLoginPage : ContentPage
+public partial class OverseaPasswordLoginPage : ContentPage,
+    IPassportSecurityVerificationHandler
 {
     private readonly PassportAccountService passportAccountService;
     private readonly UserPageViewModel userPageViewModel;
@@ -37,7 +38,8 @@ public partial class OverseaPasswordLoginPage : ContentPage
             PassportAccount account =
                 await passportAccountService.LoginWithOverseaPasswordAsync(
                     AccountEntry.Text ?? string.Empty,
-                    PasswordEntry.Text ?? string.Empty);
+                    PasswordEntry.Text ?? string.Empty,
+                    this);
             PasswordEntry.Text = string.Empty;
             StatusLabel.Text = "登录成功。";
             await LoginNavigation.CompleteAsync(
@@ -62,5 +64,34 @@ public partial class OverseaPasswordLoginPage : ContentPage
     private async void OnBackClicked(object? sender, EventArgs e)
     {
         await LoginNavigation.GoBackAsync(this);
+    }
+
+    public async Task<PassportGeetestResult?> VerifyGeetestAsync(
+        PassportGeetestChallenge challenge,
+        CancellationToken cancellationToken = default)
+    {
+        return await MainThread.InvokeOnMainThreadAsync(async () =>
+        {
+            var page = new GeetestVerificationPage(challenge);
+            await Navigation.PushModalAsync(page);
+            return await page.WaitForResultAsync(cancellationToken);
+        });
+    }
+
+    public async Task<string?> RequestAccountVerificationCodeAsync(
+        PassportAccountVerificationChallenge challenge,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return await MainThread.InvokeOnMainThreadAsync(() => DisplayPromptAsync(
+            "HoYoLAB 账号安全验证",
+            string.IsNullOrWhiteSpace(challenge.Destination)
+                ? "验证码已发送到账号绑定的邮箱或手机，请输入验证码。"
+                : $"验证码已发送到 {challenge.Destination}，请输入验证码。",
+            accept: "验证",
+            cancel: "取消",
+            placeholder: "安全验证码",
+            maxLength: 8,
+            keyboard: Keyboard.Numeric));
     }
 }

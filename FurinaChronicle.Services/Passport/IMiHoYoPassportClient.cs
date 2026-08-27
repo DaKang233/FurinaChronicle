@@ -37,6 +37,58 @@ public interface IMiHoYoPassportClient
         PassportDeviceIdentity device,
         CancellationToken cancellationToken = default);
 
+    async Task<OverseaPasswordLoginAttempt> AttemptOverseaPasswordLoginAsync(
+        string account,
+        string password,
+        PassportDeviceIdentity device,
+        string? aigis = null,
+        string? verify = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (!string.IsNullOrWhiteSpace(aigis) || !string.IsNullOrWhiteSpace(verify))
+        {
+            throw new NotSupportedException(
+                "This passport client does not support security-verification retries.");
+        }
+
+        PassportLoginTokens tokens = await LoginWithOverseaPasswordAsync(
+            account,
+            password,
+            device,
+            cancellationToken);
+        return new OverseaPasswordLoginAttempt(tokens);
+    }
+
+    string CompleteGeetestChallenge(
+        PassportGeetestChallenge challenge,
+        PassportGeetestResult result)
+    {
+        throw new NotSupportedException();
+    }
+
+    Task<PassportAccountVerificationChallenge> PrepareAccountVerificationAsync(
+        PassportAccountVerificationChallenge challenge,
+        PassportDeviceIdentity device,
+        CancellationToken cancellationToken = default)
+    {
+        throw new NotSupportedException();
+    }
+
+    Task VerifyAccountAsync(
+        PassportAccountVerificationChallenge challenge,
+        string captcha,
+        PassportDeviceIdentity device,
+        CancellationToken cancellationToken = default)
+    {
+        throw new NotSupportedException();
+    }
+
+    string CompleteAccountVerificationChallenge(
+        PassportAccountVerificationChallenge challenge)
+    {
+        throw new NotSupportedException();
+    }
+
     Task<PassportDerivedTokens> GetDerivedTokensAsync(
         PassportAccount account,
         CancellationToken cancellationToken = default);
