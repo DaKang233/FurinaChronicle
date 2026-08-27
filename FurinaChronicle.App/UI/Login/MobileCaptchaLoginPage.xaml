@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="FurinaChronicle.App.MobileCaptchaLoginPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    Title="手机验证码登录">
+    <VerticalStackLayout Padding="20" Spacing="12">
+        <Label FontAttributes="Bold" FontSize="22" Text="手机验证码登录" />
+        <Entry x:Name="MobileEntry" Keyboard="Telephone" MaxLength="11" Placeholder="中国大陆手机号" />
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <Entry x:Name="CaptchaEntry" Keyboard="Numeric" MaxLength="8" Placeholder="短信验证码" />
+            <Button Grid.Column="1" Text="发送验证码" Clicked="OnSendClicked" />
+        </Grid>
+        <Button Text="登录" Clicked="OnLoginClicked" />
+        <ActivityIndicator x:Name="BusyIndicator" IsVisible="False" />
+        <Label x:Name="StatusLabel" FontSize="12" />
+    </VerticalStackLayout>
+</ContentPage>

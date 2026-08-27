@@ -5,6 +5,8 @@ using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Services.Archives;
 using FurinaChronicle.Services.Gacha.Exporting;
 using FurinaChronicle.Services.Gacha.Importing;
+using FurinaChronicle.Services.Gacha.Refreshing;
+using FurinaChronicle.Services.Passport;
 using FurinaChronicle.Services.Wishes;
 using System.Collections.ObjectModel;
 
@@ -23,7 +25,9 @@ public partial class MainPageViewModel(
 	UpdateGameAccount updateGameAccount,
 	RenamePlayerArchive renamePlayerArchive,
 	DeleteGameAccount deleteGameAccount,
-	DeletePlayerArchive deletePlayerArchive)
+	DeletePlayerArchive deletePlayerArchive,
+	RefreshGachaRecords refreshGachaRecords,
+	IPassportSelectionStore passportSelectionStore)
 	: ObservableObject
 {
 	private bool initialized;
@@ -75,6 +79,12 @@ public partial class MainPageViewModel(
 
 	[ObservableProperty]
 	public partial string? ExportSummary { get; set; }
+
+	[ObservableProperty]
+	public partial string? RefreshSummary { get; set; }
+
+	[ObservableProperty]
+	public partial bool IsFullRefresh { get; set; }
 
 	[ObservableProperty]
 	public partial string StatusMessage { get; set; } = "请先选择档案。";
@@ -409,6 +419,169 @@ public partial class MainPageViewModel(
 		StatusMessage = string.IsNullOrWhiteSpace(filePath)
 			? "导出文件已保存。"
 			: $"导出文件已保存到 {filePath}。";
+	}
+
+	public async Task RefreshGachaAsync(
+		GachaRefreshSource source,
+		string? manualUrl = null,
+		string? gameInstallationPath = null)
+	{
+		await ExecuteBusyAsync(async () =>
+		{
+			Guid? passportAccountId = null;
+			PassportSelection? passportSelection = null;
+			if (source == GachaRefreshSource.SToken)
+			{
+				passportSelection =
+					await passportSelectionStore.LoadAsync();
+				if (passportSelection is null ||
+					string.IsNullOrWhiteSpace(passportSelection.GameUid))
+				{
+					throw new InvalidOperationException(
+						"请先在用户页选择米哈游通行证账号和原神角色。");
+				}
+				passportAccountId = passportSelection.PassportAccountId;
+			}
+
+			bool createdArchive = false;
+			Guid? createdAccountId = null;
+			try
+			{
+				GameAccount targetAccount = SelectedAccount ??
+					await EnsureRefreshAccountAsync(
+						source,
+						passportSelection,
+						manualUrl,
+						gameInstallationPath,
+						created => createdArchive = created,
+						created => createdAccountId = created);
+
+				if (passportSelection is not null &&
+					!string.Equals(
+						passportSelection.GameUid,
+						targetAccount.Uid,
+						StringComparison.Ordinal))
+				{
+					throw new InvalidOperationException(
+						$"用户页当前角色 UID {passportSelection.GameUid} 与抽卡页账号 UID {targetAccount.Uid} 不一致。");
+				}
+
+				GachaRefreshResult result = await refreshGachaRecords.ExecuteAsync(
+					new GachaRefreshRequest(
+						targetAccount,
+						source,
+						IsFullRefresh
+							? GachaRefreshMode.Full
+							: GachaRefreshMode.Incremental,
+						passportAccountId,
+						manualUrl,
+						gameInstallationPath));
+
+				await ReloadRecordsCoreAsync(pageNumber: 1);
+				RefreshSummary =
+					$"刷新完成：获取 {result.FetchedCount} 条，" +
+					$"新增 {result.InsertedCount} 条，重复 {result.DuplicateCount} 条，" +
+					$"请求 {result.PageCount} 页。";
+				StatusMessage = result.InsertedCount == 0
+					? "没有发现新的抽卡记录。"
+					: $"已新增 {result.InsertedCount} 条抽卡记录。";
+				if (createdArchive || createdAccountId is not null)
+				{
+					StatusMessage += $" 已自动创建并选择账号 {targetAccount.Uid}。";
+				}
+			}
+			catch
+			{
+				await RollBackAutomaticRefreshTargetAsync(
+					createdArchive,
+					createdAccountId);
+				throw;
+			}
+		});
+	}
+
+	private async Task<GameAccount> EnsureRefreshAccountAsync(
+		GachaRefreshSource source,
+		PassportSelection? passportSelection,
+		string? manualUrl,
+		string? gameInstallationPath,
+		Action<bool> setCreatedArchive,
+		Action<Guid?> setCreatedAccountId)
+	{
+		GachaRefreshIdentity identity;
+		if (source == GachaRefreshSource.SToken)
+		{
+			string uid = passportSelection?.GameUid
+				?? throw new InvalidOperationException(
+					"当前米哈游通行证账号没有选择原神角色。");
+			GameServerRegion region = GameServerRegionResolver.Resolve(uid);
+			if (region == GameServerRegion.Unknown)
+			{
+				throw new InvalidOperationException($"无法识别角色 UID {uid} 的服务器。");
+			}
+			identity = new GachaRefreshIdentity(uid, region);
+		}
+		else
+		{
+			identity = await refreshGachaRecords.DiscoverIdentityAsync(
+				new GachaRefreshDiscoveryRequest(
+					source,
+					manualUrl,
+					gameInstallationPath,
+					SelectedServerRegion));
+		}
+
+		bool createdArchive = SelectedArchive is null;
+		PlayerArchive archive = await EnsureImportArchiveAsync();
+		setCreatedArchive(createdArchive);
+		IReadOnlyList<GameAccount> existingAccounts =
+			await getGameAccounts.ExecuteAsync(archive.Id);
+		GameAccount? account = existingAccounts.FirstOrDefault(candidate =>
+			string.Equals(candidate.Uid, identity.Uid, StringComparison.Ordinal));
+		if (account is null)
+		{
+			account = await addGameAccount.ExecuteAsync(
+				archive.Id,
+				identity.Uid,
+				identity.ServerRegion,
+				identity.Uid);
+			setCreatedAccountId(account.Id);
+		}
+
+		await RefreshAccountsCoreAsync();
+		SelectedAccount = Accounts.First(candidate => candidate.Id == account.Id);
+		await archiveSelectionService.SelectAsync(SelectedAccount.Id);
+		return SelectedAccount;
+	}
+
+	private async Task RollBackAutomaticRefreshTargetAsync(
+		bool createdArchive,
+		Guid? createdAccountId)
+	{
+		try
+		{
+			if (createdArchive && SelectedArchive is not null)
+			{
+				await RemoveImportArchiveAsync(SelectedArchive.Id);
+				return;
+			}
+
+			if (createdAccountId is Guid accountId)
+			{
+				await deleteGameAccount.ExecuteAsync(accountId);
+				SelectedAccount = null;
+				await RefreshAccountsCoreAsync();
+				SelectedAccount = Accounts.FirstOrDefault();
+				if (SelectedAccount is not null)
+				{
+					await archiveSelectionService.SelectAsync(SelectedAccount.Id);
+				}
+			}
+		}
+		catch
+		{
+			// Preserve the original refresh error; cleanup can be retried by the user.
+		}
 	}
 
 	private static string FormatImportSummary(

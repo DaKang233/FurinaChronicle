@@ -1,0 +1,24 @@
+using CommunityToolkit.Mvvm.ComponentModel;
+using FurinaChronicle.Core.Passport;
+
+namespace FurinaChronicle.App.ViewModels;
+
+public partial class PassportAccountListItem(PassportAccount account)
+    : ObservableObject
+{
+    public PassportAccount Account { get; } = account;
+
+    public Guid Id => Account.Id;
+
+    public string Aid => Account.Aid;
+
+    [ObservableProperty]
+    public partial string DisplayName { get; set; } =
+        account.DisplayName ?? $"米游社用户 {account.Aid}";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasAvatar))]
+    public partial Uri? AvatarUrl { get; set; }
+
+    public bool HasAvatar => AvatarUrl is not null;
+}

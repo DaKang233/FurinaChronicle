@@ -6,6 +6,4 @@
     xmlns:local="clr-namespace:FurinaChronicle.App"
     FlyoutBehavior="Disabled"
     Title="FurinaChronicle.App">
-
-
 </Shell>

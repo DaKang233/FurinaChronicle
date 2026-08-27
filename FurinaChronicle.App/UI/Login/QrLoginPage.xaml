@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="FurinaChronicle.App.QrLoginPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    Title="米游社扫码登录">
+    <VerticalStackLayout Padding="20" Spacing="14" HorizontalOptions="Center">
+        <Label FontAttributes="Bold" FontSize="22" HorizontalTextAlignment="Center" Text="使用米游社 APP 扫码" />
+        <Image x:Name="QrImage" HeightRequest="280" WidthRequest="280" />
+        <ActivityIndicator x:Name="BusyIndicator" IsRunning="True" />
+        <Label x:Name="StatusLabel" HorizontalTextAlignment="Center" Text="正在创建二维码…" />
+        <Button Text="重新生成二维码" Clicked="OnReloadClicked" />
+    </VerticalStackLayout>
+</ContentPage>
