@@ -35,4 +35,9 @@ public partial class ManualCookieLoginPage : ContentPage
             StatusLabel.Text = exception.Message;
         }
     }
+
+    private async void OnBackClicked(object? sender, EventArgs e)
+    {
+        await LoginNavigation.GoBackAsync(this);
+    }
 }

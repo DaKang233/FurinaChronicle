@@ -30,7 +30,7 @@ public partial class UserPageViewModel(
     public partial bool IsBusy { get; set; }
 
     [ObservableProperty]
-    public partial string StatusMessage { get; set; } = "尚未登录米游社账号。";
+    public partial string StatusMessage { get; set; } = "尚未登录通行证账号。";
 
     [ObservableProperty]
     public partial string? ErrorMessage { get; set; }
@@ -84,7 +84,7 @@ public partial class UserPageViewModel(
                 SelectedRole = null;
                 Roles.Clear();
                 await selectionStore.ClearAsync();
-                StatusMessage = "尚未登录米游社账号。";
+                StatusMessage = "尚未登录通行证账号。";
                 return;
             }
 
@@ -178,7 +178,7 @@ public partial class UserPageViewModel(
             account.DisplayName = profile.DisplayName;
             account.AvatarUrl = profile.AvatarUrl;
             foreach (PassportGameRole role in profile.Roles
-                .Where(role => role.GameBiz == "hk4e_cn"))
+				.Where(role => role.GameBiz is "hk4e_cn" or "hk4e_global"))
             {
                 Roles.Add(role);
             }
@@ -188,7 +188,7 @@ public partial class UserPageViewModel(
                 : null;
             SelectedRole ??= Roles.FirstOrDefault();
             StatusMessage = Roles.Count == 0
-                ? "当前米游社账号没有绑定原神角色。"
+                ? "当前通行证账号没有绑定原神角色。"
                 : $"已选择 {account.DisplayName}。";
         }
         catch (Exception exception)

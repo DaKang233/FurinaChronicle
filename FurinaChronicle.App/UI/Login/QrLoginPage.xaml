@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
     Title="米游社扫码登录">
     <VerticalStackLayout Padding="20" Spacing="14" HorizontalOptions="Center">
+        <Button HorizontalOptions="Start" Text="← 返回上一级" Clicked="OnBackClicked" />
         <Label FontAttributes="Bold" FontSize="22" HorizontalTextAlignment="Center" Text="使用米游社 APP 扫码" />
         <Image x:Name="QrImage" HeightRequest="280" WidthRequest="280" />
         <ActivityIndicator x:Name="BusyIndicator" IsRunning="True" />

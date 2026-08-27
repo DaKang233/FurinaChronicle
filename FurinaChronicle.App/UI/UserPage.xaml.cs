@@ -38,7 +38,7 @@ public partial class UserPage : ContentPage
             "选择登录方式",
             "取消",
             null,
-            "账号密码登录",
+            "HoYoLAB 海外账号密码登录",
             "米游社 APP 扫码",
             "手机验证码登录",
             "手动输入 Cookie");
@@ -49,7 +49,7 @@ public partial class UserPage : ContentPage
     {
         ContentPage? page = method switch
         {
-            "账号密码登录" => serviceProvider.GetRequiredService<PasswordLoginPage>(),
+            "HoYoLAB 海外账号密码登录" => serviceProvider.GetRequiredService<OverseaPasswordLoginPage>(),
             "米游社 APP 扫码" => serviceProvider.GetRequiredService<QrLoginPage>(),
             "手机验证码登录" => serviceProvider.GetRequiredService<MobileCaptchaLoginPage>(),
             "手动输入 Cookie" => serviceProvider.GetRequiredService<ManualCookieLoginPage>(),

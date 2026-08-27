@@ -9,8 +9,6 @@ public partial class PasswordLoginPage : ContentPage
 {
     private readonly PassportAccountService passportAccountService;
     private readonly UserPageViewModel userPageViewModel;
-    private CancellationTokenSource? pollingCancellation;
-    private bool started;
 
     public PasswordLoginPage(
         PassportAccountService passportAccountService,
@@ -24,26 +22,7 @@ public partial class PasswordLoginPage : ContentPage
     protected override void OnAppearing()
     {
         base.OnAppearing();
-        if (started)
-        {
-            return;
-        }
-
-        started = true;
-        long timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        PassportWebView.Source =
-            "https://user.mihoyo.com/login-platform/index.html" +
-            "?app_id=dw9y09jqjpxc&theme=passport&token_type=4" +
-            "&game_biz=plat_cn&ux_mode=popup&iframe_level=1" +
-            $"&t={timestamp}#/login";
-        pollingCancellation = new CancellationTokenSource(TimeSpan.FromMinutes(10));
-        _ = PollCookiesAsync(pollingCancellation.Token);
-    }
-
-    protected override void OnDisappearing()
-    {
-        pollingCancellation?.Cancel();
-        base.OnDisappearing();
+        StatusLabel.Text = "国服网页密码登录已停用，请返回并使用其他登录方式。";
     }
 
     private async Task PollCookiesAsync(CancellationToken cancellationToken)

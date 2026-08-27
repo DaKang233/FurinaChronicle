@@ -31,6 +31,12 @@ public interface IMiHoYoPassportClient
         PassportDeviceIdentity device,
         CancellationToken cancellationToken = default);
 
+    Task<PassportLoginTokens> LoginWithOverseaPasswordAsync(
+        string account,
+        string password,
+        PassportDeviceIdentity device,
+        CancellationToken cancellationToken = default);
+
     Task<PassportDerivedTokens> GetDerivedTokensAsync(
         PassportAccount account,
         CancellationToken cancellationToken = default);

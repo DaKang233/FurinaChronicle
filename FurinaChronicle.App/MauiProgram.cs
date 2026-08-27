@@ -116,6 +116,7 @@ namespace FurinaChronicle.App
 				PreferencesPassportSelectionStore>();
 			builder.Services.AddSingleton(new PassportCredentialMaintenanceOptions());
 			builder.Services.AddTransient<PassportAccountService>();
+			builder.Services.AddSingleton<MobileCaptchaCooldown>();
 			builder.Services.AddSingleton<ISTokenGachaUrlProvider, MiHoYoSTokenGachaUrlProvider>();
 			builder.Services.AddSingleton<IWindowsGachaCacheUrlProvider, WindowsGachaCacheUrlProvider>();
 			builder.Services.AddSingleton<IGachaLogClient, MiHoYoGachaLogClient>();
@@ -124,7 +125,7 @@ namespace FurinaChronicle.App
 			builder.Services.AddSingleton<HomePage>();
 			builder.Services.AddSingleton<UserPage>();
 			builder.Services.AddTransient<LoginMethodPage>();
-			builder.Services.AddTransient<PasswordLoginPage>();
+			builder.Services.AddTransient<OverseaPasswordLoginPage>();
 			builder.Services.AddTransient<QrLoginPage>();
 			builder.Services.AddTransient<MobileCaptchaLoginPage>();
 			builder.Services.AddTransient<ManualCookieLoginPage>();

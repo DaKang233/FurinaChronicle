@@ -21,6 +21,12 @@ public sealed class MiHoYoPassportClient : IMiHoYoPassportClient, IDisposable
         "https://api-takumi.mihoyo.com/auth/api/getMultiTokenByLoginTicket";
     public const string UpgradeLegacySTokenUrl =
         "https://passport-api.mihoyo.com/account/ma-cn-session/app/getTokenBySToken";
+    public const string OverseaPasswordLoginUrl =
+        "https://sg-public-api.hoyoverse.com/account/ma-passport/api/appLoginByPassword";
+    public const string OverseaGetLTokenUrl =
+        "https://api-account-os.hoyoverse.com/account/auth/api/getLTokenBySToken";
+    public const string OverseaGetCookieTokenUrl =
+        "https://api-account-os.hoyoverse.com/account/auth/api/getCookieAccountInfoBySToken";
     public const string GetLTokenUrl =
         "https://passport-api.mihoyo.com/account/auth/api/getLTokenBySToken";
     public const string GetCookieTokenUrl =
@@ -283,6 +289,65 @@ public sealed class MiHoYoPassportClient : IMiHoYoPassportClient, IDisposable
             First(cookieValues, "DEVICEFP"));
     }
 
+    public async Task<PassportLoginTokens> LoginWithOverseaPasswordAsync(
+        string account,
+        string password,
+        PassportDeviceIdentity device,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(account);
+        ArgumentException.ThrowIfNullOrWhiteSpace(password);
+        ArgumentNullException.ThrowIfNull(device);
+        string body = JsonSerializer.Serialize(new
+        {
+            account = EncryptOversea(account),
+            password = EncryptOversea(password),
+            token_type = 2
+        });
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            OverseaPasswordLoginUrl)
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/json")
+        };
+        request.Headers.TryAddWithoutValidation(
+            "User-Agent",
+            "HYPContainer/1.1.4.133");
+        request.Headers.TryAddWithoutValidation("Accept", "application/json");
+        request.Headers.TryAddWithoutValidation("x-rpc-app_id", "ddxf6vlr1reo");
+        request.Headers.TryAddWithoutValidation("x-rpc-client_type", "3");
+        request.Headers.TryAddWithoutValidation("x-rpc-device_id", device.DeviceId);
+
+        using HttpResponseMessage response = await httpClient.SendAsync(
+            request,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken);
+        using JsonDocument document = await ReadResponseAsync(
+            response,
+            cancellationToken);
+        JsonElement root = document.RootElement;
+        int retcode = root.GetProperty("retcode").GetInt32();
+        if (retcode != 0)
+        {
+            string message = OptionalString(root, "message") ?? "Unknown error";
+            bool requiresSecurityVerification =
+                response.Headers.Contains("X-Rpc-Aigis") ||
+                response.Headers.Contains("X-Rpc-Verify");
+            throw new InvalidOperationException(requiresSecurityVerification
+                ? "HoYoLAB 要求额外的安全验证。请稍后重试，或先在官方 HoYoLAB 完成登录验证。"
+                : $"HoYoLAB 登录失败 ({retcode}): {message}");
+        }
+
+        JsonElement data = root.GetProperty("data");
+        JsonElement token = data.GetProperty("token");
+        JsonElement userInfo = data.GetProperty("user_info");
+        return new PassportLoginTokens(
+            RequiredString(userInfo, "aid"),
+            RequiredString(userInfo, "mid"),
+            RequiredString(token, "token"),
+            DisplayName: OptionalString(userInfo, "account_name"));
+    }
+
     public async Task<PassportDerivedTokens> GetDerivedTokensAsync(
         PassportAccount account,
         CancellationToken cancellationToken = default)
@@ -292,6 +357,23 @@ public sealed class MiHoYoPassportClient : IMiHoYoPassportClient, IDisposable
             ?? throw new InvalidOperationException("Passport account does not contain SToken.");
         string mid = account.Mid
             ?? throw new InvalidOperationException("Passport account does not contain mid.");
+        if (account.LoginMethod == PassportLoginMethod.Password)
+        {
+            string? overseaLToken = await GetOverseaTokenAsync(
+                OverseaGetLTokenUrl,
+                account,
+                "ltoken",
+                cancellationToken);
+            string? overseaCookieToken = await GetOverseaTokenAsync(
+                OverseaGetCookieTokenUrl,
+                account,
+                "cookie_token",
+                cancellationToken);
+            return new PassportDerivedTokens(
+                overseaLToken,
+                overseaCookieToken);
+        }
+
         string cookie = $"mid={mid};stoken={sToken};stuid={account.Aid}";
 
         string? lToken = await GetTokenAsync(
@@ -307,6 +389,42 @@ public sealed class MiHoYoPassportClient : IMiHoYoPassportClient, IDisposable
             account.Device,
             cancellationToken);
         return new PassportDerivedTokens(lToken, cookieToken);
+    }
+
+    private async Task<string?> GetOverseaTokenAsync(
+        string url,
+        PassportAccount account,
+        string propertyName,
+        CancellationToken cancellationToken)
+    {
+        string body = JsonSerializer.Serialize(new
+        {
+            stoken = account.Credentials.SToken,
+            uid = account.Aid
+        });
+        using var request = new HttpRequestMessage(HttpMethod.Post, url)
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/json")
+        };
+        request.Headers.TryAddWithoutValidation(
+            "Cookie",
+            $"stoken={account.Credentials.SToken}; mid={account.Mid}; stuid={account.Aid}");
+        request.Headers.TryAddWithoutValidation(
+            "User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) miHoYoBBSOversea/2.54.0");
+        request.Headers.TryAddWithoutValidation("Accept", "application/json");
+        request.Headers.TryAddWithoutValidation("x-rpc-app_version", "2.54.0");
+        request.Headers.TryAddWithoutValidation("x-rpc-client_type", "5");
+        request.Headers.TryAddWithoutValidation("x-rpc-language", "zh-cn");
+        request.Headers.TryAddWithoutValidation("x-rpc-device_id", account.Device.DeviceId);
+        using HttpResponseMessage response = await httpClient.SendAsync(
+            request,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken);
+        using JsonDocument document = await ReadSuccessAsync(
+            response,
+            cancellationToken);
+        return OptionalString(document.RootElement.GetProperty("data"), propertyName);
     }
 
     public async Task<PassportSessionVerification> VerifySessionAsync(
@@ -686,6 +804,27 @@ public sealed class MiHoYoPassportClient : IMiHoYoPassportClient, IDisposable
             cI5DcsNKqdsx5DZX0gDuWFuIjzdwButrIYPNmRJ1G8ybDIF7oDW2eEpm5sMbL9zs
             9ExXCdvqrn51qELbqj0XxtMTIpaCHFSI50PfPpTFV9Xt/hmyVwokoOXFlAEgCn+Q
             CgGs52bFoYMtyi+xEQIDAQAB
+            -----END PUBLIC KEY-----
+            """);
+        return Convert.ToBase64String(
+            rsa.Encrypt(
+                Encoding.UTF8.GetBytes(value),
+                RSAEncryptionPadding.Pkcs1));
+    }
+
+    private static string EncryptOversea(string value)
+    {
+        using RSA rsa = RSA.Create();
+        rsa.ImportFromPem(
+            """
+            -----BEGIN PUBLIC KEY-----
+            MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4PMS2JVMwBsOIrYWRluY
+            wEiFZL7Aphtm9z5Eu/anzJ09nB00uhW+ScrDWFECPwpQto/GlOJYCUwVM/raQpAj
+            /xvcjK5tNVzzK94mhk+j9RiQ+aWHaTXmOgurhxSp3YbwlRDvOgcq5yPiTz0+kSeK
+            ZJcGeJ95bvJ+hJ/UMP0Zx2qB5PElZmiKvfiNqVUk8A8oxLJdBB5eCpqWV6CUqDKQ
+            KSQP4sM0mZvQ1Sr4UcACVcYgYnCbTZMWhJTWkrNXqI8TMomekgny3y+d6NX/cFa6
+            6jozFIF4HCX5aW8bp8C8vq2tFvFbleQ/Q3CU56EWWKMrOcpmFtRmC18s9biZBVR/
+            8QIDAQAB
             -----END PUBLIC KEY-----
             """);
         return Convert.ToBase64String(

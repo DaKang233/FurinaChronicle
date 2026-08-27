@@ -17,7 +17,7 @@ public partial class LoginMethodPage : ContentPage
     }
 
     private async void OnPasswordClicked(object? sender, EventArgs e) =>
-        await OpenAsync<PasswordLoginPage>();
+		await OpenAsync<OverseaPasswordLoginPage>();
 
     private async void OnQrClicked(object? sender, EventArgs e) =>
         await OpenAsync<QrLoginPage>();
@@ -27,4 +27,7 @@ public partial class LoginMethodPage : ContentPage
 
     private async void OnCookieClicked(object? sender, EventArgs e) =>
         await OpenAsync<ManualCookieLoginPage>();
+
+    private async void OnBackClicked(object? sender, EventArgs e) =>
+        await LoginNavigation.GoBackAsync(this);
 }

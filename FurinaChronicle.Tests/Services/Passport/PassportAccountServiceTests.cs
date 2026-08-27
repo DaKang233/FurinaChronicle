@@ -87,6 +87,31 @@ public sealed class PassportAccountServiceTests
     }
 
     [Fact]
+    public async Task OverseaPasswordLogin_StoresReturnedSTokenAndUsesOverseaDevice()
+    {
+        var store = new MemoryAccountStore();
+        var client = new StubPassportClient
+        {
+            OverseaPasswordTokens = new PassportLoginTokens(
+                "900001",
+                "mid-os",
+                "stoken-os")
+        };
+        var service = CreateService(store, client);
+
+        PassportAccount account = await service.LoginWithOverseaPasswordAsync(
+            "traveler@example.com",
+            "secret-password");
+
+        Assert.Equal(PassportLoginMethod.Password, account.LoginMethod);
+        Assert.Equal("mid-os", account.Mid);
+        Assert.Equal("stoken-os", account.Credentials.SToken);
+        Assert.Equal(53, account.Device.DeviceId.Length);
+        Assert.Equal("traveler@example.com", client.OverseaPasswordAccount);
+        Assert.Equal("secret-password", client.OverseaPasswordValue);
+    }
+
+    [Fact]
     public async Task MaintainAllAsync_RefreshesEveryStaleAccountAndPersistsRotatedSToken()
     {
         var store = new MemoryAccountStore();
@@ -275,6 +300,9 @@ public sealed class PassportAccountServiceTests
         public PassportLoginTokens WebLoginTokens { get; set; } =
             new("1", "mid", "stoken");
 
+        public PassportLoginTokens OverseaPasswordTokens { get; set; } =
+            new("1", "mid", "stoken");
+
         public string? FailVerificationForAid { get; set; }
 
         public bool FailDerivedTokenExchange { get; set; }
@@ -286,6 +314,10 @@ public sealed class PassportAccountServiceTests
         public string? MobileLoginDeviceId { get; private set; }
 
         public string? WebLoginResponseJson { get; private set; }
+
+        public string? OverseaPasswordAccount { get; private set; }
+
+        public string? OverseaPasswordValue { get; private set; }
 
         public Task<PassportQrSession> CreateQrSessionAsync(
             PassportDeviceIdentity device,
@@ -335,6 +367,17 @@ public sealed class PassportAccountServiceTests
         {
             WebLoginResponseJson = loginResponseJson;
             return Task.FromResult(WebLoginTokens);
+        }
+
+        public Task<PassportLoginTokens> LoginWithOverseaPasswordAsync(
+            string account,
+            string password,
+            PassportDeviceIdentity device,
+            CancellationToken cancellationToken = default)
+        {
+            OverseaPasswordAccount = account;
+            OverseaPasswordValue = password;
+            return Task.FromResult(OverseaPasswordTokens);
         }
 
         public Task<PassportDerivedTokens> GetDerivedTokensAsync(

@@ -42,6 +42,12 @@ public partial class QrLoginPage : ContentPage
         await StartAsync();
     }
 
+    private async void OnBackClicked(object? sender, EventArgs e)
+    {
+        pollingCancellation?.Cancel();
+        await LoginNavigation.GoBackAsync(this);
+    }
+
     private async Task StartAsync()
     {
         pollingCancellation?.Cancel();

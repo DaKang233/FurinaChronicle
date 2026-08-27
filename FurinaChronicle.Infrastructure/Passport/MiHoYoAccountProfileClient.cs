@@ -15,6 +15,10 @@ public sealed class MiHoYoAccountProfileClient :
         "https://bbs-api.miyoushe.com/user/wapi/getUserFullInfo";
     public const string GameRolesUrl =
         "https://api-takumi.mihoyo.com/binding/api/getUserGameRolesByCookie?game_biz=hk4e_cn";
+    public const string OverseaUserProfileUrl =
+        "https://bbs-api-os.hoyolab.com/community/painter/wapi/user/full";
+    public const string OverseaGameRolesUrl =
+        "https://api-os-takumi.hoyoverse.com/binding/api/getUserGameRolesByCookie?game_biz=hk4e_global";
 
     private const string DsSalt = "xV8v4Qu54lUKrEYFZkJhB8cuoh9NXmz9";
     private readonly HttpClient httpClient;
@@ -39,14 +43,15 @@ public sealed class MiHoYoAccountProfileClient :
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(account);
+        bool isOversea = account.LoginMethod == PassportLoginMethod.Password;
         string cookie = BuildCookie(account);
         Task<JsonDocument> profileTask = GetDocumentAsync(
-            UserProfileUrl,
+            isOversea ? OverseaUserProfileUrl : UserProfileUrl,
             cookie,
             account,
             cancellationToken);
         Task<JsonDocument> rolesTask = GetDocumentAsync(
-            GameRolesUrl,
+            isOversea ? OverseaGameRolesUrl : GameRolesUrl,
             cookie,
             account,
             cancellationToken);
@@ -63,7 +68,9 @@ public sealed class MiHoYoAccountProfileClient :
             .GetProperty("user_info");
         string displayName = OptionalString(userInfo, "nickname")
             ?? account.DisplayName
-            ?? $"米游社用户 {account.Aid}";
+            ?? (isOversea
+                ? $"HoYoLAB 用户 {account.Aid}"
+                : $"米游社用户 {account.Aid}");
         Uri? avatarUrl = Uri.TryCreate(
             OptionalString(userInfo, "avatar_url"),
             UriKind.Absolute,
@@ -85,7 +92,8 @@ public sealed class MiHoYoAccountProfileClient :
                 }
 
                 roles.Add(new PassportGameRole(
-                    OptionalString(role, "game_biz") ?? "hk4e_cn",
+                    OptionalString(role, "game_biz") ??
+                        (isOversea ? "hk4e_global" : "hk4e_cn"),
                     OptionalString(role, "region") ?? string.Empty,
                     uid,
                     OptionalString(role, "nickname") ?? uid,
@@ -105,17 +113,29 @@ public sealed class MiHoYoAccountProfileClient :
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
         request.Headers.TryAddWithoutValidation("Cookie", cookie);
-        request.Headers.TryAddWithoutValidation("DS", CreateDs());
         request.Headers.TryAddWithoutValidation(
             "x-rpc-device_id",
             account.Device.DeviceId.Replace("-", string.Empty, StringComparison.Ordinal));
         request.Headers.TryAddWithoutValidation("x-rpc-client_type", "5");
-        request.Headers.TryAddWithoutValidation("x-rpc-app_version", "2.95.1");
-        request.Headers.TryAddWithoutValidation(
-            "User-Agent",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) miHoYoBBS/2.95.1");
-        request.Headers.Referrer = new Uri("https://act.mihoyo.com/");
-        request.Headers.TryAddWithoutValidation("Origin", "https://act.mihoyo.com");
+        if (account.LoginMethod == PassportLoginMethod.Password)
+        {
+            request.Headers.TryAddWithoutValidation("Accept", "application/json");
+            request.Headers.TryAddWithoutValidation("x-rpc-app_version", "2.54.0");
+            request.Headers.TryAddWithoutValidation("x-rpc-language", "zh-cn");
+            request.Headers.TryAddWithoutValidation(
+                "User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) miHoYoBBSOversea/2.54.0");
+        }
+        else
+        {
+            request.Headers.TryAddWithoutValidation("DS", CreateDs());
+            request.Headers.TryAddWithoutValidation("x-rpc-app_version", "2.95.1");
+            request.Headers.TryAddWithoutValidation(
+                "User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) miHoYoBBS/2.95.1");
+            request.Headers.Referrer = new Uri("https://act.mihoyo.com/");
+            request.Headers.TryAddWithoutValidation("Origin", "https://act.mihoyo.com");
+        }
 
         using HttpResponseMessage response = await httpClient.SendAsync(
             request,
@@ -131,6 +151,20 @@ public sealed class MiHoYoAccountProfileClient :
 
     private static string BuildCookie(PassportAccount account)
     {
+        if (account.LoginMethod == PassportLoginMethod.Password)
+        {
+            var overseaPairs = new List<string>
+            {
+                $"account_id_v2={account.Aid}",
+                $"ltuid_v2={account.Aid}"
+            };
+            Add(overseaPairs, "account_mid_v2", account.Mid);
+            Add(overseaPairs, "stoken_v2", account.Credentials.SToken);
+            Add(overseaPairs, "ltoken_v2", account.Credentials.LToken);
+            Add(overseaPairs, "cookie_token_v2", account.Credentials.CookieToken);
+            return string.Join(';', overseaPairs);
+        }
+
         var pairs = new List<string>
         {
             $"account_id={account.Aid}",

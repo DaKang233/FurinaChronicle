@@ -149,6 +149,53 @@ public sealed class MiHoYoPassportClientTests
         Assert.Equal(2, callCount);
     }
 
+    [Fact]
+    public async Task OverseaPasswordLogin_EncryptsCredentialsAndParsesTokens()
+    {
+        var handler = new StubHttpHandler(async request =>
+        {
+            Assert.Equal(
+                MiHoYoPassportClient.OverseaPasswordLoginUrl,
+                request.RequestUri!.AbsoluteUri);
+            string body = await request.Content!.ReadAsStringAsync();
+            Assert.DoesNotContain("traveler@example.com", body, StringComparison.Ordinal);
+            Assert.DoesNotContain("secret-password", body, StringComparison.Ordinal);
+            Assert.Equal(
+                "ddxf6vlr1reo",
+                request.Headers.GetValues("x-rpc-app_id").Single());
+            Assert.Equal(
+                "oversea-device",
+                request.Headers.GetValues("x-rpc-device_id").Single());
+            return JsonResponse(
+                """
+                {
+                  "retcode":0,
+                  "message":"OK",
+                  "data":{
+                    "token":{"token_type":2,"token":"stoken-os"},
+                    "user_info":{
+                      "aid":"900001",
+                      "mid":"mid-os",
+                      "account_name":"Traveler"
+                    }
+                  }
+                }
+                """);
+        });
+        using var httpClient = new HttpClient(handler);
+        using var client = new MiHoYoPassportClient(httpClient);
+
+        PassportLoginTokens tokens = await client.LoginWithOverseaPasswordAsync(
+            "traveler@example.com",
+            "secret-password",
+            new PassportDeviceIdentity("oversea-device", null));
+
+        Assert.Equal("900001", tokens.Aid);
+        Assert.Equal("mid-os", tokens.Mid);
+        Assert.Equal("stoken-os", tokens.SToken);
+        Assert.Equal("Traveler", tokens.DisplayName);
+    }
+
     private static HttpResponseMessage JsonResponse(string json)
     {
         return new HttpResponseMessage(HttpStatusCode.OK)

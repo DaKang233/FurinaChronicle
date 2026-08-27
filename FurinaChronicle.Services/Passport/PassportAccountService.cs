@@ -102,6 +102,27 @@ public sealed class PassportAccountService(
             cancellationToken);
     }
 
+    public async Task<PassportAccount> LoginWithOverseaPasswordAsync(
+        string account,
+        string password,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(account);
+        ArgumentException.ThrowIfNullOrWhiteSpace(password);
+        PassportDeviceIdentity device = PassportDeviceIdentity.CreateOversea();
+        PassportLoginTokens tokens =
+            await passportClient.LoginWithOverseaPasswordAsync(
+                account.Trim(),
+                password,
+                device,
+                cancellationToken);
+        return await SaveNewAccountAsync(
+            tokens,
+            PassportLoginMethod.Password,
+            device,
+            cancellationToken);
+    }
+
     public Task<PassportAccount> LoginWithManualCookieAsync(
         string cookie,
         CancellationToken cancellationToken = default)
@@ -155,7 +176,8 @@ public sealed class PassportAccountService(
         DateTimeOffset now = timeProvider.GetUtcNow();
         bool changed = false;
         bool failed = false;
-        if (IsExpired(credentials.SessionVerifiedAt, options.SessionVerificationInterval, now))
+        if (account.LoginMethod != PassportLoginMethod.Password &&
+            IsExpired(credentials.SessionVerifiedAt, options.SessionVerificationInterval, now))
         {
             try
             {
