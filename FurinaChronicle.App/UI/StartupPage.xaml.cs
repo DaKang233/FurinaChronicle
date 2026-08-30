@@ -37,6 +37,7 @@ public partial class StartupPage : ContentPage
         if (Shell.Current is AppShell shell)
         {
             await shell.ShowMainPageAsync();
+            _ = viewModel.MaintainPassportAccountsAsync();
         }
     }
 }

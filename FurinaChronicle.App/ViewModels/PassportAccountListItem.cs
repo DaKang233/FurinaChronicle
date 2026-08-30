@@ -14,7 +14,7 @@ public partial class PassportAccountListItem(PassportAccount account)
 
     [ObservableProperty]
     public partial string DisplayName { get; set; } =
-        account.DisplayName ?? (account.LoginMethod == PassportLoginMethod.Password
+        account.DisplayName ?? (account.Realm == PassportRealm.Oversea
             ? $"HoYoLAB 用户 {account.Aid}"
             : $"米游社用户 {account.Aid}");
 

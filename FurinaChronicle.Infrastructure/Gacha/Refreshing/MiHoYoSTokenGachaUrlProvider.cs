@@ -32,6 +32,12 @@ public sealed class MiHoYoSTokenGachaUrlProvider : ISTokenGachaUrlProvider, IDis
     {
         ArgumentNullException.ThrowIfNull(passportAccount);
         ArgumentNullException.ThrowIfNull(gameAccount);
+        if (passportAccount.Realm != PassportRealm.MainlandChina)
+        {
+            throw new NotSupportedException(
+                "SToken gacha refresh currently supports mainland China passport accounts only.");
+        }
+
         string sToken = passportAccount.Credentials.SToken
             ?? throw new InvalidOperationException("Passport account does not contain SToken.");
         string mid = passportAccount.Mid

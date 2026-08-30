@@ -35,31 +35,6 @@ public sealed class PassportAccountServiceTests
     }
 
     [Fact]
-    public async Task CompletePasswordLoginAsync_RecordsPasswordLoginWithoutSavingPassword()
-    {
-        var store = new MemoryAccountStore();
-        var client = new StubPassportClient
-        {
-            WebLoginTokens = new PassportLoginTokens(
-                "12345",
-                "mid-1",
-                "root-token",
-                CookieToken: "cookie-token")
-        };
-        var service = CreateService(store, client);
-
-        PassportAccount account = await service.CompletePasswordLoginAsync(
-            "account_id=12345; cookie_token=cookie-token",
-            "{\"retcode\":0}");
-
-        Assert.Equal(PassportLoginMethod.Password, account.LoginMethod);
-        Assert.Equal("root-token", account.Credentials.SToken);
-        Assert.Equal("mid-1", account.Mid);
-        Assert.Equal("cookie-token", account.Credentials.CookieToken);
-        Assert.Equal("{\"retcode\":0}", client.WebLoginResponseJson);
-    }
-
-    [Fact]
     public async Task MobileCaptchaLogin_ReusesDeviceIdentityFromChallenge()
     {
         var store = new MemoryAccountStore();
@@ -103,7 +78,8 @@ public sealed class PassportAccountServiceTests
             "traveler@example.com",
             "secret-password");
 
-        Assert.Equal(PassportLoginMethod.Password, account.LoginMethod);
+        Assert.Equal(PassportLoginMethod.OverseaPassword, account.LoginMethod);
+        Assert.Equal(PassportRealm.Oversea, account.Realm);
         Assert.Equal("mid-os", account.Mid);
         Assert.Equal("stoken-os", account.Credentials.SToken);
         Assert.Equal(53, account.Device.DeviceId.Length);
@@ -141,6 +117,40 @@ public sealed class PassportAccountServiceTests
             client.OverseaAttemptDeviceIds[1]);
         Assert.Equal("completed-aigis", client.LastAigis);
         Assert.Equal(1, handler.GeetestCallCount);
+    }
+
+    [Fact]
+    public async Task OverseaPasswordLogin_CompletesAccountVerificationAndReplaysVerify()
+    {
+        var store = new MemoryAccountStore();
+        var client = new StubPassportClient();
+        client.OverseaAttempts.Enqueue(new OverseaPasswordLoginAttempt(
+            Tokens: null,
+            AccountVerificationChallenge: new PassportAccountVerificationChallenge(
+                "opaque-state",
+                "ticket-1"),
+            Retcode: -3208,
+            Message: "account verification required"));
+        client.OverseaAttempts.Enqueue(new OverseaPasswordLoginAttempt(
+            new PassportLoginTokens("900001", "mid-os", "stoken-os")));
+        var handler = new StubSecurityVerificationHandler();
+        var service = CreateService(store, client);
+
+        PassportAccount account = await service.LoginWithOverseaPasswordAsync(
+            "traveler@example.com",
+            "secret-password",
+            handler);
+
+        Assert.Equal("stoken-os", account.Credentials.SToken);
+        Assert.Equal(2, client.OverseaAttemptDeviceIds.Count);
+        Assert.Equal(
+            client.OverseaAttemptDeviceIds[0],
+            client.OverseaAttemptDeviceIds[1]);
+        Assert.Equal(1, client.PrepareAccountVerificationCallCount);
+        Assert.Equal(1, client.VerifyAccountCallCount);
+        Assert.Equal("123456", client.VerifiedCaptcha);
+        Assert.Equal("completed-verify", client.LastVerify);
+        Assert.Equal("t***@example.com", handler.AccountVerificationDestination);
     }
 
     [Fact]
@@ -220,6 +230,95 @@ public sealed class PassportAccountServiceTests
         Assert.Equal(first.Device.DeviceId, second.Device.DeviceId);
         Assert.Equal("new-cookie", second.Credentials.CookieToken);
         Assert.Single(await store.GetAllAsync());
+    }
+
+    [Fact]
+    public async Task ReLoginWithCookieOnly_PreservesOmittedCredentialsAndMetadata()
+    {
+        var store = new MemoryAccountStore();
+        PassportAccount existing = CreateAccount(
+            "12345",
+            Now - TimeSpan.FromDays(8));
+        await store.SaveAsync(existing);
+        var client = new StubPassportClient();
+        var service = CreateService(store, client);
+
+        PassportAccount updated = await service.LoginWithManualCookieAsync(
+            "account_id=12345; cookie_token=new-cookie");
+
+        Assert.Equal(existing.Id, updated.Id);
+        Assert.Equal(existing.Device, updated.Device);
+        Assert.Equal(existing.Mid, updated.Mid);
+        Assert.Equal("root-12345", updated.Credentials.SToken);
+        Assert.Equal("old-ltoken", updated.Credentials.LToken);
+        Assert.Equal("new-cookie", updated.Credentials.CookieToken);
+        Assert.Equal(existing.Credentials.STokenUpdatedAt, updated.Credentials.STokenUpdatedAt);
+        Assert.Equal(existing.Credentials.LTokenUpdatedAt, updated.Credentials.LTokenUpdatedAt);
+        Assert.Equal(Now, updated.Credentials.CookieTokenUpdatedAt);
+        Assert.Equal(existing.Credentials.SessionVerifiedAt, updated.Credentials.SessionVerifiedAt);
+        Assert.Equal(0, client.DerivedTokenCallCount);
+    }
+
+    [Fact]
+    public async Task LoginWithSameAidInDifferentRealms_CreatesSeparateAccounts()
+    {
+        var store = new MemoryAccountStore();
+        PassportAccount mainland = CreateAccount(
+            "900001",
+            Now - TimeSpan.FromDays(1));
+        await store.SaveAsync(mainland);
+        var client = new StubPassportClient
+        {
+            OverseaPasswordTokens = new PassportLoginTokens(
+                "900001",
+                "mid-os",
+                "stoken-os")
+        };
+        var service = CreateService(store, client);
+
+        PassportAccount oversea = await service.LoginWithOverseaPasswordAsync(
+            "traveler@example.com",
+            "secret-password");
+
+        Assert.NotEqual(mainland.Id, oversea.Id);
+        Assert.Equal(PassportRealm.MainlandChina, mainland.Realm);
+        Assert.Equal(PassportRealm.Oversea, oversea.Realm);
+        Assert.Equal(2, (await store.GetAllAsync()).Count);
+    }
+
+    [Fact]
+    public async Task ConfirmedQrRelogin_PreservesDerivedCredentials()
+    {
+        var store = new MemoryAccountStore();
+        PassportAccount existing = CreateAccount(
+            "12345",
+            Now - TimeSpan.FromDays(8));
+        await store.SaveAsync(existing);
+        var client = new StubPassportClient
+        {
+            QrPollResult = new PassportQrPollResult(
+                PassportQrStatus.Confirmed,
+                new PassportLoginTokens(
+                    "12345",
+                    "mid-12345",
+                    "new-root"))
+        };
+        var service = CreateService(store, client);
+
+        (PassportQrStatus status, PassportAccount? account) =
+            await service.PollQrLoginAsync(new PassportQrSession(
+                "ticket",
+                "https://example.test/qr",
+                "temporary-device"));
+
+        Assert.Equal(PassportQrStatus.Confirmed, status);
+        Assert.NotNull(account);
+        Assert.Equal(existing.Id, account.Id);
+        Assert.Equal(existing.Device, account.Device);
+        Assert.Equal("new-root", account.Credentials.SToken);
+        Assert.Equal("old-ltoken", account.Credentials.LToken);
+        Assert.Equal("old-cookie", account.Credentials.CookieToken);
+        Assert.Equal(0, client.DerivedTokenCallCount);
     }
 
     [Fact]
@@ -323,6 +422,8 @@ public sealed class PassportAccountServiceTests
     {
         public int GeetestCallCount { get; private set; }
 
+        public string? AccountVerificationDestination { get; private set; }
+
         public Task<PassportGeetestResult?> VerifyGeetestAsync(
             PassportGeetestChallenge challenge,
             CancellationToken cancellationToken = default)
@@ -337,6 +438,7 @@ public sealed class PassportAccountServiceTests
             PassportAccountVerificationChallenge challenge,
             CancellationToken cancellationToken = default)
         {
+            AccountVerificationDestination = challenge.Destination;
             return Task.FromResult<string?>("123456");
         }
     }
@@ -352,11 +454,11 @@ public sealed class PassportAccountServiceTests
         public PassportLoginTokens MobileTokens { get; set; } =
             new("1", "mid", "stoken");
 
-        public PassportLoginTokens WebLoginTokens { get; set; } =
-            new("1", "mid", "stoken");
-
         public PassportLoginTokens OverseaPasswordTokens { get; set; } =
             new("1", "mid", "stoken");
+
+        public PassportQrPollResult QrPollResult { get; set; } =
+            new(PassportQrStatus.Pending);
 
         public string? FailVerificationForAid { get; set; }
 
@@ -368,8 +470,6 @@ public sealed class PassportAccountServiceTests
 
         public string? MobileLoginDeviceId { get; private set; }
 
-        public string? WebLoginResponseJson { get; private set; }
-
         public string? OverseaPasswordAccount { get; private set; }
 
         public string? OverseaPasswordValue { get; private set; }
@@ -379,6 +479,14 @@ public sealed class PassportAccountServiceTests
         public List<string> OverseaAttemptDeviceIds { get; } = [];
 
         public string? LastAigis { get; private set; }
+
+        public string? LastVerify { get; private set; }
+
+        public int PrepareAccountVerificationCallCount { get; private set; }
+
+        public int VerifyAccountCallCount { get; private set; }
+
+        public string? VerifiedCaptcha { get; private set; }
 
         public Task<PassportQrSession> CreateQrSessionAsync(
             PassportDeviceIdentity device,
@@ -394,7 +502,7 @@ public sealed class PassportAccountServiceTests
             PassportQrSession session,
             CancellationToken cancellationToken = default)
         {
-            return Task.FromResult(new PassportQrPollResult(PassportQrStatus.Pending));
+            return Task.FromResult(QrPollResult);
         }
 
         public Task<MobileCaptchaChallenge> SendMobileCaptchaAsync(
@@ -420,16 +528,6 @@ public sealed class PassportAccountServiceTests
             return Task.FromResult(MobileTokens);
         }
 
-        public Task<PassportLoginTokens> CompleteWebLoginAsync(
-            string authenticatedCookie,
-            string? loginResponseJson,
-            PassportDeviceIdentity device,
-            CancellationToken cancellationToken = default)
-        {
-            WebLoginResponseJson = loginResponseJson;
-            return Task.FromResult(WebLoginTokens);
-        }
-
         public Task<PassportLoginTokens> LoginWithOverseaPasswordAsync(
             string account,
             string password,
@@ -453,6 +551,7 @@ public sealed class PassportAccountServiceTests
             OverseaPasswordValue = password;
             OverseaAttemptDeviceIds.Add(device.DeviceId);
             LastAigis = aigis;
+            LastVerify = verify;
             if (OverseaAttempts.Count > 0)
             {
                 return Task.FromResult(OverseaAttempts.Dequeue());
@@ -467,6 +566,35 @@ public sealed class PassportAccountServiceTests
             PassportGeetestResult result)
         {
             return "completed-aigis";
+        }
+
+        public Task<PassportAccountVerificationChallenge> PrepareAccountVerificationAsync(
+            PassportAccountVerificationChallenge challenge,
+            PassportDeviceIdentity device,
+            CancellationToken cancellationToken = default)
+        {
+            PrepareAccountVerificationCallCount++;
+            return Task.FromResult(challenge with
+            {
+                Destination = "t***@example.com"
+            });
+        }
+
+        public Task VerifyAccountAsync(
+            PassportAccountVerificationChallenge challenge,
+            string captcha,
+            PassportDeviceIdentity device,
+            CancellationToken cancellationToken = default)
+        {
+            VerifyAccountCallCount++;
+            VerifiedCaptcha = captcha;
+            return Task.CompletedTask;
+        }
+
+        public string CompleteAccountVerificationChallenge(
+            PassportAccountVerificationChallenge challenge)
+        {
+            return "completed-verify";
         }
 
         public Task<PassportDerivedTokens> GetDerivedTokensAsync(

@@ -38,6 +38,7 @@ public sealed class PassportAccountService(
         PassportAccount account = await SaveNewAccountAsync(
             tokens,
             PassportLoginMethod.QrCode,
+            PassportRealm.MainlandChina,
             new PassportDeviceIdentity(session.DeviceId, DeviceFingerprint: null),
             cancellationToken);
         return (result.Status, account);
@@ -80,25 +81,8 @@ public sealed class PassportAccountService(
         return await SaveNewAccountAsync(
             tokens,
             PassportLoginMethod.MobileCaptcha,
+            PassportRealm.MainlandChina,
             device,
-            cancellationToken);
-    }
-
-    public async Task<PassportAccount> CompletePasswordLoginAsync(
-        string authenticatedCookie,
-        string? loginResponseJson = null,
-        CancellationToken cancellationToken = default)
-    {
-        PassportDeviceIdentity device = PassportDeviceIdentity.Create();
-        PassportLoginTokens tokens = await passportClient.CompleteWebLoginAsync(
-            authenticatedCookie,
-            loginResponseJson,
-            device,
-            cancellationToken);
-        return await SaveNewAccountAsync(
-            tokens,
-            PassportLoginMethod.Password,
-            device with { DeviceFingerprint = tokens.DeviceFingerprint },
             cancellationToken);
     }
 
@@ -155,7 +139,8 @@ public sealed class PassportAccountService(
             {
                 return await SaveNewAccountAsync(
                     tokens,
-                    PassportLoginMethod.Password,
+                    PassportLoginMethod.OverseaPassword,
+                    PassportRealm.Oversea,
                     device,
                     cancellationToken);
             }
@@ -284,7 +269,7 @@ public sealed class PassportAccountService(
         DateTimeOffset now = timeProvider.GetUtcNow();
         bool changed = false;
         bool failed = false;
-        if (account.LoginMethod != PassportLoginMethod.Password &&
+        if (account.Realm == PassportRealm.MainlandChina &&
             IsExpired(credentials.SessionVerifiedAt, options.SessionVerificationInterval, now))
         {
             try
@@ -368,6 +353,7 @@ public sealed class PassportAccountService(
         return await SaveNewAccountAsync(
             tokens,
             method,
+            PassportRealm.MainlandChina,
             PassportDeviceIdentity.Create() with
             {
                 DeviceFingerprint = tokens.DeviceFingerprint
@@ -378,33 +364,40 @@ public sealed class PassportAccountService(
     private async Task<PassportAccount> SaveNewAccountAsync(
         PassportLoginTokens tokens,
         PassportLoginMethod method,
+        PassportRealm realm,
         PassportDeviceIdentity device,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(tokens);
         DateTimeOffset now = timeProvider.GetUtcNow();
-        var credentials = new PassportCredentials(
-            tokens.SToken,
-            tokens.LToken,
-            tokens.CookieToken,
-            tokens.SToken is null ? null : now,
-            tokens.LToken is null ? null : now,
-            tokens.CookieToken is null ? null : now,
-            tokens.SToken is null ? null : now);
         PassportAccount? existing = (await accountStore.GetAllAsync(cancellationToken))
             .FirstOrDefault(account =>
+                account.Realm == realm &&
                 string.Equals(account.Aid, tokens.Aid, StringComparison.Ordinal));
+        PassportCredentials? previous = existing?.Credentials;
+        bool hasSToken = !string.IsNullOrWhiteSpace(tokens.SToken);
+        bool hasLToken = !string.IsNullOrWhiteSpace(tokens.LToken);
+        bool hasCookieToken = !string.IsNullOrWhiteSpace(tokens.CookieToken);
+        var credentials = new PassportCredentials(
+            hasSToken ? tokens.SToken : previous?.SToken,
+            hasLToken ? tokens.LToken : previous?.LToken,
+            hasCookieToken ? tokens.CookieToken : previous?.CookieToken,
+            hasSToken ? now : previous?.STokenUpdatedAt,
+            hasLToken ? now : previous?.LTokenUpdatedAt,
+            hasCookieToken ? now : previous?.CookieTokenUpdatedAt,
+            hasSToken ? now : previous?.SessionVerifiedAt);
         PassportDeviceIdentity stableDevice = existing?.Device ?? device;
         var account = new PassportAccount(
             existing?.Id ?? Guid.NewGuid(),
             tokens.Aid,
-            tokens.Mid,
+            string.IsNullOrWhiteSpace(tokens.Mid) ? existing?.Mid : tokens.Mid,
             tokens.DisplayName ?? existing?.DisplayName,
             method,
             credentials,
             stableDevice,
             existing?.CreatedAt ?? now,
-            now);
+            now,
+            realm);
 
         if (account.Credentials.SToken is not null && account.Mid is not null &&
             (account.Credentials.LToken is null || account.Credentials.CookieToken is null))

@@ -11,7 +11,8 @@ public sealed class PassportAccount
         PassportCredentials credentials,
         PassportDeviceIdentity device,
         DateTimeOffset createdAt,
-        DateTimeOffset updatedAt)
+        DateTimeOffset updatedAt,
+        PassportRealm realm = PassportRealm.MainlandChina)
     {
         if (id == Guid.Empty)
         {
@@ -22,6 +23,10 @@ public sealed class PassportAccount
         ArgumentNullException.ThrowIfNull(credentials);
         ArgumentNullException.ThrowIfNull(device);
         ArgumentException.ThrowIfNullOrWhiteSpace(device.DeviceId);
+        if (!Enum.IsDefined(realm))
+        {
+            throw new ArgumentOutOfRangeException(nameof(realm));
+        }
 
         Id = id;
         Aid = aid.Trim();
@@ -32,6 +37,7 @@ public sealed class PassportAccount
         Device = device;
         CreatedAt = createdAt;
         UpdatedAt = updatedAt;
+        Realm = realm;
     }
 
     public Guid Id { get; }
@@ -52,6 +58,8 @@ public sealed class PassportAccount
 
     public DateTimeOffset UpdatedAt { get; }
 
+    public PassportRealm Realm { get; }
+
     public PassportAccount WithCredentials(
         PassportCredentials credentials,
         DateTimeOffset updatedAt)
@@ -65,11 +73,12 @@ public sealed class PassportAccount
             credentials,
             Device,
             CreatedAt,
-            updatedAt);
+            updatedAt,
+            Realm);
     }
 
     public override string ToString()
     {
-        return $"PassportAccount(Id={Id:D}, Aid={Aid}, LoginMethod={LoginMethod})";
+        return $"PassportAccount(Id={Id:D}, Aid={Aid}, Realm={Realm}, LoginMethod={LoginMethod})";
     }
 }

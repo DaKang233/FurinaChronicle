@@ -43,6 +43,25 @@ public sealed class MiHoYoGachaClientsTests
     }
 
     [Fact]
+    public async Task STokenProvider_RejectsOverseaPassportBeforeSendingRequest()
+    {
+        int requestCount = 0;
+        var handler = new StubHttpHandler(request =>
+        {
+            requestCount++;
+            return Task.FromResult(JsonResponse("{}"));
+        });
+        using var httpClient = new HttpClient(handler);
+        using var provider = new MiHoYoSTokenGachaUrlProvider(httpClient);
+
+        NotSupportedException exception = await Assert.ThrowsAsync<NotSupportedException>(
+            () => provider.CreateAsync(Passport(PassportRealm.Oversea), Game()));
+
+        Assert.Contains("mainland China passport", exception.Message);
+        Assert.Equal(0, requestCount);
+    }
+
+    [Fact]
     public async Task GachaClient_AddsPagingParametersAndParsesServerLocalTime()
     {
         Uri? requestedUrl = null;
@@ -165,7 +184,8 @@ public sealed class MiHoYoGachaClientsTests
         }
     }
 
-    private static PassportAccount Passport()
+    private static PassportAccount Passport(
+        PassportRealm realm = PassportRealm.MainlandChina)
     {
         DateTimeOffset now = DateTimeOffset.UtcNow;
         return new PassportAccount(
@@ -186,7 +206,8 @@ public sealed class MiHoYoGachaClientsTests
                 "31bf26d5-2afe-4b30-aab4-42fcdb3d4b09",
                 "fp"),
             now,
-            now);
+            now,
+            realm);
     }
 
     private static GameAccount Game()

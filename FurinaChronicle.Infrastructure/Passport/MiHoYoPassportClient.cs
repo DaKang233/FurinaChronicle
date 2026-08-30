@@ -18,10 +18,6 @@ public sealed class MiHoYoPassportClient : IMiHoYoPassportClient, IDisposable
         "https://passport-api.mihoyo.com/account/ma-cn-verifier/verifier/createLoginCaptcha";
     public const string MobileLoginUrl =
         "https://passport-api.mihoyo.com/account/ma-cn-passport/app/loginByMobileCaptcha";
-    public const string GetMultiTokenByLoginTicketUrl =
-        "https://api-takumi.mihoyo.com/auth/api/getMultiTokenByLoginTicket";
-    public const string UpgradeLegacySTokenUrl =
-        "https://passport-api.mihoyo.com/account/ma-cn-session/app/getTokenBySToken";
     public const string OverseaPasswordLoginUrl =
         "https://sg-public-api.hoyoverse.com/account/ma-passport/api/appLoginByPassword";
     public const string OverseaGetActionTicketInfoUrl =
@@ -49,7 +45,14 @@ public sealed class MiHoYoPassportClient : IMiHoYoPassportClient, IDisposable
 
     public MiHoYoPassportClient(HttpClient? httpClient = null)
     {
-        this.httpClient = httpClient ?? new HttpClient
+        this.httpClient = httpClient ?? new HttpClient(
+            new HttpClientHandler
+            {
+                // Every authenticated request constructs its Cookie header
+                // explicitly. AndroidMessageHandler otherwise replaces that
+                // header with cookies captured from earlier login responses.
+                UseCookies = false
+            })
         {
             Timeout = TimeSpan.FromSeconds(30)
         };
@@ -194,106 +197,6 @@ public sealed class MiHoYoPassportClient : IMiHoYoPassportClient, IDisposable
             RequiredString(userInfo, "mid"),
             RequiredString(token, "token"),
             DisplayName: OptionalString(userInfo, "account_name"));
-    }
-
-    public async Task<PassportLoginTokens> CompleteWebLoginAsync(
-        string authenticatedCookie,
-        string? loginResponseJson,
-        PassportDeviceIdentity device,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(authenticatedCookie);
-        ArgumentNullException.ThrowIfNull(device);
-
-        Dictionary<string, string> cookieValues = ParseCookieValues(
-            authenticatedCookie);
-        WebLoginData? webLogin = ParseWebLoginResponse(loginResponseJson);
-        string? aid = webLogin?.Tokens.Aid ?? First(
-            cookieValues,
-            "account_id_v2",
-            "account_id",
-            "login_uid",
-            "stuid",
-            "ltuid_v2",
-            "ltuid");
-        string? mid = webLogin?.Tokens.Mid ?? First(
-            cookieValues,
-            "mid",
-            "account_mid_v2",
-            "account_mid");
-        string? sToken = webLogin?.Tokens.SToken ?? First(
-            cookieValues,
-            "stoken_v2",
-            "stoken");
-        string? lToken = webLogin?.Tokens.LToken ?? First(
-            cookieValues,
-            "ltoken_v2",
-            "ltoken");
-        string? cookieToken = webLogin?.Tokens.CookieToken ?? First(
-            cookieValues,
-            "cookie_token_v2",
-            "cookie_token");
-        string? loginTicket = webLogin?.LoginTicket ?? First(
-            cookieValues,
-            "login_ticket");
-
-        if (!string.IsNullOrWhiteSpace(loginTicket) &&
-            !string.IsNullOrWhiteSpace(aid) &&
-            string.IsNullOrWhiteSpace(sToken))
-        {
-            LoginTicketTokens ticketTokens =
-                await GetTokensByLoginTicketAsync(
-                    loginTicket,
-                    aid,
-                    cancellationToken);
-            sToken = ticketTokens.SToken;
-            lToken ??= ticketTokens.LToken;
-        }
-
-        if (!string.IsNullOrWhiteSpace(sToken) &&
-            !string.IsNullOrWhiteSpace(aid))
-        {
-            try
-            {
-                PassportLoginTokens upgraded = await UpgradeLegacySTokenAsync(
-                    aid,
-                    sToken,
-                    device,
-                    cancellationToken);
-                return upgraded with
-                {
-                    LToken = lToken ?? upgraded.LToken,
-                    CookieToken = cookieToken ?? upgraded.CookieToken,
-                    DeviceFingerprint = First(cookieValues, "DEVICEFP")
-                };
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch when (!string.IsNullOrWhiteSpace(mid))
-            {
-                // Some web login variants already return a current SToken.
-                // Keep it when the legacy-to-current exchange does not apply.
-            }
-        }
-
-        if (string.IsNullOrWhiteSpace(aid) ||
-            string.IsNullOrWhiteSpace(mid) ||
-            string.IsNullOrWhiteSpace(sToken))
-        {
-            throw new FormatException(
-                "米哈游登录页面尚未返回完整的 AID、MID 和 SToken。");
-        }
-
-        return new PassportLoginTokens(
-            aid,
-            mid,
-            sToken,
-            lToken,
-            cookieToken,
-            webLogin?.Tokens.DisplayName,
-            First(cookieValues, "DEVICEFP"));
     }
 
     public async Task<PassportLoginTokens> LoginWithOverseaPasswordAsync(
@@ -482,7 +385,7 @@ public sealed class MiHoYoPassportClient : IMiHoYoPassportClient, IDisposable
             ?? throw new InvalidOperationException("Passport account does not contain SToken.");
         string mid = account.Mid
             ?? throw new InvalidOperationException("Passport account does not contain mid.");
-        if (account.LoginMethod == PassportLoginMethod.Password)
+        if (account.Realm == PassportRealm.Oversea)
         {
             string? overseaLToken = await GetOverseaTokenAsync(
                 OverseaGetLTokenUrl,
@@ -616,81 +519,6 @@ public sealed class MiHoYoPassportClient : IMiHoYoPassportClient, IDisposable
             propertyName);
     }
 
-    private async Task<LoginTicketTokens> GetTokensByLoginTicketAsync(
-        string loginTicket,
-        string aid,
-        CancellationToken cancellationToken)
-    {
-        string url = GetMultiTokenByLoginTicketUrl +
-            $"?login_ticket={Uri.EscapeDataString(loginTicket)}" +
-            $"&uid={Uri.EscapeDataString(aid)}&token_types=3";
-        using HttpResponseMessage response = await httpClient.GetAsync(
-            url,
-            HttpCompletionOption.ResponseHeadersRead,
-            cancellationToken);
-        using JsonDocument document = await ReadSuccessAsync(
-            response,
-            cancellationToken);
-        JsonElement data = document.RootElement.GetProperty("data");
-        string? sToken = null;
-        string? lToken = null;
-        if (data.TryGetProperty("list", out JsonElement list) &&
-            list.ValueKind == JsonValueKind.Array)
-        {
-            foreach (JsonElement item in list.EnumerateArray())
-            {
-                string? name = OptionalString(item, "name");
-                string? token = OptionalString(item, "token");
-                if (string.Equals(name, "stoken", StringComparison.OrdinalIgnoreCase))
-                {
-                    sToken = token;
-                }
-                else if (string.Equals(name, "ltoken", StringComparison.OrdinalIgnoreCase))
-                {
-                    lToken = token;
-                }
-            }
-        }
-
-        if (string.IsNullOrWhiteSpace(sToken))
-        {
-            throw new InvalidDataException(
-                "Login-ticket exchange did not return SToken.");
-        }
-
-        return new LoginTicketTokens(sToken, lToken);
-    }
-
-    private async Task<PassportLoginTokens> UpgradeLegacySTokenAsync(
-        string aid,
-        string sToken,
-        PassportDeviceIdentity device,
-        CancellationToken cancellationToken)
-    {
-        using var request = new HttpRequestMessage(
-            HttpMethod.Post,
-            UpgradeLegacySTokenUrl);
-        ApplyPassportHeaders(request, "{}", device, aigis: null);
-        request.Headers.TryAddWithoutValidation(
-            "Cookie",
-            $"stuid={aid};stoken={sToken}");
-        using HttpResponseMessage response = await httpClient.SendAsync(
-            request,
-            HttpCompletionOption.ResponseHeadersRead,
-            cancellationToken);
-        using JsonDocument document = await ReadSuccessAsync(
-            response,
-            cancellationToken);
-        JsonElement data = document.RootElement.GetProperty("data");
-        JsonElement token = data.GetProperty("token");
-        JsonElement userInfo = data.GetProperty("user_info");
-        return new PassportLoginTokens(
-            RequiredString(userInfo, "aid"),
-            RequiredString(userInfo, "mid"),
-            RequiredString(token, "token"),
-            DisplayName: OptionalString(userInfo, "account_name"));
-    }
-
     private async Task<HttpResponseMessage> SendPassportJsonAsync(
         string url,
         object payload,
@@ -814,109 +642,6 @@ public sealed class MiHoYoPassportClient : IMiHoYoPassportClient, IDisposable
             ? property.GetString()
             : property.ToString();
         return string.IsNullOrWhiteSpace(value) ? null : value;
-    }
-
-    private static WebLoginData? ParseWebLoginResponse(string? json)
-    {
-        if (string.IsNullOrWhiteSpace(json))
-        {
-            return null;
-        }
-
-        try
-        {
-            using JsonDocument document = JsonDocument.Parse(json);
-            JsonElement root = document.RootElement;
-            if (!root.TryGetProperty("retcode", out JsonElement retcode) ||
-                retcode.GetInt32() != 0 ||
-                !root.TryGetProperty("data", out JsonElement data) ||
-                data.ValueKind != JsonValueKind.Object ||
-                !data.TryGetProperty("user_info", out JsonElement userInfo) ||
-                userInfo.ValueKind != JsonValueKind.Object)
-            {
-                return null;
-            }
-
-            string? aid = OptionalString(userInfo, "aid");
-            if (string.IsNullOrWhiteSpace(aid))
-            {
-                return null;
-            }
-
-            string? sToken = null;
-            string? lToken = null;
-            string? cookieToken = null;
-            if (data.TryGetProperty("token", out JsonElement token) &&
-                token.ValueKind == JsonValueKind.Object)
-            {
-                string? value = OptionalString(token, "token");
-                int type = token.TryGetProperty("token_type", out JsonElement tokenType) &&
-                    tokenType.TryGetInt32(out int parsedType)
-                    ? parsedType
-                    : 0;
-                switch (type)
-                {
-                    case 1:
-                        sToken = value;
-                        break;
-                    case 2:
-                        lToken = value;
-                        break;
-                    case 4:
-                        cookieToken = value;
-                        break;
-                }
-            }
-
-            return new WebLoginData(
-                new PassportLoginTokens(
-                    aid,
-                    OptionalString(userInfo, "mid"),
-                    sToken,
-                    lToken,
-                    cookieToken,
-                    OptionalString(userInfo, "account_name")),
-                OptionalString(data, "login_ticket"));
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
-    }
-
-    private static Dictionary<string, string> ParseCookieValues(string cookie)
-    {
-        return cookie
-            .Split(
-                ';',
-                StringSplitOptions.RemoveEmptyEntries |
-                StringSplitOptions.TrimEntries)
-            .Select(part => part.Split(
-                '=',
-                count: 2,
-                StringSplitOptions.TrimEntries))
-            .Where(parts => parts.Length == 2 && parts[0].Length > 0)
-            .GroupBy(parts => parts[0], StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(
-                group => group.Key,
-                group => group.Last()[1],
-                StringComparer.OrdinalIgnoreCase);
-    }
-
-    private static string? First(
-        IReadOnlyDictionary<string, string> values,
-        params string[] keys)
-    {
-        foreach (string key in keys)
-        {
-            if (values.TryGetValue(key, out string? value) &&
-                !string.IsNullOrWhiteSpace(value))
-            {
-                return value.Trim();
-            }
-        }
-
-        return null;
     }
 
     private async Task<HttpResponseMessage> SendOverseaPassportJsonAsync(
@@ -1104,11 +829,4 @@ public sealed class MiHoYoPassportClient : IMiHoYoPassportClient, IDisposable
         }
     }
 
-    private sealed record WebLoginData(
-        PassportLoginTokens Tokens,
-        string? LoginTicket);
-
-    private sealed record LoginTicketTokens(
-        string SToken,
-        string? LToken);
 }

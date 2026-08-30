@@ -25,12 +25,6 @@ public interface IMiHoYoPassportClient
         PassportDeviceIdentity device,
         CancellationToken cancellationToken = default);
 
-    Task<PassportLoginTokens> CompleteWebLoginAsync(
-        string authenticatedCookie,
-        string? loginResponseJson,
-        PassportDeviceIdentity device,
-        CancellationToken cancellationToken = default);
-
     Task<PassportLoginTokens> LoginWithOverseaPasswordAsync(
         string account,
         string password,

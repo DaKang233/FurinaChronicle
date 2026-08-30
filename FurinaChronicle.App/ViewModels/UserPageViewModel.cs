@@ -148,12 +148,31 @@ public partial class UserPageViewModel(
             return;
         }
 
-        Guid deletedId = SelectedAccount.Id;
-        await accountStore.DeleteAsync(deletedId);
-        SelectedAccount = null;
-        SelectedRole = null;
-        Roles.Clear();
-        await ReloadAsync();
+        bool deleted = false;
+        try
+        {
+            IsBusy = true;
+            ErrorMessage = null;
+            Guid deletedId = SelectedAccount.Id;
+            await accountStore.DeleteAsync(deletedId);
+            SelectedAccount = null;
+            SelectedRole = null;
+            Roles.Clear();
+            deleted = true;
+        }
+        catch (Exception exception)
+        {
+            ErrorMessage = $"账号删除失败：{exception.Message}";
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+
+        if (deleted)
+        {
+            await ReloadAsync();
+        }
     }
 
     private async Task SelectAccountCoreAsync(
@@ -165,6 +184,7 @@ public partial class UserPageViewModel(
         SelectedRole = null;
         Roles.Clear();
         StatusMessage = $"正在加载 {account.DisplayName}…";
+        string? selectionUid = preferredGameUid;
 
         try
         {
@@ -187,6 +207,7 @@ public partial class UserPageViewModel(
                 ? Roles.FirstOrDefault(role => role.Uid == preferredGameUid)
                 : null;
             SelectedRole ??= Roles.FirstOrDefault();
+            selectionUid = SelectedRole?.Uid;
             StatusMessage = Roles.Count == 0
                 ? "当前通行证账号没有绑定原神角色。"
                 : $"已选择 {account.DisplayName}。";
@@ -204,7 +225,7 @@ public partial class UserPageViewModel(
 
         await selectionStore.SaveAsync(new PassportSelection(
             account.Id,
-            SelectedRole?.Uid));
+            selectionUid));
     }
 
     private async Task LoadRemainingProfilesAsync(Guid selectedId)

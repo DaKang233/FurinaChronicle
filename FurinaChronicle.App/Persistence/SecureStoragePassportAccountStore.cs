@@ -8,7 +8,8 @@ namespace FurinaChronicle.App.Persistence;
 public sealed class SecureStoragePassportAccountStore(ISecureStorage secureStorage)
     : IPassportAccountStore, IDisposable
 {
-    private const string StorageKey = "passport-accounts-v1";
+    private const string StorageKey = "passport-accounts-v2";
+    private const string LegacyStorageKey = "passport-accounts-v1";
     private readonly SemaphoreSlim gate = new(1, 1);
 
     public async Task<IReadOnlyList<PassportAccount>> GetAllAsync(
@@ -100,6 +101,7 @@ public sealed class SecureStoragePassportAccountStore(ISecureStorage secureStora
             if (accounts.Count == 0)
             {
                 secureStorage.Remove(StorageKey);
+                secureStorage.Remove(LegacyStorageKey);
                 return;
             }
 
@@ -118,6 +120,12 @@ public sealed class SecureStoragePassportAccountStore(ISecureStorage secureStora
     {
         cancellationToken.ThrowIfCancellationRequested();
         string? json = await secureStorage.GetAsync(StorageKey);
+        bool loadedLegacyPayload = false;
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            json = await secureStorage.GetAsync(LegacyStorageKey);
+            loadedLegacyPayload = !string.IsNullOrWhiteSpace(json);
+        }
         cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(json))
         {
@@ -126,7 +134,19 @@ public sealed class SecureStoragePassportAccountStore(ISecureStorage secureStora
 
         StoredAccount[] stored =
             JsonSerializer.Deserialize<StoredAccount[]>(json) ?? [];
-        return stored.Select(item => item.ToDomain()).ToArray();
+        PassportAccount[] accounts = stored
+            .Select(item => item.ToDomain())
+            .ToArray();
+        if (loadedLegacyPayload)
+        {
+            string upgradedJson = JsonSerializer.Serialize(
+                accounts.Select(StoredAccount.FromDomain));
+            cancellationToken.ThrowIfCancellationRequested();
+            await secureStorage.SetAsync(StorageKey, upgradedJson);
+            secureStorage.Remove(LegacyStorageKey);
+        }
+
+        return accounts;
     }
 
     public void Dispose()
@@ -140,6 +160,7 @@ public sealed class SecureStoragePassportAccountStore(ISecureStorage secureStora
         string? Mid,
         string? DisplayName,
         PassportLoginMethod LoginMethod,
+        PassportRealm? Realm,
         string? SToken,
         string? LToken,
         string? CookieToken,
@@ -160,6 +181,7 @@ public sealed class SecureStoragePassportAccountStore(ISecureStorage secureStora
                 account.Mid,
                 account.DisplayName,
                 account.LoginMethod,
+                account.Realm,
                 account.Credentials.SToken,
                 account.Credentials.LToken,
                 account.Credentials.CookieToken,
@@ -175,6 +197,7 @@ public sealed class SecureStoragePassportAccountStore(ISecureStorage secureStora
 
         public PassportAccount ToDomain()
         {
+            PassportRealm realm = Realm ?? InferLegacyRealm();
             return new PassportAccount(
                 Id,
                 Aid,
@@ -191,7 +214,19 @@ public sealed class SecureStoragePassportAccountStore(ISecureStorage secureStora
                     SessionVerifiedAt),
                 new PassportDeviceIdentity(DeviceId, DeviceFingerprint),
                 CreatedAt,
-                UpdatedAt);
+                UpdatedAt,
+                realm);
+        }
+
+        private PassportRealm InferLegacyRealm()
+        {
+            // v1 used the same Password enum value for both the removed
+            // mainland web login and HoYoLAB login. Their generated device
+            // identifiers are distinct: UUID for mainland, 53 chars overseas.
+            return LoginMethod == PassportLoginMethod.OverseaPassword &&
+                DeviceId.Length == 53
+                    ? PassportRealm.Oversea
+                    : PassportRealm.MainlandChina;
         }
     }
 }

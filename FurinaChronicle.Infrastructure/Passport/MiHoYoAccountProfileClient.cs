@@ -30,7 +30,10 @@ public sealed class MiHoYoAccountProfileClient :
             new HttpClientHandler
             {
                 AutomaticDecompression =
-                    DecompressionMethods.GZip | DecompressionMethods.Deflate
+                    DecompressionMethods.GZip | DecompressionMethods.Deflate,
+                // Authentication cookies come from the selected persisted
+                // account and must not be replaced by handler state.
+                UseCookies = false
             })
         {
             Timeout = TimeSpan.FromSeconds(20)
@@ -43,7 +46,7 @@ public sealed class MiHoYoAccountProfileClient :
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(account);
-        bool isOversea = account.LoginMethod == PassportLoginMethod.Password;
+        bool isOversea = account.Realm == PassportRealm.Oversea;
         string cookie = BuildCookie(account);
         Task<JsonDocument> profileTask = GetDocumentAsync(
             isOversea ? OverseaUserProfileUrl : UserProfileUrl,
@@ -117,7 +120,7 @@ public sealed class MiHoYoAccountProfileClient :
             "x-rpc-device_id",
             account.Device.DeviceId.Replace("-", string.Empty, StringComparison.Ordinal));
         request.Headers.TryAddWithoutValidation("x-rpc-client_type", "5");
-        if (account.LoginMethod == PassportLoginMethod.Password)
+        if (account.Realm == PassportRealm.Oversea)
         {
             request.Headers.TryAddWithoutValidation("Accept", "application/json");
             request.Headers.TryAddWithoutValidation("x-rpc-app_version", "2.54.0");
@@ -151,7 +154,7 @@ public sealed class MiHoYoAccountProfileClient :
 
     private static string BuildCookie(PassportAccount account)
     {
-        if (account.LoginMethod == PassportLoginMethod.Password)
+        if (account.Realm == PassportRealm.Oversea)
         {
             var overseaPairs = new List<string>
             {

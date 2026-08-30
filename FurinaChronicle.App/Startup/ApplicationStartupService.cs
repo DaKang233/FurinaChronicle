@@ -25,7 +25,11 @@ public sealed class ApplicationStartupService(
         {
             throw new GachaMetadataUnavailableException("没有可用的原神角色和武器元数据。", new InvalidDataException("Metadata refresh completed without producing a usable cache."));
         }
+    }
 
+    public async Task MaintainPassportAccountsAsync(
+        CancellationToken cancellationToken = default)
+    {
         try
         {
             PassportMaintenanceResult maintenance =
