@@ -6,20 +6,22 @@ namespace FurinaChronicle.App;
 
 public partial class MobileCaptchaLoginPage : ContentPage
 {
-    private readonly PassportAccountService passportAccountService;
+    private readonly MainlandPassportLoginService passportLoginService;
     private readonly UserPageViewModel userPageViewModel;
     private readonly MobileCaptchaCooldown captchaCooldown;
     private MobileCaptchaChallenge? challenge;
     private CancellationTokenSource? countdownCancellation;
+    private CancellationTokenSource? pageCancellation;
     private bool busy;
+    private bool dismissed;
 
     public MobileCaptchaLoginPage(
-        PassportAccountService passportAccountService,
+        MainlandPassportLoginService passportLoginService,
         UserPageViewModel userPageViewModel,
         MobileCaptchaCooldown captchaCooldown)
     {
         InitializeComponent();
-        this.passportAccountService = passportAccountService;
+        this.passportLoginService = passportLoginService;
         this.userPageViewModel = userPageViewModel;
         this.captchaCooldown = captchaCooldown;
     }
@@ -27,11 +29,17 @@ public partial class MobileCaptchaLoginPage : ContentPage
     protected override void OnAppearing()
     {
         base.OnAppearing();
+        dismissed = false;
+        pageCancellation?.Cancel();
+        pageCancellation?.Dispose();
+        pageCancellation = new CancellationTokenSource();
         StartCooldownDisplay();
     }
 
     protected override void OnDisappearing()
     {
+        dismissed = true;
+        pageCancellation?.Cancel();
         countdownCancellation?.Cancel();
         base.OnDisappearing();
     }
@@ -44,11 +52,13 @@ public partial class MobileCaptchaLoginPage : ContentPage
             return;
         }
 
-        await RunAsync(async () =>
+        await RunAsync(async token =>
         {
-            challenge = await passportAccountService.SendMobileCaptchaAsync(
+            challenge = await passportLoginService.SendMobileCaptchaAsync(
                 MobileEntry.Text ?? string.Empty,
-                challenge?.Aigis);
+                challenge?.Aigis,
+                token);
+            token.ThrowIfCancellationRequested();
             StatusLabel.Text = "验证码已发送，请查收短信。";
             captchaCooldown.Start();
             StartCooldownDisplay();
@@ -57,7 +67,7 @@ public partial class MobileCaptchaLoginPage : ContentPage
 
     private async void OnLoginClicked(object? sender, EventArgs e)
     {
-        await RunAsync(async () =>
+        await RunAsync(async token =>
         {
             if (challenge is null)
             {
@@ -65,15 +75,23 @@ public partial class MobileCaptchaLoginPage : ContentPage
             }
 
             PassportAccount account =
-                await passportAccountService.LoginWithMobileCaptchaAsync(
+                await passportLoginService.LoginWithMobileCaptchaAsync(
                     MobileEntry.Text ?? string.Empty,
                     CaptchaEntry.Text ?? string.Empty,
-                    challenge);
+                    challenge,
+                    token);
+            token.ThrowIfCancellationRequested();
+            if (dismissed)
+            {
+                return;
+            }
+
             await LoginNavigation.CompleteAsync(this, userPageViewModel, account);
         });
     }
 
-    private async Task RunAsync(Func<Task> operation)
+    private async Task RunAsync(
+        Func<CancellationToken, Task> operation)
     {
         if (busy)
         {
@@ -85,8 +103,19 @@ public partial class MobileCaptchaLoginPage : ContentPage
             busy = true;
             BusyIndicator.IsVisible = true;
             BusyIndicator.IsRunning = true;
+            LoginButton.IsEnabled = false;
             StatusLabel.TextColor = Colors.Gray;
-            await operation();
+            CancellationToken token =
+                pageCancellation?.Token ?? CancellationToken.None;
+            await operation(token);
+        }
+        catch (OperationCanceledException)
+            when (pageCancellation?.IsCancellationRequested == true)
+        {
+            if (!dismissed)
+            {
+                StatusLabel.Text = "操作已取消。";
+            }
         }
         catch (Exception exception)
         {
@@ -96,6 +125,7 @@ public partial class MobileCaptchaLoginPage : ContentPage
         finally
         {
             busy = false;
+            LoginButton.IsEnabled = !dismissed;
             BusyIndicator.IsRunning = false;
             BusyIndicator.IsVisible = false;
             UpdateSendButton();
@@ -134,11 +164,13 @@ public partial class MobileCaptchaLoginPage : ContentPage
         SendButton.Text = remaining > 0
             ? $"{remaining} 秒后重试"
             : "发送验证码";
-        SendButton.IsEnabled = !busy && remaining == 0;
+        SendButton.IsEnabled = !dismissed && !busy && remaining == 0;
     }
 
     private async void OnBackClicked(object? sender, EventArgs e)
     {
+        dismissed = true;
+        pageCancellation?.Cancel();
         countdownCancellation?.Cancel();
         await LoginNavigation.GoBackAsync(this);
     }

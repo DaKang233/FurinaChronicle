@@ -8,7 +8,7 @@ using FurinaChronicle.Services.Passport;
 
 namespace FurinaChronicle.Infrastructure.Passport;
 
-public sealed class MiHoYoPassportClient : IMiHoYoPassportClient, IDisposable
+public sealed class MiHoYoPassportClient : IDisposable
 {
     public const string CreateQrUrl =
         "https://passport-api.mihoyo.com/account/ma-cn-passport/app/createQRLogin";
@@ -284,6 +284,23 @@ public sealed class MiHoYoPassportClient : IMiHoYoPassportClient, IDisposable
                 DisplayName: OptionalString(userInfo, "account_name")));
     }
 
+    public Task<OverseaPasswordLoginAttempt> AttemptPasswordLoginAsync(
+        string account,
+        string password,
+        PassportDeviceIdentity device,
+        string? aigis = null,
+        string? verify = null,
+        CancellationToken cancellationToken = default)
+    {
+        return AttemptOverseaPasswordLoginAsync(
+            account,
+            password,
+            device,
+            aigis,
+            verify,
+            cancellationToken);
+    }
+
     public string CompleteGeetestChallenge(
         PassportGeetestChallenge challenge,
         PassportGeetestResult result)
@@ -316,14 +333,16 @@ public sealed class MiHoYoPassportClient : IMiHoYoPassportClient, IDisposable
             cancellationToken);
         using JsonDocument document = await ReadSuccessAsync(
             response,
-            cancellationToken);
+            cancellationToken,
+            allowJsonOnHttpError: true);
         JsonElement data = document.RootElement.GetProperty("data");
         string? destination = null;
         if (data.TryGetProperty("user_info", out JsonElement userInfo))
         {
-            destination = OptionalString(userInfo, "email") ??
-                OptionalString(userInfo, "safe_mobile") ??
-                OptionalString(userInfo, "mobile");
+            destination = challenge.Method == HoYoLabVerificationMethod.Mobile
+                ? OptionalString(userInfo, "safe_mobile") ??
+                    OptionalString(userInfo, "mobile")
+                : OptionalString(userInfo, "email");
         }
 
         return challenge with { Destination = destination };
@@ -342,7 +361,7 @@ public sealed class MiHoYoPassportClient : IMiHoYoPassportClient, IDisposable
             CreateActionTicketRequest(
                 challenge.Ticket,
                 captcha.Trim(),
-                verifyMethod: 2),
+                challenge.Method),
             aigis: null,
             cancellationToken);
         using JsonDocument _ = await ReadSuccessAsync(response, cancellationToken);
@@ -355,7 +374,8 @@ public sealed class MiHoYoPassportClient : IMiHoYoPassportClient, IDisposable
                 cancellationToken);
         using JsonDocument confirmDocument = await ReadSuccessAsync(
             confirmResponse,
-            cancellationToken);
+            cancellationToken,
+            allowJsonOnHttpError: true);
         JsonElement data = confirmDocument.RootElement.GetProperty("data");
         string? status = data.TryGetProperty("verify_info", out JsonElement info)
             ? OptionalString(info, "status")
@@ -579,9 +599,13 @@ public sealed class MiHoYoPassportClient : IMiHoYoPassportClient, IDisposable
 
     private static async Task<JsonDocument> ReadSuccessAsync(
         HttpResponseMessage response,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool allowJsonOnHttpError = false)
     {
-        JsonDocument document = await ReadResponseAsync(response, cancellationToken);
+        JsonDocument document = await ReadResponseAsync(
+            response,
+            cancellationToken,
+            allowJsonOnHttpError);
         try
         {
             EnsureSuccess(document.RootElement);
@@ -596,14 +620,27 @@ public sealed class MiHoYoPassportClient : IMiHoYoPassportClient, IDisposable
 
     private static async Task<JsonDocument> ReadResponseAsync(
         HttpResponseMessage response,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool allowJsonOnHttpError = false)
     {
-        response.EnsureSuccessStatusCode();
-        await using Stream stream = await response.Content.ReadAsStreamAsync(
-            cancellationToken);
-        return await JsonDocument.ParseAsync(
-            stream,
-            cancellationToken: cancellationToken);
+        if (!allowJsonOnHttpError)
+        {
+            response.EnsureSuccessStatusCode();
+        }
+
+        try
+        {
+            await using Stream stream = await response.Content.ReadAsStreamAsync(
+                cancellationToken);
+            return await JsonDocument.ParseAsync(
+                stream,
+                cancellationToken: cancellationToken);
+        }
+        catch (JsonException) when (!response.IsSuccessStatusCode)
+        {
+            response.EnsureSuccessStatusCode();
+            throw;
+        }
     }
 
     private static void EnsureSuccess(JsonElement root)
@@ -717,15 +754,23 @@ public sealed class MiHoYoPassportClient : IMiHoYoPassportClient, IDisposable
     private static object CreateActionTicketRequest(
         string ticket,
         string? captcha = null,
-        int? verifyMethod = null)
+        HoYoLabVerificationMethod? method = null)
     {
-        return new
+        var request = new Dictionary<string, object?>
         {
-            action_type = "verify_for_component",
-            action_ticket = ticket,
-            email_captcha = captcha,
-            verify_method = verifyMethod
+            ["action_type"] = "verify_for_component",
+            ["action_ticket"] = ticket
         };
+
+        if (captcha is not null && method is not null)
+        {
+            request["verify_method"] = (int)method.Value;
+            request[method == HoYoLabVerificationMethod.Mobile
+                ? "mobile_captcha"
+                : "email_captcha"] = captcha;
+        }
+
+        return request;
     }
 
     private static PassportGeetestChallenge ParseGeetestChallenge(string state)
@@ -761,9 +806,12 @@ public sealed class MiHoYoPassportClient : IMiHoYoPassportClient, IDisposable
                 "verify_str");
             using JsonDocument verificationDocument = JsonDocument.Parse(
                 verifyString);
+            JsonElement verification = verificationDocument.RootElement;
             return new PassportAccountVerificationChallenge(
                 state,
-                RequiredString(verificationDocument.RootElement, "ticket"));
+                RequiredString(verification, "ticket"),
+                Method: ParseVerificationMethod(
+                    RequiredString(verification, "verify_type")));
         }
         catch (JsonException exception)
         {
@@ -771,6 +819,18 @@ public sealed class MiHoYoPassportClient : IMiHoYoPassportClient, IDisposable
                 "HoYoLAB 返回了无法解析的账号安全验证挑战。",
                 exception);
         }
+    }
+
+    private static HoYoLabVerificationMethod ParseVerificationMethod(string value)
+    {
+        return value.Trim().ToLowerInvariant() switch
+        {
+            "mobile" or "safe_mobile" or "phone" or "1" =>
+                HoYoLabVerificationMethod.Mobile,
+            "email" or "2" => HoYoLabVerificationMethod.Email,
+            _ => throw new FormatException(
+                $"HoYoLAB 返回了不支持的账号验证方式：{value}。")
+        };
     }
 
     private static string? HeaderValue(

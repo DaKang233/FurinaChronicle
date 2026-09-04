@@ -7,15 +7,15 @@ namespace FurinaChronicle.App;
 public partial class ManualCookieLoginPage : ContentPage
 {
     public ManualCookieLoginPage(
-        PassportAccountService passportAccountService,
+        MainlandPassportLoginService passportLoginService,
         UserPageViewModel userPageViewModel)
     {
         InitializeComponent();
-        this.passportAccountService = passportAccountService;
+        this.passportLoginService = passportLoginService;
         this.userPageViewModel = userPageViewModel;
     }
 
-    private readonly PassportAccountService passportAccountService;
+    private readonly MainlandPassportLoginService passportLoginService;
     private readonly UserPageViewModel userPageViewModel;
     private bool busy;
 
@@ -35,7 +35,7 @@ public partial class ManualCookieLoginPage : ContentPage
             StatusLabel.TextColor = Colors.Gray;
             StatusLabel.Text = "正在验证并保存…";
             PassportAccount account =
-                await passportAccountService.LoginWithManualCookieAsync(
+                await passportLoginService.LoginWithManualCookieAsync(
                     CookieEditor.Text ?? string.Empty);
             CookieEditor.Text = string.Empty;
             await LoginNavigation.CompleteAsync(this, userPageViewModel, account);

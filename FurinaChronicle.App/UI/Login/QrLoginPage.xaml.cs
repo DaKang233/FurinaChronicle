@@ -7,17 +7,17 @@ namespace FurinaChronicle.App;
 
 public partial class QrLoginPage : ContentPage
 {
-    private readonly PassportAccountService passportAccountService;
+    private readonly MainlandPassportLoginService passportLoginService;
     private readonly UserPageViewModel userPageViewModel;
     private CancellationTokenSource? pollingCancellation;
     private bool started;
 
     public QrLoginPage(
-        PassportAccountService passportAccountService,
+        MainlandPassportLoginService passportLoginService,
         UserPageViewModel userPageViewModel)
     {
         InitializeComponent();
-        this.passportAccountService = passportAccountService;
+        this.passportLoginService = passportLoginService;
         this.userPageViewModel = userPageViewModel;
     }
 
@@ -61,7 +61,7 @@ public partial class QrLoginPage : ContentPage
             StatusLabel.TextColor = Colors.Gray;
             StatusLabel.Text = "正在创建二维码…";
             PassportQrSession session =
-                await passportAccountService.BeginQrLoginAsync(token);
+                await passportLoginService.BeginQrLoginAsync(token);
             using var generator = new QRCodeGenerator();
             using QRCodeData data = generator.CreateQrCode(
                 session.Url,
@@ -74,7 +74,7 @@ public partial class QrLoginPage : ContentPage
             while (!token.IsCancellationRequested)
             {
                 (PassportQrStatus status, PassportAccount? account) =
-                    await passportAccountService.PollQrLoginAsync(session, token);
+                    await passportLoginService.PollQrLoginAsync(session, token);
                 if (status == PassportQrStatus.Confirmed && account is not null)
                 {
                     StatusLabel.Text = "登录成功。";

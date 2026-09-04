@@ -4,19 +4,19 @@ using FurinaChronicle.Services.Passport;
 
 namespace FurinaChronicle.App;
 
-public partial class OverseaPasswordLoginPage : ContentPage,
+public partial class HoYoLabPasswordLoginPage : ContentPage,
     IPassportSecurityVerificationHandler
 {
-    private readonly PassportAccountService passportAccountService;
+    private readonly HoYoLabPassportLoginService passportLoginService;
     private readonly UserPageViewModel userPageViewModel;
     private bool busy;
 
-    public OverseaPasswordLoginPage(
-        PassportAccountService passportAccountService,
+    public HoYoLabPasswordLoginPage(
+        HoYoLabPassportLoginService passportLoginService,
         UserPageViewModel userPageViewModel)
     {
         InitializeComponent();
-        this.passportAccountService = passportAccountService;
+        this.passportLoginService = passportLoginService;
         this.userPageViewModel = userPageViewModel;
     }
 
@@ -36,7 +36,7 @@ public partial class OverseaPasswordLoginPage : ContentPage,
             StatusLabel.TextColor = Colors.Gray;
             StatusLabel.Text = "正在登录 HoYoLAB…";
             PassportAccount account =
-                await passportAccountService.LoginWithOverseaPasswordAsync(
+                await passportLoginService.LoginWithPasswordAsync(
                     AccountEntry.Text ?? string.Empty,
                     PasswordEntry.Text ?? string.Empty,
                     this);
@@ -63,6 +63,11 @@ public partial class OverseaPasswordLoginPage : ContentPage,
 
     private async void OnBackClicked(object? sender, EventArgs e)
     {
+        if (busy)
+        {
+            return;
+        }
+
         await LoginNavigation.GoBackAsync(this);
     }
 
@@ -83,10 +88,14 @@ public partial class OverseaPasswordLoginPage : ContentPage,
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        string destinationKind =
+            challenge.Method == HoYoLabVerificationMethod.Mobile
+                ? "手机"
+                : "邮箱";
         return await MainThread.InvokeOnMainThreadAsync(() => DisplayPromptAsync(
             "HoYoLAB 账号安全验证",
             string.IsNullOrWhiteSpace(challenge.Destination)
-                ? "验证码已发送到账号绑定的邮箱或手机，请输入验证码。"
+                ? $"验证码已发送到账号绑定的{destinationKind}，请输入验证码。"
                 : $"验证码已发送到 {challenge.Destination}，请输入验证码。",
             accept: "验证",
             cancel: "取消",

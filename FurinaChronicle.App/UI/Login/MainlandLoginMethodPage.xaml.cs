@@ -1,10 +1,10 @@
 namespace FurinaChronicle.App;
 
-public partial class LoginMethodPage : ContentPage
+public partial class MainlandLoginMethodPage : ContentPage
 {
     private readonly IServiceProvider serviceProvider;
 
-    public LoginMethodPage(IServiceProvider serviceProvider)
+    public MainlandLoginMethodPage(IServiceProvider serviceProvider)
     {
         InitializeComponent();
         this.serviceProvider = serviceProvider;
@@ -15,9 +15,6 @@ public partial class LoginMethodPage : ContentPage
         return Navigation.PushAsync(
             serviceProvider.GetRequiredService<TPage>());
     }
-
-    private async void OnPasswordClicked(object? sender, EventArgs e) =>
-		await OpenAsync<OverseaPasswordLoginPage>();
 
     private async void OnQrClicked(object? sender, EventArgs e) =>
         await OpenAsync<QrLoginPage>();

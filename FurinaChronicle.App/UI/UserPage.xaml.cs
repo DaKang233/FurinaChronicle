@@ -25,41 +25,20 @@ public partial class UserPage : ContentPage
         await ViewModel.InitializeAsync();
     }
 
-    private async void OnLoginClicked(object? sender, EventArgs e)
+    private async void OnMainlandLoginClicked(object? sender, EventArgs e)
     {
-        if (OperatingSystem.IsAndroid())
-        {
-            var page = serviceProvider.GetRequiredService<LoginMethodPage>();
-            await Navigation.PushAsync(page);
-            return;
-        }
-
-        string? method = await DisplayActionSheetAsync(
-            "选择登录方式",
-            "取消",
-            null,
-            "HoYoLAB 海外账号密码登录",
-            "米游社 APP 扫码",
-            "手机验证码登录",
-            "手动输入 Cookie");
-        await OpenLoginPageAsync(method);
+        await OpenLoginRootAsync(
+            serviceProvider.GetRequiredService<MainlandLoginMethodPage>());
     }
 
-    public async Task OpenLoginPageAsync(string? method)
+    private async void OnHoYoLabLoginClicked(object? sender, EventArgs e)
     {
-        ContentPage? page = method switch
-        {
-            "HoYoLAB 海外账号密码登录" => serviceProvider.GetRequiredService<OverseaPasswordLoginPage>(),
-            "米游社 APP 扫码" => serviceProvider.GetRequiredService<QrLoginPage>(),
-            "手机验证码登录" => serviceProvider.GetRequiredService<MobileCaptchaLoginPage>(),
-            "手动输入 Cookie" => serviceProvider.GetRequiredService<ManualCookieLoginPage>(),
-            _ => null
-        };
-        if (page is null)
-        {
-            return;
-        }
+        await OpenLoginRootAsync(
+            serviceProvider.GetRequiredService<HoYoLabPasswordLoginPage>());
+    }
 
+    private async Task OpenLoginRootAsync(ContentPage page)
+    {
         if (OperatingSystem.IsWindows())
         {
             await Navigation.PushModalAsync(

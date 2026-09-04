@@ -20,6 +20,7 @@ public partial class UserPageViewModel(
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSelectedAccount))]
+    [NotifyPropertyChangedFor(nameof(CanDeleteSelectedAccount))]
     public partial PassportAccountListItem? SelectedAccount { get; set; }
 
     [ObservableProperty]
@@ -27,6 +28,7 @@ public partial class UserPageViewModel(
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsNotBusy))]
+    [NotifyPropertyChangedFor(nameof(CanDeleteSelectedAccount))]
     public partial bool IsBusy { get; set; }
 
     [ObservableProperty]
@@ -38,6 +40,8 @@ public partial class UserPageViewModel(
     public bool IsNotBusy => !IsBusy;
 
     public bool HasSelectedAccount => SelectedAccount is not null;
+
+    public bool CanDeleteSelectedAccount => HasSelectedAccount && IsNotBusy;
 
     public async Task InitializeAsync()
     {
@@ -130,15 +134,29 @@ public partial class UserPageViewModel(
 
     public async Task SelectRoleAsync(PassportGameRole? role)
     {
-        SelectedRole = role;
-        if (SelectedAccount is null)
+        PassportAccountListItem? account = SelectedAccount;
+        if (account is null || IsBusy)
         {
             return;
         }
 
-        await selectionStore.SaveAsync(new PassportSelection(
-            SelectedAccount.Id,
-            role?.Uid));
+        try
+        {
+            IsBusy = true;
+            ErrorMessage = null;
+            SelectedRole = role;
+            await selectionStore.SaveAsync(new PassportSelection(
+                account.Id,
+                role?.Uid));
+        }
+        catch (Exception exception)
+        {
+            ErrorMessage = $"角色选择保存失败：{exception.Message}";
+        }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
     public async Task DeleteSelectedAsync()

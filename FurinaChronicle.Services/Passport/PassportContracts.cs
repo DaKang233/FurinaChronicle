@@ -24,7 +24,14 @@ public sealed record PassportGeetestResult(
 public sealed record PassportAccountVerificationChallenge(
     string State,
     string Ticket,
-    string? Destination = null);
+    string? Destination = null,
+    HoYoLabVerificationMethod Method = HoYoLabVerificationMethod.Email);
+
+public enum HoYoLabVerificationMethod
+{
+    Mobile = 1,
+    Email = 2
+}
 
 public sealed record OverseaPasswordLoginAttempt(
     PassportLoginTokens? Tokens,

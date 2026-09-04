@@ -206,6 +206,94 @@ public sealed class PassportAccountServiceTests
     }
 
     [Fact]
+    public async Task MaintainAllAsync_DeletedWhileRequestIsRunning_DoesNotRecreateAccount()
+    {
+        var store = new MemoryAccountStore();
+        PassportAccount account = CreateAccount(
+            "1",
+            Now - TimeSpan.FromDays(8));
+        await store.SaveAsync(account);
+        var started = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var resume = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var client = new StubPassportClient
+        {
+            Verification = new PassportSessionVerification("rotated-token"),
+            DerivedTokens = new PassportDerivedTokens("new-ltoken", "new-cookie"),
+            DerivedTokenRequestStarted = started,
+            ContinueDerivedTokenRequest = resume
+        };
+        var service = CreateService(store, client);
+
+        Task<PassportMaintenanceResult> maintenanceTask =
+            service.MaintainAllAsync();
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await store.DeleteAsync(account.Id);
+        resume.SetResult();
+        PassportMaintenanceResult result = await maintenanceTask;
+
+        Assert.Null(await store.GetByIdAsync(account.Id));
+        Assert.Equal(0, result.UpdatedCount);
+        Assert.Empty(result.FailedAccountIds);
+    }
+
+    [Fact]
+    public async Task MaintainAllAsync_ReloginWhileRequestIsRunning_PreservesFreshCredentials()
+    {
+        var store = new MemoryAccountStore();
+        PassportAccount account = CreateAccount(
+            "1",
+            Now - TimeSpan.FromDays(8));
+        await store.SaveAsync(account);
+        var started = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var resume = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var client = new StubPassportClient
+        {
+            Verification = new PassportSessionVerification("rotated-token"),
+            DerivedTokens = new PassportDerivedTokens("new-ltoken", "new-cookie"),
+            DerivedTokenRequestStarted = started,
+            ContinueDerivedTokenRequest = resume
+        };
+        var service = CreateService(store, client);
+
+        Task<PassportMaintenanceResult> maintenanceTask =
+            service.MaintainAllAsync();
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        DateTimeOffset reloginTime = Now + TimeSpan.FromSeconds(1);
+        var relogged = new PassportAccount(
+            account.Id,
+            account.Aid,
+            account.Mid,
+            account.DisplayName,
+            PassportLoginMethod.MobileCaptcha,
+            new PassportCredentials(
+                "fresh-root",
+                "fresh-ltoken",
+                "fresh-cookie",
+                reloginTime,
+                reloginTime,
+                reloginTime,
+                reloginTime),
+            account.Device,
+            account.CreatedAt,
+            reloginTime,
+            account.Realm);
+        await store.SaveAsync(relogged);
+        resume.SetResult();
+        PassportMaintenanceResult result = await maintenanceTask;
+
+        PassportAccount stored = (await store.GetByIdAsync(account.Id))!;
+        Assert.Equal("fresh-root", stored.Credentials.SToken);
+        Assert.Equal("fresh-cookie", stored.Credentials.CookieToken);
+        Assert.Equal(reloginTime, stored.UpdatedAt);
+        Assert.Equal(0, result.UpdatedCount);
+        Assert.Empty(result.FailedAccountIds);
+    }
+
+    [Fact]
     public void CookieParser_MissingAccountOrToken_RejectsCookie()
     {
         Assert.Throws<FormatException>(
@@ -338,19 +426,67 @@ public sealed class PassportAccountServiceTests
         Assert.Equal(account, await store.GetByIdAsync(account.Id));
     }
 
-    private static PassportAccountService CreateService(
+    private static TestPassportServices CreateService(
         MemoryAccountStore store,
         StubPassportClient client)
     {
-        return new PassportAccountService(
+        var writer = new PassportAccountWriter(
             store,
             client,
-            new FixedTimeProvider(Now),
-            new PassportCredentialMaintenanceOptions
-            {
-                DerivedCredentialMaxAge = TimeSpan.FromDays(1),
-                SessionVerificationInterval = TimeSpan.FromDays(7)
-            });
+            client,
+            new FixedTimeProvider(Now));
+        return new TestPassportServices(
+            new MainlandPassportLoginService(client, writer),
+            new HoYoLabPassportLoginService(client, writer),
+            new PassportCredentialMaintenanceService(
+                store,
+                client,
+                client,
+                new FixedTimeProvider(Now),
+                new PassportCredentialMaintenanceOptions
+                {
+                    DerivedCredentialMaxAge = TimeSpan.FromDays(1),
+                    SessionVerificationInterval = TimeSpan.FromDays(7)
+                }));
+    }
+
+    private sealed class TestPassportServices(
+        MainlandPassportLoginService mainland,
+        HoYoLabPassportLoginService hoYoLab,
+        PassportCredentialMaintenanceService maintenance)
+    {
+        public Task<PassportAccount> LoginWithManualCookieAsync(string cookie) =>
+            mainland.LoginWithManualCookieAsync(cookie);
+
+        public Task<MobileCaptchaChallenge> SendMobileCaptchaAsync(string mobile) =>
+            mainland.SendMobileCaptchaAsync(mobile);
+
+        public Task<PassportAccount> LoginWithMobileCaptchaAsync(
+            string mobile,
+            string captcha,
+            MobileCaptchaChallenge challenge) =>
+            mainland.LoginWithMobileCaptchaAsync(mobile, captcha, challenge);
+
+        public Task<PassportAccount> LoginWithOverseaPasswordAsync(
+            string account,
+            string password) =>
+            hoYoLab.LoginWithPasswordAsync(account, password);
+
+        public Task<PassportAccount> LoginWithOverseaPasswordAsync(
+            string account,
+            string password,
+            IPassportSecurityVerificationHandler verificationHandler) =>
+            hoYoLab.LoginWithPasswordAsync(
+                account,
+                password,
+                verificationHandler);
+
+        public Task<(PassportQrStatus Status, PassportAccount? Account)> PollQrLoginAsync(
+            PassportQrSession session) =>
+            mainland.PollQrLoginAsync(session);
+
+        public Task<PassportMaintenanceResult> MaintainAllAsync() =>
+            maintenance.MaintainAllAsync();
     }
 
     private static PassportAccount CreateAccount(
@@ -408,12 +544,46 @@ public sealed class PassportAccountServiceTests
             return Task.CompletedTask;
         }
 
+        public Task<bool> TrySaveIfUnchangedAsync(
+            PassportAccount original,
+            PassportAccount updated,
+            CancellationToken cancellationToken = default)
+        {
+            if (!accounts.TryGetValue(original.Id, out PassportAccount? current) ||
+                !SameSnapshot(current, original))
+            {
+                return Task.FromResult(false);
+            }
+
+            accounts[updated.Id] = updated;
+            return Task.FromResult(true);
+        }
+
         public Task DeleteAsync(
             Guid accountId,
             CancellationToken cancellationToken = default)
         {
             accounts.Remove(accountId);
             return Task.CompletedTask;
+        }
+
+        private static bool SameSnapshot(
+            PassportAccount left,
+            PassportAccount right)
+        {
+            return left.Id == right.Id &&
+                left.UpdatedAt == right.UpdatedAt &&
+                left.Realm == right.Realm &&
+                left.LoginMethod == right.LoginMethod &&
+                left.Aid == right.Aid &&
+                left.Mid == right.Mid &&
+                left.Device == right.Device &&
+                left.Credentials.SToken == right.Credentials.SToken &&
+                left.Credentials.LToken == right.Credentials.LToken &&
+                left.Credentials.CookieToken ==
+                    right.Credentials.CookieToken &&
+                left.Credentials.SessionVerifiedAt ==
+                    right.Credentials.SessionVerifiedAt;
         }
     }
 
@@ -443,7 +613,9 @@ public sealed class PassportAccountServiceTests
         }
     }
 
-    private sealed class StubPassportClient : IMiHoYoPassportClient
+    private sealed class StubPassportClient :
+        IMainlandPassportClient,
+        IHoYoLabPassportClient
     {
         public PassportDerivedTokens DerivedTokens { get; set; } =
             new(null, null);
@@ -463,6 +635,10 @@ public sealed class PassportAccountServiceTests
         public string? FailVerificationForAid { get; set; }
 
         public bool FailDerivedTokenExchange { get; set; }
+
+        public TaskCompletionSource? DerivedTokenRequestStarted { get; set; }
+
+        public TaskCompletionSource? ContinueDerivedTokenRequest { get; set; }
 
         public int DerivedTokenCallCount { get; private set; }
 
@@ -539,7 +715,7 @@ public sealed class PassportAccountServiceTests
             return Task.FromResult(OverseaPasswordTokens);
         }
 
-        public Task<OverseaPasswordLoginAttempt> AttemptOverseaPasswordLoginAsync(
+        public Task<OverseaPasswordLoginAttempt> AttemptPasswordLoginAsync(
             string account,
             string password,
             PassportDeviceIdentity device,
@@ -597,7 +773,7 @@ public sealed class PassportAccountServiceTests
             return "completed-verify";
         }
 
-        public Task<PassportDerivedTokens> GetDerivedTokensAsync(
+        public async Task<PassportDerivedTokens> GetDerivedTokensAsync(
             PassportAccount account,
             CancellationToken cancellationToken = default)
         {
@@ -606,7 +782,15 @@ public sealed class PassportAccountServiceTests
             {
                 throw new HttpRequestException("offline");
             }
-            return Task.FromResult(DerivedTokens);
+
+            DerivedTokenRequestStarted?.TrySetResult();
+            if (ContinueDerivedTokenRequest is not null)
+            {
+                await ContinueDerivedTokenRequest.Task.WaitAsync(
+                    cancellationToken);
+            }
+
+            return DerivedTokens;
         }
 
         public Task<PassportSessionVerification> VerifySessionAsync(

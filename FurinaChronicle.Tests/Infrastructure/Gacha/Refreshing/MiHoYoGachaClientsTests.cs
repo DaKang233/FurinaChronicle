@@ -43,6 +43,42 @@ public sealed class MiHoYoGachaClientsTests
     }
 
     [Fact]
+    public async Task STokenProvider_ConsecutiveRequests_AlwaysSendPersistedAccountCookie()
+    {
+        var cookies = new List<string>();
+        int callCount = 0;
+        var handler = new StubHttpHandler(request =>
+        {
+            callCount++;
+            cookies.Add(request.Headers.GetValues("Cookie").Single());
+            HttpResponseMessage response = JsonResponse(
+                """{"retcode":0,"message":"OK","data":{"authkey":"key-CALL"}}"""
+                    .Replace("CALL", callCount.ToString(), StringComparison.Ordinal));
+            response.Headers.TryAddWithoutValidation(
+                "Set-Cookie",
+                "stoken=expired; Path=/; Max-Age=0");
+            return Task.FromResult(response);
+        });
+        using var httpClient = new HttpClient(handler);
+        using var provider = new MiHoYoSTokenGachaUrlProvider(httpClient);
+        PassportAccount passport = Passport();
+        GameAccount gameAccount = Game();
+
+        Uri first = await provider.CreateAsync(passport, gameAccount);
+        Uri second = await provider.CreateAsync(passport, gameAccount);
+
+        Assert.Equal(
+            new[] { "key-1", "key-2" },
+            new[] { Query(first)["authkey"], Query(second)["authkey"] });
+        Assert.Equal(2, cookies.Count);
+        Assert.All(
+            cookies,
+            cookie => Assert.Equal(
+                "stuid=12345;stoken=root-token;mid=mid-1",
+                cookie));
+    }
+
+    [Fact]
     public async Task STokenProvider_RejectsOverseaPassportBeforeSendingRequest()
     {
         int requestCount = 0;

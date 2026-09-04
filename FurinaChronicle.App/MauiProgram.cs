@@ -107,7 +107,13 @@ namespace FurinaChronicle.App
 			builder.Services.AddSingleton<
 				IPassportAccountStore,
 				SecureStoragePassportAccountStore>();
-			builder.Services.AddSingleton<IMiHoYoPassportClient, MiHoYoPassportClient>();
+			builder.Services.AddSingleton<MiHoYoPassportClient>();
+			builder.Services.AddSingleton<
+				IMainlandPassportClient,
+				MainlandPassportClient>();
+			builder.Services.AddSingleton<
+				IHoYoLabPassportClient,
+				HoYoLabPassportClient>();
 			builder.Services.AddSingleton<
 				IMiHoYoAccountProfileClient,
 				MiHoYoAccountProfileClient>();
@@ -115,7 +121,10 @@ namespace FurinaChronicle.App
 				IPassportSelectionStore,
 				PreferencesPassportSelectionStore>();
 			builder.Services.AddSingleton(new PassportCredentialMaintenanceOptions());
-			builder.Services.AddTransient<PassportAccountService>();
+			builder.Services.AddTransient<PassportAccountWriter>();
+			builder.Services.AddTransient<MainlandPassportLoginService>();
+			builder.Services.AddTransient<HoYoLabPassportLoginService>();
+			builder.Services.AddTransient<PassportCredentialMaintenanceService>();
 			builder.Services.AddSingleton<MobileCaptchaCooldown>();
 			builder.Services.AddSingleton<ISTokenGachaUrlProvider, MiHoYoSTokenGachaUrlProvider>();
 			builder.Services.AddSingleton<IWindowsGachaCacheUrlProvider, WindowsGachaCacheUrlProvider>();
@@ -124,8 +133,8 @@ namespace FurinaChronicle.App
 			builder.Services.AddSingleton<UserPageViewModel>();
 			builder.Services.AddSingleton<HomePage>();
 			builder.Services.AddSingleton<UserPage>();
-			builder.Services.AddTransient<LoginMethodPage>();
-			builder.Services.AddTransient<OverseaPasswordLoginPage>();
+			builder.Services.AddTransient<MainlandLoginMethodPage>();
+			builder.Services.AddTransient<HoYoLabPasswordLoginPage>();
 			builder.Services.AddTransient<QrLoginPage>();
 			builder.Services.AddTransient<MobileCaptchaLoginPage>();
 			builder.Services.AddTransient<ManualCookieLoginPage>();

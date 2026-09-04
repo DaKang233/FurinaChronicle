@@ -80,6 +80,46 @@ public sealed class SecureStoragePassportAccountStore(ISecureStorage secureStora
         }
     }
 
+    public async Task<bool> TrySaveIfUnchangedAsync(
+        PassportAccount original,
+        PassportAccount updated,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(original);
+        ArgumentNullException.ThrowIfNull(updated);
+        if (original.Id != updated.Id)
+        {
+            throw new ArgumentException(
+                "The original and updated accounts must have the same ID.",
+                nameof(updated));
+        }
+
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            List<PassportAccount> accounts =
+                (await LoadUnsafeAsync(cancellationToken)).ToList();
+            int index = accounts.FindIndex(account => account.Id == original.Id);
+            if (index < 0 ||
+                StoredAccount.FromDomain(accounts[index]) !=
+                StoredAccount.FromDomain(original))
+            {
+                return false;
+            }
+
+            accounts[index] = updated;
+            string json = JsonSerializer.Serialize(
+                accounts.Select(StoredAccount.FromDomain));
+            cancellationToken.ThrowIfCancellationRequested();
+            await secureStorage.SetAsync(StorageKey, json);
+            return true;
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
     public async Task DeleteAsync(
         Guid accountId,
         CancellationToken cancellationToken = default)

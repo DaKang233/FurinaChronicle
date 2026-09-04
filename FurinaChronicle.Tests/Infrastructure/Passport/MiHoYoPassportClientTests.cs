@@ -255,6 +255,20 @@ public sealed class MiHoYoPassportClientTests
             Assert.Equal(
                 MiHoYoPassportClient.OverseaVerifyActionTicketUrl,
                 url);
+            using (JsonDocument payload = JsonDocument.Parse(
+                request.Content!.ReadAsStringAsync().GetAwaiter().GetResult()))
+            {
+                Assert.Equal(
+                    2,
+                    payload.RootElement.GetProperty("verify_method").GetInt32());
+                Assert.Equal(
+                    "123456",
+                    payload.RootElement.GetProperty("email_captcha").GetString());
+                Assert.False(
+                    payload.RootElement.TryGetProperty(
+                        "mobile_captcha",
+                        out _));
+            }
             Assert.StartsWith(
                 "https://sg-public-api.hoyoverse.com/account/ma-verifier/api/",
                 url,
@@ -297,6 +311,149 @@ public sealed class MiHoYoPassportClientTests
         Assert.Equal(2, ticketInfoCalls);
     }
 
+    [Fact]
+    public async Task OverseaPasswordLogin_UsesMobileVerificationPayload()
+    {
+        int ticketInfoCalls = 0;
+        var handler = new StubHttpHandler(request =>
+        {
+            string url = request.RequestUri!.AbsoluteUri;
+            if (url == MiHoYoPassportClient.OverseaPasswordLoginUrl)
+            {
+                var response = JsonResponse(
+                    """
+                    {"retcode":-3102,"message":"Account verification required","data":null}
+                    """);
+                response.Headers.TryAddWithoutValidation(
+                    "X-Rpc-Verify",
+                    """
+                    {"risk_ticket":"risk-1","verify_str":"{\"ticket\":\"action-1\",\"verify_type\":\"mobile\"}"}
+                    """);
+                return Task.FromResult(response);
+            }
+
+            if (url == MiHoYoPassportClient.OverseaGetActionTicketInfoUrl)
+            {
+                ticketInfoCalls++;
+                string status = ticketInfoCalls == 1
+                    ? "StatusNew"
+                    : "StatusVerified";
+                return Task.FromResult(JsonResponse($$"""
+                    {
+                      "retcode":0,
+                      "message":"OK",
+                      "data":{
+                        "action_ticket":"action-1",
+                        "captcha_sent":true,
+                        "user_info":{
+                          "email":"t***@example.com",
+                          "safe_mobile":"+1 *** 1234"
+                        },
+                        "verify_info":{"status":"{{status}}"}
+                      }
+                    }
+                    """));
+            }
+
+            Assert.Equal(
+                MiHoYoPassportClient.OverseaVerifyActionTicketUrl,
+                url);
+            using JsonDocument payload = JsonDocument.Parse(
+                request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+            Assert.Equal(
+                1,
+                payload.RootElement.GetProperty("verify_method").GetInt32());
+            Assert.Equal(
+                "654321",
+                payload.RootElement.GetProperty("mobile_captcha").GetString());
+            Assert.False(
+                payload.RootElement.TryGetProperty("email_captcha", out _));
+            return Task.FromResult(JsonResponse(
+                """
+                {"retcode":0,"message":"OK","data":{}}
+                """));
+        });
+        using var httpClient = new HttpClient(handler);
+        using var client = new MiHoYoPassportClient(httpClient);
+        var device = new PassportDeviceIdentity("oversea-device", null);
+
+        OverseaPasswordLoginAttempt attempt =
+            await client.AttemptOverseaPasswordLoginAsync(
+                "traveler@example.com",
+                "secret-password",
+                device);
+        PassportAccountVerificationChallenge prepared =
+            await client.PrepareAccountVerificationAsync(
+                attempt.AccountVerificationChallenge!,
+                device);
+        await client.VerifyAccountAsync(prepared, "654321", device);
+
+        Assert.Equal(HoYoLabVerificationMethod.Mobile, prepared.Method);
+        Assert.Equal("+1 *** 1234", prepared.Destination);
+        Assert.Equal(2, ticketInfoCalls);
+    }
+
+    [Fact]
+    public async Task PrepareAccountVerification_AcceptsJsonSuccessFrom404Response()
+    {
+        var handler = new StubHttpHandler(_ =>
+            Task.FromResult(JsonResponse(
+                """
+                {
+                  "retcode":0,
+                  "message":"OK",
+                  "data":{
+                    "action_ticket":"action-1",
+                    "captcha_sent":true,
+                    "user_info":{"email":"t***@example.com"},
+                    "verify_info":{"status":"StatusNew"}
+                  }
+                }
+                """,
+                HttpStatusCode.NotFound)));
+        using var httpClient = new HttpClient(handler);
+        using var client = new MiHoYoPassportClient(httpClient);
+        var challenge = new PassportAccountVerificationChallenge(
+            "{}",
+            "action-1",
+            Method: HoYoLabVerificationMethod.Email);
+
+        PassportAccountVerificationChallenge prepared =
+            await client.PrepareAccountVerificationAsync(
+                challenge,
+                new PassportDeviceIdentity("oversea-device", null));
+
+        Assert.Equal("t***@example.com", prepared.Destination);
+    }
+
+    [Fact]
+    public async Task OverseaPasswordLogin_RejectsUnknownVerificationMethod()
+    {
+        var handler = new StubHttpHandler(_ =>
+        {
+            var response = JsonResponse(
+                """
+                {"retcode":-3102,"message":"Account verification required","data":null}
+                """);
+            response.Headers.TryAddWithoutValidation(
+                "X-Rpc-Verify",
+                """
+                {"risk_ticket":"risk-1","verify_str":"{\"ticket\":\"action-1\",\"verify_type\":\"totp\"}"}
+                """);
+            return Task.FromResult(response);
+        });
+        using var httpClient = new HttpClient(handler);
+        using var client = new MiHoYoPassportClient(httpClient);
+
+        FormatException exception = await Assert.ThrowsAsync<FormatException>(
+            () => client.AttemptOverseaPasswordLoginAsync(
+                "traveler@example.com",
+                "secret-password",
+                new PassportDeviceIdentity("oversea-device", null)));
+
+        Assert.Contains("不支持的账号验证方式", exception.Message);
+    }
+
     private static HttpResponseMessage SuccessfulOverseaLoginResponse()
     {
         return JsonResponse(
@@ -316,9 +473,11 @@ public sealed class MiHoYoPassportClientTests
             """);
     }
 
-    private static HttpResponseMessage JsonResponse(string json)
+    private static HttpResponseMessage JsonResponse(
+        string json,
+        HttpStatusCode statusCode = HttpStatusCode.OK)
     {
-        return new HttpResponseMessage(HttpStatusCode.OK)
+        return new HttpResponseMessage(statusCode)
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json")
         };

@@ -307,6 +307,21 @@ public sealed class RefreshGachaRecordsTests
             return Task.CompletedTask;
         }
 
+        public Task<bool> TrySaveIfUnchangedAsync(
+            PassportAccount original,
+            PassportAccount updated,
+            CancellationToken cancellationToken = default)
+        {
+            if (!values.TryGetValue(original.Id, out PassportAccount? current) ||
+                current.UpdatedAt != original.UpdatedAt)
+            {
+                return Task.FromResult(false);
+            }
+
+            values[updated.Id] = updated;
+            return Task.FromResult(true);
+        }
+
         public Task DeleteAsync(
             Guid accountId,
             CancellationToken cancellationToken = default)

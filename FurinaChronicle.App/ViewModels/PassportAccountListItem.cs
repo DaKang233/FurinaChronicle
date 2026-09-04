@@ -12,7 +12,12 @@ public partial class PassportAccountListItem(PassportAccount account)
 
     public string Aid => Account.Aid;
 
+    public string RealmDisplayName => Account.Realm == PassportRealm.Oversea
+        ? "HoYoLAB · 国际服"
+        : "米游社 · 国服";
+
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PickerDisplayName))]
     public partial string DisplayName { get; set; } =
         account.DisplayName ?? (account.Realm == PassportRealm.Oversea
             ? $"HoYoLAB 用户 {account.Aid}"
@@ -23,4 +28,6 @@ public partial class PassportAccountListItem(PassportAccount account)
     public partial Uri? AvatarUrl { get; set; }
 
     public bool HasAvatar => AvatarUrl is not null;
+
+    public string PickerDisplayName => $"{DisplayName} · {RealmDisplayName}";
 }

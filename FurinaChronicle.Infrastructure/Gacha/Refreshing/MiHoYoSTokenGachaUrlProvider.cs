@@ -18,7 +18,14 @@ public sealed class MiHoYoSTokenGachaUrlProvider : ISTokenGachaUrlProvider, IDis
 
     public MiHoYoSTokenGachaUrlProvider(HttpClient? httpClient = null)
     {
-        this.httpClient = httpClient ?? new HttpClient
+        this.httpClient = httpClient ?? new HttpClient(
+            new HttpClientHandler
+            {
+                // The account cookie is supplied explicitly for every request.
+                // AndroidMessageHandler otherwise retains Set-Cookie values from
+                // genAuthKey and can replace the persisted SToken on later calls.
+                UseCookies = false
+            })
         {
             Timeout = TimeSpan.FromSeconds(30)
         };

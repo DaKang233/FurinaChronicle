@@ -8,7 +8,7 @@ namespace FurinaChronicle.App.Startup;
 
 public sealed class ApplicationStartupService(
     IGachaMetadataRefreshService metadataRefreshService,
-    PassportAccountService passportAccountService)
+    PassportCredentialMaintenanceService credentialMaintenanceService)
 {
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
@@ -33,7 +33,8 @@ public sealed class ApplicationStartupService(
         try
         {
             PassportMaintenanceResult maintenance =
-                await passportAccountService.MaintainAllAsync(cancellationToken);
+                await credentialMaintenanceService.MaintainAllAsync(
+                    cancellationToken);
             if (maintenance.FailedAccountIds.Count > 0)
             {
                 Debug.WriteLine(

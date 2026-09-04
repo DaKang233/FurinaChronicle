@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="FurinaChronicle.App.MainlandLoginMethodPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    Title="登录米游社账号">
+    <ScrollView>
+        <VerticalStackLayout Padding="20" Spacing="12">
+            <Button HorizontalOptions="Start" Text="← 返回上一级" Clicked="OnBackClicked" />
+            <Label FontAttributes="Bold" FontSize="24" Text="登录米游社账号（国服）" />
+            <Label
+                FontSize="12"
+                Text="此入口仅用于米游社中国大陆账号。登录成功后会自动返回用户页。" />
+            <Button Text="米游社 APP 扫码" Clicked="OnQrClicked" />
+            <Button Text="中国大陆手机号验证码" Clicked="OnMobileClicked" />
+            <Button Text="手动输入米游社 Cookie" Clicked="OnCookieClicked" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

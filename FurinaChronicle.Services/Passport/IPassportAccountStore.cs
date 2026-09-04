@@ -15,6 +15,11 @@ public interface IPassportAccountStore
         PassportAccount account,
         CancellationToken cancellationToken = default);
 
+    Task<bool> TrySaveIfUnchangedAsync(
+        PassportAccount original,
+        PassportAccount updated,
+        CancellationToken cancellationToken = default);
+
     Task DeleteAsync(
         Guid accountId,
         CancellationToken cancellationToken = default);
