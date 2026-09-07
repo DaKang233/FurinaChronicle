@@ -204,7 +204,8 @@ public sealed class MiHoYoGachaClientsTests
             cacheFile,
             Encoding.UTF8.GetBytes(
                 "old\0https://webstatic.mihoyo.com/hk4e/event/e20190909gacha/index.html" +
-                "?authkey=cache-key&auth_appid=webview_gacha&lang=zh-cn#/log\0"));
+                "?authkey=cache-key&auth_appid=webview_gacha&lang=zh-cn#/log\0" +
+                "https://webstatic.mihoyo.com/hk4e/event/e20190909gacha/assets/icon.png\0"));
 
         try
         {

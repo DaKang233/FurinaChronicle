@@ -9,8 +9,10 @@ public partial class QrLoginPage : ContentPage
 {
     private readonly MainlandPassportLoginService passportLoginService;
     private readonly UserPageViewModel userPageViewModel;
+    private readonly SemaphoreSlim restartGate = new(1, 1);
     private CancellationTokenSource? pollingCancellation;
-    private bool started;
+    private Task? activePolling;
+    private bool dismissed;
 
     public QrLoginPage(
         MainlandPassportLoginService passportLoginService,
@@ -24,36 +26,64 @@ public partial class QrLoginPage : ContentPage
     protected override async void OnAppearing()
     {
         base.OnAppearing();
-        if (!started)
-        {
-            started = true;
-            await StartAsync();
-        }
+        dismissed = false;
+        await RestartAsync();
     }
 
     protected override void OnDisappearing()
     {
+        dismissed = true;
         pollingCancellation?.Cancel();
         base.OnDisappearing();
     }
 
     private async void OnReloadClicked(object? sender, EventArgs e)
     {
-        await StartAsync();
+        await RestartAsync();
     }
 
     private async void OnBackClicked(object? sender, EventArgs e)
     {
+        dismissed = true;
         pollingCancellation?.Cancel();
         await LoginNavigation.GoBackAsync(this);
     }
 
-    private async Task StartAsync()
+    private async Task RestartAsync()
     {
-        pollingCancellation?.Cancel();
-        pollingCancellation?.Dispose();
-        pollingCancellation = new CancellationTokenSource(TimeSpan.FromMinutes(3));
-        CancellationToken token = pollingCancellation.Token;
+        Task? operation = null;
+        await restartGate.WaitAsync();
+        try
+        {
+            pollingCancellation?.Cancel();
+            if (activePolling is not null)
+            {
+                await activePolling;
+            }
+
+            pollingCancellation?.Dispose();
+            pollingCancellation = null;
+            activePolling = null;
+            if (dismissed)
+            {
+                return;
+            }
+
+            pollingCancellation =
+                new CancellationTokenSource(TimeSpan.FromMinutes(3));
+            operation = RunPollingAsync(pollingCancellation.Token);
+            activePolling = operation;
+        }
+        finally
+        {
+            restartGate.Release();
+        }
+
+        await operation;
+    }
+
+    private async Task RunPollingAsync(CancellationToken token)
+    {
 
         try
         {
@@ -75,6 +105,12 @@ public partial class QrLoginPage : ContentPage
             {
                 (PassportQrStatus status, PassportAccount? account) =
                     await passportLoginService.PollQrLoginAsync(session, token);
+                token.ThrowIfCancellationRequested();
+                if (dismissed)
+                {
+                    return;
+                }
+
                 if (status == PassportQrStatus.Confirmed && account is not null)
                 {
                     StatusLabel.Text = "登录成功。";
@@ -99,12 +135,18 @@ public partial class QrLoginPage : ContentPage
         }
         catch (OperationCanceledException)
         {
-            StatusLabel.Text = "扫码已取消或超时。";
+            if (!dismissed)
+            {
+                StatusLabel.Text = "扫码已取消或超时。";
+            }
         }
         catch (Exception exception)
         {
-            StatusLabel.TextColor = Colors.Red;
-            StatusLabel.Text = exception.Message;
+            if (!dismissed)
+            {
+                StatusLabel.TextColor = Colors.Red;
+                StatusLabel.Text = exception.Message;
+            }
         }
         finally
         {

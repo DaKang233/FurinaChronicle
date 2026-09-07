@@ -105,29 +105,48 @@ public sealed class WindowsGachaCacheUrlProvider : IWindowsGachaCacheUrlProvider
 
     internal static string? FindLastUrl(ReadOnlySpan<byte> bytes)
     {
-        int bestIndex = -1;
-        byte[]? bestPrefix = null;
+        var candidates = new List<(int Index, byte[] Prefix)>();
         foreach (byte[] prefix in UrlPrefixes)
         {
-            int index = bytes.LastIndexOf(prefix);
-            if (index > bestIndex)
+            int searchStart = 0;
+            while (searchStart < bytes.Length)
             {
-                bestIndex = index;
-                bestPrefix = prefix;
+                int relativeIndex = bytes[searchStart..].IndexOf(prefix);
+                if (relativeIndex < 0)
+                {
+                    break;
+                }
+
+                int index = searchStart + relativeIndex;
+                candidates.Add((index, prefix));
+                searchStart = index + 1;
             }
         }
 
-        if (bestIndex < 0 || bestPrefix is null)
+        foreach ((int index, byte[] prefix) in candidates
+            .OrderByDescending(candidate => candidate.Index))
         {
-            return null;
+            int end = index + prefix.Length;
+            while (end < bytes.Length && bytes[end] is >= 0x20 and < 0x7F)
+            {
+                end++;
+            }
+
+            string candidate = Encoding.UTF8
+                .GetString(bytes[index..end])
+                .TrimEnd('#', '/', '\0');
+            try
+            {
+                _ = GachaRefreshUrl.Parse(candidate);
+                return candidate;
+            }
+            catch (FormatException)
+            {
+                // Asset and navigation URLs can share the gacha page prefix.
+                // Continue backward until an authenticated URL is found.
+            }
         }
 
-        int end = bestIndex + bestPrefix.Length;
-        while (end < bytes.Length && bytes[end] is >= 0x20 and < 0x7F)
-        {
-            end++;
-        }
-
-        return Encoding.UTF8.GetString(bytes[bestIndex..end]).TrimEnd('#', '/', '\0');
+        return null;
     }
 }

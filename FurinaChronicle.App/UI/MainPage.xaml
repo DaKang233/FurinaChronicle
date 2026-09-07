@@ -66,7 +66,7 @@
                             IsEnabled="{Binding IsNotBusy}" />
                         <Button Text="输入 URL 刷新" Clicked="OnManualUrlRefreshClicked" IsEnabled="{Binding IsNotBusy}" />
                         <HorizontalStackLayout Spacing="4" VerticalOptions="Center">
-                            <CheckBox IsChecked="{Binding IsFullRefresh}" />
+                            <CheckBox IsChecked="{Binding IsFullRefresh}" IsEnabled="{Binding IsNotBusy}" />
                             <Label Text="全量刷新" VerticalTextAlignment="Center" />
                         </HorizontalStackLayout>
                         <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}" />
@@ -75,18 +75,18 @@
 
                 <ScrollView Orientation="Horizontal" HorizontalScrollBarVisibility="Default">
                     <HorizontalStackLayout Spacing="8">
-                        <Button Text="创建档案" Clicked="OnCreateArchiveClicked" />
-                        <Button Text="重命名档案" Clicked="OnRenameArchiveClicked" />
-                        <Button Text="删除档案" Clicked="OnDeleteArchiveClicked" />
-                        <Button Text="重新加载" Command="{Binding ReloadArchivesCommand}" />
-                        <Button Text="编辑游戏账号" Clicked="OnEditAccountClicked" />
-                        <Button Text="删除游戏账号" Clicked="OnDeleteAccountClicked" />
-                        <Button Text="导入 UIGF 到档案" Clicked="OnImportIntoArchiveClicked" />
-                        <Button Text="导入 UIGF 到账号" Clicked="OnImportIntoSelectedAccountClicked" />
-                        <Button Text="导出档案 UIGF" Clicked="OnExportArchiveUigfClicked" />
-                        <Button Text="导出账号 UIGF" Clicked="OnExportAccountUigfClicked" />
-                        <Button Text="导出档案表格" Clicked="OnExportArchiveTableClicked" />
-                        <Button Text="导出账号表格" Clicked="OnExportAccountTableClicked" />
+                        <Button Text="创建档案" Clicked="OnCreateArchiveClicked" IsEnabled="{Binding IsNotBusy}" />
+                        <Button Text="重命名档案" Clicked="OnRenameArchiveClicked" IsEnabled="{Binding IsNotBusy}" />
+                        <Button Text="删除档案" Clicked="OnDeleteArchiveClicked" IsEnabled="{Binding IsNotBusy}" />
+                        <Button Text="重新加载" Command="{Binding ReloadArchivesCommand}" IsEnabled="{Binding IsNotBusy}" />
+                        <Button Text="编辑游戏账号" Clicked="OnEditAccountClicked" IsEnabled="{Binding IsNotBusy}" />
+                        <Button Text="删除游戏账号" Clicked="OnDeleteAccountClicked" IsEnabled="{Binding IsNotBusy}" />
+                        <Button Text="导入 UIGF 到档案" Clicked="OnImportIntoArchiveClicked" IsEnabled="{Binding IsNotBusy}" />
+                        <Button Text="导入 UIGF 到账号" Clicked="OnImportIntoSelectedAccountClicked" IsEnabled="{Binding IsNotBusy}" />
+                        <Button Text="导出档案 UIGF" Clicked="OnExportArchiveUigfClicked" IsEnabled="{Binding IsNotBusy}" />
+                        <Button Text="导出账号 UIGF" Clicked="OnExportAccountUigfClicked" IsEnabled="{Binding IsNotBusy}" />
+                        <Button Text="导出档案表格" Clicked="OnExportArchiveTableClicked" IsEnabled="{Binding IsNotBusy}" />
+                        <Button Text="导出账号表格" Clicked="OnExportAccountTableClicked" IsEnabled="{Binding IsNotBusy}" />
                     </HorizontalStackLayout>
                 </ScrollView>
             </VerticalStackLayout>

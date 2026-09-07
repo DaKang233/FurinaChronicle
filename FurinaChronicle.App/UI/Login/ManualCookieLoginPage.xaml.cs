@@ -17,7 +17,32 @@ public partial class ManualCookieLoginPage : ContentPage
 
     private readonly MainlandPassportLoginService passportLoginService;
     private readonly UserPageViewModel userPageViewModel;
+    private CancellationTokenSource? pageCancellation;
     private bool busy;
+    private bool dismissed;
+
+    protected override void OnAppearing()
+    {
+        base.OnAppearing();
+        dismissed = false;
+        pageCancellation?.Cancel();
+        pageCancellation?.Dispose();
+        pageCancellation = new CancellationTokenSource();
+    }
+
+    protected override void OnDisappearing()
+    {
+        dismissed = true;
+        pageCancellation?.Cancel();
+        base.OnDisappearing();
+    }
+
+    protected override bool OnBackButtonPressed()
+    {
+        dismissed = true;
+        pageCancellation?.Cancel();
+        return base.OnBackButtonPressed();
+    }
 
     private async void OnLoginClicked(object? sender, EventArgs e)
     {
@@ -34,21 +59,41 @@ public partial class ManualCookieLoginPage : ContentPage
             BusyIndicator.IsRunning = true;
             StatusLabel.TextColor = Colors.Gray;
             StatusLabel.Text = "正在验证并保存…";
+            CancellationToken token =
+                pageCancellation?.Token ?? CancellationToken.None;
             PassportAccount account =
                 await passportLoginService.LoginWithManualCookieAsync(
-                    CookieEditor.Text ?? string.Empty);
+                    CookieEditor.Text ?? string.Empty,
+                    token);
+            token.ThrowIfCancellationRequested();
+            if (dismissed)
+            {
+                return;
+            }
+
             CookieEditor.Text = string.Empty;
             await LoginNavigation.CompleteAsync(this, userPageViewModel, account);
         }
+        catch (OperationCanceledException)
+            when (pageCancellation?.IsCancellationRequested == true)
+        {
+            if (!dismissed)
+            {
+                StatusLabel.Text = "操作已取消。";
+            }
+        }
         catch (Exception exception)
         {
-            StatusLabel.TextColor = Colors.Red;
-            StatusLabel.Text = exception.Message;
+            if (!dismissed)
+            {
+                StatusLabel.TextColor = Colors.Red;
+                StatusLabel.Text = exception.Message;
+            }
         }
         finally
         {
             busy = false;
-            LoginButton.IsEnabled = true;
+            LoginButton.IsEnabled = !dismissed;
             BusyIndicator.IsRunning = false;
             BusyIndicator.IsVisible = false;
         }
@@ -56,11 +101,8 @@ public partial class ManualCookieLoginPage : ContentPage
 
     private async void OnBackClicked(object? sender, EventArgs e)
     {
-        if (busy)
-        {
-            return;
-        }
-
+        dismissed = true;
+        pageCancellation?.Cancel();
         await LoginNavigation.GoBackAsync(this);
     }
 }
