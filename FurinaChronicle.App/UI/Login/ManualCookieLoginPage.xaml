@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="FurinaChronicle.App.ManualCookieLoginPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    Title="手动输入 Cookie">
+    <Grid Padding="20" RowDefinitions="Auto,Auto,*,Auto,Auto,Auto" RowSpacing="12">
+        <Button HorizontalOptions="Start" Text="← 返回上一级" Clicked="OnBackClicked" />
+        <Label Grid.Row="1" Text="粘贴包含 account_id/ltuid 和可用 Token 的米游社大陆账号 Cookie。" />
+        <Editor x:Name="CookieEditor" Grid.Row="2" AutoSize="TextChanges" Placeholder="account_id=...; stoken=...; mid=..." />
+        <Button x:Name="LoginButton" Grid.Row="3" Text="登录并保存" Clicked="OnLoginClicked" />
+        <ActivityIndicator x:Name="BusyIndicator" Grid.Row="4" IsVisible="False" IsRunning="False" />
+        <Label x:Name="StatusLabel" Grid.Row="5" FontSize="12" TextColor="Red" />
+    </Grid>
+</ContentPage>

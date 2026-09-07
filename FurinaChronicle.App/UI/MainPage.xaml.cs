@@ -1,6 +1,7 @@
 using FurinaChronicle.App.Exporting;
 using FurinaChronicle.App.ViewModels;
 using FurinaChronicle.Core.Archives;
+using FurinaChronicle.Services.Gacha.Refreshing;
 
 namespace FurinaChronicle.App;
 
@@ -9,10 +10,16 @@ public partial class MainPage : ContentPage
     private MainPageViewModel ViewModel =>
         (MainPageViewModel)BindingContext;
 
-    public MainPage(MainPageViewModel viewModel)
+    public MainPage(
+        MainPageViewModel viewModel,
+        UserPageViewModel userPageViewModel)
     {
         InitializeComponent();
         BindingContext = viewModel;
+        if (Shell.GetTitleView(this) is UI.Controls.PassportAvatarButton avatar)
+        {
+            avatar.BindingContext = userPageViewModel;
+        }
     }
 
     protected override async void OnAppearing()
@@ -143,6 +150,43 @@ public partial class MainPage : ContentPage
             cancel: "取消");
         if (!confirm) return;
         await ViewModel.DeleteSelectedArchiveAsync();
+    }
+
+    private async void OnSTokenRefreshClicked(object? sender, EventArgs e)
+    {
+        await ViewModel.RefreshGachaAsync(GachaRefreshSource.SToken);
+    }
+
+    private async void OnWebCacheRefreshClicked(object? sender, EventArgs e)
+    {
+        string? path = await DisplayPromptAsync(
+            "网页缓存刷新",
+            "请输入原神安装目录或 YuanShen.exe 路径。此功能仅 Windows 可用。",
+            "刷新",
+            "取消",
+            placeholder: @"C:\Games\Genshin Impact game");
+        if (!string.IsNullOrWhiteSpace(path))
+        {
+            await ViewModel.RefreshGachaAsync(
+                GachaRefreshSource.WindowsWebCache,
+                gameInstallationPath: path);
+        }
+    }
+
+    private async void OnManualUrlRefreshClicked(object? sender, EventArgs e)
+    {
+        string? url = await DisplayPromptAsync(
+            "输入抽卡记录 URL",
+            "请输入包含 authkey 的祈愿页面或 getGachaLog URL。",
+            "刷新",
+            "取消",
+            placeholder: "https://...");
+        if (!string.IsNullOrWhiteSpace(url))
+        {
+            await ViewModel.RefreshGachaAsync(
+                GachaRefreshSource.ManualUrl,
+                manualUrl: url);
+        }
     }
     private async void OnImportIntoArchiveClicked(
         object? sender,

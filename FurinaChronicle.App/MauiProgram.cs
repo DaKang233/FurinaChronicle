@@ -20,6 +20,10 @@ using FurinaChronicle.Infrastructure.Gacha.Uigf.Compatibility;
 using FurinaChronicle.Services.Gacha.Abstractions;
 using FurinaChronicle.Services.Gacha.Exporting;
 using FurinaChronicle.Services.Gacha.Importing;
+using FurinaChronicle.Infrastructure.Gacha.Refreshing;
+using FurinaChronicle.Infrastructure.Passport;
+using FurinaChronicle.Services.Gacha.Refreshing;
+using FurinaChronicle.Services.Passport;
 
 using System.Diagnostics;
 
@@ -96,6 +100,44 @@ namespace FurinaChronicle.App
 			builder.Services.AddSingleton<
 				IArchiveSelectionStore,
 				PreferencesArchiveSelectionStore>();
+
+			// Passport credentials are secrets and must not be stored in Preferences
+			// or in the main SQLite database.
+			builder.Services.AddSingleton<ISecureStorage>(SecureStorage.Default);
+			builder.Services.AddSingleton<
+				IPassportAccountStore,
+				SecureStoragePassportAccountStore>();
+			builder.Services.AddSingleton<MiHoYoPassportClient>();
+			builder.Services.AddSingleton<
+				IMainlandPassportClient,
+				MainlandPassportClient>();
+			builder.Services.AddSingleton<
+				IHoYoLabPassportClient,
+				HoYoLabPassportClient>();
+			builder.Services.AddSingleton<
+				IMiHoYoAccountProfileClient,
+				MiHoYoAccountProfileClient>();
+			builder.Services.AddSingleton<
+				IPassportSelectionStore,
+				PreferencesPassportSelectionStore>();
+			builder.Services.AddSingleton(new PassportCredentialMaintenanceOptions());
+			builder.Services.AddTransient<PassportAccountWriter>();
+			builder.Services.AddTransient<MainlandPassportLoginService>();
+			builder.Services.AddTransient<HoYoLabPassportLoginService>();
+			builder.Services.AddTransient<PassportCredentialMaintenanceService>();
+			builder.Services.AddSingleton<MobileCaptchaCooldown>();
+			builder.Services.AddSingleton<ISTokenGachaUrlProvider, MiHoYoSTokenGachaUrlProvider>();
+			builder.Services.AddSingleton<IWindowsGachaCacheUrlProvider, WindowsGachaCacheUrlProvider>();
+			builder.Services.AddSingleton<IGachaLogClient, MiHoYoGachaLogClient>();
+			builder.Services.AddTransient<RefreshGachaRecords>();
+			builder.Services.AddSingleton<UserPageViewModel>();
+			builder.Services.AddSingleton<HomePage>();
+			builder.Services.AddSingleton<UserPage>();
+			builder.Services.AddTransient<MainlandLoginMethodPage>();
+			builder.Services.AddTransient<HoYoLabPasswordLoginPage>();
+			builder.Services.AddTransient<QrLoginPage>();
+			builder.Services.AddTransient<MobileCaptchaLoginPage>();
+			builder.Services.AddTransient<ManualCookieLoginPage>();
 
 			builder.Services.AddTransient<CreatePlayerArchive>();
 			builder.Services.AddTransient<GetPlayerArchives>();

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="FurinaChronicle.App.GeetestVerificationPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    Title="GeeTest 安全验证">
+    <Grid RowDefinitions="Auto,*">
+        <Grid Padding="12" ColumnDefinitions="Auto,*" ColumnSpacing="12">
+            <Button Text="取消" Clicked="OnCancelClicked" />
+            <Label
+                Grid.Column="1"
+                FontAttributes="Bold"
+                FontSize="18"
+                VerticalOptions="Center"
+                Text="请完成 HoYoLAB 安全验证" />
+        </Grid>
+        <WebView
+            x:Name="VerificationWebView"
+            Grid.Row="1"
+            Navigating="OnWebViewNavigating" />
+    </Grid>
+</ContentPage>
