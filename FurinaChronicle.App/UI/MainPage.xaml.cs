@@ -188,6 +188,87 @@ public partial class MainPage : ContentPage
                 manualUrl: url);
         }
     }
+
+    private async void OnTeyvatHelperImportClicked(
+        object? sender,
+        EventArgs e)
+    {
+        const string automaticOption = "使用当前通行证角色自动导入（国服）";
+        const string manualOption = "手动输入 UID 和抽卡链接";
+        string? option = await DisplayActionSheetAsync(
+            "从提瓦特小助手导入",
+            "取消",
+            destruction: null,
+            automaticOption,
+            manualOption);
+
+        if (option == automaticOption)
+        {
+            if (!ViewModel.CanAutomaticallyImportFromTeyvatHelper)
+            {
+                await DisplayAlertAsync(
+                    "无法自动导入",
+                    "自动导入仅支持已登录米哈游通行证并选择了国服原神角色的情况。你仍可使用手动方式输入 UID 和抽卡链接。",
+                    "确定");
+                return;
+            }
+
+            bool confirmed = await DisplayAlertAsync(
+                "隐私提示",
+                $"将为角色 {ViewModel.SelectedPassportRoleUid} 立即生成新的临时抽卡链接，并把 UID 和该链接发送给第三方网站 lelaer.com。是否继续？",
+                "继续",
+                "取消");
+            if (confirmed)
+            {
+                await ViewModel.ImportFromTeyvatHelperAutomaticallyAsync();
+            }
+
+            return;
+        }
+
+        if (option != manualOption)
+        {
+            return;
+        }
+
+        string? uid = await DisplayPromptAsync(
+            title: "手动从提瓦特小助手导入",
+            message: "请输入要导入的原神 UID。",
+            accept: "下一步",
+            cancel: "取消",
+            placeholder: "原神 UID",
+            maxLength: 10,
+            keyboard: Keyboard.Numeric,
+            initialValue: ViewModel.SelectedPassportRoleUid ?? string.Empty);
+        if (string.IsNullOrWhiteSpace(uid))
+        {
+            return;
+        }
+
+        string? gachaUrl = await DisplayPromptAsync(
+            title: "手动从提瓦特小助手导入",
+            message: "请输入包含 authkey 的有效抽卡记录链接。",
+            accept: "下一步",
+            cancel: "取消",
+            placeholder: "https://...");
+        if (string.IsNullOrWhiteSpace(gachaUrl))
+        {
+            return;
+        }
+
+        bool manualConfirmed = await DisplayAlertAsync(
+            "隐私提示",
+            "将把输入的 UID 和抽卡链接发送给第三方网站 lelaer.com。是否继续？",
+            "导入",
+            "取消");
+        if (manualConfirmed)
+        {
+            await ViewModel.ImportFromTeyvatHelperManuallyAsync(
+                uid,
+                gachaUrl);
+        }
+    }
+
     private async void OnImportIntoArchiveClicked(
         object? sender,
         EventArgs e)

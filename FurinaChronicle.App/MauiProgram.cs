@@ -17,6 +17,7 @@ using FurinaChronicle.Infrastructure.Gacha.Metadata.Persistence;
 using FurinaChronicle.Infrastructure.Gacha.Metadata.Remote;
 using FurinaChronicle.Infrastructure.Gacha.Uigf.V4_2;
 using FurinaChronicle.Infrastructure.Gacha.Uigf.Compatibility;
+using FurinaChronicle.Infrastructure.Gacha.Importing;
 using FurinaChronicle.Services.Gacha.Abstractions;
 using FurinaChronicle.Services.Gacha.Exporting;
 using FurinaChronicle.Services.Gacha.Importing;
@@ -79,6 +80,10 @@ namespace FurinaChronicle.App
 			builder.Services.AddSingleton<IGachaMetadataRefreshService>(
 				services => services.GetRequiredService<SqliteGachaItemMetadataProvider>());
 			builder.Services.AddTransient<ImportUigfGachaRecords>();
+			builder.Services.AddSingleton<
+				ITeyvatHelperUigfClient,
+				TeyvatHelperUigfClient>();
+			builder.Services.AddTransient<TeyvatHelperUigfImportSource>();
 			builder.Services.AddSingleton<
 				IUigfV42ExportWriter,
 				UigfV42GachaWriter>();

@@ -27,7 +27,8 @@ public partial class MainPageViewModel(
 	DeleteGameAccount deleteGameAccount,
 	DeletePlayerArchive deletePlayerArchive,
 	RefreshGachaRecords refreshGachaRecords,
-	IPassportSelectionStore passportSelectionStore)
+	IPassportSelectionStore passportSelectionStore,
+	TeyvatHelperUigfImportSource teyvatHelperUigfImportSource)
 	: ObservableObject
 {
 	private bool initialized;
@@ -47,10 +48,21 @@ public partial class MainPageViewModel(
 	[NotifyCanExecuteChangedFor(nameof(PreviousPageCommand))]
 	[NotifyCanExecuteChangedFor(nameof(NextPageCommand))]
 	[NotifyPropertyChangedFor(nameof(IsNotBusy))]
+	[NotifyPropertyChangedFor(nameof(CanAutomaticallyImportFromTeyvatHelper))]
 	[NotifyPropertyChangedFor(nameof(CanGoToPreviousPage))]
 	[NotifyPropertyChangedFor(nameof(CanGoToNextPage))]
 	public partial bool IsBusy { get; set; }
 	public bool IsNotBusy => !IsBusy;
+
+	[ObservableProperty]
+	public partial string? SelectedPassportRoleUid { get; set; }
+
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(CanAutomaticallyImportFromTeyvatHelper))]
+	public partial bool HasAutomaticTeyvatHelperImportContext { get; set; }
+
+	public bool CanAutomaticallyImportFromTeyvatHelper =>
+		IsNotBusy && HasAutomaticTeyvatHelperImportContext;
 
 	[ObservableProperty]
 	public partial PlayerArchive? SelectedArchive { get; set; }
@@ -122,14 +134,21 @@ public partial class MainPageViewModel(
 	{
 		if (initialized)
 		{
+			await RefreshPassportSelectionAsync();
 			return;
 		}
 
 		await ExecuteBusyAsync(async () =>
 		{
 			await LoadArchivesCoreAsync();
+			await RefreshPassportSelectionCoreAsync();
 			initialized = true;
 		});
+	}
+
+	public async Task RefreshPassportSelectionAsync()
+	{
+		await ExecuteBusyAsync(RefreshPassportSelectionCoreAsync);
 	}
 
 	public async Task CreateArchiveAsync(string name)
@@ -246,52 +265,92 @@ public partial class MainPageViewModel(
 	{
 		ArgumentNullException.ThrowIfNull(source);
 
+		await ExecuteBusyAsync(() =>
+			ImportUigfIntoArchiveCoreAsync(source, fileName));
+	}
+
+	public async Task ImportFromTeyvatHelperAutomaticallyAsync()
+	{
 		await ExecuteBusyAsync(async () =>
 		{
-			bool createdArchiveForImport = SelectedArchive is null;
-			PlayerArchive archive = await EnsureImportArchiveAsync();
-			GachaImportResult result;
-			try
-			{
-				result = await importUigfGachaRecords.ExecuteAsync(
-					source,
-					archive.Id);
-			}
-			catch
-			{
-				if (createdArchiveForImport)
-				{
-					await RemoveImportArchiveAsync(archive.Id);
-				}
+			TeyvatHelperUigfDownload download =
+				await teyvatHelperUigfImportSource
+					.DownloadForSelectedRoleAsync();
+			await using var source = new MemoryStream(
+				download.Content,
+				writable: false);
+			await ImportUigfIntoArchiveCoreAsync(
+				source,
+				download.FileName);
+		});
+	}
 
-				throw;
-			}
+	public async Task ImportFromTeyvatHelperManuallyAsync(
+		string uid,
+		string gachaUrl)
+	{
+		await ExecuteBusyAsync(async () =>
+		{
+			TeyvatHelperUigfDownload download =
+				await teyvatHelperUigfImportSource.DownloadManuallyAsync(
+					uid,
+					gachaUrl);
+			await using var source = new MemoryStream(
+				download.Content,
+				writable: false);
+			await ImportUigfIntoArchiveCoreAsync(
+				source,
+				download.FileName);
+		});
+	}
 
-			ImportSummary = FormatImportSummary(
-				fileName,
-				result);
-
-			if (createdArchiveForImport && result.ImportedCount == 0)
+	private async Task ImportUigfIntoArchiveCoreAsync(
+		Stream source,
+		string fileName)
+	{
+		bool createdArchiveForImport = SelectedArchive is null;
+		PlayerArchive archive = await EnsureImportArchiveAsync();
+		GachaImportResult result;
+		try
+		{
+			result = await importUigfGachaRecords.ExecuteAsync(
+				source,
+				archive.Id);
+		}
+		catch
+		{
+			if (createdArchiveForImport)
 			{
 				await RemoveImportArchiveAsync(archive.Id);
-				StatusMessage =
-					"UIGF 文件没有可导入的有效记录，未创建档案。";
-				return;
 			}
 
-			await RefreshAccountsCoreAsync();
-			SelectedAccount ??= Accounts.FirstOrDefault();
+			throw;
+		}
 
-			if (SelectedAccount is not null)
-			{
-				await archiveSelectionService.SelectAsync(
-					SelectedAccount.Id);
-				await ReloadRecordsCoreAsync(pageNumber: 1);
-			}
+		ImportSummary = FormatImportSummary(
+			fileName,
+			result);
 
+		if (createdArchiveForImport && result.ImportedCount == 0)
+		{
+			await RemoveImportArchiveAsync(archive.Id);
 			StatusMessage =
-				$"已将 UIGF 文件导入档案“{archive.Name}”。";
-		});
+				"UIGF 文件没有可导入的有效记录，未创建档案。";
+			return;
+		}
+
+		await RefreshAccountsCoreAsync();
+		SelectedAccount ??= Accounts.FirstOrDefault();
+
+		if (SelectedAccount is not null)
+		{
+			await archiveSelectionService.SelectAsync(
+				SelectedAccount.Id);
+			await ReloadRecordsCoreAsync(pageNumber: 1);
+		}
+
+		StatusMessage =
+			$"已将 UIGF 文件导入档案“{archive.Name}”。";
 	}
 
 	public async Task ImportUigfIntoSelectedAccountAsync(
@@ -445,6 +504,7 @@ public partial class MainPageViewModel(
 
 			bool createdArchive = false;
 			Guid? createdAccountId = null;
+			bool refreshRecordsCommitted = false;
 			try
 			{
 				GameAccount targetAccount = SelectedAccount ??
@@ -476,6 +536,7 @@ public partial class MainPageViewModel(
 						passportAccountId,
 						manualUrl,
 						gameInstallationPath));
+				refreshRecordsCommitted = true;
 
 				await ReloadRecordsCoreAsync(pageNumber: 1);
 				RefreshSummary =
@@ -492,9 +553,13 @@ public partial class MainPageViewModel(
 			}
 			catch
 			{
-				await RollBackAutomaticRefreshTargetAsync(
-					createdArchive,
-					createdAccountId);
+				if (!refreshRecordsCommitted)
+				{
+					await RollBackAutomaticRefreshTargetAsync(
+						createdArchive,
+						createdAccountId);
+				}
+
 				throw;
 			}
 		});
@@ -698,6 +763,15 @@ public partial class MainPageViewModel(
 	}
 
 	private bool CanRun() => !IsBusy;
+
+	private async Task RefreshPassportSelectionCoreAsync()
+	{
+		TeyvatHelperImportAvailability availability =
+			await teyvatHelperUigfImportSource.GetAvailabilityAsync();
+		SelectedPassportRoleUid = availability.SelectedRoleUid;
+		HasAutomaticTeyvatHelperImportContext =
+			availability.CanAutomaticallyImport;
+	}
 
 	private async Task<PlayerArchive> EnsureImportArchiveAsync()
 	{

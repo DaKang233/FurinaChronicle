@@ -83,6 +83,10 @@
                         <Button Text="删除游戏账号" Clicked="OnDeleteAccountClicked" IsEnabled="{Binding IsNotBusy}" />
                         <Button Text="导入 UIGF 到档案" Clicked="OnImportIntoArchiveClicked" IsEnabled="{Binding IsNotBusy}" />
                         <Button Text="导入 UIGF 到账号" Clicked="OnImportIntoSelectedAccountClicked" IsEnabled="{Binding IsNotBusy}" />
+                        <Button
+                            Text="从提瓦特小助手导入"
+                            Clicked="OnTeyvatHelperImportClicked"
+                            IsEnabled="{Binding IsNotBusy}" />
                         <Button Text="导出档案 UIGF" Clicked="OnExportArchiveUigfClicked" IsEnabled="{Binding IsNotBusy}" />
                         <Button Text="导出账号 UIGF" Clicked="OnExportAccountUigfClicked" IsEnabled="{Binding IsNotBusy}" />
                         <Button Text="导出档案表格" Clicked="OnExportArchiveTableClicked" IsEnabled="{Binding IsNotBusy}" />
