@@ -66,4 +66,43 @@ public sealed class GetWishRecordPageTests
         Assert.Equal(3, page.PageNumber);
         Assert.Equal(2, page.Records.Count);
     }
+
+    [Fact]
+    public async Task ExecuteAsync_QuerySupportsMultipleAccountsAndFilters()
+    {
+        Guid first = Guid.NewGuid();
+        Guid second = Guid.NewGuid();
+        WishRecord[] records =
+        [
+            new(first, "1", "Five A", 5, DateTimeOffset.UnixEpoch)
+            {
+                UigfGachaType = "301"
+            },
+            new(second, "2", "Five B", 5, DateTimeOffset.UnixEpoch.AddMinutes(1))
+            {
+                UigfGachaType = "400"
+            },
+            new(first, "3", "Four", 4, DateTimeOffset.UnixEpoch.AddMinutes(2))
+            {
+                UigfGachaType = "301"
+            }
+        ];
+        var service = new GetWishRecordPage(
+            new InMemoryWishRecordRepository(records));
+        var query = new WishRecordQuery(
+            [first, second],
+            RankTypes: new HashSet<int> { 5 },
+            PoolGroups: new HashSet<WishPoolGroup>
+            {
+                WishPoolGroup.CharacterEvent
+            });
+
+        WishRecordPage page =
+            await service.ExecuteAsync(query, pageNumber: 1, pageSize: 20);
+
+        Assert.Equal(2, page.TotalCount);
+        Assert.Equal(
+            ["2", "1"],
+            page.Records.Select(record => record.ExternalRecordId));
+    }
 }

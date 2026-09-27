@@ -151,6 +151,22 @@ public sealed class GetRecentWishRecordsTests
                 "该测试替身只用于测试最近记录查询。");
         }
 
+        public Task<IReadOnlyList<WishRecord>> QueryAsync(
+            WishRecordQuery query,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException(
+                "该测试替身只用于测试最近记录查询。");
+        }
+
+        public Task<int> CountAsync(
+            WishRecordQuery query,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException(
+                "该测试替身只用于测试最近记录查询。");
+        }
+
 
         public Task<WishSaveResult> SaveBatchAsync(IReadOnlyCollection<WishRecord> records, CancellationToken cancellationToken = default)
         {

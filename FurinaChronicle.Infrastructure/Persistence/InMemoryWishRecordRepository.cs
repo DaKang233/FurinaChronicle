@@ -87,6 +87,54 @@ namespace FurinaChronicle.Infrastructure.Persistence
             }
         }
 
+        public async Task<IReadOnlyList<WishRecord>> QueryAsync(
+            WishRecordQuery query,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(query);
+            query.Validate();
+            await gate.WaitAsync(cancellationToken);
+            try
+            {
+                IEnumerable<WishRecord> filtered = ApplyQuery(records, query);
+                filtered = query.SortOrder == WishRecordSortOrder.NewestFirst
+                    ? filtered
+                        .OrderByDescending(record => record.Time)
+                        .ThenByDescending(record => record.ExternalRecordId)
+                    : filtered
+                        .OrderBy(record => record.Time)
+                        .ThenBy(record => record.ExternalRecordId);
+                filtered = filtered.Skip(query.Offset);
+                if (query.Limit is int limit)
+                {
+                    filtered = filtered.Take(limit);
+                }
+
+                return filtered.ToArray();
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }
+
+        public async Task<int> CountAsync(
+            WishRecordQuery query,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(query);
+            query.Validate();
+            await gate.WaitAsync(cancellationToken);
+            try
+            {
+                return ApplyQuery(records, query).Count();
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }
+
         public async Task<WishSaveResult> SaveBatchAsync(IReadOnlyCollection<WishRecord> newRecords, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(newRecords, nameof(newRecords));
@@ -120,6 +168,38 @@ namespace FurinaChronicle.Infrastructure.Persistence
                     new(AccountId2, "100000000000000005", "菲林斯", 5, new DateTimeOffset(2026, 6, 18, 9, 30, 0, TimeSpan.FromHours(8))),
                     new(AccountId2, "100000000000000006", "阿罗夏", 4, new DateTimeOffset(2026, 8, 18, 18, 30, 0, TimeSpan.FromHours(8))),
                     new(AccountId2, "100000000000000007", "阿蕾奇诺", 5, new DateTimeOffset(2026, 8, 18, 17, 30, 0, TimeSpan.FromHours(8)))];
+        }
+
+        private static IEnumerable<WishRecord> ApplyQuery(
+            IEnumerable<WishRecord> source,
+            WishRecordQuery query)
+        {
+            HashSet<Guid> accountIds = query.GameAccountIds.ToHashSet();
+            IEnumerable<WishRecord> filtered = source.Where(
+                record => accountIds.Contains(record.GameAccountId));
+
+            if (query.RankTypes is not null)
+            {
+                filtered = filtered.Where(
+                    record => record.RankType is int rank &&
+                        query.RankTypes.Contains(rank));
+            }
+            if (query.PoolGroups is not null)
+            {
+                filtered = filtered.Where(
+                    record => query.PoolGroups.Contains(
+                        WishPoolGroupResolver.Resolve(record)));
+            }
+            if (query.StartTime is DateTimeOffset start)
+            {
+                filtered = filtered.Where(record => record.Time >= start);
+            }
+            if (query.EndTime is DateTimeOffset end)
+            {
+                filtered = filtered.Where(record => record.Time <= end);
+            }
+
+            return filtered;
         }
     }
     /*

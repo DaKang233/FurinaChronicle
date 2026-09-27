@@ -1,5 +1,6 @@
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Wishes;
+using FurinaChronicle.Services.Wishes;
 using SQLite;
 
 namespace FurinaChronicle.Tests.Infrastructure.Persistence.Sqlite;
@@ -99,6 +100,67 @@ public sealed class SqliteWishRecordRepositoryBehaviorTests
                 Guid.NewGuid(),
                 20,
                 cancellation.Token));
+    }
+
+    [Fact]
+    public async Task QueryAsync_AppliesAccountPoolRankAndTimeFilters()
+    {
+        await using var context = SqliteRepositoryTestContext.Create();
+        PlayerArchive archive = SqliteRepositoryTestContext.CreateArchive();
+        await context.Archives.AddAsync(archive);
+        GameAccount first = SqliteRepositoryTestContext.CreateAccount(
+            archive.Id,
+            uid: "100000001");
+        GameAccount second = SqliteRepositoryTestContext.CreateAccount(
+            archive.Id,
+            uid: "100000002");
+        await context.Accounts.AddAsync(first);
+        await context.Accounts.AddAsync(second);
+        DateTimeOffset start =
+            new(2026, 7, 16, 18, 0, 0, TimeSpan.FromHours(8));
+        await context.Wishes.SaveBatchAsync(
+        [
+            CreateWish(first.Id, "event-1", 1) with
+            {
+                RankType = 5,
+                UigfGachaType = "301"
+            },
+            CreateWish(second.Id, "event-2", 2) with
+            {
+                RankType = 5,
+                GachaType = "400",
+                UigfGachaType = null
+            },
+            CreateWish(first.Id, "weapon", 3) with
+            {
+                RankType = 5,
+                UigfGachaType = "302"
+            },
+            CreateWish(second.Id, "four-star", 4) with
+            {
+                RankType = 4,
+                UigfGachaType = "301"
+            }
+        ]);
+        var query = new WishRecordQuery(
+            [first.Id, second.Id],
+            RankTypes: new HashSet<int> { 5 },
+            PoolGroups: new HashSet<WishPoolGroup>
+            {
+                WishPoolGroup.CharacterEvent
+            },
+            StartTime: start,
+            EndTime: start.AddHours(1),
+            SortOrder: WishRecordSortOrder.OldestFirst);
+
+        IReadOnlyList<WishRecord> result =
+            await context.Wishes.QueryAsync(query);
+        int count = await context.Wishes.CountAsync(query);
+
+        Assert.Equal(2, count);
+        Assert.Equal(
+            ["event-1", "event-2"],
+            result.Select(record => record.ExternalRecordId));
     }
 
     private static async Task<GameAccount> AddAccountAsync(
