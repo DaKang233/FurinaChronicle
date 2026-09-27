@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView
+    x:Class="FurinaChronicle.App.UI.Controls.PassportAvatarButton"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:viewModels="clr-namespace:FurinaChronicle.App.ViewModels"
+    x:DataType="viewModels:UserPageViewModel">
+    <Border
+        HeightRequest="42"
+        WidthRequest="42"
+        Padding="2"
+        StrokeShape="RoundRectangle 21">
+        <Grid>
+            <Label
+                FontSize="22"
+                HorizontalTextAlignment="Center"
+                Text="👤"
+                VerticalTextAlignment="Center" />
+            <Image
+                Aspect="AspectFill"
+                IsVisible="{Binding SelectedAccount.HasAvatar}"
+                Source="{Binding SelectedAccount.AvatarUrl}" />
+            <Grid.GestureRecognizers>
+                <TapGestureRecognizer Tapped="OnTapped" />
+            </Grid.GestureRecognizers>
+        </Grid>
+    </Border>
+</ContentView>

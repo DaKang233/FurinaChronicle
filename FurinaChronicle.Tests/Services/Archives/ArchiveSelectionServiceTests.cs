@@ -7,6 +7,67 @@ namespace FurinaChronicle.Tests.Services.Archives;
 public sealed class ArchiveSelectionServiceTests
 {
     [Fact]
+    public async Task GetCurrentArchive_SavedArchiveWithoutAccounts_ReturnsIt()
+    {
+        var archives = new InMemoryPlayerArchiveRepository();
+        PlayerArchive archive = ArchiveTestData.Archive();
+        await archives.AddAsync(archive);
+        var store = new InMemoryArchiveSelectionStore
+        {
+            CurrentArchiveId = archive.Id
+        };
+        var service = new ArchiveSelectionService(
+            store,
+            archives,
+            new InMemoryGameAccountRepository());
+
+        PlayerArchive? result = await service.GetCurrentArchiveAsync();
+
+        Assert.Equal(archive, result);
+        Assert.Equal(archive.Id, store.CurrentArchiveId);
+    }
+
+    [Fact]
+    public async Task GetCurrentArchive_LegacySelection_MigratesArchiveId()
+    {
+        var archives = new InMemoryPlayerArchiveRepository();
+        PlayerArchive archive = ArchiveTestData.Archive();
+        await archives.AddAsync(archive);
+        var store = new InMemoryArchiveSelectionStore
+        {
+            Current = new ArchiveSelection(archive.Id, Guid.NewGuid())
+        };
+        var service = new ArchiveSelectionService(
+            store,
+            archives,
+            new InMemoryGameAccountRepository());
+
+        PlayerArchive? result = await service.GetCurrentArchiveAsync();
+
+        Assert.Equal(archive, result);
+        Assert.Equal(archive.Id, store.CurrentArchiveId);
+        Assert.Equal(1, store.SaveCurrentArchiveCallCount);
+    }
+
+    [Fact]
+    public async Task GetForArchive_NoAccounts_SavesArchiveAsCurrent()
+    {
+        var archives = new InMemoryPlayerArchiveRepository();
+        PlayerArchive archive = ArchiveTestData.Archive();
+        await archives.AddAsync(archive);
+        var store = new InMemoryArchiveSelectionStore();
+        var service = new ArchiveSelectionService(
+            store,
+            archives,
+            new InMemoryGameAccountRepository());
+
+        ArchiveSelection? result = await service.GetForArchiveAsync(archive.Id);
+
+        Assert.Null(result);
+        Assert.Equal(archive.Id, store.CurrentArchiveId);
+    }
+
+    [Fact]
     public async Task GetCurrent_ValidSavedSelection_ReturnsWithoutRewritingIt()
     {
         var archives = new InMemoryPlayerArchiveRepository();

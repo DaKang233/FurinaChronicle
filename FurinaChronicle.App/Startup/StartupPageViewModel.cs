@@ -65,4 +65,10 @@ public partial class StartupPageViewModel(ApplicationStartupService startupServi
             IsInitializing = false;
         }
     }
+
+    public Task MaintainPassportAccountsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return startupService.MaintainPassportAccountsAsync(cancellationToken);
+    }
 }

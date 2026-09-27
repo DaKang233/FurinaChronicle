@@ -1,10 +1,14 @@
 ﻿using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Services.Gacha.Abstractions;
 using FurinaChronicle.Services.Gacha.Metadata;
+using FurinaChronicle.Services.Passport;
+using System.Diagnostics;
 
 namespace FurinaChronicle.App.Startup;
 
-public sealed class ApplicationStartupService(IGachaMetadataRefreshService metadataRefreshService)
+public sealed class ApplicationStartupService(
+    IGachaMetadataRefreshService metadataRefreshService,
+    PassportCredentialMaintenanceService credentialMaintenanceService)
 {
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
@@ -20,6 +24,31 @@ public sealed class ApplicationStartupService(IGachaMetadataRefreshService metad
         if (!metadataAvailable)
         {
             throw new GachaMetadataUnavailableException("没有可用的原神角色和武器元数据。", new InvalidDataException("Metadata refresh completed without producing a usable cache."));
+        }
+    }
+
+    public async Task MaintainPassportAccountsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            PassportMaintenanceResult maintenance =
+                await credentialMaintenanceService.MaintainAllAsync(
+                    cancellationToken);
+            if (maintenance.FailedAccountIds.Count > 0)
+            {
+                Debug.WriteLine(
+                    $"Passport maintenance failed for {maintenance.FailedAccountIds.Count} account(s); existing credentials were retained.");
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            // Passport maintenance is best-effort and must not block offline use.
+            Debug.WriteLine($"Passport maintenance skipped: {exception.Message}");
         }
     }
 }

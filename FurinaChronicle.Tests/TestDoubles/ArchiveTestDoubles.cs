@@ -147,9 +147,20 @@ internal sealed class InMemoryArchiveSelectionStore : IArchiveSelectionStore
 
     public ArchiveSelection? Current { get; set; }
 
+    public Guid? CurrentArchiveId { get; set; }
+
     public int SaveCallCount { get; private set; }
 
+    public int SaveCurrentArchiveCallCount { get; private set; }
+
     public int ClearCallCount { get; private set; }
+
+    public Task<Guid?> LoadCurrentArchiveIdAsync(
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(CurrentArchiveId);
+    }
 
     public Task<ArchiveSelection?> LoadAsync(
         CancellationToken cancellationToken = default)
@@ -175,8 +186,19 @@ internal sealed class InMemoryArchiveSelectionStore : IArchiveSelectionStore
     {
         cancellationToken.ThrowIfCancellationRequested();
         Current = selection;
+        CurrentArchiveId = selection.PlayerArchiveId;
         selectionsByArchive[selection.PlayerArchiveId] = selection;
         SaveCallCount++;
+        return Task.CompletedTask;
+    }
+
+    public Task SaveCurrentArchiveIdAsync(
+        Guid playerArchiveId,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        CurrentArchiveId = playerArchiveId;
+        SaveCurrentArchiveCallCount++;
         return Task.CompletedTask;
     }
 
@@ -184,6 +206,7 @@ internal sealed class InMemoryArchiveSelectionStore : IArchiveSelectionStore
     {
         cancellationToken.ThrowIfCancellationRequested();
         Current = null;
+        CurrentArchiveId = null;
         ClearCallCount++;
         return Task.CompletedTask;
     }
