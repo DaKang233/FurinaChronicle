@@ -200,23 +200,24 @@ public partial class GachaAnalysisViewModel(
     }
 
     [RelayCommand]
-    private void ShowOverview() => CurrentSection = GachaAnalysisSection.Overview;
+    private Task ShowOverviewAsync() =>
+        ShowSectionAsync(GachaAnalysisSection.Overview);
 
     [RelayCommand]
-    private async Task ShowDetailsAsync()
-    {
-        CurrentSection = GachaAnalysisSection.Details;
-        await LoadDetailAsync();
-    }
+    private Task ShowDetailsAsync() =>
+        ShowSectionAsync(GachaAnalysisSection.Details);
 
     [RelayCommand]
-    private void ShowHistory() => CurrentSection = GachaAnalysisSection.History;
+    private Task ShowHistoryAsync() =>
+        ShowSectionAsync(GachaAnalysisSection.History);
 
     [RelayCommand]
-    private void ShowCalendar() => CurrentSection = GachaAnalysisSection.Calendar;
+    private Task ShowCalendarAsync() =>
+        ShowSectionAsync(GachaAnalysisSection.Calendar);
 
     [RelayCommand]
-    private void ShowItems() => CurrentSection = GachaAnalysisSection.Items;
+    private Task ShowItemsAsync() =>
+        ShowSectionAsync(GachaAnalysisSection.Items);
 
     [RelayCommand]
     private async Task ApplyScopeAsync()
@@ -264,6 +265,19 @@ public partial class GachaAnalysisViewModel(
         }
     }
 
+    private async Task ShowSectionAsync(GachaAnalysisSection section)
+    {
+        if (CurrentSection == section)
+        {
+            return;
+        }
+
+        CurrentSection = section;
+        DetailPage = 1;
+        ClearResults();
+        await RefreshAsync();
+    }
+
     private async Task RefreshAsync()
     {
         if (IsBusy)
@@ -282,11 +296,17 @@ public partial class GachaAnalysisViewModel(
                 return;
             }
 
+            if (CurrentSection == GachaAnalysisSection.Details)
+            {
+                await LoadDetailCoreAsync(ids);
+                return;
+            }
+
             WishAnalyticsReport report = await buildWishAnalytics.ExecuteAsync(
                 new WishRecordQuery(ids),
+                GetCurrentComponent(),
                 CancellationToken.None);
-            PopulateReport(report);
-            await LoadDetailCoreAsync(ids);
+            PopulateCurrentSection(report);
         }
         catch (Exception exception)
         {
@@ -351,6 +371,9 @@ public partial class GachaAnalysisViewModel(
         DetailPage = page.PageNumber;
         DetailTotalPages = page.TotalPages;
         DetailTotalCount = page.TotalCount;
+        Summary = page.TotalCount == 0
+            ? "当前筛选没有匹配的抽卡记录。"
+            : $"当前筛选共 {page.TotalCount} 条抽卡记录。";
     }
 
     private WishRecordQuery BuildDetailQuery(IReadOnlyList<Guid> ids)
@@ -400,16 +423,60 @@ public partial class GachaAnalysisViewModel(
                     : $"账号：{selectedAccount.DisplayName ?? selectedAccount.Uid}";
     }
 
-    private void PopulateReport(WishAnalyticsReport report)
+    private static WishAnalyticsComponents GetCurrentComponent(
+        GachaAnalysisSection section)
+    {
+        return section switch
+        {
+            GachaAnalysisSection.Overview => WishAnalyticsComponents.Pools,
+            GachaAnalysisSection.History => WishAnalyticsComponents.History,
+            GachaAnalysisSection.Calendar => WishAnalyticsComponents.Calendar,
+            GachaAnalysisSection.Items => WishAnalyticsComponents.Items,
+            _ => WishAnalyticsComponents.None
+        };
+    }
+
+    private WishAnalyticsComponents GetCurrentComponent() =>
+        GetCurrentComponent(CurrentSection);
+
+    private void PopulateCurrentSection(WishAnalyticsReport report)
+    {
+        switch (CurrentSection)
+        {
+            case GachaAnalysisSection.Overview:
+                PopulateOverview(report.Pools);
+                break;
+            case GachaAnalysisSection.History:
+                PopulateHistory(report.History);
+                break;
+            case GachaAnalysisSection.Calendar:
+                PopulateCalendar(report.Calendar);
+                break;
+            case GachaAnalysisSection.Items:
+                PopulateItems(report.Items);
+                break;
+        }
+
+        Summary = report.TotalPulls == 0
+            ? "当前范围暂无抽卡记录。"
+            : $"当前范围共 {report.TotalPulls} 抽。";
+    }
+
+    private void PopulateOverview(
+        IReadOnlyList<WishPoolStatistics> pools)
     {
         PoolCards.Clear();
-        foreach (WishPoolStatistics pool in report.Pools)
+        foreach (WishPoolStatistics pool in pools)
         {
             PoolCards.Add(ToDisplayItem(pool));
         }
+    }
 
+    private void PopulateHistory(
+        IReadOnlyList<WishHistoryPeriod> history)
+    {
         HistoryItems.Clear();
-        foreach (WishHistoryPeriod period in report.History)
+        foreach (WishHistoryPeriod period in history)
         {
             HistoryItems.Add(new WishHistoryDisplayItem(
                 period.Date.ToString("yyyy-MM-dd"),
@@ -418,9 +485,13 @@ public partial class GachaAnalysisViewModel(
                 FormatAccounts(period.GameAccountIds),
                 FormatHistoryItems(period.Items)));
         }
+    }
 
+    private void PopulateCalendar(
+        IReadOnlyList<WishCalendarDay> calendar)
+    {
         CalendarItems.Clear();
-        foreach (WishCalendarDay day in report.Calendar)
+        foreach (WishCalendarDay day in calendar)
         {
             CalendarItems.Add(new WishCalendarDisplayItem(
                 day.Date.ToString("MM-dd"),
@@ -428,9 +499,13 @@ public partial class GachaAnalysisViewModel(
                 $"五星 {day.FiveStarCount} · 四星 {day.FourStarCount}",
                 GetIntensityColor(day.IntensityLevel)));
         }
+    }
 
+    private void PopulateItems(
+        IReadOnlyList<WishItemStatistics> items)
+    {
         ItemStatistics.Clear();
-        foreach (WishItemStatistics item in report.Items)
+        foreach (WishItemStatistics item in items)
         {
             ItemStatistics.Add(new WishItemStatisticsDisplayItem(item));
         }
@@ -442,9 +517,6 @@ public partial class GachaAnalysisViewModel(
                 group.Key is int rank ? $"{rank} 星" : "未知星级",
                 group.ToArray()));
         }
-        Summary = report.TotalPulls == 0
-            ? "当前范围暂无抽卡记录。"
-            : $"当前范围共 {report.TotalPulls} 抽，覆盖 {report.Pools.Count} 类卡池。";
     }
 
     private static string FormatHistoryItems(IReadOnlyList<WishHistoryItem> items)
@@ -488,11 +560,14 @@ public partial class GachaAnalysisViewModel(
                 ? "暂无记录"
                 : $"{pool.StartTime:yyyy-MM-dd} 至 {pool.EndTime:yyyy-MM-dd}",
             pool.AverageFiveStarPulls is double average
-                ? $"五星平均 {average:F2} 抽"
-                : "五星平均 —",
+                ? $"任意五星期望 {average:F2} 抽"
+                : "任意五星期望 —",
             pool.AverageUpFiveStarPulls is double upAverage
-                ? $"UP 平均 {upAverage:F2} 抽"
-                : "UP 平均：需要卡池 UP 元数据",
+                ? $"限定五星期望 {upAverage:F2} 抽"
+                : pool.PoolGroup is WishPoolGroup.CharacterEvent or
+                    WishPoolGroup.WeaponEvent
+                    ? "限定五星期望 —"
+                    : "限定五星期望：不适用于该卡池",
             pool.MinimumFiveStarPulls is int minimum
                 ? $"五星极值 {minimum} / {pool.MaximumFiveStarPulls} 抽"
                 : "五星极值 —",

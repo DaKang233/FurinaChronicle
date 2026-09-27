@@ -1,12 +1,16 @@
 using FurinaChronicle.App.Exporting;
+using FurinaChronicle.App.UI.Gacha;
 using FurinaChronicle.App.ViewModels;
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Services.Gacha.Refreshing;
+using System.ComponentModel;
 
 namespace FurinaChronicle.App;
 
 public partial class MainPage : ContentPage
 {
+    private GachaAnalysisSection? loadedAnalysisSection;
+
     private MainPageViewModel ViewModel =>
         (MainPageViewModel)BindingContext;
 
@@ -16,6 +20,8 @@ public partial class MainPage : ContentPage
     {
         InitializeComponent();
         BindingContext = viewModel;
+        viewModel.Analysis.PropertyChanged += OnAnalysisPropertyChanged;
+        LoadAnalysisPage(viewModel.Analysis.CurrentSection);
         if (Shell.GetTitleView(this) is UI.Controls.PassportAvatarButton avatar)
         {
             avatar.BindingContext = userPageViewModel;
@@ -25,7 +31,51 @@ public partial class MainPage : ContentPage
     protected override async void OnAppearing()
     {
         base.OnAppearing();
+        LoadAnalysisPage(ViewModel.Analysis.CurrentSection);
         await ViewModel.InitializeAsync();
+    }
+
+    protected override void OnDisappearing()
+    {
+        AnalysisPageHost.Content = null;
+        loadedAnalysisSection = null;
+        base.OnDisappearing();
+    }
+
+    private void OnAnalysisPropertyChanged(
+        object? sender,
+        PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(GachaAnalysisViewModel.CurrentSection))
+        {
+            LoadAnalysisPage(ViewModel.Analysis.CurrentSection);
+        }
+    }
+
+    private void LoadAnalysisPage(GachaAnalysisSection section)
+    {
+        if (loadedAnalysisSection == section &&
+            AnalysisPageHost.Content is not null)
+        {
+            return;
+        }
+
+        ContentView page = section switch
+        {
+            GachaAnalysisSection.Overview => new OverviewView(),
+            GachaAnalysisSection.Details => new DetailView(),
+            GachaAnalysisSection.History => new HistoryView(),
+            GachaAnalysisSection.Calendar => new CalendarView(),
+            GachaAnalysisSection.Items =>
+                new FurinaChronicle.App.UI.Gacha.ItemsView(),
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(section),
+                section,
+                null)
+        };
+        page.BindingContext = ViewModel.Analysis;
+        AnalysisPageHost.Content = page;
+        loadedAnalysisSection = section;
     }
 
     private async void OnArchiveModeToggled(

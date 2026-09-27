@@ -2,6 +2,17 @@ using FurinaChronicle.Core.Wishes;
 
 namespace FurinaChronicle.Services.Wishes.Analytics;
 
+[Flags]
+public enum WishAnalyticsComponents
+{
+    None = 0,
+    Pools = 1 << 0,
+    History = 1 << 1,
+    Calendar = 1 << 2,
+    Items = 1 << 3,
+    All = Pools | History | Calendar | Items
+}
+
 public sealed record WishAnalyticsReport(
     IReadOnlyList<WishPoolStatistics> Pools,
     IReadOnlyList<WishHistoryPeriod> History,

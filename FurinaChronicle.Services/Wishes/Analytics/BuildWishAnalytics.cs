@@ -10,8 +10,45 @@ public sealed class BuildWishAnalytics(
     IWishRecordRepository repository,
     IGachaItemMetadataProvider metadataProvider)
 {
+    private static readonly HashSet<string> StandardCharacterIds =
+    [
+        "10000003", // Jean
+        "10000016", // Diluc
+        "10000035", // Qiqi
+        "10000041", // Mona
+        "10000042", // Keqing
+        "10000069", // Tighnari
+        "10000079", // Dehya
+        "10000109"  // Yumemizuki Mizuki
+    ];
+
+    private static readonly HashSet<string> StandardWeaponIds =
+    [
+        "11501", // Aquila Favonia
+        "11502", // Skyward Blade
+        "12501", // Skyward Pride
+        "12502", // Wolf's Gravestone
+        "13502", // Skyward Spine
+        "13505", // Primordial Jade Winged-Spear
+        "14501", // Skyward Atlas
+        "14502", // Lost Prayer to the Sacred Winds
+        "15501", // Skyward Harp
+        "15502"  // Amos' Bow
+    ];
+
+    public Task<WishAnalyticsReport> ExecuteAsync(
+        WishRecordQuery query,
+        CancellationToken cancellationToken = default)
+    {
+        return ExecuteAsync(
+            query,
+            WishAnalyticsComponents.All,
+            cancellationToken);
+    }
+
     public async Task<WishAnalyticsReport> ExecuteAsync(
         WishRecordQuery query,
+        WishAnalyticsComponents components,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(query);
@@ -24,43 +61,33 @@ public sealed class BuildWishAnalytics(
         };
         IReadOnlyList<WishRecord> records =
             await repository.QueryAsync(analyticsQuery, cancellationToken);
-        Dictionary<string, GachaItemMetadata?> metadata =
-            await LoadMetadataAsync(records, cancellationToken);
+        bool needsMetadata = components.HasFlag(WishAnalyticsComponents.Pools) ||
+            components.HasFlag(WishAnalyticsComponents.History) ||
+            components.HasFlag(WishAnalyticsComponents.Items);
+        Dictionary<string, GachaItemMetadata?> metadata = needsMetadata
+            ? await LoadMetadataAsync(records, cancellationToken)
+            : new Dictionary<string, GachaItemMetadata?>(StringComparer.Ordinal);
 
-        IReadOnlyList<WishPoolStatistics> pools = records
-            .GroupBy(WishPoolGroupResolver.Resolve)
-            .Select(group => BuildPoolStatistics(group.Key, group, metadata))
-            .OrderBy(statistics => GetPoolOrder(statistics.PoolGroup))
-            .ToArray();
-        IReadOnlyList<WishHistoryPeriod> history = records
-            .GroupBy(record => new
-            {
-                Date = DateOnly.FromDateTime(record.Time.Date),
-                Pool = WishPoolGroupResolver.Resolve(record)
-            })
-            .Select(group => new WishHistoryPeriod(
-                group.Key.Date,
-                group.Key.Pool,
-                WishPoolGroupResolver.GetDisplayName(group.Key.Pool),
-                group.Sum(GetPullCount),
-                group.Select(record => record.GameAccountId).Distinct().ToArray(),
-                group
-                    .GroupBy(GetItemKey)
-                    .Select(items => new WishHistoryItem(
-                        GetItemName(items.First(), metadata),
-                        items.First().RankType,
-                        items.Sum(GetPullCount)))
-                    .OrderByDescending(item => item.RankType)
-                    .ThenByDescending(item => item.Count)
-                    .ThenBy(item => item.ItemName, StringComparer.Ordinal)
-                    .ToArray()))
-            .OrderByDescending(period => period.Date)
-            .ThenBy(period => GetPoolOrder(period.PoolGroup))
-            .ToArray();
+        IReadOnlyList<WishPoolStatistics> pools =
+            components.HasFlag(WishAnalyticsComponents.Pools)
+                ? records
+                    .GroupBy(WishPoolGroupResolver.Resolve)
+                    .Select(group => BuildPoolStatistics(group.Key, group, metadata))
+                    .OrderBy(statistics => GetPoolOrder(statistics.PoolGroup))
+                    .ToArray()
+                : [];
+        IReadOnlyList<WishHistoryPeriod> history =
+            components.HasFlag(WishAnalyticsComponents.History)
+                ? BuildHistory(records, metadata)
+                : [];
         IReadOnlyList<WishCalendarDay> calendar =
-            BuildCalendar(records);
+            components.HasFlag(WishAnalyticsComponents.Calendar)
+                ? BuildCalendar(records)
+                : [];
         IReadOnlyList<WishItemStatistics> items =
-            BuildItems(records, metadata);
+            components.HasFlag(WishAnalyticsComponents.Items)
+                ? BuildItems(records, metadata)
+                : [];
 
         return new WishAnalyticsReport(
             pools,
@@ -111,6 +138,7 @@ public sealed class BuildWishAnalytics(
             .Where(record => record.RankType == 3)
             .Sum(GetPullCount);
         var fiveStarPities = new List<int>();
+        var limitedFiveStarPities = new List<int>();
         var fiveStarHistory = new List<FiveStarWish>();
         int sinceFive = 0;
         int sinceFour = 0;
@@ -120,6 +148,9 @@ public sealed class BuildWishAnalytics(
         {
             int accountSinceFive = 0;
             int accountSinceFour = 0;
+            int accountSinceLimitedFive = 0;
+            bool hasFiveStarBoundary = false;
+            bool hasLimitedFiveStarBoundary = false;
             foreach (WishRecord record in accountRecords
                 .OrderBy(record => record.Time)
                 .ThenBy(record => record.ExternalRecordId, StringComparer.Ordinal))
@@ -127,9 +158,14 @@ public sealed class BuildWishAnalytics(
                 int count = GetPullCount(record);
                 accountSinceFive += count;
                 accountSinceFour += count;
+                accountSinceLimitedFive += count;
                 if (record.RankType == 5)
                 {
-                    fiveStarPities.Add(accountSinceFive);
+                    if (hasFiveStarBoundary &&
+                        IsValidFiveStarInterval(pool, accountSinceFive))
+                    {
+                        fiveStarPities.Add(accountSinceFive);
+                    }
                     fiveStarHistory.Add(new FiveStarWish(
                         record.GameAccountId,
                         GetItemName(record, metadata),
@@ -137,7 +173,22 @@ public sealed class BuildWishAnalytics(
                         GetIconUrl(record, metadata),
                         record.Time,
                         accountSinceFive));
+                    hasFiveStarBoundary = true;
                     accountSinceFive = 0;
+
+                    if (IsLimitedFiveStar(record, pool))
+                    {
+                        if (hasLimitedFiveStarBoundary &&
+                            IsValidLimitedFiveStarInterval(
+                                pool,
+                                accountSinceLimitedFive))
+                        {
+                            limitedFiveStarPities.Add(
+                                accountSinceLimitedFive);
+                        }
+                        hasLimitedFiveStarBoundary = true;
+                        accountSinceLimitedFive = 0;
+                    }
                 }
                 if (record.RankType == 4)
                 {
@@ -161,7 +212,9 @@ public sealed class BuildWishAnalytics(
             Percentage(fourCount, total),
             Percentage(threeCount, total),
             fiveStarPities.Count == 0 ? null : fiveStarPities.Average(),
-            AverageUpFiveStarPulls: null,
+            limitedFiveStarPities.Count == 0
+                ? null
+                : limitedFiveStarPities.Average(),
             fiveStarPities.Count == 0 ? null : fiveStarPities.Min(),
             fiveStarPities.Count == 0 ? null : fiveStarPities.Max(),
             sinceFive,
@@ -185,6 +238,74 @@ public sealed class BuildWishAnalytics(
                 .ThenByDescending(item => item.Count)
                 .ThenBy(item => item.ItemName, StringComparer.Ordinal)
                 .ToArray());
+    }
+
+    private static IReadOnlyList<WishHistoryPeriod> BuildHistory(
+        IReadOnlyList<WishRecord> records,
+        IReadOnlyDictionary<string, GachaItemMetadata?> metadata)
+    {
+        return records
+            .GroupBy(record => new
+            {
+                Date = DateOnly.FromDateTime(record.Time.Date),
+                Pool = WishPoolGroupResolver.Resolve(record)
+            })
+            .Select(group => new WishHistoryPeriod(
+                group.Key.Date,
+                group.Key.Pool,
+                WishPoolGroupResolver.GetDisplayName(group.Key.Pool),
+                group.Sum(GetPullCount),
+                group.Select(record => record.GameAccountId).Distinct().ToArray(),
+                group
+                    .GroupBy(GetItemKey)
+                    .Select(items => new WishHistoryItem(
+                        GetItemName(items.First(), metadata),
+                        items.First().RankType,
+                        items.Sum(GetPullCount)))
+                    .OrderByDescending(item => item.RankType)
+                    .ThenByDescending(item => item.Count)
+                    .ThenBy(item => item.ItemName, StringComparer.Ordinal)
+                    .ToArray()))
+            .OrderByDescending(period => period.Date)
+            .ThenBy(period => GetPoolOrder(period.PoolGroup))
+            .ToArray();
+    }
+
+    private static bool IsLimitedFiveStar(
+        WishRecord record,
+        WishPoolGroup pool)
+    {
+        if (record.RankType != 5 ||
+            string.IsNullOrWhiteSpace(record.ItemId))
+        {
+            return false;
+        }
+
+        string itemId = record.ItemId.Trim();
+        return pool switch
+        {
+            WishPoolGroup.CharacterEvent =>
+                !StandardCharacterIds.Contains(itemId),
+            WishPoolGroup.WeaponEvent =>
+                !StandardWeaponIds.Contains(itemId),
+            _ => false
+        };
+    }
+
+    private static bool IsValidFiveStarInterval(
+        WishPoolGroup pool,
+        int pulls)
+    {
+        int maximum = pool == WishPoolGroup.WeaponEvent ? 80 : 90;
+        return pulls is > 0 && pulls <= maximum;
+    }
+
+    private static bool IsValidLimitedFiveStarInterval(
+        WishPoolGroup pool,
+        int pulls)
+    {
+        int maximum = pool == WishPoolGroup.WeaponEvent ? 160 : 180;
+        return pulls is > 0 && pulls <= maximum;
     }
 
     private static IReadOnlyList<WishCalendarDay> BuildCalendar(

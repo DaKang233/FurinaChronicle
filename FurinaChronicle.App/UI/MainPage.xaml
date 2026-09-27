@@ -5,7 +5,6 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
     xmlns:viewModels="clr-namespace:FurinaChronicle.App.ViewModels"
     xmlns:controls="clr-namespace:FurinaChronicle.App.UI.Controls"
-    xmlns:gacha="clr-namespace:FurinaChronicle.App.UI.Gacha"
     x:DataType="viewModels:MainPageViewModel"
     Title="抽卡记录">
 
@@ -99,11 +98,11 @@
 
         <ScrollView Grid.Row="2" Orientation="Horizontal">
             <HorizontalStackLayout Spacing="8">
-                <Button Command="{Binding Analysis.ShowOverviewCommand}" Text="数据总览" />
-                <Button Command="{Binding Analysis.ShowDetailsCommand}" Text="明细表格" />
-                <Button Command="{Binding Analysis.ShowHistoryCommand}" Text="抽卡历史" />
-                <Button Command="{Binding Analysis.ShowCalendarCommand}" Text="抽卡日历" />
-                <Button Command="{Binding Analysis.ShowItemsCommand}" Text="物品" />
+                <Button Command="{Binding Analysis.ShowOverviewCommand}" IsEnabled="{Binding Analysis.IsNotBusy}" Text="数据总览" />
+                <Button Command="{Binding Analysis.ShowDetailsCommand}" IsEnabled="{Binding Analysis.IsNotBusy}" Text="明细表格" />
+                <Button Command="{Binding Analysis.ShowHistoryCommand}" IsEnabled="{Binding Analysis.IsNotBusy}" Text="抽卡历史" />
+                <Button Command="{Binding Analysis.ShowCalendarCommand}" IsEnabled="{Binding Analysis.IsNotBusy}" Text="抽卡日历" />
+                <Button Command="{Binding Analysis.ShowItemsCommand}" IsEnabled="{Binding Analysis.IsNotBusy}" Text="物品" />
             </HorizontalStackLayout>
         </ScrollView>
 
@@ -111,6 +110,7 @@
             <VerticalStackLayout Spacing="6">
                 <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="8">
                     <Switch
+                        IsEnabled="{Binding Analysis.IsNotBusy}"
                         IsToggled="{Binding Analysis.IsArchiveMode}"
                         Toggled="OnArchiveModeToggled" />
                     <Label Grid.Column="1" Text="档案模式" VerticalTextAlignment="Center" />
@@ -118,6 +118,7 @@
                     <Button
                         Grid.Column="3"
                         Command="{Binding Analysis.ApplyScopeCommand}"
+                        IsEnabled="{Binding Analysis.IsNotBusy}"
                         IsVisible="{Binding Analysis.IsArchiveMode}"
                         Text="应用账号选择" />
                 </Grid>
@@ -140,23 +141,10 @@
             </VerticalStackLayout>
         </Border>
 
-        <Grid Grid.Row="4">
-            <gacha:OverviewView
-                BindingContext="{Binding Analysis}"
-                IsVisible="{Binding Analysis.IsOverviewVisible}" />
-            <gacha:DetailView
-                BindingContext="{Binding Analysis}"
-                IsVisible="{Binding Analysis.IsDetailsVisible}" />
-            <gacha:HistoryView
-                BindingContext="{Binding Analysis}"
-                IsVisible="{Binding Analysis.IsHistoryVisible}" />
-            <gacha:CalendarView
-                BindingContext="{Binding Analysis}"
-                IsVisible="{Binding Analysis.IsCalendarVisible}" />
-            <gacha:ItemsView
-                BindingContext="{Binding Analysis}"
-                IsVisible="{Binding Analysis.IsItemsVisible}" />
-        </Grid>
+        <ContentView
+            x:Name="AnalysisPageHost"
+            Grid.Row="4"
+            BindingContext="{Binding Analysis}" />
 
         <Grid Grid.Row="5" ColumnDefinitions="*,Auto" ColumnSpacing="8">
             <VerticalStackLayout Spacing="2">

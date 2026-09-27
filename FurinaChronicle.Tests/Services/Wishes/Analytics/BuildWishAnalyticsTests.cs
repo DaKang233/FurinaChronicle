@@ -41,10 +41,10 @@ public sealed class BuildWishAnalyticsTests
             pool => pool.PoolGroup == WishPoolGroup.CharacterEvent);
         Assert.Equal(7, character.TotalPulls);
         Assert.Equal(2, character.FiveStarCount);
-        Assert.Equal(2D, character.AverageFiveStarPulls);
+        Assert.Null(character.AverageFiveStarPulls);
         Assert.Null(character.AverageUpFiveStarPulls);
-        Assert.Equal(1, character.MinimumFiveStarPulls);
-        Assert.Equal(3, character.MaximumFiveStarPulls);
+        Assert.Null(character.MinimumFiveStarPulls);
+        Assert.Null(character.MaximumFiveStarPulls);
         Assert.Equal(3, character.PullsSinceLastFiveStar);
         Assert.Equal(3, character.PullsSinceLastFourStar);
         Assert.Equal(["五星乙", "五星甲"], character.FiveStarHistory.Select(item => item.ItemName));
@@ -62,6 +62,96 @@ public sealed class BuildWishAnalyticsTests
             item => item.ItemId == "weapon-3");
         Assert.Equal(3, threeStar.Count);
         Assert.Equal(3, threeStar.AcquisitionTimes.Count);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_CalculatesCompletedFiveStarIntervals()
+    {
+        Guid accountId = Guid.NewGuid();
+        DateTimeOffset start =
+            new(2026, 1, 1, 8, 0, 0, TimeSpan.FromHours(8));
+        WishRecord[] records =
+        [
+            Record(accountId, "1", "限定五星甲", "10000089", 5, start, "301"),
+            Record(accountId, "2", "三星武器", "weapon-3", 3, start.AddMinutes(1), "301"),
+            Record(accountId, "3", "迪卢克", "10000016", 5, start.AddMinutes(2), "301"),
+            Record(accountId, "4", "三星武器", "weapon-3", 3, start.AddMinutes(3), "400"),
+            Record(accountId, "5", "四星角色", "avatar-4", 4, start.AddMinutes(4), "400"),
+            Record(accountId, "6", "限定五星乙", "10000087", 5, start.AddMinutes(5), "400"),
+            Record(accountId, "7", "三星武器", "weapon-3", 3, start.AddMinutes(6), "301"),
+            Record(accountId, "8", "限定五星丙", "10000078", 5, start.AddMinutes(7), "301")
+        ];
+        var service = new BuildWishAnalytics(
+            new InMemoryWishRecordRepository(records),
+            new StubMetadataProvider());
+
+        WishAnalyticsReport report = await service.ExecuteAsync(
+            new WishRecordQuery([accountId]),
+            WishAnalyticsComponents.Pools);
+
+        WishPoolStatistics character = Assert.Single(report.Pools);
+        Assert.NotNull(character.AverageFiveStarPulls);
+        Assert.Equal(
+            7D / 3D,
+            character.AverageFiveStarPulls.Value,
+            precision: 6);
+        Assert.Equal(3.5D, character.AverageUpFiveStarPulls);
+        Assert.Equal(2, character.MinimumFiveStarPulls);
+        Assert.Equal(3, character.MaximumFiveStarPulls);
+        Assert.Empty(report.History);
+        Assert.Empty(report.Calendar);
+        Assert.Empty(report.Items);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_CalculatesWeaponLimitedFiveStarIntervals()
+    {
+        Guid accountId = Guid.NewGuid();
+        DateTimeOffset start =
+            new(2026, 1, 1, 8, 0, 0, TimeSpan.FromHours(8));
+        WishRecord[] records =
+        [
+            Record(accountId, "1", "限定五星武器甲", "15514", 5, start, "302"),
+            Record(accountId, "2", "三星武器", "weapon-3", 3, start.AddMinutes(1), "302"),
+            Record(accountId, "3", "天空之翼", "15501", 5, start.AddMinutes(2), "302"),
+            Record(accountId, "4", "三星武器", "weapon-3", 3, start.AddMinutes(3), "302"),
+            Record(accountId, "5", "限定五星武器乙", "15512", 5, start.AddMinutes(4), "302")
+        ];
+        var service = new BuildWishAnalytics(
+            new InMemoryWishRecordRepository(records),
+            new StubMetadataProvider());
+
+        WishAnalyticsReport report = await service.ExecuteAsync(
+            new WishRecordQuery([accountId]),
+            WishAnalyticsComponents.Pools);
+
+        WishPoolStatistics weapon = Assert.Single(report.Pools);
+        Assert.Equal(2D, weapon.AverageFiveStarPulls);
+        Assert.Equal(4D, weapon.AverageUpFiveStarPulls);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_RequestedComponentOnlyBuildsThatProjection()
+    {
+        Guid accountId = Guid.NewGuid();
+        DateTimeOffset time =
+            new(2026, 1, 1, 8, 0, 0, TimeSpan.FromHours(8));
+        var service = new BuildWishAnalytics(
+            new InMemoryWishRecordRepository(
+            [
+                Record(accountId, "1", "五星甲", "10000089", 5, time, "301")
+            ]),
+            new StubMetadataProvider());
+
+        WishAnalyticsReport report = await service.ExecuteAsync(
+            new WishRecordQuery([accountId]),
+            WishAnalyticsComponents.Calendar);
+
+        Assert.Empty(report.Pools);
+        Assert.Empty(report.History);
+        Assert.Single(report.Calendar);
+        Assert.Empty(report.Items);
+        Assert.Equal(1, report.TotalPulls);
     }
 
     [Fact]
