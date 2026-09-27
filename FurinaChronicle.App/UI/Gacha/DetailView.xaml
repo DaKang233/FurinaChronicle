@@ -30,12 +30,17 @@
                     <CheckBox IsChecked="{Binding IsNewestFirst}" />
                     <Label Text="时间倒序" VerticalTextAlignment="Center" />
                 </HorizontalStackLayout>
+                <Label Text="每页" VerticalTextAlignment="Center" />
+                <Picker
+                    ItemsSource="{Binding DetailPageSizeOptions}"
+                    SelectedItem="{Binding DetailPageSize}"
+                    WidthRequest="90" />
                 <Button Command="{Binding ApplyDetailFiltersCommand}" Text="应用筛选" />
             </HorizontalStackLayout>
         </ScrollView>
 
         <ScrollView Grid.Row="2" HorizontalScrollBarVisibility="Always" Orientation="Horizontal">
-            <VerticalStackLayout WidthRequest="820">
+            <Grid RowDefinitions="Auto,*" WidthRequest="820">
                 <Grid
                     Padding="10,8"
                     BackgroundColor="{AppThemeBinding Light=#EEEEEE, Dark=#303030}"
@@ -48,7 +53,10 @@
                     <Label Grid.Column="4" FontAttributes="Bold" Text="卡池" />
                     <Label Grid.Column="5" FontAttributes="Bold" Text="类型" />
                 </Grid>
-                <CollectionView ItemsSource="{Binding DetailRecords}">
+                <CollectionView
+                    Grid.Row="1"
+                    ItemsSource="{Binding DetailRecords}"
+                    VerticalScrollBarVisibility="Always">
                     <CollectionView.EmptyView>
                         <Label Padding="16" HorizontalTextAlignment="Center" Text="没有符合筛选条件的记录。" />
                     </CollectionView.EmptyView>
@@ -65,7 +73,7 @@
                         </DataTemplate>
                     </CollectionView.ItemTemplate>
                 </CollectionView>
-            </VerticalStackLayout>
+            </Grid>
         </ScrollView>
 
         <Grid Grid.Row="3" ColumnDefinitions="Auto,*,Auto">

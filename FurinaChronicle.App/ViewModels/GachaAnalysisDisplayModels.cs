@@ -52,14 +52,14 @@ public sealed record WishRecordAnalysisDisplayItem(
 
 public sealed record FiveStarWishDisplayItem(
     string ItemName,
-    string? IconUrl,
+    ImageSource? IconUrl,
     string Pulls,
     string Time,
     string Account);
 
 public sealed record WishPoolItemCountDisplayItem(
     string ItemName,
-    string? IconUrl,
+    ImageSource? IconUrl,
     string Rank,
     string Count);
 
@@ -89,12 +89,15 @@ public sealed record WishCalendarDisplayItem(
     Color Color);
 
 public sealed partial class WishItemStatisticsDisplayItem(
-    WishItemStatistics source)
+    WishItemStatistics source,
+    string? cachedIconPath)
     : ObservableObject
 {
     public string ItemName => source.ItemName;
 
-    public string? IconUrl => source.IconUrl;
+    public ImageSource? IconUrl { get; } = string.IsNullOrWhiteSpace(cachedIconPath)
+        ? null
+        : ImageSource.FromFile(cachedIconPath);
 
     public int? RankType => source.RankType;
 

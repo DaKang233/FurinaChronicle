@@ -21,11 +21,12 @@
                 Text="五星列表" />
         </Grid>
 
-        <CollectionView Grid.Row="1" ItemsSource="{Binding PoolCards}">
-            <CollectionView.EmptyView>
-                <Label Padding="16" HorizontalTextAlignment="Center" Text="当前范围暂无可统计的抽卡记录。" />
-            </CollectionView.EmptyView>
-            <CollectionView.ItemTemplate>
+        <ScrollView Grid.Row="1">
+            <VerticalStackLayout BindableLayout.ItemsSource="{Binding PoolCards}">
+                <BindableLayout.EmptyView>
+                    <Label Padding="16" HorizontalTextAlignment="Center" Text="当前范围暂无可统计的抽卡记录。" />
+                </BindableLayout.EmptyView>
+                <BindableLayout.ItemTemplate>
                 <DataTemplate x:DataType="viewModels:WishPoolStatisticsDisplayItem">
                     <Border Margin="0,0,0,10" Padding="14">
                         <VerticalStackLayout Spacing="7">
@@ -110,7 +111,8 @@
                         </VerticalStackLayout>
                     </Border>
                 </DataTemplate>
-            </CollectionView.ItemTemplate>
-        </CollectionView>
+                </BindableLayout.ItemTemplate>
+            </VerticalStackLayout>
+        </ScrollView>
     </Grid>
 </ContentView>

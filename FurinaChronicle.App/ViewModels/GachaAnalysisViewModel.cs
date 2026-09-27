@@ -1,7 +1,9 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using FurinaChronicle.Core.Archives;
+using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.Wishes;
+using FurinaChronicle.Services.Gacha.Abstractions;
 using FurinaChronicle.Services.Wishes;
 using FurinaChronicle.Services.Wishes.Analytics;
 using System.Collections.ObjectModel;
@@ -19,10 +21,10 @@ public enum GachaAnalysisSection
 
 public partial class GachaAnalysisViewModel(
     BuildWishAnalytics buildWishAnalytics,
-    GetWishRecordPage getWishRecordPage)
+    GetWishRecordPage getWishRecordPage,
+    IGachaItemIconCache iconCache)
     : ObservableObject
 {
-    private const int DetailPageSize = 50;
     private PlayerArchive? archive;
     private GameAccount? selectedAccount;
     private IReadOnlyList<GameAccount> accounts = [];
@@ -51,6 +53,9 @@ public partial class GachaAnalysisViewModel(
         new(4, "四星"),
         new(3, "三星")
     ];
+
+    public IReadOnlyList<int> DetailPageSizeOptions { get; } =
+        [25, 50, 100, 200];
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsNotBusy))]
@@ -115,6 +120,10 @@ public partial class GachaAnalysisViewModel(
     public partial bool IsNewestFirst { get; set; } = true;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DetailPageSummary))]
+    public partial int DetailPageSize { get; set; } = 50;
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanGoToPreviousDetailPage))]
     [NotifyPropertyChangedFor(nameof(CanGoToNextDetailPage))]
     [NotifyPropertyChangedFor(nameof(DetailPageSummary))]
@@ -131,7 +140,7 @@ public partial class GachaAnalysisViewModel(
     public partial int DetailTotalCount { get; set; }
 
     public string DetailPageSummary =>
-        $"第 {DetailPage} / {DetailTotalPages} 页，共 {DetailTotalCount} 条";
+        $"第 {DetailPage} / {DetailTotalPages} 页，共 {DetailTotalCount} 条，每页 {DetailPageSize} 条";
 
     public bool CanGoToPreviousDetailPage =>
         IsNotBusy && DetailPage > 1;
@@ -186,6 +195,12 @@ public partial class GachaAnalysisViewModel(
 
     public async Task SetArchiveModeAsync(bool archiveMode)
     {
+        if (IsBusy || IsArchiveMode == archiveMode)
+        {
+            return;
+        }
+
+        ClearResults();
         IsArchiveMode = archiveMode;
         if (archiveMode)
         {
@@ -265,6 +280,42 @@ public partial class GachaAnalysisViewModel(
         }
     }
 
+    [RelayCommand]
+    private async Task ClearIconCacheAsync()
+    {
+        if (IsBusy)
+        {
+            return;
+        }
+
+        IsBusy = true;
+        ErrorMessage = null;
+        bool cleared = false;
+        try
+        {
+            await iconCache.ClearAsync();
+            cleared = true;
+        }
+        catch (Exception exception)
+        {
+            ErrorMessage = exception.Message;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+
+        if (cleared)
+        {
+            ClearResults();
+            await RefreshAsync();
+            if (ErrorMessage is null)
+            {
+                Summary = $"图标缓存已清除并重新加载。{Summary}";
+            }
+        }
+    }
+
     private async Task ShowSectionAsync(GachaAnalysisSection section)
     {
         if (CurrentSection == section)
@@ -306,7 +357,7 @@ public partial class GachaAnalysisViewModel(
                 new WishRecordQuery(ids),
                 GetCurrentComponent(),
                 CancellationToken.None);
-            PopulateCurrentSection(report);
+            await PopulateCurrentSectionAsync(report);
         }
         catch (Exception exception)
         {
@@ -439,12 +490,12 @@ public partial class GachaAnalysisViewModel(
     private WishAnalyticsComponents GetCurrentComponent() =>
         GetCurrentComponent(CurrentSection);
 
-    private void PopulateCurrentSection(WishAnalyticsReport report)
+    private async Task PopulateCurrentSectionAsync(WishAnalyticsReport report)
     {
         switch (CurrentSection)
         {
             case GachaAnalysisSection.Overview:
-                PopulateOverview(report.Pools);
+                await PopulateOverviewAsync(report.Pools);
                 break;
             case GachaAnalysisSection.History:
                 PopulateHistory(report.History);
@@ -453,7 +504,7 @@ public partial class GachaAnalysisViewModel(
                 PopulateCalendar(report.Calendar);
                 break;
             case GachaAnalysisSection.Items:
-                PopulateItems(report.Items);
+                await PopulateItemsAsync(report.Items);
                 break;
         }
 
@@ -462,13 +513,15 @@ public partial class GachaAnalysisViewModel(
             : $"当前范围共 {report.TotalPulls} 抽。";
     }
 
-    private void PopulateOverview(
+    private async Task PopulateOverviewAsync(
         IReadOnlyList<WishPoolStatistics> pools)
     {
+        WishPoolStatisticsDisplayItem[] displayItems =
+            await Task.WhenAll(pools.Select(ToDisplayItemAsync));
         PoolCards.Clear();
-        foreach (WishPoolStatistics pool in pools)
+        foreach (WishPoolStatisticsDisplayItem item in displayItems)
         {
-            PoolCards.Add(ToDisplayItem(pool));
+            PoolCards.Add(item);
         }
     }
 
@@ -501,13 +554,20 @@ public partial class GachaAnalysisViewModel(
         }
     }
 
-    private void PopulateItems(
+    private async Task PopulateItemsAsync(
         IReadOnlyList<WishItemStatistics> items)
     {
+        WishItemStatisticsDisplayItem[] displayItems =
+            await Task.WhenAll(items.Select(async item =>
+                new WishItemStatisticsDisplayItem(
+                    item,
+                    await GetCachedIconPathAsync(
+                        item.ItemId,
+                        item.IconUrl))));
         ItemStatistics.Clear();
-        foreach (WishItemStatistics item in items)
+        foreach (WishItemStatisticsDisplayItem item in displayItems)
         {
-            ItemStatistics.Add(new WishItemStatisticsDisplayItem(item));
+            ItemStatistics.Add(item);
         }
         ItemGroups.Clear();
         foreach (IGrouping<int?, WishItemStatisticsDisplayItem> group in
@@ -538,21 +598,46 @@ public partial class GachaAnalysisViewModel(
             : string.Join("、", summaries);
     }
 
-    private WishPoolStatisticsDisplayItem ToDisplayItem(
+    private async Task<WishPoolStatisticsDisplayItem> ToDisplayItemAsync(
         WishPoolStatistics pool)
     {
         Dictionary<Guid, GameAccount> accountMap =
             accounts.ToDictionary(account => account.Id);
-        IReadOnlyList<FiveStarWishDisplayItem> fiveStars = IsArchiveMode
-            ? []
-            : pool.FiveStarHistory.Select(item => new FiveStarWishDisplayItem(
-                item.ItemName,
-                item.IconUrl,
-                $"{item.Pulls} 抽",
-                item.Time.ToString("yyyy-MM-dd HH:mm"),
-                accountMap.TryGetValue(item.GameAccountId, out GameAccount? account)
-                    ? account.DisplayName ?? account.Uid
-                    : string.Empty)).ToArray();
+        var fiveStars = new List<FiveStarWishDisplayItem>();
+        if (!IsArchiveMode)
+        {
+            fiveStars.AddRange(await Task.WhenAll(
+                pool.FiveStarHistory.Select(async item =>
+                    new FiveStarWishDisplayItem(
+                    item.ItemName,
+                    CreateFileImageSource(
+                        await GetCachedIconPathAsync(
+                            item.ItemId,
+                            item.IconUrl)),
+                    $"{item.Pulls} 抽",
+                    item.Time.ToString("yyyy-MM-dd HH:mm"),
+                    accountMap.TryGetValue(
+                        item.GameAccountId,
+                        out GameAccount? account)
+                        ? account.DisplayName ?? account.Uid
+                        : string.Empty))));
+        }
+
+        var itemCounts = new List<WishPoolItemCountDisplayItem>();
+        if (IsArchiveMode)
+        {
+            itemCounts.AddRange(await Task.WhenAll(
+                pool.ItemCounts.Select(async item =>
+                    new WishPoolItemCountDisplayItem(
+                    item.ItemName,
+                    CreateFileImageSource(
+                        await GetCachedIconPathAsync(
+                            item.ItemId,
+                            item.IconUrl)),
+                    item.RankType is int rank ? $"{rank} 星" : "未知",
+                    $"× {item.Count}"))));
+        }
+
         return new WishPoolStatisticsDisplayItem(
             pool.PoolName,
             $"总抽数 {pool.TotalPulls}",
@@ -576,11 +661,29 @@ public partial class GachaAnalysisViewModel(
                 $"三星 {pool.ThreeStarCount}（{pool.ThreeStarPercentage:F2}%）",
             $"距五星 {pool.PullsSinceLastFiveStar} 抽 · 距四星 {pool.PullsSinceLastFourStar} 抽",
             fiveStars,
-            pool.ItemCounts.Select(item => new WishPoolItemCountDisplayItem(
-                item.ItemName,
-                item.IconUrl,
-                item.RankType is int rank ? $"{rank} 星" : "未知",
-                $"× {item.Count}")).ToArray());
+            itemCounts);
+    }
+
+    private Task<string?> GetCachedIconPathAsync(
+        string? itemId,
+        string? sourceUrl)
+    {
+        if (string.IsNullOrWhiteSpace(itemId))
+        {
+            return Task.FromResult<string?>(null);
+        }
+
+        return iconCache.GetOrRefreshAsync(
+            GachaGame.GenshinImpact,
+            itemId,
+            sourceUrl);
+    }
+
+    private static ImageSource? CreateFileImageSource(string? path)
+    {
+        return string.IsNullOrWhiteSpace(path)
+            ? null
+            : ImageSource.FromFile(path);
     }
 
     private string FormatAccounts(IReadOnlyList<Guid> accountIds)

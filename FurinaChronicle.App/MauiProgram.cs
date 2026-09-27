@@ -81,6 +81,14 @@ namespace FurinaChronicle.App
 				services => services.GetRequiredService<SqliteGachaItemMetadataProvider>());
 			builder.Services.AddSingleton<IGachaMetadataRefreshService>(
 				services => services.GetRequiredService<SqliteGachaItemMetadataProvider>());
+			builder.Services.AddSingleton(
+				new GachaItemIconCacheOptions(
+					Path.Combine(
+						FileSystem.CacheDirectory,
+						"gacha-item-icons")));
+			builder.Services.AddSingleton<
+				IGachaItemIconCache,
+				FileGachaItemIconCache>();
 			builder.Services.AddTransient<ImportUigfGachaRecords>();
 			builder.Services.AddSingleton<
 				ITeyvatHelperUigfClient,

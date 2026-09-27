@@ -91,6 +91,10 @@
                         <Button Text="导出账号 UIGF" Clicked="OnExportAccountUigfClicked" IsEnabled="{Binding IsNotBusy}" />
                         <Button Text="导出档案表格" Clicked="OnExportArchiveTableClicked" IsEnabled="{Binding IsNotBusy}" />
                         <Button Text="导出账号表格" Clicked="OnExportAccountTableClicked" IsEnabled="{Binding IsNotBusy}" />
+                        <Button
+                            Command="{Binding Analysis.ClearIconCacheCommand}"
+                            IsEnabled="{Binding Analysis.IsNotBusy}"
+                            Text="清除图标缓存" />
                     </HorizontalStackLayout>
                 </ScrollView>
             </VerticalStackLayout>
@@ -111,7 +115,7 @@
                 <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="8">
                     <Switch
                         IsEnabled="{Binding Analysis.IsNotBusy}"
-                        IsToggled="{Binding Analysis.IsArchiveMode}"
+                        IsToggled="{Binding Analysis.IsArchiveMode, Mode=OneWay}"
                         Toggled="OnArchiveModeToggled" />
                     <Label Grid.Column="1" Text="档案模式" VerticalTextAlignment="Center" />
                     <Label Grid.Column="2" FontSize="12" Text="{Binding Analysis.ScopeDescription}" VerticalTextAlignment="Center" />

@@ -35,13 +35,6 @@ public partial class MainPage : ContentPage
         await ViewModel.InitializeAsync();
     }
 
-    protected override void OnDisappearing()
-    {
-        AnalysisPageHost.Content = null;
-        loadedAnalysisSection = null;
-        base.OnDisappearing();
-    }
-
     private void OnAnalysisPropertyChanged(
         object? sender,
         PropertyChangedEventArgs e)
@@ -60,6 +53,8 @@ public partial class MainPage : ContentPage
             return;
         }
 
+        ReleaseAnalysisPage();
+
         ContentView page = section switch
         {
             GachaAnalysisSection.Overview => new OverviewView(),
@@ -76,6 +71,19 @@ public partial class MainPage : ContentPage
         page.BindingContext = ViewModel.Analysis;
         AnalysisPageHost.Content = page;
         loadedAnalysisSection = section;
+    }
+
+    private void ReleaseAnalysisPage()
+    {
+        if (AnalysisPageHost.Content is not ContentView oldPage)
+        {
+            return;
+        }
+
+        AnalysisPageHost.Content = null;
+        oldPage.BindingContext = null;
+        oldPage.Handler?.DisconnectHandler();
+        loadedAnalysisSection = null;
     }
 
     private async void OnArchiveModeToggled(
