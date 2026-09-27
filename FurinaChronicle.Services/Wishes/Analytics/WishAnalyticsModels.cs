@@ -27,7 +27,8 @@ public sealed record WishPoolStatistics(
     int? MaximumFiveStarPulls,
     int PullsSinceLastFiveStar,
     int PullsSinceLastFourStar,
-    IReadOnlyList<FiveStarWish> FiveStarHistory);
+    IReadOnlyList<FiveStarWish> FiveStarHistory,
+    IReadOnlyList<WishPoolItemCount> ItemCounts);
 
 public sealed record FiveStarWish(
     Guid GameAccountId,
@@ -36,6 +37,13 @@ public sealed record FiveStarWish(
     string? IconUrl,
     DateTimeOffset Time,
     int Pulls);
+
+public sealed record WishPoolItemCount(
+    string ItemName,
+    string? ItemId,
+    string? IconUrl,
+    int? RankType,
+    int Count);
 
 public sealed record WishHistoryPeriod(
     DateOnly Date,

@@ -168,6 +168,22 @@ public sealed class BuildWishAnalytics(
             sinceFour,
             fiveStarHistory
                 .OrderByDescending(item => item.Time)
+                .ToArray(),
+            records
+                .GroupBy(GetItemKey, StringComparer.Ordinal)
+                .Select(group =>
+                {
+                    WishRecord first = group.First();
+                    return new WishPoolItemCount(
+                        GetItemName(first, metadata),
+                        first.ItemId,
+                        GetIconUrl(first, metadata),
+                        first.RankType,
+                        group.Sum(GetPullCount));
+                })
+                .OrderByDescending(item => item.RankType)
+                .ThenByDescending(item => item.Count)
+                .ThenBy(item => item.ItemName, StringComparer.Ordinal)
                 .ToArray());
     }
 

@@ -21,6 +21,7 @@ using FurinaChronicle.Infrastructure.Gacha.Importing;
 using FurinaChronicle.Services.Gacha.Abstractions;
 using FurinaChronicle.Services.Gacha.Exporting;
 using FurinaChronicle.Services.Gacha.Importing;
+using FurinaChronicle.Services.Wishes.Analytics;
 using FurinaChronicle.Infrastructure.Gacha.Refreshing;
 using FurinaChronicle.Infrastructure.Passport;
 using FurinaChronicle.Services.Gacha.Refreshing;
@@ -56,6 +57,7 @@ namespace FurinaChronicle.App
 			builder.Services.AddSingleton<FurinaDatabase>();
 			builder.Services.AddSingleton<IWishRecordRepository, SqliteWishRecordRepository>();
 			builder.Services.AddTransient<GetWishRecordPage>();
+			builder.Services.AddTransient<BuildWishAnalytics>();
 
 			builder.Services.AddSingleton<IWishRecordReader, JsonWishRecordReader>();
 			builder.Services.AddTransient<GetRecentWishRecords>();
@@ -96,6 +98,7 @@ namespace FurinaChronicle.App
 
 
 			builder.Services.AddTransient<MainPageViewModel>();
+			builder.Services.AddTransient<GachaAnalysisViewModel>();
 			builder.Services.AddTransient<MainPage>();
 
 			// Phase 5

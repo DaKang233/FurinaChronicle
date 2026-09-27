@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
     xmlns:viewModels="clr-namespace:FurinaChronicle.App.ViewModels"
     xmlns:controls="clr-namespace:FurinaChronicle.App.UI.Controls"
+    xmlns:gacha="clr-namespace:FurinaChronicle.App.UI.Gacha"
     x:DataType="viewModels:MainPageViewModel"
     Title="抽卡记录">
 
@@ -13,7 +14,7 @@
             IsVisible="{OnPlatform Android=True, WinUI=False}" />
     </Shell.TitleView>
 
-    <Grid Padding="16" RowDefinitions="Auto,Auto,*,Auto" RowSpacing="10">
+    <Grid Padding="16" RowDefinitions="Auto,Auto,Auto,Auto,*,Auto" RowSpacing="10">
         <Border Padding="14">
             <Grid
                 ColumnDefinitions="*,*"
@@ -96,53 +97,80 @@
             </VerticalStackLayout>
         </Border>
 
-        <Border Grid.Row="2" Padding="0">
-            <Grid RowDefinitions="Auto,*">
-                <ScrollView Orientation="Horizontal" HorizontalScrollBarVisibility="Always">
-                    <VerticalStackLayout WidthRequest="680">
-                        <Grid
-                            Padding="10,8"
-                            BackgroundColor="{AppThemeBinding Light=#EEEEEE, Dark=#303030}"
-                            ColumnDefinitions="2*,80,175,150,90"
-                            ColumnSpacing="8">
-                            <Label FontAttributes="Bold" Text="名称" />
-                            <Label Grid.Column="1" FontAttributes="Bold" Text="星级" />
-                            <Label Grid.Column="2" FontAttributes="Bold" Text="时间" />
-                            <Label Grid.Column="3" FontAttributes="Bold" Text="卡池" />
-                            <Label Grid.Column="4" FontAttributes="Bold" Text="类型" />
-                        </Grid>
+        <ScrollView Grid.Row="2" Orientation="Horizontal">
+            <HorizontalStackLayout Spacing="8">
+                <Button Command="{Binding Analysis.ShowOverviewCommand}" Text="数据总览" />
+                <Button Command="{Binding Analysis.ShowDetailsCommand}" Text="明细表格" />
+                <Button Command="{Binding Analysis.ShowHistoryCommand}" Text="抽卡历史" />
+                <Button Command="{Binding Analysis.ShowCalendarCommand}" Text="抽卡日历" />
+                <Button Command="{Binding Analysis.ShowItemsCommand}" Text="物品" />
+            </HorizontalStackLayout>
+        </ScrollView>
 
-                        <CollectionView HeightRequest="520" ItemsSource="{Binding WishRecords}">
-                            <CollectionView.EmptyView>
-                                <Label Padding="16" HorizontalTextAlignment="Center" Text="当前账号暂无抽卡记录。" />
-                            </CollectionView.EmptyView>
-                            <CollectionView.ItemTemplate>
-                                <DataTemplate x:DataType="viewModels:WishRecordDisplayItem">
-                                    <Grid Padding="10,8" ColumnDefinitions="2*,80,175,150,90" ColumnSpacing="8">
-                                        <Label FontAttributes="Bold" LineBreakMode="TailTruncation" Text="{Binding Name}" />
-                                        <Label Grid.Column="1" Text="{Binding Rank}" />
-                                        <Label Grid.Column="2" FontSize="12" Text="{Binding Time}" />
-                                        <Label Grid.Column="3" FontSize="12" LineBreakMode="TailTruncation" Text="{Binding Pool}" />
-                                        <Label Grid.Column="4" Text="{Binding ItemType}" />
-                                    </Grid>
-                                </DataTemplate>
-                            </CollectionView.ItemTemplate>
-                        </CollectionView>
-                    </VerticalStackLayout>
+        <Border Grid.Row="3" Padding="10">
+            <VerticalStackLayout Spacing="6">
+                <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="8">
+                    <Switch
+                        IsToggled="{Binding Analysis.IsArchiveMode}"
+                        Toggled="OnArchiveModeToggled" />
+                    <Label Grid.Column="1" Text="档案模式" VerticalTextAlignment="Center" />
+                    <Label Grid.Column="2" FontSize="12" Text="{Binding Analysis.ScopeDescription}" VerticalTextAlignment="Center" />
+                    <Button
+                        Grid.Column="3"
+                        Command="{Binding Analysis.ApplyScopeCommand}"
+                        IsVisible="{Binding Analysis.IsArchiveMode}"
+                        Text="应用账号选择" />
+                </Grid>
+                <ScrollView
+                    IsVisible="{Binding Analysis.IsArchiveMode}"
+                    Orientation="Horizontal">
+                    <HorizontalStackLayout
+                        BindableLayout.ItemsSource="{Binding Analysis.AccountFilters}"
+                        Spacing="10">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="viewModels:GachaAccountFilterItem">
+                                <HorizontalStackLayout Spacing="3">
+                                    <CheckBox IsChecked="{Binding IsSelected}" />
+                                    <Label Text="{Binding DisplayName}" VerticalTextAlignment="Center" />
+                                </HorizontalStackLayout>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </HorizontalStackLayout>
                 </ScrollView>
-            </Grid>
+            </VerticalStackLayout>
         </Border>
 
-        <Grid Grid.Row="3" RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
-            <Button Command="{Binding PreviousPageCommand}" IsEnabled="{Binding CanGoToPreviousPage}" Text="上一页" />
-            <Label Grid.Column="1" HorizontalTextAlignment="Center" Text="{Binding PageSummary}" VerticalTextAlignment="Center" />
-            <Button Grid.Column="2" Command="{Binding NextPageCommand}" IsEnabled="{Binding CanGoToNextPage}" Text="下一页" />
-            <VerticalStackLayout Grid.Row="1" Grid.ColumnSpan="3" Spacing="2">
+        <Grid Grid.Row="4">
+            <gacha:OverviewView
+                BindingContext="{Binding Analysis}"
+                IsVisible="{Binding Analysis.IsOverviewVisible}" />
+            <gacha:DetailView
+                BindingContext="{Binding Analysis}"
+                IsVisible="{Binding Analysis.IsDetailsVisible}" />
+            <gacha:HistoryView
+                BindingContext="{Binding Analysis}"
+                IsVisible="{Binding Analysis.IsHistoryVisible}" />
+            <gacha:CalendarView
+                BindingContext="{Binding Analysis}"
+                IsVisible="{Binding Analysis.IsCalendarVisible}" />
+            <gacha:ItemsView
+                BindingContext="{Binding Analysis}"
+                IsVisible="{Binding Analysis.IsItemsVisible}" />
+        </Grid>
+
+        <Grid Grid.Row="5" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <VerticalStackLayout Spacing="2">
+                <Label FontSize="11" Text="{Binding Analysis.Summary}" />
                 <Label FontSize="11" Text="{Binding RefreshSummary}" />
                 <Label FontSize="11" Text="{Binding ImportSummary}" />
                 <Label FontSize="11" Text="{Binding ExportSummary}" />
                 <Label FontSize="11" Text="{Binding ErrorMessage}" TextColor="Red" />
+                <Label FontSize="11" Text="{Binding Analysis.ErrorMessage}" TextColor="Red" />
             </VerticalStackLayout>
+            <ActivityIndicator
+                Grid.Column="1"
+                IsRunning="{Binding Analysis.IsBusy}"
+                IsVisible="{Binding Analysis.IsBusy}" />
         </Grid>
     </Grid>
 </ContentPage>

@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView
+    x:Class="FurinaChronicle.App.UI.Gacha.DetailView"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:viewModels="clr-namespace:FurinaChronicle.App.ViewModels"
+    x:DataType="viewModels:GachaAnalysisViewModel">
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="8">
+        <Label FontAttributes="Bold" FontSize="20" Text="明细表格" />
+        <ScrollView Grid.Row="1" Orientation="Horizontal">
+            <HorizontalStackLayout Spacing="8">
+                <Picker
+                    ItemDisplayBinding="{Binding Name}"
+                    ItemsSource="{Binding PoolFilters}"
+                    SelectedItem="{Binding SelectedPoolFilter}"
+                    Title="卡池"
+                    WidthRequest="170" />
+                <Picker
+                    ItemDisplayBinding="{Binding Name}"
+                    ItemsSource="{Binding RankFilters}"
+                    SelectedItem="{Binding SelectedRankFilter}"
+                    Title="星级"
+                    WidthRequest="120" />
+                <CheckBox IsChecked="{Binding HasStartDate}" />
+                <DatePicker Date="{Binding StartDate}" IsEnabled="{Binding HasStartDate}" />
+                <CheckBox IsChecked="{Binding HasEndDate}" />
+                <DatePicker Date="{Binding EndDate}" IsEnabled="{Binding HasEndDate}" />
+                <HorizontalStackLayout Spacing="3">
+                    <CheckBox IsChecked="{Binding IsNewestFirst}" />
+                    <Label Text="时间倒序" VerticalTextAlignment="Center" />
+                </HorizontalStackLayout>
+                <Button Command="{Binding ApplyDetailFiltersCommand}" Text="应用筛选" />
+            </HorizontalStackLayout>
+        </ScrollView>
+
+        <ScrollView Grid.Row="2" HorizontalScrollBarVisibility="Always" Orientation="Horizontal">
+            <VerticalStackLayout WidthRequest="820">
+                <Grid
+                    Padding="10,8"
+                    BackgroundColor="{AppThemeBinding Light=#EEEEEE, Dark=#303030}"
+                    ColumnDefinitions="140,2*,70,175,150,90"
+                    ColumnSpacing="8">
+                    <Label FontAttributes="Bold" Text="账号" />
+                    <Label Grid.Column="1" FontAttributes="Bold" Text="名称" />
+                    <Label Grid.Column="2" FontAttributes="Bold" Text="星级" />
+                    <Label Grid.Column="3" FontAttributes="Bold" Text="时间" />
+                    <Label Grid.Column="4" FontAttributes="Bold" Text="卡池" />
+                    <Label Grid.Column="5" FontAttributes="Bold" Text="类型" />
+                </Grid>
+                <CollectionView ItemsSource="{Binding DetailRecords}">
+                    <CollectionView.EmptyView>
+                        <Label Padding="16" HorizontalTextAlignment="Center" Text="没有符合筛选条件的记录。" />
+                    </CollectionView.EmptyView>
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate x:DataType="viewModels:WishRecordAnalysisDisplayItem">
+                            <Grid Padding="10,8" ColumnDefinitions="140,2*,70,175,150,90" ColumnSpacing="8">
+                                <Label FontSize="11" LineBreakMode="TailTruncation" Text="{Binding Account}" />
+                                <Label Grid.Column="1" FontAttributes="Bold" LineBreakMode="TailTruncation" Text="{Binding Name}" />
+                                <Label Grid.Column="2" Text="{Binding Rank}" />
+                                <Label Grid.Column="3" FontSize="11" Text="{Binding Time}" />
+                                <Label Grid.Column="4" FontSize="11" Text="{Binding Pool}" />
+                                <Label Grid.Column="5" Text="{Binding ItemType}" />
+                            </Grid>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                </CollectionView>
+            </VerticalStackLayout>
+        </ScrollView>
+
+        <Grid Grid.Row="3" ColumnDefinitions="Auto,*,Auto">
+            <Button Command="{Binding PreviousDetailPageCommand}" IsEnabled="{Binding CanGoToPreviousDetailPage}" Text="上一页" />
+            <Label Grid.Column="1" HorizontalTextAlignment="Center" Text="{Binding DetailPageSummary}" VerticalTextAlignment="Center" />
+            <Button Grid.Column="2" Command="{Binding NextDetailPageCommand}" IsEnabled="{Binding CanGoToNextDetailPage}" Text="下一页" />
+        </Grid>
+    </Grid>
+</ContentView>

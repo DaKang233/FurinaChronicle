@@ -49,6 +49,10 @@ public sealed class BuildWishAnalyticsTests
         Assert.Equal(3, character.PullsSinceLastFourStar);
         Assert.Equal(["五星乙", "五星甲"], character.FiveStarHistory.Select(item => item.ItemName));
         Assert.All(character.FiveStarHistory, item => Assert.NotNull(item.IconUrl));
+        WishPoolItemCount threeStarCount = Assert.Single(
+            character.ItemCounts,
+            item => item.ItemId == "weapon-3");
+        Assert.Equal(3, threeStarCount.Count);
 
         Assert.Equal(3, report.History.Count);
         Assert.Equal(2, report.Calendar.Count);

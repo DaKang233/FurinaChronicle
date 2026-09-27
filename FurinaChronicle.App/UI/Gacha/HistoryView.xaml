@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView
+    x:Class="FurinaChronicle.App.UI.Gacha.HistoryView"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:viewModels="clr-namespace:FurinaChronicle.App.ViewModels"
+    x:DataType="viewModels:GachaAnalysisViewModel">
+
+    <Grid RowDefinitions="Auto,*" RowSpacing="8">
+        <Label FontAttributes="Bold" FontSize="20" Text="抽卡历史" />
+        <CollectionView Grid.Row="1" ItemsSource="{Binding HistoryItems}">
+            <CollectionView.EmptyView>
+                <Label Padding="16" Text="当前范围暂无抽卡历史。" />
+            </CollectionView.EmptyView>
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="viewModels:WishHistoryDisplayItem">
+                    <Border Margin="0,0,0,8" Padding="12">
+                        <Grid ColumnDefinitions="110,150,90,*" RowDefinitions="Auto,Auto" ColumnSpacing="8">
+                            <Label FontAttributes="Bold" Text="{Binding Date}" />
+                            <Label Grid.Column="1" Text="{Binding Pool}" />
+                            <Label Grid.Column="2" FontAttributes="Bold" Text="{Binding Total}" />
+                            <Label Grid.Column="3" FontSize="11" Text="{Binding Accounts}" />
+                            <Label Grid.Row="1" Grid.ColumnSpan="4" FontSize="12" Text="{Binding Items}" />
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+    </Grid>
+</ContentView>

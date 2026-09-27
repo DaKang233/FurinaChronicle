@@ -14,6 +14,7 @@ namespace FurinaChronicle.App.ViewModels;
 
 public partial class MainPageViewModel(
 	GetWishRecordPage getWishRecordPage,
+	GachaAnalysisViewModel analysis,
 	ImportUigfGachaRecords importUigfGachaRecords,
 	ExportUigfV42GachaRecords exportUigfV42GachaRecords,
 	ExportGachaTable exportGachaTable,
@@ -32,6 +33,8 @@ public partial class MainPageViewModel(
 	: ObservableObject
 {
 	private bool initialized;
+
+	public GachaAnalysisViewModel Analysis { get; } = analysis;
 
 	public ObservableCollection<PlayerArchive> Archives { get; } = [];
 
@@ -188,6 +191,10 @@ public partial class MainPageViewModel(
 				SelectedAccount = null;
 				WishRecords.Clear();
 				ResetPagination();
+				await Analysis.SetContextAsync(
+					SelectedArchive,
+					Accounts,
+					SelectedAccount);
 				StatusMessage = "当前档案尚未选择账号。";
 				return;
 			}
@@ -840,6 +847,7 @@ public partial class MainPageViewModel(
 			SelectedAccount = null;
 			WishRecords.Clear();
 			ResetPagination();
+			await Analysis.SetContextAsync(null, [], null);
 			StatusMessage = "请先选择档案。";
 		}
 	}
@@ -853,6 +861,7 @@ public partial class MainPageViewModel(
 
 		if (SelectedArchive is null)
 		{
+			await Analysis.SetContextAsync(null, [], null);
 			StatusMessage = "请先选择档案。";
 			return;
 		}
@@ -865,6 +874,10 @@ public partial class MainPageViewModel(
 
 		if (selection is null)
 		{
+			await Analysis.SetContextAsync(
+				SelectedArchive,
+				Accounts,
+				SelectedAccount);
 			StatusMessage =
 				$"档案“{SelectedArchive.Name}”尚无账号。";
 			return;
@@ -933,6 +946,10 @@ public partial class MainPageViewModel(
 		int pageNumber = 1)
 	{
 		WishRecords.Clear();
+		await Analysis.SetContextAsync(
+			SelectedArchive,
+			Accounts,
+			SelectedAccount);
 
 		if (SelectedAccount is null)
 		{

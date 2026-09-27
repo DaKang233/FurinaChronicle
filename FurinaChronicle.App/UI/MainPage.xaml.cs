@@ -28,6 +28,13 @@ public partial class MainPage : ContentPage
         await ViewModel.InitializeAsync();
     }
 
+    private async void OnArchiveModeToggled(
+        object? sender,
+        ToggledEventArgs e)
+    {
+        await ViewModel.Analysis.SetArchiveModeAsync(e.Value);
+    }
+
     private async void OnCreateArchiveClicked(
         object? sender,
         EventArgs e)
