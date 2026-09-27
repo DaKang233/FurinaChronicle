@@ -140,7 +140,13 @@ public partial class MainPageViewModel(
 
 		await ExecuteBusyAsync(async () =>
 		{
-			await LoadArchivesCoreAsync();
+			PlayerArchive? currentArchive =
+				await archiveSelectionService.GetCurrentArchiveAsync();
+			await LoadArchivesCoreAsync(currentArchive?.Id);
+			if (SelectedArchive is not null)
+			{
+				await LoadSelectedArchiveCoreAsync();
+			}
 			await RefreshPassportSelectionCoreAsync();
 			initialized = true;
 		});

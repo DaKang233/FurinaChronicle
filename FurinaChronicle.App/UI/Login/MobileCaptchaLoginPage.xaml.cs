@@ -10,6 +10,7 @@ public partial class MobileCaptchaLoginPage : ContentPage
     private readonly UserPageViewModel userPageViewModel;
     private readonly MobileCaptchaCooldown captchaCooldown;
     private MobileCaptchaChallenge? challenge;
+    private string? challengeMobile;
     private CancellationTokenSource? countdownCancellation;
     private CancellationTokenSource? pageCancellation;
     private bool busy;
@@ -54,11 +55,16 @@ public partial class MobileCaptchaLoginPage : ContentPage
 
         await RunAsync(async token =>
         {
-            challenge = await passportLoginService.SendMobileCaptchaAsync(
-                MobileEntry.Text ?? string.Empty,
+            string mobile = (MobileEntry.Text ?? string.Empty).Trim();
+            MobileCaptchaChallenge nextChallenge =
+                await passportLoginService.SendMobileCaptchaAsync(
+                mobile,
                 challenge?.Aigis,
                 token);
             token.ThrowIfCancellationRequested();
+            MobileEntry.Text = mobile;
+            challenge = nextChallenge;
+            challengeMobile = mobile;
             StatusLabel.Text = "验证码已发送，请查收短信。";
             captchaCooldown.Start();
             StartCooldownDisplay();
@@ -69,14 +75,14 @@ public partial class MobileCaptchaLoginPage : ContentPage
     {
         await RunAsync(async token =>
         {
-            if (challenge is null)
+            if (challenge is null || challengeMobile is null)
             {
                 throw new InvalidOperationException("请先发送短信验证码。");
             }
 
             PassportAccount account =
                 await passportLoginService.LoginWithMobileCaptchaAsync(
-                    MobileEntry.Text ?? string.Empty,
+                    challengeMobile,
                     CaptchaEntry.Text ?? string.Empty,
                     challenge,
                     token);
@@ -104,6 +110,7 @@ public partial class MobileCaptchaLoginPage : ContentPage
             BusyIndicator.IsVisible = true;
             BusyIndicator.IsRunning = true;
             LoginButton.IsEnabled = false;
+            MobileEntry.IsEnabled = false;
             StatusLabel.TextColor = Colors.Gray;
             CancellationToken token =
                 pageCancellation?.Token ?? CancellationToken.None;
@@ -126,6 +133,7 @@ public partial class MobileCaptchaLoginPage : ContentPage
         {
             busy = false;
             LoginButton.IsEnabled = !dismissed;
+            MobileEntry.IsEnabled = !dismissed;
             BusyIndicator.IsRunning = false;
             BusyIndicator.IsVisible = false;
             UpdateSendButton();
@@ -165,6 +173,24 @@ public partial class MobileCaptchaLoginPage : ContentPage
             ? $"{remaining} 秒后重试"
             : "发送验证码";
         SendButton.IsEnabled = !dismissed && !busy && remaining == 0;
+    }
+
+    private void OnMobileTextChanged(object? sender, TextChangedEventArgs e)
+    {
+        if (challenge is null || challengeMobile is null ||
+            string.Equals(
+                e.NewTextValue?.Trim(),
+                challengeMobile,
+                StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        challenge = null;
+        challengeMobile = null;
+        CaptchaEntry.Text = string.Empty;
+        StatusLabel.TextColor = Colors.Gray;
+        StatusLabel.Text = "手机号已更改，请重新获取验证码。";
     }
 
     private async void OnBackClicked(object? sender, EventArgs e)

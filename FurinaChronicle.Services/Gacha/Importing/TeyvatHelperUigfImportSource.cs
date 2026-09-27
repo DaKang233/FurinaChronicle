@@ -28,6 +28,8 @@ public sealed class TeyvatHelperUigfImportSource(
             selected.Uid);
         bool canAutomaticallyImport =
             selected.Account.Realm == PassportRealm.MainlandChina &&
+            selected.Account.Credentials.SToken is not null &&
+            selected.Account.Mid is not null &&
             region is GameServerRegion.ChinaOfficial or
                 GameServerRegion.ChinaBilibili;
         return new TeyvatHelperImportAvailability(
@@ -48,6 +50,13 @@ public sealed class TeyvatHelperUigfImportSource(
         {
             throw new NotSupportedException(
                 "自动生成抽卡链接目前仅支持国服米哈游通行证；国际服可使用手动方式提供 UID 和抽卡链接。");
+        }
+
+        if (selected.Account.Credentials.SToken is null ||
+            selected.Account.Mid is null)
+        {
+            throw new InvalidOperationException(
+                "自动生成抽卡链接要求所选通行证账号同时包含 SToken 和 MID；请重新登录或使用手动方式。");
         }
 
         GameServerRegion region = GameServerRegionResolver.Resolve(

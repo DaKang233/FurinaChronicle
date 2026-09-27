@@ -97,7 +97,10 @@ public partial class UserPageViewModel(
                 savedSelection?.PassportAccountId == target.Id
                     ? savedSelection.GameUid
                     : null);
-            _ = LoadRemainingProfilesAsync(target.Id);
+            PassportAccountListItem[] remainingAccounts = Accounts
+                .Where(item => item.Id != target.Id)
+                .ToArray();
+            _ = LoadRemainingProfilesAsync(remainingAccounts);
         }
         catch (Exception exception)
         {
@@ -246,9 +249,10 @@ public partial class UserPageViewModel(
             selectionUid));
     }
 
-    private async Task LoadRemainingProfilesAsync(Guid selectedId)
+    private async Task LoadRemainingProfilesAsync(
+        IReadOnlyList<PassportAccountListItem> accounts)
     {
-        foreach (PassportAccountListItem item in Accounts.Where(item => item.Id != selectedId))
+        foreach (PassportAccountListItem item in accounts)
         {
             try
             {

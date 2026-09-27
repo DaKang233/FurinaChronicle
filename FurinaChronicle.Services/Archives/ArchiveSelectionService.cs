@@ -31,6 +31,10 @@ public sealed class ArchiveSelectionService(
 				"要选择的玩家档案不存在。");
 		}
 
+		await selectionStore.SaveCurrentArchiveIdAsync(
+			playerArchiveId,
+			cancellationToken);
+
 		ArchiveSelection? savedSelection =
 			await selectionStore.LoadForArchiveAsync(
 				playerArchiveId,
@@ -63,6 +67,49 @@ public sealed class ArchiveSelectionService(
 		await selectionStore.SaveAsync(repairedSelection, cancellationToken);
 		return repairedSelection;
 	}
+
+	public async Task<PlayerArchive?> GetCurrentArchiveAsync(
+		CancellationToken cancellationToken = default)
+	{
+		Guid? savedArchiveId =
+			await selectionStore.LoadCurrentArchiveIdAsync(cancellationToken);
+
+		if (savedArchiveId is null)
+		{
+			ArchiveSelection? legacySelection =
+				await selectionStore.LoadAsync(cancellationToken);
+			savedArchiveId = legacySelection?.PlayerArchiveId;
+		}
+
+		if (savedArchiveId is not null)
+		{
+			PlayerArchive? savedArchive = await archiveRepository.GetByIdAsync(
+				savedArchiveId.Value,
+				cancellationToken);
+			if (savedArchive is not null)
+			{
+				await selectionStore.SaveCurrentArchiveIdAsync(
+					savedArchive.Id,
+					cancellationToken);
+				return savedArchive;
+			}
+		}
+
+		IReadOnlyList<PlayerArchive> archives =
+			await archiveRepository.GetAllAsync(cancellationToken);
+		PlayerArchive? firstArchive = archives.FirstOrDefault();
+		if (firstArchive is null)
+		{
+			await selectionStore.ClearAsync(cancellationToken);
+			return null;
+		}
+
+		await selectionStore.SaveCurrentArchiveIdAsync(
+			firstArchive.Id,
+			cancellationToken);
+		return firstArchive;
+	}
+
 	public async Task<ArchiveSelection?> GetCurrentAsync(CancellationToken cancellationToken = default)
 	{
 		ArchiveSelection? savedSelection = await selectionStore.LoadAsync(cancellationToken);

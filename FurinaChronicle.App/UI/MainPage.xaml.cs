@@ -208,7 +208,7 @@ public partial class MainPage : ContentPage
             {
                 await DisplayAlertAsync(
                     "无法自动导入",
-                    "自动导入仅支持已登录米哈游通行证并选择了国服原神角色的情况。你仍可使用手动方式输入 UID 和抽卡链接。",
+                    "自动导入要求已登录米哈游通行证、选择国服原神角色，并且账号同时具有 SToken 和 MID。你仍可使用手动方式输入 UID 和抽卡链接。",
                     "确定");
                 return;
             }

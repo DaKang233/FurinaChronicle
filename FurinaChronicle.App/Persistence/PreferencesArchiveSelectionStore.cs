@@ -8,7 +8,20 @@ public sealed class PreferencesArchiveSelectionStore(IPreferences preferences)
 	: IArchiveSelectionStore
 {
 	private const string CurrentSelectionKey = "archive-selection-v1";
+	private const string CurrentArchiveIdKey = "archive-selection-v1.current-archive";
 	private const string ArchiveSelectionKeyPrefix = "archive-selection-v1.archive.";
+
+	public Task<Guid?> LoadCurrentArchiveIdAsync(
+		CancellationToken cancellationToken = default)
+	{
+		cancellationToken.ThrowIfCancellationRequested();
+		string serialized = preferences.Get(CurrentArchiveIdKey, string.Empty);
+		Guid? archiveId = Guid.TryParse(serialized, out Guid parsed) &&
+			parsed != Guid.Empty
+			? parsed
+			: null;
+		return Task.FromResult(archiveId);
+	}
 
 	public Task<ArchiveSelection?> LoadAsync(
 		CancellationToken cancellationToken = default)
@@ -53,6 +66,7 @@ public sealed class PreferencesArchiveSelectionStore(IPreferences preferences)
 		}
 
 		string serialized = Serialize(selection);
+		preferences.Set(CurrentArchiveIdKey, selection.PlayerArchiveId.ToString("D"));
 		preferences.Set(CurrentSelectionKey, serialized);
 		preferences.Set(
 			GetArchiveSelectionKey(selection.PlayerArchiveId),
@@ -60,10 +74,27 @@ public sealed class PreferencesArchiveSelectionStore(IPreferences preferences)
 		return Task.CompletedTask;
 	}
 
+	public Task SaveCurrentArchiveIdAsync(
+		Guid playerArchiveId,
+		CancellationToken cancellationToken = default)
+	{
+		cancellationToken.ThrowIfCancellationRequested();
+		if (playerArchiveId == Guid.Empty)
+		{
+			throw new ArgumentException(
+				"玩家档案 ID 不能为空。",
+				nameof(playerArchiveId));
+		}
+
+		preferences.Set(CurrentArchiveIdKey, playerArchiveId.ToString("D"));
+		return Task.CompletedTask;
+	}
+
 	public Task ClearAsync(
 		CancellationToken cancellationToken = default)
 	{
 		cancellationToken.ThrowIfCancellationRequested();
+		preferences.Remove(CurrentArchiveIdKey);
 		preferences.Remove(CurrentSelectionKey);
 		return Task.CompletedTask;
 	}

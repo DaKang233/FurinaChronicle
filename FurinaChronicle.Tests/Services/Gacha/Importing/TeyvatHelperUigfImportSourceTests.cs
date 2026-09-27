@@ -132,23 +132,57 @@ public sealed class TeyvatHelperUigfImportSourceTests
         Assert.Empty(client.Requests);
     }
 
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public async Task AutomaticImport_RequiresBothSTokenAndMid(
+        bool includeSToken,
+        bool includeMid)
+    {
+        PassportAccount account = Passport(
+            includeSToken: includeSToken,
+            includeMid: includeMid);
+        var provider = new StubSTokenProvider();
+        var client = new RecordingClient();
+        var source = new TeyvatHelperUigfImportSource(
+            new StubAccountStore(account),
+            new StubSelectionStore(
+                new PassportSelection(account.Id, "123456789")),
+            provider,
+            client);
+
+        TeyvatHelperImportAvailability availability =
+            await source.GetAvailabilityAsync();
+        InvalidOperationException exception =
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                source.DownloadForSelectedRoleAsync());
+
+        Assert.Equal("123456789", availability.SelectedRoleUid);
+        Assert.False(availability.CanAutomaticallyImport);
+        Assert.Contains("SToken 和 MID", exception.Message);
+        Assert.Equal(0, provider.CallCount);
+        Assert.Empty(client.Requests);
+    }
+
     private static PassportAccount Passport(
-        PassportRealm realm = PassportRealm.MainlandChina)
+        PassportRealm realm = PassportRealm.MainlandChina,
+        bool includeSToken = true,
+        bool includeMid = true)
     {
         DateTimeOffset now = DateTimeOffset.UtcNow;
         return new PassportAccount(
             Guid.NewGuid(),
             "12345",
-            "mid-1",
+            includeMid ? "mid-1" : null,
             "Tester",
             PassportLoginMethod.MobileCaptcha,
             new PassportCredentials(
-                "stoken",
+                includeSToken ? "stoken" : null,
                 null,
+                includeSToken ? null : "cookie-token",
+                includeSToken ? now : null,
                 null,
-                now,
-                null,
-                null,
+                includeSToken ? null : now,
                 now),
             new PassportDeviceIdentity(
                 "31bf26d5-2afe-4b30-aab4-42fcdb3d4b09",
