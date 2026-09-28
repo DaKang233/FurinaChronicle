@@ -55,13 +55,19 @@
                                 </BindableLayout.ItemTemplate>
                             </VerticalStackLayout>
 
-                            <FlexLayout
-                                BindableLayout.ItemsSource="{Binding FiveStarHistory}"
-                                Direction="Row"
+                            <CollectionView
+                                HeightRequest="164"
+                                ItemsSource="{Binding FiveStarHistory}"
                                 IsVisible="{Binding Source={RelativeSource AncestorType={x:Type viewModels:GachaAnalysisViewModel}}, Path=IsFiveStarGridMode}"
-                                JustifyContent="Start"
-                                Wrap="Wrap">
-                                <BindableLayout.ItemTemplate>
+                                SelectionMode="None">
+                                <CollectionView.ItemsLayout>
+                                    <GridItemsLayout
+                                        HorizontalItemSpacing="3"
+                                        Orientation="Horizontal"
+                                        Span="2"
+                                        VerticalItemSpacing="3" />
+                                </CollectionView.ItemsLayout>
+                                <CollectionView.ItemTemplate>
                                     <DataTemplate x:DataType="viewModels:FiveStarWishDisplayItem">
                                         <VerticalStackLayout Margin="3" WidthRequest="72" Spacing="2">
                                             <Border HeightRequest="56" Padding="2" WidthRequest="56">
@@ -78,16 +84,22 @@
                                             <Label FontAttributes="Bold" FontSize="11" HorizontalTextAlignment="Center" Text="{Binding Pulls}" />
                                         </VerticalStackLayout>
                                     </DataTemplate>
-                                </BindableLayout.ItemTemplate>
-                            </FlexLayout>
+                                </CollectionView.ItemTemplate>
+                            </CollectionView>
 
-                            <FlexLayout
-                                BindableLayout.ItemsSource="{Binding ItemCounts}"
-                                Direction="Row"
+                            <CollectionView
+                                HeightRequest="164"
+                                ItemsSource="{Binding ItemCounts}"
                                 IsVisible="{Binding Source={RelativeSource AncestorType={x:Type viewModels:GachaAnalysisViewModel}}, Path=IsArchiveMode}"
-                                JustifyContent="Start"
-                                Wrap="Wrap">
-                                <BindableLayout.ItemTemplate>
+                                SelectionMode="None">
+                                <CollectionView.ItemsLayout>
+                                    <GridItemsLayout
+                                        HorizontalItemSpacing="3"
+                                        Orientation="Horizontal"
+                                        Span="2"
+                                        VerticalItemSpacing="3" />
+                                </CollectionView.ItemsLayout>
+                                <CollectionView.ItemTemplate>
                                     <DataTemplate x:DataType="viewModels:WishPoolItemCountDisplayItem">
                                         <VerticalStackLayout Margin="3" WidthRequest="72" Spacing="2">
                                             <Border HeightRequest="56" Padding="2" WidthRequest="56">
@@ -106,8 +118,8 @@
                                             <Label FontSize="10" HorizontalTextAlignment="Center" LineBreakMode="TailTruncation" Text="{Binding ItemName}" />
                                         </VerticalStackLayout>
                                     </DataTemplate>
-                                </BindableLayout.ItemTemplate>
-                            </FlexLayout>
+                                </CollectionView.ItemTemplate>
+                            </CollectionView>
                         </VerticalStackLayout>
                     </Border>
                 </DataTemplate>
