@@ -1,7 +1,10 @@
 using FurinaChronicle.Core.Archives;
+using FurinaChronicle.Core.Gacha;
+using FurinaChronicle.Core.Gacha.Metadata;
 using FurinaChronicle.Core.Passport;
 using FurinaChronicle.Core.Wishes;
 using FurinaChronicle.Infrastructure.Persistence;
+using FurinaChronicle.Services.Gacha.Abstractions;
 using FurinaChronicle.Services.Gacha.Refreshing;
 using FurinaChronicle.Services.Passport;
 
@@ -90,7 +93,8 @@ public sealed class RefreshGachaRecordsTests
             passportStore,
             sTokenProvider,
             new StubWindowsProvider(false),
-            new StubGachaLogClient());
+            new StubGachaLogClient(),
+            new StubMetadataProvider());
 
         await service.ExecuteAsync(new GachaRefreshRequest(
             GameAccount,
@@ -109,7 +113,8 @@ public sealed class RefreshGachaRecordsTests
             new StubPassportStore(),
             new StubSTokenProvider(),
             new StubWindowsProvider(false),
-            new StubGachaLogClient());
+            new StubGachaLogClient(),
+            new StubMetadataProvider());
 
         PlatformNotSupportedException exception =
             await Assert.ThrowsAsync<PlatformNotSupportedException>(() =>
@@ -136,6 +141,33 @@ public sealed class RefreshGachaRecordsTests
                 ManualUrl: ValidUrl.AbsoluteUri)));
 
         Assert.Equal(0, await repository.CountAsync(GameAccountId));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_MissingItemId_CompletesItFromItemName()
+    {
+        var repository = new InMemoryWishRecordRepository([]);
+        var client = new StubGachaLogClient();
+        client.Add(
+            "301",
+            null,
+            Page(Remote("103") with
+            {
+                ItemName = "芙宁娜",
+                ItemId = null,
+                ItemType = "Avatar",
+                RankType = 5
+            }));
+        var service = CreateService(repository, client);
+
+        await service.ExecuteAsync(new GachaRefreshRequest(
+            GameAccount,
+            GachaRefreshSource.ManualUrl,
+            ManualUrl: ValidUrl.AbsoluteUri));
+
+        WishRecord stored = Assert.Single(
+            await repository.GetRecentAsync(GameAccountId, 20));
+        Assert.Equal("10000089", stored.ItemId);
     }
 
     [Fact]
@@ -175,7 +207,8 @@ public sealed class RefreshGachaRecordsTests
             new StubPassportStore(),
             new StubSTokenProvider(),
             new StubWindowsProvider(false),
-            client);
+            client,
+            new StubMetadataProvider());
     }
 
     private static WishRecord Record(string id)
@@ -244,6 +277,36 @@ public sealed class RefreshGachaRecordsTests
             return Task.FromResult(
                 pages.GetValueOrDefault((gachaType, endId)) ??
                 new GachaRemotePage([], null));
+        }
+    }
+
+    private sealed class StubMetadataProvider : IGachaItemMetadataProvider
+    {
+        public ValueTask<GachaItemMetadata?> FindByIdAsync(
+            GachaGame game,
+            string itemId,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return ValueTask.FromResult<GachaItemMetadata?>(null);
+        }
+
+        public ValueTask<GachaItemMetadata?> FindByNameAsync(
+            GachaGame game,
+            string itemName,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            GachaItemMetadata? result = itemName == "芙宁娜"
+                ? new(
+                    game,
+                    "10000089",
+                    itemName,
+                    "Avatar",
+                    5,
+                    "https://example.test/furina.png")
+                : null;
+            return ValueTask.FromResult(result);
         }
     }
 

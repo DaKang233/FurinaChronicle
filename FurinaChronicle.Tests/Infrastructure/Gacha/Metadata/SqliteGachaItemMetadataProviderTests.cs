@@ -38,6 +38,22 @@ public sealed class SqliteGachaItemMetadataProviderTests
     }
 
     [Fact]
+    public async Task FindByNameAsync_LocalizedNameReturnsCanonicalMetadata()
+    {
+        await using MetadataTestContext context = MetadataTestContext.Create();
+
+        GachaItemMetadata? item = await context.Provider.FindByNameAsync(
+            GachaGame.GenshinImpact,
+            "芙宁娜");
+
+        Assert.NotNull(item);
+        Assert.Equal("10000089", item.ItemId);
+        Assert.Equal("Furina", item.Name);
+        Assert.Equal("https://example.test/furina.png", item.IconUrl);
+        Assert.Equal(1, context.RemoteSource.CallCount);
+    }
+
+    [Fact]
     public async Task RefreshIfNeededAsync_AfterIntervalUsesSha256AndReplacesChangedContent()
     {
         await using MetadataTestContext context = MetadataTestContext.Create();

@@ -68,6 +68,8 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
                     WHERE GameAccountId = ?
                     ORDER BY
                         TimeUtcTicks DESC,
+                        LENGTH(ExternalRecordId) DESC,
+                        ExternalRecordId COLLATE BINARY DESC,
                         Id DESC
                     LIMIT ?
                     OFFSET ?
@@ -129,7 +131,11 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
                     TimeOffsetMinutes
                 FROM {WishRecordRow.TableName}
                 WHERE {where}
-                ORDER BY TimeUtcTicks {direction}, Id {direction}
+                ORDER BY
+                    TimeUtcTicks {direction},
+                    LENGTH(ExternalRecordId) {direction},
+                    ExternalRecordId COLLATE BINARY {direction},
+                    Id {direction}
                 """);
             sql.AppendLine();
             var parameters = arguments.ToList();
@@ -193,7 +199,51 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
                     {
                         cancellationToken.ThrowIfCancellationRequested();
 
-                        insertedCount += connection.Insert(row,"OR IGNORE");
+                        int inserted = connection.Insert(row, "OR IGNORE");
+                        insertedCount += inserted;
+                        if (inserted == 0)
+                        {
+                            connection.Execute(
+                                $"""
+                                UPDATE {WishRecordRow.TableName}
+                                SET
+                                    ItemName = CASE
+                                        WHEN ItemName IS NULL OR TRIM(ItemName) = ''
+                                        THEN ?
+                                        ELSE ItemName
+                                    END,
+                                    ItemId = CASE
+                                        WHEN ItemId IS NULL OR TRIM(ItemId) = ''
+                                        THEN ?
+                                        ELSE ItemId
+                                    END,
+                                    ItemType = CASE
+                                        WHEN ItemType IS NULL OR TRIM(ItemType) = ''
+                                        THEN ?
+                                        ELSE ItemType
+                                    END,
+                                    GachaType = CASE
+                                        WHEN GachaType IS NULL OR TRIM(GachaType) = ''
+                                        THEN ?
+                                        ELSE GachaType
+                                    END,
+                                    UigfGachaType = CASE
+                                        WHEN UigfGachaType IS NULL OR TRIM(UigfGachaType) = ''
+                                        THEN ?
+                                        ELSE UigfGachaType
+                                    END,
+                                    RankType = COALESCE(RankType, ?)
+                                WHERE GameAccountId = ? AND ExternalRecordId = ?;
+                                """,
+                                row.ItemName,
+                                row.ItemId,
+                                row.ItemType,
+                                row.GachaType,
+                                row.UigfGachaType,
+                                row.RankType,
+                                row.GameAccountId,
+                                row.ExternalRecordId);
+                        }
                     }
                 });
 

@@ -11,6 +11,24 @@ internal sealed class GachaExportValueResolver(
 {
     private readonly Dictionary<string, GachaItemMetadata?> metadataCache =
         new(StringComparer.Ordinal);
+    private readonly Dictionary<string, GachaItemMetadata?> metadataByName =
+        new(StringComparer.Ordinal);
+
+    public async ValueTask<string> GetItemIdAsync(
+        WishRecord record,
+        CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(record.ItemId))
+        {
+            return record.ItemId.Trim();
+        }
+
+        GachaItemMetadata? metadata =
+            await GetMetadataAsync(record, cancellationToken);
+        return !string.IsNullOrWhiteSpace(metadata?.ItemId)
+            ? metadata.ItemId
+            : throw MissingValue(record, "item_id");
+    }
 
     public async ValueTask<string> GetItemNameAsync(
         WishRecord record,
@@ -130,16 +148,40 @@ internal sealed class GachaExportValueResolver(
     {
         if (string.IsNullOrWhiteSpace(record.ItemId))
         {
-            return null;
+            if (string.IsNullOrWhiteSpace(record.ItemName))
+            {
+                return null;
+            }
+
+            string itemName = record.ItemName.Trim();
+            if (!metadataByName.TryGetValue(
+                itemName,
+                out GachaItemMetadata? nameMetadata))
+            {
+                nameMetadata = await metadataProvider.FindByNameAsync(
+                    GachaGame.GenshinImpact,
+                    itemName,
+                    cancellationToken);
+                metadataByName.Add(itemName, nameMetadata);
+                if (nameMetadata is not null)
+                {
+                    metadataCache.TryAdd(
+                        nameMetadata.ItemId,
+                        nameMetadata);
+                }
+            }
+
+            return nameMetadata;
         }
 
-        if (!metadataCache.TryGetValue(record.ItemId, out GachaItemMetadata? metadata))
+        string itemId = record.ItemId.Trim();
+        if (!metadataCache.TryGetValue(itemId, out GachaItemMetadata? metadata))
         {
             metadata = await metadataProvider.FindByIdAsync(
                 GachaGame.GenshinImpact,
-                record.ItemId,
+                itemId,
                 cancellationToken);
-            metadataCache.Add(record.ItemId, metadata);
+            metadataCache.Add(itemId, metadata);
         }
 
         return metadata;

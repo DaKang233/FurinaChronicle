@@ -33,6 +33,38 @@ public sealed class SqliteWishRecordRepositoryBehaviorTests
     }
 
     [Fact]
+    public async Task SaveBatchAsync_DuplicateCompletesPreviouslyMissingFields()
+    {
+        await using var context = SqliteRepositoryTestContext.Create();
+        GameAccount account = await AddAccountAsync(context);
+        WishRecord incomplete = CreateWish(
+            account.Id,
+            "1756372800000232682",
+            minute: 30) with
+        {
+            ItemId = null,
+            ItemType = null,
+            GachaType = "200",
+            UigfGachaType = "200"
+        };
+        WishRecord complete = incomplete with
+        {
+            ItemId = "14301",
+            ItemType = "Weapon"
+        };
+        await context.Wishes.SaveBatchAsync([incomplete]);
+
+        WishSaveResult result = await context.Wishes.SaveBatchAsync([complete]);
+
+        Assert.Equal(0, result.InsertedCount);
+        Assert.Equal(1, result.DuplicateCount);
+        WishRecord stored = Assert.Single(
+            await context.Wishes.GetRecentAsync(account.Id, 20));
+        Assert.Equal("14301", stored.ItemId);
+        Assert.Equal("Weapon", stored.ItemType);
+    }
+
+    [Fact]
     public async Task GetRecentAsync_FiltersAccountSortsNewestFirstAndAppliesLimit()
     {
         await using var context = SqliteRepositoryTestContext.Create();
@@ -59,6 +91,43 @@ public sealed class SqliteWishRecordRepositoryBehaviorTests
 
         Assert.Equal(["new", "middle"], loaded.Select(x => x.ExternalRecordId));
         Assert.All(loaded, x => Assert.Equal(requestedAccount.Id, x.GameAccountId));
+    }
+
+    [Fact]
+    public async Task QueryAsync_SameSecondUsesRemoteRecordIdAsTieBreaker()
+    {
+        await using var context = SqliteRepositoryTestContext.Create();
+        GameAccount account = await AddAccountAsync(context);
+        DateTimeOffset sameTime =
+            new(2026, 9, 9, 13, 34, 0, TimeSpan.FromHours(8));
+        await context.Wishes.SaveBatchAsync(
+        [
+            new WishRecord(account.Id, "1788931200000208082", "鸦羽弓", 3, sameTime),
+            new WishRecord(account.Id, "1788931200000207182", "飞天御剑", 3, sameTime),
+            new WishRecord(account.Id, "1788931200000207982", "黑缨枪", 3, sameTime)
+        ]);
+
+        IReadOnlyList<WishRecord> newest =
+            await context.Wishes.GetRecentAsync(account.Id, 20);
+        IReadOnlyList<WishRecord> oldest = await context.Wishes.QueryAsync(
+            new WishRecordQuery(
+                [account.Id],
+                SortOrder: WishRecordSortOrder.OldestFirst));
+
+        Assert.Equal(
+            [
+                "1788931200000208082",
+                "1788931200000207982",
+                "1788931200000207182"
+            ],
+            newest.Select(record => record.ExternalRecordId));
+        Assert.Equal(
+            [
+                "1788931200000207182",
+                "1788931200000207982",
+                "1788931200000208082"
+            ],
+            oldest.Select(record => record.ExternalRecordId));
     }
 
     [Theory]

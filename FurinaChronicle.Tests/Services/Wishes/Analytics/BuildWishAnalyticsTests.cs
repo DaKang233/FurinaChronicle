@@ -155,6 +155,48 @@ public sealed class BuildWishAnalyticsTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_MissingAndPresentItemIdForSameNameAreMerged()
+    {
+        Guid accountId = Guid.NewGuid();
+        DateTimeOffset start =
+            new(2026, 1, 1, 8, 0, 0, TimeSpan.FromHours(8));
+        WishRecord withId = Record(
+            accountId,
+            "1",
+            "三星武器",
+            "weapon-3",
+            3,
+            start,
+            "301");
+        WishRecord withoutId = Record(
+            accountId,
+            "2",
+            "三星武器",
+            "temporary",
+            3,
+            start.AddMinutes(1),
+            "301") with
+        {
+            ItemId = null
+        };
+        var service = new BuildWishAnalytics(
+            new InMemoryWishRecordRepository([withId, withoutId]),
+            new StubMetadataProvider());
+
+        WishAnalyticsReport report = await service.ExecuteAsync(
+            new WishRecordQuery([accountId]));
+
+        WishItemStatistics item = Assert.Single(report.Items);
+        Assert.Equal("weapon-3", item.ItemId);
+        Assert.Equal(2, item.Count);
+        Assert.NotNull(item.IconUrl);
+        WishPoolItemCount poolItem = Assert.Single(
+            Assert.Single(report.Pools).ItemCounts);
+        Assert.Equal("weapon-3", poolItem.ItemId);
+        Assert.Equal(2, poolItem.Count);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_EmptyScopeReturnsEmptyReport()
     {
         Guid accountId = Guid.NewGuid();
@@ -206,6 +248,24 @@ public sealed class BuildWishAnalyticsTests
                         : "Weapon",
                     null,
                     $"https://example.test/{itemId}.png"));
+        }
+
+        public ValueTask<GachaItemMetadata?> FindByNameAsync(
+            GachaGame game,
+            string itemName,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            GachaItemMetadata? result = itemName == "三星武器"
+                ? new(
+                    game,
+                    "weapon-3",
+                    itemName,
+                    "Weapon",
+                    3,
+                    "https://example.test/weapon-3.png")
+                : null;
+            return ValueTask.FromResult(result);
         }
     }
 }

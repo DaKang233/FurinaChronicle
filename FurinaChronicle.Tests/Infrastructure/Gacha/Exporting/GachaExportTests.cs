@@ -87,6 +87,46 @@ public sealed class GachaExportTests
     }
 
     [Fact]
+    public async Task UigfWriter_MissingItemId_ResolvesItFromItemName()
+    {
+        GachaExportDocument source = CreateDocument();
+        GachaExportAccount sourceAccount = source.Accounts[0];
+        WishRecord sourceRecord = sourceAccount.Records[0];
+        GachaExportDocument document = source with
+        {
+            Accounts =
+            [
+                sourceAccount with
+                {
+                    Records = [sourceRecord with { ItemId = null }]
+                }
+            ]
+        };
+        var metadata = new GachaItemMetadata(
+            GachaGame.GenshinImpact,
+            sourceRecord.ItemId!,
+            sourceRecord.ItemName!,
+            sourceRecord.ItemType!,
+            sourceRecord.RankType);
+        var writer = new UigfV42GachaWriter(
+            new FixedMetadataProvider(metadata));
+        await using var stream = new MemoryStream();
+
+        await writer.WriteAsync(
+            stream,
+            document,
+            UigfV42ExportOptions.Minimal);
+
+        stream.Position = 0;
+        using JsonDocument json = await JsonDocument.ParseAsync(stream);
+        JsonElement record =
+            json.RootElement.GetProperty("hk4e")[0].GetProperty("list")[0];
+        Assert.Equal(
+            metadata.ItemId,
+            record.GetProperty("item_id").GetString());
+    }
+
+    [Fact]
     public async Task ExportThenImport_ExistingDatabase_ReportsAllDuplicates()
     {
         var archives = new InMemoryPlayerArchiveRepository();
@@ -384,6 +424,24 @@ public sealed class GachaExportTests
             GachaItemMetadata? result =
                 game == metadata.Game &&
                 string.Equals(itemId, metadata.ItemId, StringComparison.Ordinal)
+                    ? metadata
+                    : null;
+            return ValueTask.FromResult(result);
+        }
+
+        public ValueTask<GachaItemMetadata?> FindByNameAsync(
+            GachaGame game,
+            string itemName,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            bool matchesName =
+                string.Equals(itemName, metadata.Name, StringComparison.Ordinal) ||
+                metadata.LocalizedNames?.Values.Contains(
+                    itemName,
+                    StringComparer.Ordinal) == true;
+            GachaItemMetadata? result =
+                game == metadata.Game && matchesName
                     ? metadata
                     : null;
             return ValueTask.FromResult(result);

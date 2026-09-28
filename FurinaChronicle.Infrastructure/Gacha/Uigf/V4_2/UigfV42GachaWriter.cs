@@ -128,7 +128,9 @@ public sealed class UigfV42GachaWriter(
             record.UigfGachaType,
             record,
             "uigf_gacha_type");
-        string itemId = Required(record.ItemId, record, "item_id");
+        string itemId = await resolver.GetItemIdAsync(
+            record,
+            cancellationToken);
 
         writer.WriteStartObject();
         writer.WriteString("gacha_type", gachaType);

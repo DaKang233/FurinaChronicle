@@ -64,9 +64,17 @@ public sealed class BuildWishAnalytics(
         bool needsMetadata = components.HasFlag(WishAnalyticsComponents.Pools) ||
             components.HasFlag(WishAnalyticsComponents.History) ||
             components.HasFlag(WishAnalyticsComponents.Items);
-        Dictionary<string, GachaItemMetadata?> metadata = needsMetadata
-            ? await LoadMetadataAsync(records, cancellationToken)
-            : new Dictionary<string, GachaItemMetadata?>(StringComparer.Ordinal);
+        Dictionary<string, GachaItemMetadata?> metadata =
+            new(StringComparer.Ordinal);
+        if (needsMetadata)
+        {
+            (
+                IReadOnlyList<WishRecord> resolvedRecords,
+                Dictionary<string, GachaItemMetadata?> resolvedMetadata) =
+                await ResolveMetadataAsync(records, cancellationToken);
+            records = resolvedRecords;
+            metadata = resolvedMetadata;
+        }
 
         IReadOnlyList<WishPoolStatistics> pools =
             components.HasFlag(WishAnalyticsComponents.Pools)
@@ -97,25 +105,67 @@ public sealed class BuildWishAnalytics(
             records.Sum(GetPullCount));
     }
 
-    private async Task<Dictionary<string, GachaItemMetadata?>> LoadMetadataAsync(
+    private async Task<(
+        IReadOnlyList<WishRecord> Records,
+        Dictionary<string, GachaItemMetadata?> Metadata)> ResolveMetadataAsync(
         IReadOnlyList<WishRecord> records,
         CancellationToken cancellationToken)
     {
-        var result = new Dictionary<string, GachaItemMetadata?>(
+        var metadataById = new Dictionary<string, GachaItemMetadata?>(
             StringComparer.Ordinal);
-        foreach (string itemId in records
-            .Select(record => record.ItemId)
-            .Where(id => !string.IsNullOrWhiteSpace(id))
-            .Select(id => id!)
-            .Distinct(StringComparer.Ordinal))
+        var metadataByName = new Dictionary<string, GachaItemMetadata?>(
+            StringComparer.Ordinal);
+        var resolvedRecords = new List<WishRecord>(records.Count);
+
+        foreach (WishRecord record in records)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            result[itemId] = await metadataProvider.FindByIdAsync(
-                GachaGame.GenshinImpact,
-                itemId,
-                cancellationToken);
+            GachaItemMetadata? item = null;
+            if (!string.IsNullOrWhiteSpace(record.ItemId))
+            {
+                string itemId = record.ItemId.Trim();
+                if (!metadataById.TryGetValue(itemId, out item))
+                {
+                    item = await metadataProvider.FindByIdAsync(
+                        GachaGame.GenshinImpact,
+                        itemId,
+                        cancellationToken);
+                    metadataById.Add(itemId, item);
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(record.ItemName))
+            {
+                string itemName = record.ItemName.Trim();
+                if (!metadataByName.TryGetValue(itemName, out item))
+                {
+                    item = await metadataProvider.FindByNameAsync(
+                        GachaGame.GenshinImpact,
+                        itemName,
+                        cancellationToken);
+                    metadataByName.Add(itemName, item);
+                }
+                if (item is not null)
+                {
+                    metadataById.TryAdd(item.ItemId, item);
+                }
+            }
+
+            resolvedRecords.Add(item is null
+                ? record
+                : record with
+                {
+                    ItemId = item.ItemId,
+                    ItemName = string.IsNullOrWhiteSpace(record.ItemName)
+                        ? item.Name
+                        : record.ItemName.Trim(),
+                    ItemType = string.IsNullOrWhiteSpace(record.ItemType)
+                        ? item.ItemType
+                        : record.ItemType.Trim(),
+                    RankType = record.RankType ?? item.RankType
+                });
         }
-        return result;
+
+        return (resolvedRecords, metadataById);
     }
 
     private static WishPoolStatistics BuildPoolStatistics(
@@ -389,7 +439,9 @@ public sealed class BuildWishAnalytics(
             return record.ItemName.Trim();
         }
         if (record.ItemId is string itemId &&
-            metadata.TryGetValue(itemId, out GachaItemMetadata? item) &&
+            metadata.TryGetValue(
+                itemId.Trim(),
+                out GachaItemMetadata? item) &&
             item is not null)
         {
             return item.Name;
@@ -402,7 +454,9 @@ public sealed class BuildWishAnalytics(
         IReadOnlyDictionary<string, GachaItemMetadata?> metadata)
     {
         return record.ItemId is string itemId &&
-            metadata.TryGetValue(itemId, out GachaItemMetadata? item)
+            metadata.TryGetValue(
+                itemId.Trim(),
+                out GachaItemMetadata? item)
             ? item?.IconUrl
             : null;
     }

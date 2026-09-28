@@ -158,6 +158,41 @@ public sealed class GachaMetadataDatabase : IAsyncDisposable
         return (item, names);
     }
 
+    internal async Task<(
+        GachaMetadataItemRow? Item,
+        IReadOnlyList<GachaMetadataNameRow> Names)> FindByNameAsync(
+        GachaGame game,
+        string itemName,
+        CancellationToken cancellationToken)
+    {
+        await InitializeAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        List<GachaMetadataNameRow> matches =
+            await Connection.QueryAsync<GachaMetadataNameRow>(
+                """
+                SELECT
+                    GameId,
+                    ItemId,
+                    Language,
+                    Name
+                FROM GachaMetadataNames
+                WHERE GameId = ? AND Name = ? COLLATE NOCASE;
+                """,
+                (int)game,
+                itemName);
+        string[] itemIds = matches
+            .Select(match => match.ItemId)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (itemIds.Length != 1)
+        {
+            return (null, []);
+        }
+
+        return await FindAsync(game, itemIds[0], cancellationToken);
+    }
+
     internal async Task ReplaceSnapshotAsync(
         GachaGame game,
         IReadOnlyCollection<GachaMetadataItemRow> items,

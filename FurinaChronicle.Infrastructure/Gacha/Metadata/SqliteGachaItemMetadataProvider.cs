@@ -39,32 +39,30 @@ public sealed class SqliteGachaItemMetadataProvider(
                 itemId.Trim(),
                 cancellationToken);
 
-        if (item is null)
+        return CreateMetadata(game, item, names);
+    }
+
+    public async ValueTask<GachaItemMetadata?> FindByNameAsync(
+        GachaGame game,
+        string itemName,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(itemName))
         {
-            return null;
+            throw new ArgumentException("Item name is required.", nameof(itemName));
         }
 
-        Dictionary<string, string> localizedNames = names
-            .GroupBy(name => name.Language, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(
-                group => group.Key,
-                group => group.First().Name,
-                StringComparer.OrdinalIgnoreCase);
+        await RefreshIfNeededAsync(game, cancellationToken: cancellationToken);
 
-        string? displayName = SelectDisplayName(localizedNames);
-        if (displayName is null)
-        {
-            return null;
-        }
+        (
+            GachaMetadataItemRow? item,
+            IReadOnlyList<GachaMetadataNameRow> names) =
+            await database.FindByNameAsync(
+                game,
+                itemName.Trim(),
+                cancellationToken);
 
-        return new GachaItemMetadata(
-            game,
-            item.ItemId,
-            displayName,
-            item.ItemType,
-            item.RankType,
-            item.IconUrl,
-            localizedNames);
+        return CreateMetadata(game, item, names);
     }
 
     public async Task<GachaMetadataRefreshResult> RefreshIfNeededAsync(
@@ -212,6 +210,35 @@ public sealed class SqliteGachaItemMetadataProvider(
             .OrderBy(pair => pair.Key, StringComparer.Ordinal)
             .Select(pair => pair.Value)
             .FirstOrDefault();
+    }
+
+    private GachaItemMetadata? CreateMetadata(
+        GachaGame game,
+        GachaMetadataItemRow? item,
+        IReadOnlyList<GachaMetadataNameRow> names)
+    {
+        if (item is null)
+        {
+            return null;
+        }
+
+        Dictionary<string, string> localizedNames = names
+            .GroupBy(name => name.Language, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.Key,
+                group => group.First().Name,
+                StringComparer.OrdinalIgnoreCase);
+        string? displayName = SelectDisplayName(localizedNames);
+        return displayName is null
+            ? null
+            : new GachaItemMetadata(
+                game,
+                item.ItemId,
+                displayName,
+                item.ItemType,
+                item.RankType,
+                item.IconUrl,
+                localizedNames);
     }
 
     private static (

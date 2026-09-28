@@ -9,4 +9,12 @@ public interface IGachaItemMetadataProvider
         GachaGame game,
         string itemId,
         CancellationToken cancellationToken = default);
+
+    ValueTask<GachaItemMetadata?> FindByNameAsync(
+        GachaGame game,
+        string itemName,
+        CancellationToken cancellationToken = default)
+    {
+        return ValueTask.FromResult<GachaItemMetadata?>(null);
+    }
 }

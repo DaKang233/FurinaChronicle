@@ -1,7 +1,10 @@
 using FurinaChronicle.Core.Archives;
+using FurinaChronicle.Core.Gacha;
+using FurinaChronicle.Core.Gacha.Metadata;
 using FurinaChronicle.Core.Passport;
 using FurinaChronicle.Core.Wishes;
 using FurinaChronicle.Services.Abstractions;
+using FurinaChronicle.Services.Gacha.Abstractions;
 using FurinaChronicle.Services.Passport;
 using FurinaChronicle.Services.Wishes;
 
@@ -12,7 +15,8 @@ public sealed class RefreshGachaRecords(
     IPassportAccountStore passportAccountStore,
     ISTokenGachaUrlProvider sTokenUrlProvider,
     IWindowsGachaCacheUrlProvider windowsCacheUrlProvider,
-    IGachaLogClient gachaLogClient)
+    IGachaLogClient gachaLogClient,
+    IGachaItemMetadataProvider metadataProvider)
 {
     private static readonly string[] GachaTypes =
         ["301", "302", "500", "100", "200"];
@@ -34,6 +38,8 @@ public sealed class RefreshGachaRecords(
             : new HashSet<string>(StringComparer.Ordinal);
         var collected = new List<WishRecord>();
         var collectedIds = new HashSet<string>(StringComparer.Ordinal);
+        var metadataByName =
+            new Dictionary<string, GachaItemMetadata?>(StringComparer.Ordinal);
         int pageCount = 0;
         int boundaryCount = 0;
 
@@ -74,7 +80,12 @@ public sealed class RefreshGachaRecords(
 
                     if (collectedIds.Add(remote.ExternalRecordId))
                     {
-                        collected.Add(remote.ToDomain(request.GameAccount.Id));
+                        GachaRemoteRecord completed =
+                            await CompleteMetadataAsync(
+                                remote,
+                                metadataByName,
+                                cancellationToken);
+                        collected.Add(completed.ToDomain(request.GameAccount.Id));
                     }
                 }
 
@@ -257,5 +268,38 @@ public sealed class RefreshGachaRecords(
         return records
             .Select(record => record.ExternalRecordId)
             .ToHashSet(StringComparer.Ordinal);
+    }
+
+    private async Task<GachaRemoteRecord> CompleteMetadataAsync(
+        GachaRemoteRecord record,
+        IDictionary<string, GachaItemMetadata?> metadataByName,
+        CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(record.ItemId) ||
+            string.IsNullOrWhiteSpace(record.ItemName))
+        {
+            return record;
+        }
+
+        string itemName = record.ItemName.Trim();
+        if (!metadataByName.TryGetValue(
+            itemName,
+            out GachaItemMetadata? metadata))
+        {
+            metadata = await metadataProvider.FindByNameAsync(
+                GachaGame.GenshinImpact,
+                itemName,
+                cancellationToken);
+            metadataByName.Add(itemName, metadata);
+        }
+
+        return metadata is null
+            ? record
+            : record with
+            {
+                ItemId = metadata.ItemId,
+                ItemType = record.ItemType ?? metadata.ItemType,
+                RankType = record.RankType ?? metadata.RankType
+            };
     }
 }
