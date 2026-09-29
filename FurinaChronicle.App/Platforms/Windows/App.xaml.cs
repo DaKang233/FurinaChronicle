@@ -16,7 +16,31 @@ namespace FurinaChronicle.App.WinUI
         /// </summary>
         public App()
         {
+            UnhandledException += OnUnhandledException;
             this.InitializeComponent();
+        }
+
+        private static void OnUnhandledException(
+            object sender,
+            Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
+        {
+            try
+            {
+                string logDirectory = Path.Combine(
+                    Environment.GetFolderPath(
+                        Environment.SpecialFolder.LocalApplicationData),
+                    "FurinaChronicle",
+                    "Logs");
+                Directory.CreateDirectory(logDirectory);
+                File.AppendAllText(
+                    Path.Combine(logDirectory, "windows-unhandled.log"),
+                    $"[{DateTimeOffset.Now:O}]{Environment.NewLine}" +
+                    $"{e.Exception}{Environment.NewLine}{Environment.NewLine}");
+            }
+            catch
+            {
+                // Logging must never replace the original UI exception.
+            }
         }
 
         protected override MauiApp CreateMauiApp() => MauiProgram.CreateMauiApp();
