@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView
+    x:Class="FurinaChronicle.App.UI.Gacha.ArchiveGachaView"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:viewModels="clr-namespace:FurinaChronicle.App.ViewModels"
+    x:DataType="viewModels:GachaAnalysisViewModel">
+
+    <Grid RowDefinitions="Auto,Auto,*" RowSpacing="8">
+        <Border Padding="10">
+            <VerticalStackLayout Spacing="6">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                    <Label FontAttributes="Bold" Text="档案数据" VerticalTextAlignment="Center" />
+                    <Label
+                        Grid.Column="1"
+                        FontSize="12"
+                        Text="{Binding ScopeDescription}"
+                        VerticalTextAlignment="Center" />
+                    <Button
+                        Grid.Column="2"
+                        Command="{Binding ApplyScopeCommand}"
+                        IsEnabled="{Binding IsNotBusy}"
+                        Text="应用账号选择" />
+                </Grid>
+                <ScrollView Orientation="Horizontal">
+                    <HorizontalStackLayout
+                        BindableLayout.ItemsSource="{Binding AccountFilters}"
+                        Spacing="10">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="viewModels:GachaAccountFilterItem">
+                                <HorizontalStackLayout Spacing="3">
+                                    <CheckBox IsChecked="{Binding IsSelected}" />
+                                    <Label Text="{Binding DisplayName}" VerticalTextAlignment="Center" />
+                                </HorizontalStackLayout>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </HorizontalStackLayout>
+                </ScrollView>
+            </VerticalStackLayout>
+        </Border>
+
+        <ScrollView Grid.Row="1" Orientation="Horizontal">
+            <HorizontalStackLayout Spacing="8">
+                <Button Command="{Binding ShowOverviewCommand}" IsEnabled="{Binding IsNotBusy}" Text="数据总览" />
+                <Button Command="{Binding ShowDetailsCommand}" IsEnabled="{Binding IsNotBusy}" Text="明细表格" />
+                <Button Command="{Binding ShowHistoryCommand}" IsEnabled="{Binding IsNotBusy}" Text="抽卡历史" />
+                <Button Command="{Binding ShowCalendarCommand}" IsEnabled="{Binding IsNotBusy}" Text="抽卡日历" />
+                <Button Command="{Binding ShowItemsCommand}" IsEnabled="{Binding IsNotBusy}" Text="物品" />
+            </HorizontalStackLayout>
+        </ScrollView>
+
+        <ContentView x:Name="AnalysisPageHost" Grid.Row="2" />
+    </Grid>
+</ContentView>

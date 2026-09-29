@@ -102,6 +102,20 @@ public partial class MainPageViewModel(
 	public partial bool IsFullRefresh { get; set; }
 
 	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(AccountSelectionPanelToggleText))]
+	public partial bool IsAccountSelectionPanelExpanded { get; set; } = true;
+
+	public string AccountSelectionPanelToggleText =>
+		IsAccountSelectionPanelExpanded ? "收起 ▲" : "展开 ▼";
+
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(AccountOperationsPanelToggleText))]
+	public partial bool IsAccountOperationsPanelExpanded { get; set; } = true;
+
+	public string AccountOperationsPanelToggleText =>
+		IsAccountOperationsPanelExpanded ? "收起 ▲" : "展开 ▼";
+
+	[ObservableProperty]
 	public partial string StatusMessage { get; set; } = "请先选择档案。";
 	[ObservableProperty]
 	[NotifyCanExecuteChangedFor(nameof(PreviousPageCommand))]
@@ -131,6 +145,14 @@ public partial class MainPageViewModel(
 
 	public bool CanGoToNextPage =>
 		!IsBusy && SelectedAccount is not null && CurrentPage < TotalPages;
+
+	[RelayCommand]
+	private void ToggleAccountSelectionPanel() =>
+		IsAccountSelectionPanelExpanded = !IsAccountSelectionPanelExpanded;
+
+	[RelayCommand]
+	private void ToggleAccountOperationsPanel() =>
+		IsAccountOperationsPanelExpanded = !IsAccountOperationsPanelExpanded;
 
 
 	public async Task InitializeAsync()

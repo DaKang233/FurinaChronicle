@@ -63,6 +63,12 @@ public sealed record WishPoolItemCountDisplayItem(
     string Rank,
     string Count);
 
+public sealed record FiveStarWishDisplayRow(
+    IReadOnlyList<FiveStarWishDisplayItem> Items);
+
+public sealed record WishPoolItemCountDisplayRow(
+    IReadOnlyList<WishPoolItemCountDisplayItem> Items);
+
 public sealed record WishPoolStatisticsDisplayItem(
     string PoolName,
     string Total,
@@ -73,7 +79,34 @@ public sealed record WishPoolStatisticsDisplayItem(
     string RankDistribution,
     string CurrentPity,
     IReadOnlyList<FiveStarWishDisplayItem> FiveStarHistory,
-    IReadOnlyList<WishPoolItemCountDisplayItem> ItemCounts);
+    IReadOnlyList<WishPoolItemCountDisplayItem> ItemCounts,
+    IReadOnlyList<FiveStarWishDisplayRow> FiveStarRows,
+    IReadOnlyList<WishPoolItemCountDisplayRow> ItemCountRows);
+
+public sealed record ArchiveOverviewDisplayRow(
+    WishPoolStatisticsDisplayItem? Summary,
+    IReadOnlyList<WishPoolItemCountDisplayItem> Items)
+{
+    public bool IsSummary => Summary is not null;
+
+    public bool IsItemRow => Summary is null;
+
+    public string PoolName => Summary?.PoolName ?? string.Empty;
+
+    public string Total => Summary?.Total ?? string.Empty;
+
+    public string Period => Summary?.Period ?? string.Empty;
+
+    public string AverageFiveStar => Summary?.AverageFiveStar ?? string.Empty;
+
+    public string AverageUp => Summary?.AverageUp ?? string.Empty;
+
+    public string Extremes => Summary?.Extremes ?? string.Empty;
+
+    public string RankDistribution => Summary?.RankDistribution ?? string.Empty;
+
+    public string CurrentPity => Summary?.CurrentPity ?? string.Empty;
+}
 
 public sealed record WishHistoryDisplayItem(
     string Date,
@@ -122,6 +155,11 @@ public sealed partial class WishItemStatisticsDisplayItem(
     public partial bool IsExpanded { get; set; }
 }
 
-public sealed record WishItemRankGroupDisplayItem(
-    string Name,
-    IReadOnlyList<WishItemStatisticsDisplayItem> Items);
+public sealed record WishItemGridDisplayRow(
+    string? GroupName,
+    IReadOnlyList<WishItemStatisticsDisplayItem> Items)
+{
+    public bool IsHeader => GroupName is not null;
+
+    public bool IsItemRow => GroupName is null;
+}

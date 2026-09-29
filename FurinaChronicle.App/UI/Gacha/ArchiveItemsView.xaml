@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView
+    x:Class="FurinaChronicle.App.UI.Gacha.ArchiveItemsView"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:viewModels="clr-namespace:FurinaChronicle.App.ViewModels"
+    x:DataType="viewModels:GachaAnalysisViewModel">
+
+    <Grid RowDefinitions="Auto,*" RowSpacing="8">
+        <Label FontAttributes="Bold" FontSize="20" Text="档案物品统计" />
+
+        <CollectionView
+            Grid.Row="1"
+            ItemsSource="{Binding ItemGridRows}"
+            SelectionMode="None">
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="viewModels:WishItemGridDisplayRow">
+                    <Grid>
+                        <Label
+                            Margin="0,8,0,4"
+                            FontAttributes="Bold"
+                            FontSize="17"
+                            IsVisible="{Binding IsHeader}"
+                            Text="{Binding GroupName}" />
+                        <HorizontalStackLayout
+                            BindableLayout.ItemsSource="{Binding Items}"
+                            IsVisible="{Binding IsItemRow}"
+                            Spacing="4">
+                            <BindableLayout.ItemTemplate>
+                                <DataTemplate x:DataType="viewModels:WishItemStatisticsDisplayItem">
+                                    <Border Margin="4" Padding="8" WidthRequest="132">
+                                        <Grid RowDefinitions="90,Auto,Auto">
+                                            <Grid>
+                                                <Image Aspect="AspectFit" Source="{Binding IconUrl}" />
+                                                <Label
+                                                    Margin="0,3,3,0"
+                                                    BackgroundColor="#CC333333"
+                                                    FontAttributes="Bold"
+                                                    HorizontalOptions="End"
+                                                    Padding="5,2"
+                                                    Text="{Binding Count}"
+                                                    TextColor="White"
+                                                    VerticalOptions="Start" />
+                                            </Grid>
+                                            <Label Grid.Row="1" FontAttributes="Bold" HorizontalTextAlignment="Center" LineBreakMode="TailTruncation" Text="{Binding ItemName}" />
+                                            <Label Grid.Row="2" FontSize="11" HorizontalTextAlignment="Center" Text="{Binding Rank}" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </BindableLayout.ItemTemplate>
+                        </HorizontalStackLayout>
+                    </Grid>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+    </Grid>
+</ContentView>

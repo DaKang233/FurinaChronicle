@@ -25,17 +25,26 @@ public partial class GachaAnalysisViewModel(
     IGachaItemIconCache iconCache)
     : ObservableObject
 {
+    private const int IconItemsPerRow = 4;
     private PlayerArchive? archive;
     private GameAccount? selectedAccount;
     private IReadOnlyList<GameAccount> accounts = [];
 
     public ObservableCollection<GachaAccountFilterItem> AccountFilters { get; } = [];
-    public ObservableCollection<WishPoolStatisticsDisplayItem> PoolCards { get; } = [];
+    [ObservableProperty]
+    public partial IReadOnlyList<WishPoolStatisticsDisplayItem> PoolCards { get; set; } = [];
     public ObservableCollection<WishRecordAnalysisDisplayItem> DetailRecords { get; } = [];
     public ObservableCollection<WishHistoryDisplayItem> HistoryItems { get; } = [];
     public ObservableCollection<WishCalendarDisplayItem> CalendarItems { get; } = [];
-    public ObservableCollection<WishItemStatisticsDisplayItem> ItemStatistics { get; } = [];
-    public ObservableCollection<WishItemRankGroupDisplayItem> ItemGroups { get; } = [];
+
+    [ObservableProperty]
+    public partial IReadOnlyList<ArchiveOverviewDisplayRow> ArchiveOverviewRows { get; set; } = [];
+
+    [ObservableProperty]
+    public partial IReadOnlyList<WishItemStatisticsDisplayItem> ItemStatistics { get; set; } = [];
+
+    [ObservableProperty]
+    public partial IReadOnlyList<WishItemGridDisplayRow> ItemGridRows { get; set; } = [];
 
     public IReadOnlyList<PoolFilterOption> PoolFilters { get; } =
     [
@@ -80,12 +89,9 @@ public partial class GachaAnalysisViewModel(
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsAccountMode))]
-    [NotifyPropertyChangedFor(nameof(CanUseItemListMode))]
     public partial bool IsArchiveMode { get; set; }
 
     public bool IsAccountMode => !IsArchiveMode;
-
-    public bool CanUseItemListMode => !IsArchiveMode;
 
     [ObservableProperty]
     public partial string ScopeDescription { get; set; } = "尚未选择档案或账号";
@@ -97,11 +103,11 @@ public partial class GachaAnalysisViewModel(
     public partial string Summary { get; set; } = "暂无抽卡记录。";
 
     [ObservableProperty]
-    public partial PoolFilterOption SelectedPoolFilter { get; set; } =
+    public partial PoolFilterOption? SelectedPoolFilter { get; set; } =
         new(null, "全部卡池");
 
     [ObservableProperty]
-    public partial RankFilterOption SelectedRankFilter { get; set; } =
+    public partial RankFilterOption? SelectedRankFilter { get; set; } =
         new(null, "全部星级");
 
     [ObservableProperty]
@@ -200,18 +206,49 @@ public partial class GachaAnalysisViewModel(
             return;
         }
 
-        ClearResults();
-        IsArchiveMode = archiveMode;
-        if (archiveMode)
+        ErrorMessage = null;
+        try
         {
-            foreach (GachaAccountFilterItem item in AccountFilters)
+            ClearResults();
+            IsArchiveMode = archiveMode;
+            if (archiveMode)
             {
-                item.IsSelected = true;
+                foreach (GachaAccountFilterItem item in AccountFilters)
+                {
+                    item.IsSelected = true;
+                }
+                IsItemGridMode = true;
             }
-            IsItemGridMode = true;
+            DetailPage = 1;
+            await RefreshAsync();
         }
-        DetailPage = 1;
-        await RefreshAsync();
+        catch (Exception exception)
+        {
+            // This method is called by an async void UI event. Do not let a
+            // binding/handler exception escape into WinUI's dispatcher.
+            ErrorMessage = exception.Message;
+        }
+    }
+
+    [RelayCommand]
+    private Task ShowAccountScopeAsync() => SetArchiveModeAsync(false);
+
+    [RelayCommand]
+    private Task ShowArchiveScopeAsync() => SetArchiveModeAsync(true);
+
+    public void PrepareForSection(GachaAnalysisSection section)
+    {
+        if (section != GachaAnalysisSection.Details)
+        {
+            return;
+        }
+
+        SelectedPoolFilter ??= PoolFilters[0];
+        SelectedRankFilter ??= RankFilters[0];
+        if (!DetailPageSizeOptions.Contains(DetailPageSize))
+        {
+            DetailPageSize = 50;
+        }
     }
 
     [RelayCommand]
@@ -272,13 +309,7 @@ public partial class GachaAnalysisViewModel(
     private void UseItemGrid() => IsItemGridMode = true;
 
     [RelayCommand]
-    private void UseItemList()
-    {
-        if (CanUseItemListMode)
-        {
-            IsItemGridMode = false;
-        }
-    }
+    private void UseItemList() => IsItemGridMode = false;
 
     [RelayCommand]
     private async Task ClearIconCacheAsync()
@@ -323,6 +354,7 @@ public partial class GachaAnalysisViewModel(
             return;
         }
 
+        PrepareForSection(section);
         CurrentSection = section;
         DetailPage = 1;
         ClearResults();
@@ -429,11 +461,12 @@ public partial class GachaAnalysisViewModel(
 
     private WishRecordQuery BuildDetailQuery(IReadOnlyList<Guid> ids)
     {
-        IReadOnlySet<int>? ranks = SelectedRankFilter.Value is int rank
+        PrepareForSection(GachaAnalysisSection.Details);
+        IReadOnlySet<int>? ranks = SelectedRankFilter?.Value is int rank
             ? new HashSet<int> { rank }
             : null;
         IReadOnlySet<WishPoolGroup>? pools =
-            SelectedPoolFilter.Value is WishPoolGroup pool
+            SelectedPoolFilter?.Value is WishPoolGroup pool
                 ? new HashSet<WishPoolGroup> { pool }
                 : null;
         return new WishRecordQuery(
@@ -516,13 +549,21 @@ public partial class GachaAnalysisViewModel(
     private async Task PopulateOverviewAsync(
         IReadOnlyList<WishPoolStatistics> pools)
     {
-        WishPoolStatisticsDisplayItem[] displayItems =
-            await Task.WhenAll(pools.Select(ToDisplayItemAsync));
-        PoolCards.Clear();
-        foreach (WishPoolStatisticsDisplayItem item in displayItems)
+        PoolCards = await Task.WhenAll(pools.Select(ToDisplayItemAsync));
+        if (!IsArchiveMode)
         {
-            PoolCards.Add(item);
+            ArchiveOverviewRows = [];
+            return;
         }
+
+        var rows = new List<ArchiveOverviewDisplayRow>();
+        foreach (WishPoolStatisticsDisplayItem card in PoolCards)
+        {
+            rows.Add(new ArchiveOverviewDisplayRow(card, []));
+            rows.AddRange(card.ItemCountRows.Select(row =>
+                new ArchiveOverviewDisplayRow(null, row.Items)));
+        }
+        ArchiveOverviewRows = rows;
     }
 
     private void PopulateHistory(
@@ -564,19 +605,20 @@ public partial class GachaAnalysisViewModel(
                     await GetCachedIconPathAsync(
                         item.ItemId,
                         item.IconUrl))));
-        ItemStatistics.Clear();
-        foreach (WishItemStatisticsDisplayItem item in displayItems)
-        {
-            ItemStatistics.Add(item);
-        }
-        ItemGroups.Clear();
+        ItemStatistics = displayItems;
+        var rows = new List<WishItemGridDisplayRow>();
         foreach (IGrouping<int?, WishItemStatisticsDisplayItem> group in
             ItemStatistics.GroupBy(item => item.RankType))
         {
-            ItemGroups.Add(new WishItemRankGroupDisplayItem(
+            WishItemStatisticsDisplayItem[] groupItems = group.ToArray();
+            rows.Add(new WishItemGridDisplayRow(
                 group.Key is int rank ? $"{rank} 星" : "未知星级",
-                group.ToArray()));
+                []));
+            rows.AddRange(groupItems
+                .Chunk(IconItemsPerRow)
+                .Select(row => new WishItemGridDisplayRow(null, row)));
         }
+        ItemGridRows = rows;
     }
 
     private static string FormatHistoryItems(IReadOnlyList<WishHistoryItem> items)
@@ -661,7 +703,15 @@ public partial class GachaAnalysisViewModel(
                 $"三星 {pool.ThreeStarCount}（{pool.ThreeStarPercentage:F2}%）",
             $"距五星 {pool.PullsSinceLastFiveStar} 抽 · 距四星 {pool.PullsSinceLastFourStar} 抽",
             fiveStars,
-            itemCounts);
+            itemCounts,
+            fiveStars
+                .Chunk(IconItemsPerRow)
+                .Select(row => new FiveStarWishDisplayRow(row))
+                .ToArray(),
+            itemCounts
+                .Chunk(IconItemsPerRow)
+                .Select(row => new WishPoolItemCountDisplayRow(row))
+                .ToArray());
     }
 
     private Task<string?> GetCachedIconPathAsync(
@@ -700,12 +750,13 @@ public partial class GachaAnalysisViewModel(
 
     private void ClearResults()
     {
-        PoolCards.Clear();
+        PoolCards = [];
+        ArchiveOverviewRows = [];
         DetailRecords.Clear();
         HistoryItems.Clear();
         CalendarItems.Clear();
-        ItemStatistics.Clear();
-        ItemGroups.Clear();
+        ItemStatistics = [];
+        ItemGridRows = [];
         DetailPage = 1;
         DetailTotalPages = 1;
         DetailTotalCount = 0;

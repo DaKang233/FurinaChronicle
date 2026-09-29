@@ -2,9 +2,9 @@ using FurinaChronicle.App.ViewModels;
 
 namespace FurinaChronicle.App.UI.Gacha;
 
-public partial class ItemsView : ContentView
+public partial class AccountItemsView : ContentView
 {
-    public ItemsView()
+    public AccountItemsView()
     {
         InitializeComponent();
     }

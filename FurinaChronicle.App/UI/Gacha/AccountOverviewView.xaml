@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView
+    x:Class="FurinaChronicle.App.UI.Gacha.AccountOverviewView"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:viewModels="clr-namespace:FurinaChronicle.App.ViewModels"
+    x:DataType="viewModels:GachaAnalysisViewModel">
+
+    <Grid RowDefinitions="Auto,*" RowSpacing="8">
+        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+            <Label FontAttributes="Bold" FontSize="20" Text="账号数据总览" />
+            <Button Grid.Column="1" Command="{Binding UseFiveStarGridCommand}" Text="五星图标" />
+            <Button Grid.Column="2" Command="{Binding UseFiveStarListCommand}" Text="五星列表" />
+        </Grid>
+
+        <ScrollView Grid.Row="1">
+            <VerticalStackLayout BindableLayout.ItemsSource="{Binding PoolCards}">
+                <BindableLayout.EmptyView>
+                    <Label Padding="16" HorizontalTextAlignment="Center" Text="当前账号暂无可统计的抽卡记录。" />
+                </BindableLayout.EmptyView>
+                <BindableLayout.ItemTemplate>
+                    <DataTemplate x:DataType="viewModels:WishPoolStatisticsDisplayItem">
+                        <Border Margin="0,0,0,10" Padding="14">
+                            <VerticalStackLayout Spacing="7">
+                                <Label FontAttributes="Bold" FontSize="19" Text="{Binding PoolName}" />
+                                <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="5">
+                                    <Label Text="{Binding Total}" />
+                                    <Label Grid.Column="1" Text="{Binding AverageFiveStar}" />
+                                    <Label Grid.Row="1" Text="{Binding Extremes}" />
+                                    <Label Grid.Row="1" Grid.Column="1" Text="{Binding CurrentPity}" />
+                                    <Label Grid.Row="2" Grid.ColumnSpan="2" FontSize="12" Text="{Binding RankDistribution}" />
+                                </Grid>
+                                <Label FontSize="12" Text="{Binding Period}" />
+                                <Label FontSize="12" Text="{Binding AverageUp}" TextColor="{AppThemeBinding Light=#666666, Dark=#BBBBBB}" />
+
+                                <VerticalStackLayout
+                                    BindableLayout.ItemsSource="{Binding FiveStarHistory}"
+                                    IsVisible="{Binding Source={RelativeSource AncestorType={x:Type viewModels:GachaAnalysisViewModel}}, Path=IsFiveStarListMode}"
+                                    Spacing="4">
+                                    <BindableLayout.ItemTemplate>
+                                        <DataTemplate x:DataType="viewModels:FiveStarWishDisplayItem">
+                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                                                <Label Text="{Binding ItemName}" />
+                                                <Label Grid.Column="1" FontAttributes="Bold" HorizontalTextAlignment="End" Text="{Binding Pulls}" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </BindableLayout.ItemTemplate>
+                                </VerticalStackLayout>
+
+                                <VerticalStackLayout
+                                    BindableLayout.ItemsSource="{Binding FiveStarRows}"
+                                    IsVisible="{Binding Source={RelativeSource AncestorType={x:Type viewModels:GachaAnalysisViewModel}}, Path=IsFiveStarGridMode}"
+                                    Spacing="3">
+                                    <BindableLayout.ItemTemplate>
+                                        <DataTemplate x:DataType="viewModels:FiveStarWishDisplayRow">
+                                            <HorizontalStackLayout BindableLayout.ItemsSource="{Binding Items}" Spacing="3">
+                                                <BindableLayout.ItemTemplate>
+                                                    <DataTemplate x:DataType="viewModels:FiveStarWishDisplayItem">
+                                                        <VerticalStackLayout Margin="3" WidthRequest="72" Spacing="2">
+                                                            <Border HeightRequest="56" Padding="2" WidthRequest="56">
+                                                                <Grid>
+                                                                    <Image Aspect="AspectFit" Source="{Binding IconUrl}" />
+                                                                    <Label
+                                                                        FontSize="9"
+                                                                        HorizontalTextAlignment="Center"
+                                                                        LineBreakMode="TailTruncation"
+                                                                        Text="{Binding ItemName}"
+                                                                        VerticalOptions="End" />
+                                                                </Grid>
+                                                            </Border>
+                                                            <Label FontAttributes="Bold" FontSize="11" HorizontalTextAlignment="Center" Text="{Binding Pulls}" />
+                                                        </VerticalStackLayout>
+                                                    </DataTemplate>
+                                                </BindableLayout.ItemTemplate>
+                                            </HorizontalStackLayout>
+                                        </DataTemplate>
+                                    </BindableLayout.ItemTemplate>
+                                </VerticalStackLayout>
+                            </VerticalStackLayout>
+                        </Border>
+                    </DataTemplate>
+                </BindableLayout.ItemTemplate>
+            </VerticalStackLayout>
+        </ScrollView>
+    </Grid>
+</ContentView>

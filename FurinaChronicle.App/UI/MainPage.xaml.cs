@@ -9,7 +9,11 @@ namespace FurinaChronicle.App;
 
 public partial class MainPage : ContentPage
 {
-    private GachaAnalysisSection? loadedAnalysisSection;
+    private const double MinimumAnalysisViewportHeight = 360;
+    private const double MaximumAnalysisViewportHeight = 900;
+    private const double AnalysisViewportHeightRatio = 0.65;
+
+    private bool? loadedArchiveScope;
 
     private MainPageViewModel ViewModel =>
         (MainPageViewModel)BindingContext;
@@ -21,7 +25,7 @@ public partial class MainPage : ContentPage
         InitializeComponent();
         BindingContext = viewModel;
         viewModel.Analysis.PropertyChanged += OnAnalysisPropertyChanged;
-        LoadAnalysisPage(viewModel.Analysis.CurrentSection);
+        LoadScopePage(viewModel.Analysis.IsArchiveMode);
         if (Shell.GetTitleView(this) is UI.Controls.PassportAvatarButton avatar)
         {
             avatar.BindingContext = userPageViewModel;
@@ -31,66 +35,67 @@ public partial class MainPage : ContentPage
     protected override async void OnAppearing()
     {
         base.OnAppearing();
-        LoadAnalysisPage(ViewModel.Analysis.CurrentSection);
+        LoadScopePage(ViewModel.Analysis.IsArchiveMode);
         await ViewModel.InitializeAsync();
+    }
+
+    protected override void OnSizeAllocated(double width, double height)
+    {
+        base.OnSizeAllocated(width, height);
+        if (height <= 0)
+        {
+            return;
+        }
+
+        double viewportHeight = Math.Clamp(
+            height * AnalysisViewportHeightRatio,
+            MinimumAnalysisViewportHeight,
+            MaximumAnalysisViewportHeight);
+        if (Math.Abs(GachaScopePageHost.HeightRequest - viewportHeight) >= 1)
+        {
+            // The fixed viewport keeps nested CollectionView controls bounded
+            // while the outer ScrollView handles the whole page.
+            GachaScopePageHost.HeightRequest = viewportHeight;
+        }
     }
 
     private void OnAnalysisPropertyChanged(
         object? sender,
         PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(GachaAnalysisViewModel.CurrentSection))
+        if (e.PropertyName == nameof(GachaAnalysisViewModel.IsArchiveMode))
         {
-            LoadAnalysisPage(ViewModel.Analysis.CurrentSection);
+            LoadScopePage(ViewModel.Analysis.IsArchiveMode);
         }
     }
 
-    private void LoadAnalysisPage(GachaAnalysisSection section)
+    private void LoadScopePage(bool archiveMode)
     {
-        if (loadedAnalysisSection == section &&
-            AnalysisPageHost.Content is not null)
+        if (loadedArchiveScope == archiveMode &&
+            GachaScopePageHost.Content is not null)
         {
             return;
         }
 
-        ReleaseAnalysisPage();
-
-        ContentView page = section switch
-        {
-            GachaAnalysisSection.Overview => new OverviewView(),
-            GachaAnalysisSection.Details => new DetailView(),
-            GachaAnalysisSection.History => new HistoryView(),
-            GachaAnalysisSection.Calendar => new CalendarView(),
-            GachaAnalysisSection.Items =>
-                new FurinaChronicle.App.UI.Gacha.ItemsView(),
-            _ => throw new ArgumentOutOfRangeException(
-                nameof(section),
-                section,
-                null)
-        };
+        ReleaseScopePage();
+        ContentView page = archiveMode
+            ? new ArchiveGachaView()
+            : new AccountGachaView();
         page.BindingContext = ViewModel.Analysis;
-        AnalysisPageHost.Content = page;
-        loadedAnalysisSection = section;
+        GachaScopePageHost.Content = page;
+        loadedArchiveScope = archiveMode;
     }
 
-    private void ReleaseAnalysisPage()
+    private void ReleaseScopePage()
     {
-        if (AnalysisPageHost.Content is not ContentView oldPage)
+        if (GachaScopePageHost.Content is not ContentView oldPage)
         {
             return;
         }
 
-        AnalysisPageHost.Content = null;
         oldPage.BindingContext = null;
-        oldPage.Handler?.DisconnectHandler();
-        loadedAnalysisSection = null;
-    }
-
-    private async void OnArchiveModeToggled(
-        object? sender,
-        ToggledEventArgs e)
-    {
-        await ViewModel.Analysis.SetArchiveModeAsync(e.Value);
+        GachaScopePageHost.Content = null;
+        loadedArchiveScope = null;
     }
 
     private async void OnCreateArchiveClicked(

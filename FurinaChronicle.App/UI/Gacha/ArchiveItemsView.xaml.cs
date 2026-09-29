@@ -1,8 +1,8 @@
 namespace FurinaChronicle.App.UI.Gacha;
 
-public partial class OverviewView : ContentView
+public partial class ArchiveItemsView : ContentView
 {
-    public OverviewView()
+    public ArchiveItemsView()
     {
         InitializeComponent();
     }
