@@ -30,7 +30,11 @@ public sealed class RefreshGachaRecordsTests
     [Fact]
     public async Task ExecuteAsync_DefaultIncremental_StopsAtFirstLocalRecord()
     {
-        WishRecord known = Record("100");
+        WishRecord known = Record("100") with
+        {
+            ItemName = "保留的本地名称",
+            RankType = 5
+        };
         var repository = new InMemoryWishRecordRepository([known]);
         var client = new StubGachaLogClient();
         client.Add("301", null, Page(
@@ -47,10 +51,15 @@ public sealed class RefreshGachaRecordsTests
 
         Assert.Equal(2, result.FetchedCount);
         Assert.Equal(2, result.InsertedCount);
+        Assert.Equal(0, result.UpdatedCount);
         Assert.Equal(1, result.ReachedLocalBoundaryCount);
         IReadOnlyList<WishRecord> stored =
             await repository.GetRecentAsync(GameAccountId, 20);
         Assert.Contains(stored, item => item.ExternalRecordId == "103");
+        Assert.Contains(stored, item =>
+            item.ExternalRecordId == "100" &&
+            item.ItemName == "保留的本地名称" &&
+            item.RankType == 5);
         Assert.DoesNotContain(stored, item => item.ExternalRecordId == "099");
         Assert.Single(client.Calls, call => call.GachaType == "301");
     }
@@ -58,7 +67,14 @@ public sealed class RefreshGachaRecordsTests
     [Fact]
     public async Task ExecuteAsync_FullRefresh_DoesNotStopAtLocalRecord()
     {
-        var repository = new InMemoryWishRecordRepository([Record("100")]);
+        var repository = new InMemoryWishRecordRepository(
+        [
+            Record("100") with
+            {
+                ItemName = "不准确的旧名称",
+                RankType = 5
+            }
+        ]);
         var client = new StubGachaLogClient();
         client.Add("301", null, new GachaRemotePage(
             [Remote("103"), Remote("100")],
@@ -76,9 +92,16 @@ public sealed class RefreshGachaRecordsTests
 
         Assert.Equal(3, result.FetchedCount);
         Assert.Equal(2, result.InsertedCount);
-        Assert.Equal(1, result.DuplicateCount);
+        Assert.Equal(1, result.UpdatedCount);
+        Assert.Equal(0, result.DuplicateCount);
         Assert.Equal(0, result.ReachedLocalBoundaryCount);
         Assert.Equal(2, client.Calls.Count(call => call.GachaType == "301"));
+        IReadOnlyList<WishRecord> stored =
+            await repository.GetRecentAsync(GameAccountId, 20);
+        Assert.Contains(stored, item =>
+            item.ExternalRecordId == "100" &&
+            item.ItemName == "Item 100" &&
+            item.RankType == 3);
     }
 
     [Fact]

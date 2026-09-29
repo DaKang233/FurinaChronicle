@@ -135,7 +135,11 @@ namespace FurinaChronicle.Infrastructure.Persistence
             }
         }
 
-        public async Task<WishSaveResult> SaveBatchAsync(IReadOnlyCollection<WishRecord> newRecords, CancellationToken cancellationToken = default)
+        public async Task<WishSaveResult> SaveBatchAsync(
+            IReadOnlyCollection<WishRecord> newRecords,
+            CancellationToken cancellationToken = default,
+            WishRecordConflictPolicy conflictPolicy =
+                WishRecordConflictPolicy.PreserveExisting)
         {
             ArgumentNullException.ThrowIfNull(newRecords, nameof(newRecords));
             await gate.WaitAsync(cancellationToken);
@@ -143,18 +147,73 @@ namespace FurinaChronicle.Infrastructure.Persistence
             {
                 int insertedCount = 0;
                 int duplicateCount = 0;
+                int updatedCount = 0;
                 foreach (var record in newRecords)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     var key = (record.GameAccountId, record.ExternalRecordId);
 
-                    if (!uniqueKeys.Add(key)) { duplicateCount++; continue; };
+                    if (!uniqueKeys.Add(key))
+                    {
+                        if (conflictPolicy == WishRecordConflictPolicy.ReplaceExisting)
+                        {
+                            int index = records.FindIndex(candidate =>
+                                candidate.GameAccountId == record.GameAccountId &&
+                                candidate.ExternalRecordId == record.ExternalRecordId);
+                            if (index >= 0)
+                            {
+                                records[index] = MergeForReplacement(
+                                    records[index],
+                                    record);
+                                updatedCount++;
+                                continue;
+                            }
+                        }
+
+                        duplicateCount++;
+                        continue;
+                    }
                     records.Add(record);
                     insertedCount++;
                 }
-                return new WishSaveResult(insertedCount, duplicateCount);
+                return new WishSaveResult(
+                    insertedCount,
+                    duplicateCount,
+                    updatedCount);
             }
             finally { gate?.Release(); }
+        }
+
+        private static WishRecord MergeForReplacement(
+            WishRecord existing,
+            WishRecord incoming)
+        {
+            return incoming with
+            {
+                ItemName = UseIncomingOrExisting(
+                    incoming.ItemName,
+                    existing.ItemName),
+                ItemId = UseIncomingOrExisting(
+                    incoming.ItemId,
+                    existing.ItemId),
+                ItemType = UseIncomingOrExisting(
+                    incoming.ItemType,
+                    existing.ItemType),
+                GachaType = UseIncomingOrExisting(
+                    incoming.GachaType,
+                    existing.GachaType),
+                UigfGachaType = UseIncomingOrExisting(
+                    incoming.UigfGachaType,
+                    existing.UigfGachaType),
+                RankType = incoming.RankType ?? existing.RankType
+            };
+        }
+
+        private static string? UseIncomingOrExisting(
+            string? incoming,
+            string? existing)
+        {
+            return string.IsNullOrWhiteSpace(incoming) ? existing : incoming;
         }
 
         public static IEnumerable<WishRecord> CreateSampleRecords()

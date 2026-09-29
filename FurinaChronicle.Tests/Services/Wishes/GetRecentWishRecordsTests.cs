@@ -168,7 +168,11 @@ public sealed class GetRecentWishRecordsTests
         }
 
 
-        public Task<WishSaveResult> SaveBatchAsync(IReadOnlyCollection<WishRecord> records, CancellationToken cancellationToken = default)
+        public Task<WishSaveResult> SaveBatchAsync(
+            IReadOnlyCollection<WishRecord> records,
+            CancellationToken cancellationToken = default,
+            WishRecordConflictPolicy conflictPolicy =
+                WishRecordConflictPolicy.PreserveExisting)
         {
             throw new NotSupportedException("该测试替身只用于测试查询功能。");
         }

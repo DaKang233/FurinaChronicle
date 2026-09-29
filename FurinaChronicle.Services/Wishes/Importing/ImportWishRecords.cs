@@ -24,7 +24,10 @@ namespace FurinaChronicle.Services.Wishes.Importing
             WishRecord[] distinctRecords = readResult.Records.DistinctBy(record => (record.GameAccountId, record.ExternalRecordId)).ToArray();
 
             int duplicatesInsideSource = readResult.Records.Count - distinctRecords.Length;
-            WishSaveResult saveResult = await wishRepository.SaveBatchAsync(distinctRecords, cancellationToken);
+            WishSaveResult saveResult = await wishRepository.SaveBatchAsync(
+                distinctRecords,
+                cancellationToken,
+                WishRecordConflictPolicy.PreserveExisting);
             return new WishImportResult(
                 TotalCount: readResult.Records.Count + readResult.Errors.Count,
                 ImportedCount: saveResult.InsertedCount,

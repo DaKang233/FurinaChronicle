@@ -65,6 +65,79 @@ public sealed class SqliteWishRecordRepositoryBehaviorTests
     }
 
     [Fact]
+    public async Task SaveBatchAsync_PreserveExisting_DoesNotOverwriteCompleteFields()
+    {
+        await using var context = SqliteRepositoryTestContext.Create();
+        GameAccount account = await AddAccountAsync(context);
+        WishRecord existing = CreateWish(account.Id, "wish-1", minute: 30) with
+        {
+            ItemId = "old-id",
+            ItemType = "Avatar",
+            GachaType = "301",
+            UigfGachaType = "301",
+            RankType = 5
+        };
+        WishRecord incoming = existing with
+        {
+            ItemName = "纠正后的名称",
+            ItemId = "new-id",
+            ItemType = "Weapon",
+            GachaType = "302",
+            UigfGachaType = "302",
+            RankType = 4,
+            Time = existing.Time.AddMinutes(1)
+        };
+        await context.Wishes.SaveBatchAsync([existing]);
+
+        WishSaveResult result = await context.Wishes.SaveBatchAsync([incoming]);
+
+        Assert.Equal(0, result.InsertedCount);
+        Assert.Equal(0, result.UpdatedCount);
+        Assert.Equal(1, result.DuplicateCount);
+        WishRecord stored = Assert.Single(
+            await context.Wishes.GetRecentAsync(account.Id, 20));
+        Assert.Equal(existing, stored);
+    }
+
+    [Fact]
+    public async Task SaveBatchAsync_ReplaceExisting_OverwritesAuthoritativeFields()
+    {
+        await using var context = SqliteRepositoryTestContext.Create();
+        GameAccount account = await AddAccountAsync(context);
+        WishRecord existing = CreateWish(account.Id, "wish-1", minute: 30) with
+        {
+            ItemId = "old-id",
+            ItemType = "Avatar",
+            GachaType = "301",
+            UigfGachaType = "301",
+            RankType = 5
+        };
+        WishRecord incoming = existing with
+        {
+            ItemName = "纠正后的名称",
+            ItemId = "new-id",
+            ItemType = "Weapon",
+            GachaType = "302",
+            UigfGachaType = "302",
+            RankType = 4,
+            Count = 2,
+            Time = existing.Time.AddMinutes(1)
+        };
+        await context.Wishes.SaveBatchAsync([existing]);
+
+        WishSaveResult result = await context.Wishes.SaveBatchAsync(
+            [incoming],
+            conflictPolicy: WishRecordConflictPolicy.ReplaceExisting);
+
+        Assert.Equal(0, result.InsertedCount);
+        Assert.Equal(1, result.UpdatedCount);
+        Assert.Equal(0, result.DuplicateCount);
+        WishRecord stored = Assert.Single(
+            await context.Wishes.GetRecentAsync(account.Id, 20));
+        Assert.Equal(incoming, stored);
+    }
+
+    [Fact]
     public async Task GetRecentAsync_FiltersAccountSortsNewestFirstAndAppliesLimit()
     {
         await using var context = SqliteRepositoryTestContext.Create();

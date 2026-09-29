@@ -37,6 +37,7 @@ public sealed record GachaRefreshIdentity(
 public sealed record GachaRefreshResult(
     int FetchedCount,
     int InsertedCount,
+    int UpdatedCount,
     int DuplicateCount,
     int PageCount,
     int ReachedLocalBoundaryCount);

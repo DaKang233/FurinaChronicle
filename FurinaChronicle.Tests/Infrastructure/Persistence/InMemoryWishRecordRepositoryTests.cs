@@ -1,5 +1,6 @@
 ﻿using FurinaChronicle.Core.Wishes;
 using FurinaChronicle.Infrastructure.Persistence;
+using FurinaChronicle.Services.Wishes;
 using Xunit;
 
 namespace FurinaChronicle.Tests.Infrastructure.Persistence;
@@ -134,5 +135,43 @@ public sealed class InMemoryWishRecordRepositoryTests
 
         Assert.Equal(2, result.InsertedCount);
         Assert.Equal(0, result.DuplicateCount);
+    }
+
+    [Fact]
+    public async Task SaveBatchAsync_ReplaceExisting_UpdatesSameAccountRecord()
+    {
+        Guid accountId = Guid.NewGuid();
+        DateTimeOffset time = DateTimeOffset.UtcNow;
+        var existing = new WishRecord(
+            accountId,
+            "same-id",
+            "旧名称",
+            5,
+            time)
+        {
+            ItemId = "old-id",
+            ItemType = "Avatar"
+        };
+        var incoming = new WishRecord(
+            accountId,
+            "same-id",
+            "新名称",
+            4,
+            time.AddMinutes(1))
+        {
+            ItemId = "new-id",
+            ItemType = "Weapon"
+        };
+        var repository = new InMemoryWishRecordRepository([existing]);
+
+        WishSaveResult result = await repository.SaveBatchAsync(
+            [incoming],
+            conflictPolicy: WishRecordConflictPolicy.ReplaceExisting);
+
+        Assert.Equal(1, result.UpdatedCount);
+        Assert.Equal(0, result.DuplicateCount);
+        Assert.Equal(
+            incoming,
+            Assert.Single(await repository.GetRecentAsync(accountId, 20)));
     }
 }

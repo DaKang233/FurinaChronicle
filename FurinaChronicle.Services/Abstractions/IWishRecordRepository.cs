@@ -28,6 +28,10 @@ namespace FurinaChronicle.Services.Abstractions
             WishRecordQuery query,
             CancellationToken cancellationToken = default);
 
-        Task<WishSaveResult> SaveBatchAsync(IReadOnlyCollection<WishRecord> records, CancellationToken cancellationToken = default);
+        Task<WishSaveResult> SaveBatchAsync(
+            IReadOnlyCollection<WishRecord> records,
+            CancellationToken cancellationToken = default,
+            WishRecordConflictPolicy conflictPolicy =
+                WishRecordConflictPolicy.PreserveExisting);
     }
 }

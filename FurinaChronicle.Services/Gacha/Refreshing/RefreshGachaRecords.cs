@@ -108,10 +108,14 @@ public sealed class RefreshGachaRecords(
 
         WishSaveResult saveResult = await recordRepository.SaveBatchAsync(
             collected,
-            cancellationToken);
+            cancellationToken,
+            request.Mode == GachaRefreshMode.Full
+                ? WishRecordConflictPolicy.ReplaceExisting
+                : WishRecordConflictPolicy.PreserveExisting);
         return new GachaRefreshResult(
             collected.Count,
             saveResult.InsertedCount,
+            saveResult.UpdatedCount,
             saveResult.DuplicateCount,
             pageCount,
             boundaryCount);

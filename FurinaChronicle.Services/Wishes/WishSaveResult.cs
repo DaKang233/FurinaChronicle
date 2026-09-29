@@ -4,5 +4,14 @@ using System.Text;
 
 namespace FurinaChronicle.Services.Wishes
 {
-    public sealed record WishSaveResult(int InsertedCount, int DuplicateCount);
+    public enum WishRecordConflictPolicy
+    {
+        PreserveExisting = 0,
+        ReplaceExisting = 1
+    }
+
+    public sealed record WishSaveResult(
+        int InsertedCount,
+        int DuplicateCount,
+        int UpdatedCount = 0);
 }

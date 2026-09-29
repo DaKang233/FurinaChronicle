@@ -174,7 +174,11 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
                 arguments);
         }
 
-        public async Task<WishSaveResult> SaveBatchAsync(IReadOnlyCollection<WishRecord> records, CancellationToken cancellationToken = default)
+        public async Task<WishSaveResult> SaveBatchAsync(
+            IReadOnlyCollection<WishRecord> records,
+            CancellationToken cancellationToken = default,
+            WishRecordConflictPolicy conflictPolicy =
+                WishRecordConflictPolicy.PreserveExisting)
         {
             ArgumentNullException.ThrowIfNull(records);
 
@@ -191,6 +195,7 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
             cancellationToken.ThrowIfCancellationRequested();
 
             int insertedCount = 0;
+            int updatedCount = 0;
 
             await database.Connection.RunInTransactionAsync(
                 connection =>
@@ -203,7 +208,39 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
                         insertedCount += inserted;
                         if (inserted == 0)
                         {
-                            connection.Execute(
+                            if (conflictPolicy ==
+                                WishRecordConflictPolicy.ReplaceExisting)
+                            {
+                                updatedCount += connection.Execute(
+                                    $"""
+                                    UPDATE {WishRecordRow.TableName}
+                                    SET
+                                        ItemName = COALESCE(NULLIF(TRIM(?), ''), ItemName),
+                                        ItemId = COALESCE(NULLIF(TRIM(?), ''), ItemId),
+                                        ItemType = COALESCE(NULLIF(TRIM(?), ''), ItemType),
+                                        GachaType = COALESCE(NULLIF(TRIM(?), ''), GachaType),
+                                        UigfGachaType = COALESCE(NULLIF(TRIM(?), ''), UigfGachaType),
+                                        RankType = COALESCE(?, RankType),
+                                        Count = ?,
+                                        TimeUtcTicks = ?,
+                                        TimeOffsetMinutes = ?
+                                    WHERE GameAccountId = ? AND ExternalRecordId = ?;
+                                    """,
+                                    row.ItemName,
+                                    row.ItemId,
+                                    row.ItemType,
+                                    row.GachaType,
+                                    row.UigfGachaType,
+                                    row.RankType,
+                                    row.Count,
+                                    row.TimeUtcTicks,
+                                    row.TimeOffsetMinutes,
+                                    row.GameAccountId,
+                                    row.ExternalRecordId);
+                            }
+                            else
+                            {
+                                connection.Execute(
                                 $"""
                                 UPDATE {WishRecordRow.TableName}
                                 SET
@@ -243,11 +280,15 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
                                 row.RankType,
                                 row.GameAccountId,
                                 row.ExternalRecordId);
+                            }
                         }
                     }
                 });
 
-            return new WishSaveResult(InsertedCount: insertedCount, DuplicateCount: rows.Length - insertedCount);
+            return new WishSaveResult(
+                InsertedCount: insertedCount,
+                DuplicateCount: rows.Length - insertedCount - updatedCount,
+                UpdatedCount: updatedCount);
         }
 
         private static (string Where, object[] Arguments) BuildWhereClause(

@@ -554,11 +554,12 @@ public partial class MainPageViewModel(
 				await ReloadRecordsCoreAsync(pageNumber: 1);
 				RefreshSummary =
 					$"刷新完成：获取 {result.FetchedCount} 条，" +
-					$"新增 {result.InsertedCount} 条，重复 {result.DuplicateCount} 条，" +
+					$"新增 {result.InsertedCount} 条，覆盖校正 {result.UpdatedCount} 条，" +
+					$"保留重复 {result.DuplicateCount} 条，" +
 					$"请求 {result.PageCount} 页。";
-				StatusMessage = result.InsertedCount == 0
+				StatusMessage = result.InsertedCount == 0 && result.UpdatedCount == 0
 					? "没有发现新的抽卡记录。"
-					: $"已新增 {result.InsertedCount} 条抽卡记录。";
+					: $"已新增 {result.InsertedCount} 条、覆盖校正 {result.UpdatedCount} 条抽卡记录。";
 				if (createdArchive || createdAccountId is not null)
 				{
 					StatusMessage += $" 已自动创建并选择账号 {targetAccount.Uid}。";

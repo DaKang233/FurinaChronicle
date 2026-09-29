@@ -180,7 +180,8 @@ public sealed class ImportUigfGachaRecords(
             duplicateCount += records.Count - distinctRecords.Length;
             WishSaveResult saveResult = await recordRepository.SaveBatchAsync(
                 distinctRecords,
-                cancellationToken);
+                cancellationToken,
+                WishRecordConflictPolicy.PreserveExisting);
             importedCount += saveResult.InsertedCount;
             duplicateCount += saveResult.DuplicateCount;
         }
