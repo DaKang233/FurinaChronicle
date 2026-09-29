@@ -218,6 +218,7 @@ public sealed class BuildWishAnalytics(
                     }
                     fiveStarHistory.Add(new FiveStarWish(
                         record.GameAccountId,
+                        record.ExternalRecordId,
                         GetItemName(record, metadata),
                         record.ItemId,
                         GetIconUrl(record, metadata),
@@ -271,6 +272,9 @@ public sealed class BuildWishAnalytics(
             sinceFour,
             fiveStarHistory
                 .OrderByDescending(item => item.Time)
+                .ThenByDescending(
+                    item => item.ExternalRecordId,
+                    StringComparer.Ordinal)
                 .ToArray(),
             records
                 .GroupBy(GetItemKey, StringComparer.Ordinal)

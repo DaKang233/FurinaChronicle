@@ -43,6 +43,7 @@ public sealed record WishPoolStatistics(
 
 public sealed record FiveStarWish(
     Guid GameAccountId,
+    string ExternalRecordId,
     string ItemName,
     string? ItemId,
     string? IconUrl,

@@ -65,6 +65,32 @@ public sealed class BuildWishAnalyticsTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_FiveStarHistory_MatchesNewestFirstDetailOrder()
+    {
+        Guid accountId = Guid.NewGuid();
+        DateTimeOffset time =
+            new(2026, 1, 1, 8, 0, 0, TimeSpan.FromHours(8));
+        WishRecord[] records =
+        [
+            Record(accountId, "100", "五星甲", "avatar-a", 5, time, "301"),
+            Record(accountId, "102", "五星丙", "avatar-c", 5, time, "301"),
+            Record(accountId, "101", "五星乙", "avatar-b", 5, time, "301")
+        ];
+        var service = new BuildWishAnalytics(
+            new InMemoryWishRecordRepository(records),
+            new StubMetadataProvider());
+
+        WishAnalyticsReport report = await service.ExecuteAsync(
+            new WishRecordQuery([accountId]),
+            WishAnalyticsComponents.Pools);
+
+        WishPoolStatistics pool = Assert.Single(report.Pools);
+        Assert.Equal(
+            ["102", "101", "100"],
+            pool.FiveStarHistory.Select(item => item.ExternalRecordId));
+    }
+
+    [Fact]
     public async Task ExecuteAsync_CalculatesCompletedFiveStarIntervals()
     {
         Guid accountId = Guid.NewGuid();
