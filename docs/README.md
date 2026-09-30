@@ -32,6 +32,7 @@
 - [决策记录](decisions/DECISION_REGISTER.md)
 - [ADR 索引](decisions/README.md)
 - [测试要求](development/TESTING.md)
+- [版权头规范](development/COPYRIGHT_HEADERS.md)
 
 ## 文档状态
 

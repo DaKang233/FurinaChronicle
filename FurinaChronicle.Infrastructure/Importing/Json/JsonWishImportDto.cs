@@ -1,4 +1,7 @@
-﻿using FurinaChronicle.Infrastructure.Importing.Json;
+﻿// Copyright (c) 2026 DaKang233.
+// SPDX-License-Identifier: MIT
+
+using FurinaChronicle.Infrastructure.Importing.Json;
 using System;
 using System.Collections.Generic;
 using System.Text;

@@ -1,4 +1,7 @@
-﻿using FurinaChronicle.Core.Gacha;
+﻿// Copyright (c) 2026 DaKang233.
+// SPDX-License-Identifier: MIT
+
+using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Services.Gacha.Abstractions;
 using FurinaChronicle.Services.Gacha.Metadata;
 using FurinaChronicle.Services.Passport;

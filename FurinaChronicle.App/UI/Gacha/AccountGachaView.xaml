@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
+<!--
+  Copyright (c) 2026 DaKang233.
+  SPDX-License-Identifier: MIT
+-->
+
 <ContentView
     x:Class="FurinaChronicle.App.UI.Gacha.AccountGachaView"
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"

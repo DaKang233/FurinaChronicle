@@ -1,0 +1,19 @@
+#!/usr/bin/env sh
+# Copyright (c) 2026 DaKang233.
+# SPDX-License-Identifier: MIT
+
+set -eu
+
+repository_root="$(git rev-parse --show-toplevel)"
+header_script="$repository_root/eng/copyright/Manage-CopyrightHeaders.ps1"
+
+if command -v pwsh >/dev/null 2>&1; then
+    powershell_command="pwsh"
+elif command -v powershell.exe >/dev/null 2>&1; then
+    powershell_command="powershell.exe"
+else
+    echo "PowerShell is required to apply FurinaChronicle copyright headers." >&2
+    exit 1
+fi
+
+"$powershell_command" -NoProfile -ExecutionPolicy Bypass -File "$header_script" -Mode Apply -StagedOnly

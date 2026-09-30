@@ -1,4 +1,7 @@
-﻿using System.Globalization;
+﻿// Copyright (c) 2026 DaKang233.
+// SPDX-License-Identifier: MIT
+
+using System.Globalization;
 using System.Text.Json;
 using FurinaChronicle.Core.Wishes;
 using FurinaChronicle.Services.Wishes.Importing;
