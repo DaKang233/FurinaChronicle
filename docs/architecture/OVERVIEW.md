@@ -47,6 +47,8 @@ Projection
 
 ## 当前实现与目标模型
 
-当前数据库使用 `PlayerArchive → GameAccount → WishRecord`，`WishRecord` 通过 `GameAccountId` 归属档案内账号副本。目标模型保留该归属方式，同时给 `GameAccount` 增加共享的 `GameRoleIdentityId`，用于识别不同档案中的副本来自同一个真实角色。该迁移尚未实现。
+当前数据库使用 `PlayerArchive → GameAccount → GachaRecord`，`GachaRecord` 通过 `GameAccountId` 归属档案内账号副本。目标模型保留该归属方式，同时给 `GameAccount` 增加共享的 `GameRoleIdentityId`，用于识别不同档案中的副本来自同一个真实角色。该迁移尚未实现。
+
+当前主数据库 Schema 版本为 2，抽卡表名为 `GachaRecords`。应用启动时会在事务中将版本 1 的历史表 `WishRecords` 及其旧索引迁移为 `GachaRecords`，保留原记录和外键；历史名称不得扩散到迁移边界之外。
 
 服务端能力通过端口扩展，Core 和本地数据库不依赖服务端存在。

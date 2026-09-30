@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 using FurinaChronicle.Core.Archives;
-using FurinaChronicle.Core.Wishes;
+using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Services.Abstractions;
 
 namespace FurinaChronicle.Services.Gacha.Exporting;
@@ -10,7 +10,7 @@ namespace FurinaChronicle.Services.Gacha.Exporting;
 public sealed class LoadGachaExportData(
     IPlayerArchiveRepository archiveRepository,
     IGameAccountRepository accountRepository,
-    IWishRecordRepository recordRepository,
+    IGachaRecordRepository recordRepository,
     TimeProvider timeProvider)
 {
     private const int BatchSize = 500;
@@ -73,7 +73,7 @@ public sealed class LoadGachaExportData(
                     "所选游戏账号不属于要导出的玩家档案。");
             }
 
-            IReadOnlyList<WishRecord> records =
+            IReadOnlyList<GachaRecord> records =
                 await LoadAllRecordsAsync(
                     gameAccountId,
                     cancellationToken);
@@ -88,18 +88,18 @@ public sealed class LoadGachaExportData(
             exportAccounts);
     }
 
-    private async Task<IReadOnlyList<WishRecord>> LoadAllRecordsAsync(
+    private async Task<IReadOnlyList<GachaRecord>> LoadAllRecordsAsync(
         Guid gameAccountId,
         CancellationToken cancellationToken)
     {
         int totalCount = await recordRepository.CountAsync(
             gameAccountId,
             cancellationToken);
-        List<WishRecord> records = new(totalCount);
+        List<GachaRecord> records = new(totalCount);
 
         for (int offset = 0; offset < totalCount; offset += BatchSize)
         {
-            IReadOnlyList<WishRecord> batch =
+            IReadOnlyList<GachaRecord> batch =
                 await recordRepository.GetPageAsync(
                     gameAccountId,
                     offset,
@@ -116,7 +116,7 @@ public sealed class LoadGachaExportData(
 
     private static int ResolveTimezone(
         GameAccount account,
-        IReadOnlyList<WishRecord> records)
+        IReadOnlyList<GachaRecord> records)
     {
         int? recordTimezone = records
             .Select(record => record.Time.Offset.TotalHours)

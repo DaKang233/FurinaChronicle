@@ -24,7 +24,7 @@
                 <Label Padding="16" Text="当前范围暂无日历数据。" />
             </CollectionView.EmptyView>
             <CollectionView.ItemTemplate>
-                <DataTemplate x:DataType="viewModels:WishCalendarDisplayItem">
+                <DataTemplate x:DataType="viewModels:GachaCalendarDisplayItem">
                     <Border BackgroundColor="{Binding Color}" Padding="7" MinimumHeightRequest="72">
                         <VerticalStackLayout Spacing="2">
                             <Label FontAttributes="Bold" FontSize="11" Text="{Binding Date}" TextColor="Black" />

@@ -3,8 +3,8 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using FurinaChronicle.Core.Archives;
-using FurinaChronicle.Core.Wishes;
-using FurinaChronicle.Services.Wishes.Analytics;
+using FurinaChronicle.Core.Gacha;
+using FurinaChronicle.Services.Gacha.Analytics;
 
 namespace FurinaChronicle.App.ViewModels;
 
@@ -20,14 +20,14 @@ public sealed partial class GachaAccountFilterItem(GameAccount account)
 }
 
 public sealed record PoolFilterOption(
-    WishPoolGroup? Value,
+    GachaPoolGroup? Value,
     string Name);
 
 public sealed record RankFilterOption(
     int? Value,
     string Name);
 
-public sealed record WishRecordAnalysisDisplayItem(
+public sealed record GachaRecordAnalysisDisplayItem(
     string Account,
     string Name,
     string Rank,
@@ -35,11 +35,11 @@ public sealed record WishRecordAnalysisDisplayItem(
     string Pool,
     string ItemType)
 {
-    public static WishRecordAnalysisDisplayItem FromDomain(
-        WishRecord record,
+    public static GachaRecordAnalysisDisplayItem FromDomain(
+        GachaRecord record,
         IReadOnlyDictionary<Guid, GameAccount> accounts)
     {
-        WishRecordDisplayItem item = WishRecordDisplayItem.FromDomain(record);
+        GachaRecordDisplayItem item = GachaRecordDisplayItem.FromDomain(record);
         string account = accounts.TryGetValue(record.GameAccountId, out GameAccount? value)
             ? value.DisplayName ?? value.Uid
             : record.GameAccountId.ToString("D");
@@ -53,26 +53,26 @@ public sealed record WishRecordAnalysisDisplayItem(
     }
 }
 
-public sealed record FiveStarWishDisplayItem(
+public sealed record FiveStarGachaDisplayItem(
     string ItemName,
     ImageSource? IconUrl,
     string Pulls,
     string Time,
     string Account);
 
-public sealed record WishPoolItemCountDisplayItem(
+public sealed record GachaPoolItemCountDisplayItem(
     string ItemName,
     ImageSource? IconUrl,
     string Rank,
     string Count);
 
-public sealed record FiveStarWishDisplayRow(
-    IReadOnlyList<FiveStarWishDisplayItem> Items);
+public sealed record FiveStarGachaDisplayRow(
+    IReadOnlyList<FiveStarGachaDisplayItem> Items);
 
-public sealed record WishPoolItemCountDisplayRow(
-    IReadOnlyList<WishPoolItemCountDisplayItem> Items);
+public sealed record GachaPoolItemCountDisplayRow(
+    IReadOnlyList<GachaPoolItemCountDisplayItem> Items);
 
-public sealed record WishPoolStatisticsDisplayItem(
+public sealed record GachaPoolStatisticsDisplayItem(
     string PoolName,
     string Total,
     string Period,
@@ -81,14 +81,14 @@ public sealed record WishPoolStatisticsDisplayItem(
     string Extremes,
     string RankDistribution,
     string CurrentPity,
-    IReadOnlyList<FiveStarWishDisplayItem> FiveStarHistory,
-    IReadOnlyList<WishPoolItemCountDisplayItem> ItemCounts,
-    IReadOnlyList<FiveStarWishDisplayRow> FiveStarRows,
-    IReadOnlyList<WishPoolItemCountDisplayRow> ItemCountRows);
+    IReadOnlyList<FiveStarGachaDisplayItem> FiveStarHistory,
+    IReadOnlyList<GachaPoolItemCountDisplayItem> ItemCounts,
+    IReadOnlyList<FiveStarGachaDisplayRow> FiveStarRows,
+    IReadOnlyList<GachaPoolItemCountDisplayRow> ItemCountRows);
 
 public sealed record ArchiveOverviewDisplayRow(
-    WishPoolStatisticsDisplayItem? Summary,
-    IReadOnlyList<WishPoolItemCountDisplayItem> Items)
+    GachaPoolStatisticsDisplayItem? Summary,
+    IReadOnlyList<GachaPoolItemCountDisplayItem> Items)
 {
     public bool IsSummary => Summary is not null;
 
@@ -111,21 +111,21 @@ public sealed record ArchiveOverviewDisplayRow(
     public string CurrentPity => Summary?.CurrentPity ?? string.Empty;
 }
 
-public sealed record WishHistoryDisplayItem(
+public sealed record GachaHistoryDisplayItem(
     string Date,
     string Pool,
     string Total,
     string Accounts,
     string Items);
 
-public sealed record WishCalendarDisplayItem(
+public sealed record GachaCalendarDisplayItem(
     string Date,
     string Total,
     string HighRanks,
     Color Color);
 
-public sealed partial class WishItemStatisticsDisplayItem(
-    WishItemStatistics source,
+public sealed partial class GachaItemStatisticsDisplayItem(
+    GachaItemStatistics source,
     string? cachedIconPath)
     : ObservableObject
 {
@@ -158,9 +158,9 @@ public sealed partial class WishItemStatisticsDisplayItem(
     public partial bool IsExpanded { get; set; }
 }
 
-public sealed record WishItemGridDisplayRow(
+public sealed record GachaItemGridDisplayRow(
     string? GroupName,
-    IReadOnlyList<WishItemStatisticsDisplayItem> Items)
+    IReadOnlyList<GachaItemStatisticsDisplayItem> Items)
 {
     public bool IsHeader => GroupName is not null;
 

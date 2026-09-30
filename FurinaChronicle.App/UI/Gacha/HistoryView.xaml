@@ -18,7 +18,7 @@
                 <Label Padding="16" Text="当前范围暂无抽卡历史。" />
             </CollectionView.EmptyView>
             <CollectionView.ItemTemplate>
-                <DataTemplate x:DataType="viewModels:WishHistoryDisplayItem">
+                <DataTemplate x:DataType="viewModels:GachaHistoryDisplayItem">
                     <Border Margin="0,0,0,8" Padding="12">
                         <Grid ColumnDefinitions="110,150,90,*" RowDefinitions="Auto,Auto" ColumnSpacing="8">
                             <Label FontAttributes="Bold" Text="{Binding Date}" />

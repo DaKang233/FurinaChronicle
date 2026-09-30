@@ -7,8 +7,15 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite;
 
 public sealed class FurinaDatabase : IAsyncDisposable
 {
-    // This is the first schema version that belongs to a released data model.
-    private const int CurrentSchemaVersion = 1;
+    private const int CurrentSchemaVersion = 2;
+    private const int LegacyGachaSchemaVersion = 1;
+    private const string LegacyGachaRecordsTableName = "WishRecords";
+    private const string LegacyGachaRecordsUniqueIndexName =
+        "UX_WishRecords_Account_ExternalId";
+    private const string LegacyGachaRecordsTimeIndexName =
+        "IX_WishRecords_TimeUtcTicks";
+    private const string LegacyGachaRecordsAccountIndexName =
+        "IX_WishRecords_GameAccountId";
 
     // "FUCH" distinguishes the current v1 generation from pre-release
     // databases that also used PRAGMA user_version values such as 1.
@@ -64,8 +71,13 @@ public sealed class FurinaDatabase : IAsyncDisposable
             int applicationId = await Connection.ExecuteScalarAsync<int>(
                 "PRAGMA application_id;");
 
-            if (schemaVersion != CurrentSchemaVersion ||
-                applicationId != CurrentApplicationId)
+            if (applicationId == CurrentApplicationId &&
+                schemaVersion == LegacyGachaSchemaVersion)
+            {
+                await MigrateVersionOneToVersionTwoAsync(cancellationToken);
+            }
+            else if (schemaVersion != CurrentSchemaVersion ||
+                     applicationId != CurrentApplicationId)
             {
                 await RecreateCurrentSchemaAsync(cancellationToken);
             }
@@ -76,6 +88,30 @@ public sealed class FurinaDatabase : IAsyncDisposable
         {
             initializeGate.Release();
         }
+    }
+
+    private async Task MigrateVersionOneToVersionTwoAsync(
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        await Connection.RunInTransactionAsync(connection =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            connection.Execute(
+                $"DROP INDEX IF EXISTS {LegacyGachaRecordsUniqueIndexName};");
+            connection.Execute(
+                $"DROP INDEX IF EXISTS {LegacyGachaRecordsTimeIndexName};");
+            connection.Execute(
+                $"DROP INDEX IF EXISTS {LegacyGachaRecordsAccountIndexName};");
+            connection.Execute(
+                $"ALTER TABLE {LegacyGachaRecordsTableName} " +
+                "RENAME TO GachaRecords;");
+            CreateGachaRecordIndexes(connection);
+            connection.Execute(
+                $"PRAGMA user_version = {CurrentSchemaVersion};");
+        });
     }
 
     private async Task RecreateCurrentSchemaAsync(
@@ -89,7 +125,9 @@ public sealed class FurinaDatabase : IAsyncDisposable
 
             // Pre-release schemas are intentionally unsupported. Drop children
             // before parents so the operation also works with foreign keys on.
-            connection.Execute("DROP TABLE IF EXISTS WishRecords;");
+            connection.Execute("DROP TABLE IF EXISTS GachaRecords;");
+            connection.Execute(
+                $"DROP TABLE IF EXISTS {LegacyGachaRecordsTableName};");
             connection.Execute("DROP TABLE IF EXISTS GameAccounts;");
             connection.Execute("DROP TABLE IF EXISTS PlayerArchives;");
 
@@ -124,7 +162,7 @@ public sealed class FurinaDatabase : IAsyncDisposable
 
             connection.Execute(
                 """
-                CREATE TABLE WishRecords
+                CREATE TABLE GachaRecords
                 (
                     Id INTEGER PRIMARY KEY AUTOINCREMENT,
                     GameAccountId TEXT NOT NULL,
@@ -156,29 +194,34 @@ public sealed class FurinaDatabase : IAsyncDisposable
                 ON GameAccounts(PlayerArchiveId, Uid);
                 """);
 
-            connection.Execute(
-                """
-                CREATE UNIQUE INDEX UX_WishRecords_Account_ExternalId
-                ON WishRecords(GameAccountId, ExternalRecordId);
-                """);
-
-            connection.Execute(
-                """
-                CREATE INDEX IX_WishRecords_TimeUtcTicks
-                ON WishRecords(TimeUtcTicks);
-                """);
-
-            connection.Execute(
-                """
-                CREATE INDEX IX_WishRecords_GameAccountId
-                ON WishRecords(GameAccountId);
-                """);
+            CreateGachaRecordIndexes(connection);
 
             connection.Execute(
                 $"PRAGMA application_id = {CurrentApplicationId};");
             connection.Execute(
                 $"PRAGMA user_version = {CurrentSchemaVersion};");
         });
+    }
+
+    private static void CreateGachaRecordIndexes(SQLiteConnection connection)
+    {
+        connection.Execute(
+            """
+            CREATE UNIQUE INDEX UX_GachaRecords_Account_ExternalId
+            ON GachaRecords(GameAccountId, ExternalRecordId);
+            """);
+
+        connection.Execute(
+            """
+            CREATE INDEX IX_GachaRecords_TimeUtcTicks
+            ON GachaRecords(TimeUtcTicks);
+            """);
+
+        connection.Execute(
+            """
+            CREATE INDEX IX_GachaRecords_GameAccountId
+            ON GachaRecords(GameAccountId);
+            """);
     }
 
     public async ValueTask DisposeAsync()

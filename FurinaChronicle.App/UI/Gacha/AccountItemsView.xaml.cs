@@ -16,7 +16,7 @@ public partial class AccountItemsView : ContentView
     {
         if (sender is Button
             {
-                CommandParameter: WishItemStatisticsDisplayItem item
+                CommandParameter: GachaItemStatisticsDisplayItem item
             })
         {
             item.IsExpanded = !item.IsExpanded;

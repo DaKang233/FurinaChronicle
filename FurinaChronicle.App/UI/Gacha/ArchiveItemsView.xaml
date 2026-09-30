@@ -19,7 +19,7 @@
             ItemsSource="{Binding ItemGridRows}"
             SelectionMode="None">
             <CollectionView.ItemTemplate>
-                <DataTemplate x:DataType="viewModels:WishItemGridDisplayRow">
+                <DataTemplate x:DataType="viewModels:GachaItemGridDisplayRow">
                     <Grid>
                         <Label
                             Margin="0,8,0,4"
@@ -32,7 +32,7 @@
                             IsVisible="{Binding IsItemRow}"
                             Spacing="4">
                             <BindableLayout.ItemTemplate>
-                                <DataTemplate x:DataType="viewModels:WishItemStatisticsDisplayItem">
+                                <DataTemplate x:DataType="viewModels:GachaItemStatisticsDisplayItem">
                                     <Border Margin="4" Padding="8" WidthRequest="132">
                                         <Grid RowDefinitions="90,Auto,Auto">
                                             <Grid>

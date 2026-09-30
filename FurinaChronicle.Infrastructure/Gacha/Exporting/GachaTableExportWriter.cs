@@ -5,7 +5,7 @@ using System.Globalization;
 using System.IO.Compression;
 using System.Text;
 using System.Xml;
-using FurinaChronicle.Core.Wishes;
+using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Services.Gacha.Abstractions;
 using FurinaChronicle.Services.Gacha.Exporting;
 
@@ -168,7 +168,7 @@ public sealed class GachaTableExportWriter(
             Dictionary<string, int> pityByPool =
                 new(StringComparer.Ordinal);
 
-            foreach (WishRecord record in account.Records)
+            foreach (GachaRecord record in account.Records)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 index++;
@@ -230,7 +230,7 @@ public sealed class GachaTableExportWriter(
             GachaExportLanguages.English =>
             [
                 "UID", "ExternalID", "Time", "Timezone Offset",
-                "Item Name", "Item Type", "Wish Type", "Index", "Pity Count"
+                "Item Name", "Item Type", "Gacha Type", "Index", "Pity Count"
             ],
             _ =>
             [

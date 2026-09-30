@@ -5,16 +5,15 @@ using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.Gacha.Metadata;
 using FurinaChronicle.Core.Passport;
-using FurinaChronicle.Core.Wishes;
 using FurinaChronicle.Services.Abstractions;
 using FurinaChronicle.Services.Gacha.Abstractions;
 using FurinaChronicle.Services.Passport;
-using FurinaChronicle.Services.Wishes;
+using FurinaChronicle.Services.Gacha;
 
 namespace FurinaChronicle.Services.Gacha.Refreshing;
 
 public sealed class RefreshGachaRecords(
-    IWishRecordRepository recordRepository,
+    IGachaRecordRepository recordRepository,
     IPassportAccountStore passportAccountStore,
     ISTokenGachaUrlProvider sTokenUrlProvider,
     IWindowsGachaCacheUrlProvider windowsCacheUrlProvider,
@@ -39,7 +38,7 @@ public sealed class RefreshGachaRecords(
         HashSet<string> localIds = request.Mode == GachaRefreshMode.Incremental
             ? await LoadExistingIdsAsync(request.GameAccount.Id, cancellationToken)
             : new HashSet<string>(StringComparer.Ordinal);
-        var collected = new List<WishRecord>();
+        var collected = new List<GachaRecord>();
         var collectedIds = new HashSet<string>(StringComparer.Ordinal);
         var metadataByName =
             new Dictionary<string, GachaItemMetadata?>(StringComparer.Ordinal);
@@ -109,12 +108,12 @@ public sealed class RefreshGachaRecords(
             }
         }
 
-        WishSaveResult saveResult = await recordRepository.SaveBatchAsync(
+        GachaSaveResult saveResult = await recordRepository.SaveBatchAsync(
             collected,
             cancellationToken,
             request.Mode == GachaRefreshMode.Full
-                ? WishRecordConflictPolicy.ReplaceExisting
-                : WishRecordConflictPolicy.PreserveExisting);
+                ? GachaRecordConflictPolicy.ReplaceExisting
+                : GachaRecordConflictPolicy.PreserveExisting);
         return new GachaRefreshResult(
             collected.Count,
             saveResult.InsertedCount,
@@ -267,7 +266,7 @@ public sealed class RefreshGachaRecords(
             return new HashSet<string>(StringComparer.Ordinal);
         }
 
-        IReadOnlyList<WishRecord> records = await recordRepository.GetPageAsync(
+        IReadOnlyList<GachaRecord> records = await recordRepository.GetPageAsync(
             gameAccountId,
             offset: 0,
             count,

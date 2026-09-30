@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 using FurinaChronicle.Core.Archives;
-using FurinaChronicle.Core.Wishes;
+using FurinaChronicle.Core.Gacha;
 
 namespace FurinaChronicle.Services.Gacha.Refreshing;
 
@@ -56,9 +56,9 @@ public sealed record GachaRemoteRecord(
     DateTimeOffset Time,
     int Count = 1)
 {
-    public WishRecord ToDomain(Guid gameAccountId)
+    public GachaRecord ToDomain(Guid gameAccountId)
     {
-        return new WishRecord(
+        return new GachaRecord(
             gameAccountId,
             ExternalRecordId,
             ItemName,

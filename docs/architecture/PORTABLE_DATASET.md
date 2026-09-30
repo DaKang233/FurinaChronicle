@@ -30,8 +30,8 @@ Portable Dataset 是数据库、UI 和平台无关的数据契约，可用于分
 抽卡、流水和长期观察等大型数据在 Archive 中优先使用：
 
 ```text
-datasets/wishes.metadata.json
-datasets/wishes.ndjson
+datasets/gacha.metadata.json
+datasets/gacha.ndjson
 ```
 
 每行一个记录，以便流式读取、验证、迁移和分批写入。不得要求把整个数组一次性加载到内存。

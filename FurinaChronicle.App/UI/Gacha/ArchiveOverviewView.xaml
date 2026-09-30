@@ -48,7 +48,7 @@
                             IsVisible="{Binding IsItemRow}"
                             Spacing="3">
                             <BindableLayout.ItemTemplate>
-                                <DataTemplate x:DataType="viewModels:WishPoolItemCountDisplayItem">
+                                <DataTemplate x:DataType="viewModels:GachaPoolItemCountDisplayItem">
                                     <VerticalStackLayout Margin="3" WidthRequest="72" Spacing="2">
                                         <Border HeightRequest="56" Padding="2" WidthRequest="56">
                                             <Grid>

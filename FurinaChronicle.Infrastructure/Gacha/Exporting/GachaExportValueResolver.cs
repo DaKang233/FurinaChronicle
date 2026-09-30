@@ -3,7 +3,6 @@
 
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.Gacha.Metadata;
-using FurinaChronicle.Core.Wishes;
 using FurinaChronicle.Services.Gacha.Abstractions;
 using FurinaChronicle.Services.Gacha.Exporting;
 
@@ -18,7 +17,7 @@ internal sealed class GachaExportValueResolver(
         new(StringComparer.Ordinal);
 
     public async ValueTask<string> GetItemIdAsync(
-        WishRecord record,
+        GachaRecord record,
         CancellationToken cancellationToken)
     {
         if (!string.IsNullOrWhiteSpace(record.ItemId))
@@ -34,7 +33,7 @@ internal sealed class GachaExportValueResolver(
     }
 
     public async ValueTask<string> GetItemNameAsync(
-        WishRecord record,
+        GachaRecord record,
         string language,
         CancellationToken cancellationToken)
     {
@@ -62,7 +61,7 @@ internal sealed class GachaExportValueResolver(
     }
 
     public async ValueTask<string> GetItemTypeAsync(
-        WishRecord record,
+        GachaRecord record,
         string language,
         CancellationToken cancellationToken)
     {
@@ -96,7 +95,7 @@ internal sealed class GachaExportValueResolver(
     }
 
     public async ValueTask<int> GetRankTypeAsync(
-        WishRecord record,
+        GachaRecord record,
         CancellationToken cancellationToken)
     {
         GachaItemMetadata? metadata =
@@ -106,7 +105,7 @@ internal sealed class GachaExportValueResolver(
     }
 
     public static string GetPoolName(
-        WishRecord record,
+        GachaRecord record,
         string language)
     {
         string type = record.UigfGachaType ??
@@ -126,12 +125,12 @@ internal sealed class GachaExportValueResolver(
             },
             GachaExportLanguages.English => type switch
             {
-                "100" => "Beginners' Wish",
+                "100" => "Beginners' Gacha",
                 "200" => "Wanderlust Invocation",
-                "301" => "Character Event Wish",
-                "302" => "Weapon Event Wish",
-                "500" => "Chronicled Wish",
-                _ => $"Unknown Wish ({type})"
+                "301" => "Character Event Gacha",
+                "302" => "Weapon Event Gacha",
+                "500" => "Chronicled Gacha",
+                _ => $"Unknown Gacha ({type})"
             },
             _ => type switch
             {
@@ -146,7 +145,7 @@ internal sealed class GachaExportValueResolver(
     }
 
     private async ValueTask<GachaItemMetadata?> GetMetadataAsync(
-        WishRecord record,
+        GachaRecord record,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(record.ItemId))
@@ -191,7 +190,7 @@ internal sealed class GachaExportValueResolver(
     }
 
     private static InvalidDataException MissingValue(
-        WishRecord record,
+        GachaRecord record,
         string field)
     {
         return new InvalidDataException(

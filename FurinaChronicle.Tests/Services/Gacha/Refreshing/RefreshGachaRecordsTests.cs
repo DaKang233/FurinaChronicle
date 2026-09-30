@@ -5,7 +5,6 @@ using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.Gacha.Metadata;
 using FurinaChronicle.Core.Passport;
-using FurinaChronicle.Core.Wishes;
 using FurinaChronicle.Infrastructure.Persistence;
 using FurinaChronicle.Services.Gacha.Abstractions;
 using FurinaChronicle.Services.Gacha.Refreshing;
@@ -33,12 +32,12 @@ public sealed class RefreshGachaRecordsTests
     [Fact]
     public async Task ExecuteAsync_DefaultIncremental_StopsAtFirstLocalRecord()
     {
-        WishRecord known = Record("100") with
+        GachaRecord known = Record("100") with
         {
             ItemName = "保留的本地名称",
             RankType = 5
         };
-        var repository = new InMemoryWishRecordRepository([known]);
+        var repository = new InMemoryGachaRecordRepository([known]);
         var client = new StubGachaLogClient();
         client.Add("301", null, Page(
             Remote("103"),
@@ -56,7 +55,7 @@ public sealed class RefreshGachaRecordsTests
         Assert.Equal(2, result.InsertedCount);
         Assert.Equal(0, result.UpdatedCount);
         Assert.Equal(1, result.ReachedLocalBoundaryCount);
-        IReadOnlyList<WishRecord> stored =
+        IReadOnlyList<GachaRecord> stored =
             await repository.GetRecentAsync(GameAccountId, 20);
         Assert.Contains(stored, item => item.ExternalRecordId == "103");
         Assert.Contains(stored, item =>
@@ -70,7 +69,7 @@ public sealed class RefreshGachaRecordsTests
     [Fact]
     public async Task ExecuteAsync_FullRefresh_DoesNotStopAtLocalRecord()
     {
-        var repository = new InMemoryWishRecordRepository(
+        var repository = new InMemoryGachaRecordRepository(
         [
             Record("100") with
             {
@@ -99,7 +98,7 @@ public sealed class RefreshGachaRecordsTests
         Assert.Equal(0, result.DuplicateCount);
         Assert.Equal(0, result.ReachedLocalBoundaryCount);
         Assert.Equal(2, client.Calls.Count(call => call.GachaType == "301"));
-        IReadOnlyList<WishRecord> stored =
+        IReadOnlyList<GachaRecord> stored =
             await repository.GetRecentAsync(GameAccountId, 20);
         Assert.Contains(stored, item =>
             item.ExternalRecordId == "100" &&
@@ -110,7 +109,7 @@ public sealed class RefreshGachaRecordsTests
     [Fact]
     public async Task ExecuteAsync_STokenSource_LoadsPassportAccountAndUsesProvider()
     {
-        var repository = new InMemoryWishRecordRepository([]);
+        var repository = new InMemoryGachaRecordRepository([]);
         PassportAccount passportAccount = Passport("root-token");
         var passportStore = new StubPassportStore(passportAccount);
         var sTokenProvider = new StubSTokenProvider();
@@ -135,7 +134,7 @@ public sealed class RefreshGachaRecordsTests
     public async Task ExecuteAsync_WindowsCacheOnUnsupportedPlatform_ThrowsClearError()
     {
         var service = new RefreshGachaRecords(
-            new InMemoryWishRecordRepository([]),
+            new InMemoryGachaRecordRepository([]),
             new StubPassportStore(),
             new StubSTokenProvider(),
             new StubWindowsProvider(false),
@@ -155,7 +154,7 @@ public sealed class RefreshGachaRecordsTests
     [Fact]
     public async Task ExecuteAsync_ResponseFromAnotherUid_IsRejectedWithoutSaving()
     {
-        var repository = new InMemoryWishRecordRepository([]);
+        var repository = new InMemoryGachaRecordRepository([]);
         var client = new StubGachaLogClient();
         client.Add("301", null, Page(Remote("103") with { Uid = "223456789" }));
         var service = CreateService(repository, client);
@@ -172,7 +171,7 @@ public sealed class RefreshGachaRecordsTests
     [Fact]
     public async Task ExecuteAsync_MissingItemId_CompletesItFromItemName()
     {
-        var repository = new InMemoryWishRecordRepository([]);
+        var repository = new InMemoryGachaRecordRepository([]);
         var client = new StubGachaLogClient();
         client.Add(
             "301",
@@ -191,7 +190,7 @@ public sealed class RefreshGachaRecordsTests
             GachaRefreshSource.ManualUrl,
             ManualUrl: ValidUrl.AbsoluteUri));
 
-        WishRecord stored = Assert.Single(
+        GachaRecord stored = Assert.Single(
             await repository.GetRecentAsync(GameAccountId, 20));
         Assert.Equal("10000089", stored.ItemId);
     }
@@ -202,7 +201,7 @@ public sealed class RefreshGachaRecordsTests
         var client = new StubGachaLogClient();
         client.Add("302", null, Page(Remote("103")));
         var service = CreateService(
-            new InMemoryWishRecordRepository([]),
+            new InMemoryGachaRecordRepository([]),
             client);
 
         GachaRefreshIdentity identity = await service.DiscoverIdentityAsync(
@@ -225,7 +224,7 @@ public sealed class RefreshGachaRecordsTests
     }
 
     private static RefreshGachaRecords CreateService(
-        InMemoryWishRecordRepository repository,
+        InMemoryGachaRecordRepository repository,
         StubGachaLogClient client)
     {
         return new RefreshGachaRecords(
@@ -237,7 +236,7 @@ public sealed class RefreshGachaRecordsTests
             new StubMetadataProvider());
     }
 
-    private static WishRecord Record(string id)
+    private static GachaRecord Record(string id)
     {
         return Remote(id).ToDomain(GameAccountId);
     }

@@ -4,10 +4,9 @@
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.Gacha.Metadata;
-using FurinaChronicle.Core.Wishes;
 using FurinaChronicle.Services.Abstractions;
 using FurinaChronicle.Services.Gacha.Abstractions;
-using FurinaChronicle.Services.Wishes;
+using FurinaChronicle.Services.Gacha;
 
 namespace FurinaChronicle.Services.Gacha.Importing;
 
@@ -16,7 +15,7 @@ public sealed class ImportUigfGachaRecords(
     IGachaItemMetadataProvider metadataProvider,
     IPlayerArchiveRepository archiveRepository,
     IGameAccountRepository accountRepository,
-    IWishRecordRepository recordRepository)
+    IGachaRecordRepository recordRepository)
 {
     public async Task<GachaImportResult> ExecuteAsync(
         Stream source,
@@ -51,7 +50,7 @@ public sealed class ImportUigfGachaRecords(
         }
 
         GachaReadResult readResult = await reader.ReadAsync(source, cancellationToken);
-        Dictionary<Guid, List<WishRecord>> recordsByAccount = [];
+        Dictionary<Guid, List<GachaRecord>> recordsByAccount = [];
         Dictionary<string, GameAccount> accountsByUid = new(StringComparer.Ordinal);
         Dictionary<string, GachaItemMetadata?> metadataByItemId = new(StringComparer.Ordinal);
         ILookup<string, GachaReadError> readErrorsByUid = readResult.Errors
@@ -146,7 +145,7 @@ public sealed class ImportUigfGachaRecords(
                 accountsByUid.Add(uid, account);
             }
 
-            if (!recordsByAccount.TryGetValue(account.Id, out List<WishRecord>? records))
+            if (!recordsByAccount.TryGetValue(account.Id, out List<GachaRecord>? records))
             {
                 records = [];
                 recordsByAccount.Add(account.Id, records);
@@ -155,7 +154,7 @@ public sealed class ImportUigfGachaRecords(
             foreach (PreparedGachaRecord preparedRecord in preparedRecords)
             {
                 GachaSourceRecord sourceRecord = preparedRecord.Source;
-                records.Add(new WishRecord(
+                records.Add(new GachaRecord(
                     account.Id,
                     sourceRecord.ExternalRecordId,
                     preparedRecord.ItemName,
@@ -174,17 +173,17 @@ public sealed class ImportUigfGachaRecords(
         int importedCount = 0;
         int duplicateCount = 0;
 
-        foreach (List<WishRecord> records in recordsByAccount.Values)
+        foreach (List<GachaRecord> records in recordsByAccount.Values)
         {
-            WishRecord[] distinctRecords = records
+            GachaRecord[] distinctRecords = records
                 .DistinctBy(record => (record.GameAccountId, record.ExternalRecordId))
                 .ToArray();
 
             duplicateCount += records.Count - distinctRecords.Length;
-            WishSaveResult saveResult = await recordRepository.SaveBatchAsync(
+            GachaSaveResult saveResult = await recordRepository.SaveBatchAsync(
                 distinctRecords,
                 cancellationToken,
-                WishRecordConflictPolicy.PreserveExisting);
+                GachaRecordConflictPolicy.PreserveExisting);
             importedCount += saveResult.InsertedCount;
             duplicateCount += saveResult.DuplicateCount;
         }

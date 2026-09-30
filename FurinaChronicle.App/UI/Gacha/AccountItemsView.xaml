@@ -24,7 +24,7 @@
             ItemsSource="{Binding ItemGridRows}"
             SelectionMode="None">
             <CollectionView.ItemTemplate>
-                <DataTemplate x:DataType="viewModels:WishItemGridDisplayRow">
+                <DataTemplate x:DataType="viewModels:GachaItemGridDisplayRow">
                     <Grid>
                         <Label
                             Margin="0,8,0,4"
@@ -37,7 +37,7 @@
                             IsVisible="{Binding IsItemRow}"
                             Spacing="4">
                             <BindableLayout.ItemTemplate>
-                                <DataTemplate x:DataType="viewModels:WishItemStatisticsDisplayItem">
+                                <DataTemplate x:DataType="viewModels:GachaItemStatisticsDisplayItem">
                                     <Border Margin="4" Padding="8" WidthRequest="132">
                                         <Grid RowDefinitions="90,Auto,Auto">
                                             <Grid>
@@ -66,7 +66,7 @@
 
         <CollectionView Grid.Row="1" IsVisible="{Binding IsItemListMode}" ItemsSource="{Binding ItemStatistics}">
             <CollectionView.ItemTemplate>
-                <DataTemplate x:DataType="viewModels:WishItemStatisticsDisplayItem">
+                <DataTemplate x:DataType="viewModels:GachaItemStatisticsDisplayItem">
                     <Border Margin="0,0,0,8" Padding="10">
                         <Grid ColumnDefinitions="64,*,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="10">
                             <Image Grid.RowSpan="2" Aspect="AspectFit" HeightRequest="56" Source="{Binding IconUrl}" WidthRequest="56" />

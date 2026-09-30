@@ -50,7 +50,7 @@ public sealed class UigfV42ExternalFileSmokeTests
             var accounts =
                 new SqliteGameAccountRepository(database);
             var records =
-                new SqliteWishRecordRepository(database);
+                new SqliteGachaRecordRepository(database);
             var service = new ImportUigfGachaRecords(
                 new UigfCompatibleGachaReader(
                     new UigfV42GachaReader(),

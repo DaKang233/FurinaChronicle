@@ -16,7 +16,7 @@ internal sealed class SqliteRepositoryTestContext : IAsyncDisposable
         Database = database;
         Archives = new SqlitePlayerArchiveRepository(database);
         Accounts = new SqliteGameAccountRepository(database);
-        Wishes = new SqliteWishRecordRepository(database);
+        Gacha = new SqliteGachaRecordRepository(database);
     }
 
     public FurinaDatabase Database { get; }
@@ -25,7 +25,7 @@ internal sealed class SqliteRepositoryTestContext : IAsyncDisposable
 
     public SqliteGameAccountRepository Accounts { get; }
 
-    public SqliteWishRecordRepository Wishes { get; }
+    public SqliteGachaRecordRepository Gacha { get; }
 
     public static SqliteRepositoryTestContext Create()
     {

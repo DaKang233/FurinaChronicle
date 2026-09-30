@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 using FurinaChronicle.Core.Archives;
-using FurinaChronicle.Core.Wishes;
+using FurinaChronicle.Core.Gacha;
 
 namespace FurinaChronicle.Services.Gacha.Exporting;
 
@@ -16,7 +16,7 @@ public sealed record GachaExportDocument(
 public sealed record GachaExportAccount(
     GameAccount Account,
     int Timezone,
-    IReadOnlyList<WishRecord> Records);
+    IReadOnlyList<GachaRecord> Records);
 
 public sealed record GachaExportResult(
     int AccountCount,

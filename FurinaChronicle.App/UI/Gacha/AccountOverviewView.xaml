@@ -24,7 +24,7 @@
                     <Label Padding="16" HorizontalTextAlignment="Center" Text="当前账号暂无可统计的抽卡记录。" />
                 </BindableLayout.EmptyView>
                 <BindableLayout.ItemTemplate>
-                    <DataTemplate x:DataType="viewModels:WishPoolStatisticsDisplayItem">
+                    <DataTemplate x:DataType="viewModels:GachaPoolStatisticsDisplayItem">
                         <Border Margin="0,0,0,10" Padding="14">
                             <VerticalStackLayout Spacing="7">
                                 <Label FontAttributes="Bold" FontSize="19" Text="{Binding PoolName}" />
@@ -43,7 +43,7 @@
                                     IsVisible="{Binding Source={RelativeSource AncestorType={x:Type viewModels:GachaAnalysisViewModel}}, Path=IsFiveStarListMode}"
                                     Spacing="4">
                                     <BindableLayout.ItemTemplate>
-                                        <DataTemplate x:DataType="viewModels:FiveStarWishDisplayItem">
+                                        <DataTemplate x:DataType="viewModels:FiveStarGachaDisplayItem">
                                             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
                                                 <Label Text="{Binding ItemName}" />
                                                 <Label Grid.Column="1" FontAttributes="Bold" HorizontalTextAlignment="End" Text="{Binding Pulls}" />
@@ -57,10 +57,10 @@
                                     IsVisible="{Binding Source={RelativeSource AncestorType={x:Type viewModels:GachaAnalysisViewModel}}, Path=IsFiveStarGridMode}"
                                     Spacing="3">
                                     <BindableLayout.ItemTemplate>
-                                        <DataTemplate x:DataType="viewModels:FiveStarWishDisplayRow">
+                                        <DataTemplate x:DataType="viewModels:FiveStarGachaDisplayRow">
                                             <HorizontalStackLayout BindableLayout.ItemsSource="{Binding Items}" Spacing="3">
                                                 <BindableLayout.ItemTemplate>
-                                                    <DataTemplate x:DataType="viewModels:FiveStarWishDisplayItem">
+                                                    <DataTemplate x:DataType="viewModels:FiveStarGachaDisplayItem">
                                                         <VerticalStackLayout Margin="3" WidthRequest="72" Spacing="2">
                                                             <Border HeightRequest="56" Padding="2" WidthRequest="56">
                                                                 <Grid>

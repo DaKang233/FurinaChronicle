@@ -5,7 +5,6 @@ using System.Text;
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.Gacha.Metadata;
-using FurinaChronicle.Core.Wishes;
 using FurinaChronicle.Infrastructure.Gacha.Uigf.V4_2;
 using FurinaChronicle.Infrastructure.Persistence;
 using FurinaChronicle.Services.Gacha.Abstractions;
@@ -22,7 +21,7 @@ public sealed class ImportUigfGachaRecordsTests
     {
         var archives = new InMemoryPlayerArchiveRepository();
         var accounts = new InMemoryGameAccountRepository();
-        var records = new InMemoryWishRecordRepository(Array.Empty<WishRecord>());
+        var records = new InMemoryGachaRecordRepository(Array.Empty<GachaRecord>());
         PlayerArchive archive = ArchiveTestData.Archive();
         await archives.AddAsync(archive);
 
@@ -41,11 +40,11 @@ public sealed class ImportUigfGachaRecordsTests
 
         GameAccount asiaAccount =
             Assert.Single(storedAccounts, account => account.Uid == "800000001");
-        IReadOnlyList<WishRecord> asiaRecords =
+        IReadOnlyList<GachaRecord> asiaRecords =
             await records.GetRecentAsync(asiaAccount.Id, 20);
         Assert.Equal(2, asiaRecords.Count);
 
-        WishRecord enriched = Assert.Single(
+        GachaRecord enriched = Assert.Single(
             asiaRecords,
             record => record.ItemId == "10000089");
         Assert.Equal("Furina", enriched.ItemName);
@@ -60,7 +59,7 @@ public sealed class ImportUigfGachaRecordsTests
     {
         var archives = new InMemoryPlayerArchiveRepository();
         var accounts = new InMemoryGameAccountRepository();
-        var records = new InMemoryWishRecordRepository(Array.Empty<WishRecord>());
+        var records = new InMemoryGachaRecordRepository(Array.Empty<GachaRecord>());
         PlayerArchive archive = ArchiveTestData.Archive();
         GameAccount target = ArchiveTestData.Account(
             archive.Id,
@@ -89,7 +88,7 @@ public sealed class ImportUigfGachaRecordsTests
     {
         var archives = new InMemoryPlayerArchiveRepository();
         var accounts = new InMemoryGameAccountRepository();
-        var records = new InMemoryWishRecordRepository(Array.Empty<WishRecord>());
+        var records = new InMemoryGachaRecordRepository(Array.Empty<GachaRecord>());
         PlayerArchive archive = ArchiveTestData.Archive();
         await archives.AddAsync(archive);
 
@@ -113,7 +112,7 @@ public sealed class ImportUigfGachaRecordsTests
     {
         var archives = new InMemoryPlayerArchiveRepository();
         var accounts = new InMemoryGameAccountRepository();
-        var records = new InMemoryWishRecordRepository(Array.Empty<WishRecord>());
+        var records = new InMemoryGachaRecordRepository(Array.Empty<GachaRecord>());
         PlayerArchive archive = ArchiveTestData.Archive();
         GameAccount target = ArchiveTestData.Account(
             archive.Id,
@@ -141,7 +140,7 @@ public sealed class ImportUigfGachaRecordsTests
     {
         var archives = new InMemoryPlayerArchiveRepository();
         var accounts = new InMemoryGameAccountRepository();
-        var records = new InMemoryWishRecordRepository(Array.Empty<WishRecord>());
+        var records = new InMemoryGachaRecordRepository(Array.Empty<GachaRecord>());
         PlayerArchive archive = ArchiveTestData.Archive();
         await archives.AddAsync(archive);
 
@@ -161,7 +160,7 @@ public sealed class ImportUigfGachaRecordsTests
     {
         var archives = new InMemoryPlayerArchiveRepository();
         var accounts = new InMemoryGameAccountRepository();
-        var records = new InMemoryWishRecordRepository(Array.Empty<WishRecord>());
+        var records = new InMemoryGachaRecordRepository(Array.Empty<GachaRecord>());
         var archive = ArchiveTestData.Archive();
         await archives.AddAsync(archive);
         var service = CreateService(archives, accounts, records);
@@ -189,7 +188,7 @@ public sealed class ImportUigfGachaRecordsTests
     {
         var archives = new InMemoryPlayerArchiveRepository();
         var accounts = new InMemoryGameAccountRepository();
-        var records = new InMemoryWishRecordRepository(Array.Empty<WishRecord>());
+        var records = new InMemoryGachaRecordRepository(Array.Empty<GachaRecord>());
         var archive = ArchiveTestData.Archive();
         await archives.AddAsync(archive);
         var service = CreateService(archives, accounts, records);
@@ -217,7 +216,7 @@ public sealed class ImportUigfGachaRecordsTests
     {
         var archives = new InMemoryPlayerArchiveRepository();
         var accounts = new InMemoryGameAccountRepository();
-        var records = new InMemoryWishRecordRepository(Array.Empty<WishRecord>());
+        var records = new InMemoryGachaRecordRepository(Array.Empty<GachaRecord>());
         var archive = ArchiveTestData.Archive();
         await archives.AddAsync(archive);
         var service = CreateService(archives, accounts, records);
@@ -241,7 +240,7 @@ public sealed class ImportUigfGachaRecordsTests
     private static ImportUigfGachaRecords CreateService(
         InMemoryPlayerArchiveRepository archives,
         InMemoryGameAccountRepository accounts,
-        InMemoryWishRecordRepository records)
+        InMemoryGachaRecordRepository records)
     {
         return new ImportUigfGachaRecords(
             new UigfV42GachaReader(),

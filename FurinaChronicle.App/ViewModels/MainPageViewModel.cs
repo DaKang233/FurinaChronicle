@@ -10,13 +10,13 @@ using FurinaChronicle.Services.Gacha.Exporting;
 using FurinaChronicle.Services.Gacha.Importing;
 using FurinaChronicle.Services.Gacha.Refreshing;
 using FurinaChronicle.Services.Passport;
-using FurinaChronicle.Services.Wishes;
+using FurinaChronicle.Services.Gacha;
 using System.Collections.ObjectModel;
 
 namespace FurinaChronicle.App.ViewModels;
 
 public partial class MainPageViewModel(
-	GetWishRecordPage getWishRecordPage,
+	GetGachaRecordPage getGachaRecordPage,
 	GachaAnalysisViewModel analysis,
 	ImportUigfGachaRecords importUigfGachaRecords,
 	ExportUigfV42GachaRecords exportUigfV42GachaRecords,
@@ -43,7 +43,7 @@ public partial class MainPageViewModel(
 
 	public ObservableCollection<GameAccount> Accounts { get; } = [];
 
-	public ObservableCollection<WishRecordDisplayItem> WishRecords { get; } = [];
+	public ObservableCollection<GachaRecordDisplayItem> GachaRecords { get; } = [];
 
 	public IReadOnlyList<GameServerRegion> ServerRegions { get; } = Enum.GetValues<GameServerRegion>().Where(region => region != GameServerRegion.Unknown).ToArray();
 
@@ -214,7 +214,7 @@ public partial class MainPageViewModel(
 			if (account is null)
 			{
 				SelectedAccount = null;
-				WishRecords.Clear();
+				GachaRecords.Clear();
 				ResetPagination();
 				await Analysis.SetContextAsync(
 					SelectedArchive,
@@ -753,7 +753,7 @@ public partial class MainPageViewModel(
 			SelectedArchive = null;
 			SelectedAccount = null;
 			Accounts.Clear();
-			WishRecords.Clear();
+			GachaRecords.Clear();
 			ResetPagination();
 
 			await LoadArchivesCoreAsync();
@@ -781,7 +781,7 @@ public partial class MainPageViewModel(
 			string deletedAccountUid = SelectedAccount.Uid;
 			await deleteGameAccount.ExecuteAsync(deletedAccountId);
 			SelectedAccount = null;
-			WishRecords.Clear();
+			GachaRecords.Clear();
 			ResetPagination();
 			await RefreshAccountsCoreAsync();
 			SelectedAccount = Accounts.FirstOrDefault();
@@ -835,7 +835,7 @@ public partial class MainPageViewModel(
 
 		SelectedAccount = null;
 		Accounts.Clear();
-		WishRecords.Clear();
+		GachaRecords.Clear();
 		ResetPagination();
 		await LoadArchivesCoreAsync();
 	}
@@ -871,7 +871,7 @@ public partial class MainPageViewModel(
 		{
 			Accounts.Clear();
 			SelectedAccount = null;
-			WishRecords.Clear();
+			GachaRecords.Clear();
 			ResetPagination();
 			await Analysis.SetContextAsync(null, [], null);
 			StatusMessage = "请先选择档案。";
@@ -882,7 +882,7 @@ public partial class MainPageViewModel(
 	{
 		Accounts.Clear();
 		SelectedAccount = null;
-		WishRecords.Clear();
+		GachaRecords.Clear();
 		ResetPagination();
 
 		if (SelectedArchive is null)
@@ -927,7 +927,7 @@ public partial class MainPageViewModel(
 		{
 			Accounts.Clear();
 			SelectedAccount = null;
-			WishRecords.Clear();
+			GachaRecords.Clear();
 			ResetPagination();
 			return;
 		}
@@ -971,7 +971,7 @@ public partial class MainPageViewModel(
 	private async Task ReloadRecordsCoreAsync(
 		int pageNumber = 1)
 	{
-		WishRecords.Clear();
+		GachaRecords.Clear();
 		await Analysis.SetContextAsync(
 			SelectedArchive,
 			Accounts,
@@ -983,8 +983,8 @@ public partial class MainPageViewModel(
 			return;
 		}
 
-		WishRecordPage page =
-			await getWishRecordPage.ExecuteAsync(
+		GachaRecordPage page =
+			await getGachaRecordPage.ExecuteAsync(
 				SelectedAccount.Id,
 				pageNumber,
 				pageSize: 50);
@@ -995,8 +995,8 @@ public partial class MainPageViewModel(
 
 		foreach (var record in page.Records)
 		{
-			WishRecords.Add(
-				WishRecordDisplayItem.FromDomain(record));
+			GachaRecords.Add(
+				GachaRecordDisplayItem.FromDomain(record));
 		}
 	}
 

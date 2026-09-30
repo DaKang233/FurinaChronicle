@@ -7,7 +7,6 @@ using System.Text.Json;
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.Gacha.Metadata;
-using FurinaChronicle.Core.Wishes;
 using FurinaChronicle.Infrastructure.Gacha.Exporting;
 using FurinaChronicle.Infrastructure.Gacha.Metadata;
 using FurinaChronicle.Infrastructure.Gacha.Uigf.V4_2;
@@ -94,7 +93,7 @@ public sealed class GachaExportTests
     {
         GachaExportDocument source = CreateDocument();
         GachaExportAccount sourceAccount = source.Accounts[0];
-        WishRecord sourceRecord = sourceAccount.Records[0];
+        GachaRecord sourceRecord = sourceAccount.Records[0];
         GachaExportDocument document = source with
         {
             Accounts =
@@ -140,13 +139,13 @@ public sealed class GachaExportTests
         {
             PlayerArchiveId = archive.Id
         };
-        WishRecord[] existingRecords = source.Accounts[0].Records
+        GachaRecord[] existingRecords = source.Accounts[0].Records
             .Select(record => record with
             {
                 GameAccountId = account.Id
             })
             .ToArray();
-        var records = new InMemoryWishRecordRepository(existingRecords);
+        var records = new InMemoryGachaRecordRepository(existingRecords);
         await archives.AddAsync(archive);
         await accounts.AddAsync(account);
 
@@ -223,9 +222,9 @@ public sealed class GachaExportTests
     {
         GachaExportDocument source = CreateDocument();
         GachaExportAccount account = source.Accounts[0];
-        WishRecord template = account.Records[0];
+        GachaRecord template = account.Records[0];
         string[] dangerousNames = ["=1+1", "+1+1", "-1+1", "@SUM", "  =1+1"];
-        WishRecord[] records = dangerousNames
+        GachaRecord[] records = dangerousNames
             .Select((name, index) => template with
             {
                 ExternalRecordId = $"danger-{index}",
@@ -264,7 +263,7 @@ public sealed class GachaExportTests
     {
         GachaExportDocument source = CreateDocument();
         GachaExportAccount account = source.Accounts[0];
-        WishRecord record = account.Records[1] with
+        GachaRecord record = account.Records[1] with
         {
             ItemType = "キャラクター"
         };
@@ -299,7 +298,7 @@ public sealed class GachaExportTests
     {
         GachaExportDocument source = CreateDocument();
         GachaExportAccount account = source.Accounts[0];
-        WishRecord record = account.Records[0] with
+        GachaRecord record = account.Records[0] with
         {
             ItemId = "999999",
             RankType = null
@@ -346,7 +345,7 @@ public sealed class GachaExportTests
         string xml = await reader.ReadToEndAsync();
 
         Assert.Contains("Timezone Offset", xml);
-        Assert.Contains("Character Event Wish", xml);
+        Assert.Contains("Character Event Gacha", xml);
         Assert.Contains("800000001", xml);
         Assert.Contains("600000001", xml);
     }
@@ -356,7 +355,7 @@ public sealed class GachaExportTests
     {
         GachaExportDocument source = CreateDocument();
         GachaExportAccount account = source.Accounts[0];
-        WishRecord record = account.Records[0] with
+        GachaRecord record = account.Records[0] with
         {
             ItemId = "999999",
             ItemName = "Furina\u0001😀"
@@ -406,7 +405,7 @@ public sealed class GachaExportTests
         var loader = new LoadGachaExportData(
             archives,
             accounts,
-            new InMemoryWishRecordRepository(Array.Empty<WishRecord>()),
+            new InMemoryGachaRecordRepository(Array.Empty<GachaRecord>()),
             TimeProvider.System);
 
         await Assert.ThrowsAsync<InvalidOperationException>(
@@ -463,7 +462,7 @@ public sealed class GachaExportTests
             uid: "600000001",
             region: GameServerRegion.America);
 
-        WishRecord[] asiaRecords =
+        GachaRecord[] asiaRecords =
         [
             Record(
                 asia.Id,
@@ -493,7 +492,7 @@ public sealed class GachaExportTests
                 new DateTimeOffset(
                     2026, 1, 1, 10, 2, 0, TimeSpan.FromHours(8)))
         ];
-        WishRecord[] americaRecords =
+        GachaRecord[] americaRecords =
         [
             Record(
                 america.Id,
@@ -514,7 +513,7 @@ public sealed class GachaExportTests
             ]);
     }
 
-    private static WishRecord Record(
+    private static GachaRecord Record(
         Guid accountId,
         string externalId,
         string itemId,
@@ -523,7 +522,7 @@ public sealed class GachaExportTests
         int rankType,
         DateTimeOffset time)
     {
-        return new WishRecord(
+        return new GachaRecord(
             accountId,
             externalId,
             name,

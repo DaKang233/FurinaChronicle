@@ -5,10 +5,9 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Gacha;
-using FurinaChronicle.Core.Wishes;
 using FurinaChronicle.Services.Gacha.Abstractions;
-using FurinaChronicle.Services.Wishes;
-using FurinaChronicle.Services.Wishes.Analytics;
+using FurinaChronicle.Services.Gacha;
+using FurinaChronicle.Services.Gacha.Analytics;
 using System.Collections.ObjectModel;
 
 namespace FurinaChronicle.App.ViewModels;
@@ -23,8 +22,8 @@ public enum GachaAnalysisSection
 }
 
 public partial class GachaAnalysisViewModel(
-    BuildWishAnalytics buildWishAnalytics,
-    GetWishRecordPage getWishRecordPage,
+    BuildGachaAnalytics buildGachaAnalytics,
+    GetGachaRecordPage getGachaRecordPage,
     IGachaItemIconCache iconCache)
     : ObservableObject
 {
@@ -35,27 +34,27 @@ public partial class GachaAnalysisViewModel(
 
     public ObservableCollection<GachaAccountFilterItem> AccountFilters { get; } = [];
     [ObservableProperty]
-    public partial IReadOnlyList<WishPoolStatisticsDisplayItem> PoolCards { get; set; } = [];
-    public ObservableCollection<WishRecordAnalysisDisplayItem> DetailRecords { get; } = [];
-    public ObservableCollection<WishHistoryDisplayItem> HistoryItems { get; } = [];
-    public ObservableCollection<WishCalendarDisplayItem> CalendarItems { get; } = [];
+    public partial IReadOnlyList<GachaPoolStatisticsDisplayItem> PoolCards { get; set; } = [];
+    public ObservableCollection<GachaRecordAnalysisDisplayItem> DetailRecords { get; } = [];
+    public ObservableCollection<GachaHistoryDisplayItem> HistoryItems { get; } = [];
+    public ObservableCollection<GachaCalendarDisplayItem> CalendarItems { get; } = [];
 
     [ObservableProperty]
     public partial IReadOnlyList<ArchiveOverviewDisplayRow> ArchiveOverviewRows { get; set; } = [];
 
     [ObservableProperty]
-    public partial IReadOnlyList<WishItemStatisticsDisplayItem> ItemStatistics { get; set; } = [];
+    public partial IReadOnlyList<GachaItemStatisticsDisplayItem> ItemStatistics { get; set; } = [];
 
     [ObservableProperty]
-    public partial IReadOnlyList<WishItemGridDisplayRow> ItemGridRows { get; set; } = [];
+    public partial IReadOnlyList<GachaItemGridDisplayRow> ItemGridRows { get; set; } = [];
 
     public IReadOnlyList<PoolFilterOption> PoolFilters { get; } =
     [
         new(null, "全部卡池"),
-        .. Enum.GetValues<WishPoolGroup>()
+        .. Enum.GetValues<GachaPoolGroup>()
             .Select(group => new PoolFilterOption(
                 group,
-                WishPoolGroupResolver.GetDisplayName(group)))
+                GachaPoolGroupResolver.GetDisplayName(group)))
     ];
 
     public IReadOnlyList<RankFilterOption> RankFilters { get; } =
@@ -388,8 +387,8 @@ public partial class GachaAnalysisViewModel(
                 return;
             }
 
-            WishAnalyticsReport report = await buildWishAnalytics.ExecuteAsync(
-                new WishRecordQuery(ids),
+            GachaAnalyticsReport report = await buildGachaAnalytics.ExecuteAsync(
+                new GachaRecordQuery(ids),
                 GetCurrentComponent(),
                 CancellationToken.None);
             await PopulateCurrentSectionAsync(report);
@@ -441,18 +440,18 @@ public partial class GachaAnalysisViewModel(
 
     private async Task LoadDetailCoreAsync(IReadOnlyList<Guid> ids)
     {
-        WishRecordQuery query = BuildDetailQuery(ids);
-        WishRecordPage page = await getWishRecordPage.ExecuteAsync(
+        GachaRecordQuery query = BuildDetailQuery(ids);
+        GachaRecordPage page = await getGachaRecordPage.ExecuteAsync(
             query,
             DetailPage,
             DetailPageSize);
         DetailRecords.Clear();
         Dictionary<Guid, GameAccount> accountMap =
             accounts.ToDictionary(account => account.Id);
-        foreach (WishRecord record in page.Records)
+        foreach (GachaRecord record in page.Records)
         {
             DetailRecords.Add(
-                WishRecordAnalysisDisplayItem.FromDomain(record, accountMap));
+                GachaRecordAnalysisDisplayItem.FromDomain(record, accountMap));
         }
         DetailPage = page.PageNumber;
         DetailTotalPages = page.TotalPages;
@@ -462,25 +461,25 @@ public partial class GachaAnalysisViewModel(
             : $"当前筛选共 {page.TotalCount} 条抽卡记录。";
     }
 
-    private WishRecordQuery BuildDetailQuery(IReadOnlyList<Guid> ids)
+    private GachaRecordQuery BuildDetailQuery(IReadOnlyList<Guid> ids)
     {
         PrepareForSection(GachaAnalysisSection.Details);
         IReadOnlySet<int>? ranks = SelectedRankFilter?.Value is int rank
             ? new HashSet<int> { rank }
             : null;
-        IReadOnlySet<WishPoolGroup>? pools =
-            SelectedPoolFilter?.Value is WishPoolGroup pool
-                ? new HashSet<WishPoolGroup> { pool }
+        IReadOnlySet<GachaPoolGroup>? pools =
+            SelectedPoolFilter?.Value is GachaPoolGroup pool
+                ? new HashSet<GachaPoolGroup> { pool }
                 : null;
-        return new WishRecordQuery(
+        return new GachaRecordQuery(
             ids,
             ranks,
             pools,
             HasStartDate ? ToStartOfDay(StartDate) : null,
             HasEndDate ? ToEndOfDay(EndDate) : null,
             SortOrder: IsNewestFirst
-                ? WishRecordSortOrder.NewestFirst
-                : WishRecordSortOrder.OldestFirst);
+                ? GachaRecordSortOrder.NewestFirst
+                : GachaRecordSortOrder.OldestFirst);
     }
 
     private IReadOnlyList<Guid> GetScopeAccountIds()
@@ -510,23 +509,23 @@ public partial class GachaAnalysisViewModel(
                     : $"账号：{selectedAccount.DisplayName ?? selectedAccount.Uid}";
     }
 
-    private static WishAnalyticsComponents GetCurrentComponent(
+    private static GachaAnalyticsComponents GetCurrentComponent(
         GachaAnalysisSection section)
     {
         return section switch
         {
-            GachaAnalysisSection.Overview => WishAnalyticsComponents.Pools,
-            GachaAnalysisSection.History => WishAnalyticsComponents.History,
-            GachaAnalysisSection.Calendar => WishAnalyticsComponents.Calendar,
-            GachaAnalysisSection.Items => WishAnalyticsComponents.Items,
-            _ => WishAnalyticsComponents.None
+            GachaAnalysisSection.Overview => GachaAnalyticsComponents.Pools,
+            GachaAnalysisSection.History => GachaAnalyticsComponents.History,
+            GachaAnalysisSection.Calendar => GachaAnalyticsComponents.Calendar,
+            GachaAnalysisSection.Items => GachaAnalyticsComponents.Items,
+            _ => GachaAnalyticsComponents.None
         };
     }
 
-    private WishAnalyticsComponents GetCurrentComponent() =>
+    private GachaAnalyticsComponents GetCurrentComponent() =>
         GetCurrentComponent(CurrentSection);
 
-    private async Task PopulateCurrentSectionAsync(WishAnalyticsReport report)
+    private async Task PopulateCurrentSectionAsync(GachaAnalyticsReport report)
     {
         switch (CurrentSection)
         {
@@ -550,7 +549,7 @@ public partial class GachaAnalysisViewModel(
     }
 
     private async Task PopulateOverviewAsync(
-        IReadOnlyList<WishPoolStatistics> pools)
+        IReadOnlyList<GachaPoolStatistics> pools)
     {
         PoolCards = await Task.WhenAll(pools.Select(ToDisplayItemAsync));
         if (!IsArchiveMode)
@@ -560,7 +559,7 @@ public partial class GachaAnalysisViewModel(
         }
 
         var rows = new List<ArchiveOverviewDisplayRow>();
-        foreach (WishPoolStatisticsDisplayItem card in PoolCards)
+        foreach (GachaPoolStatisticsDisplayItem card in PoolCards)
         {
             rows.Add(new ArchiveOverviewDisplayRow(card, []));
             rows.AddRange(card.ItemCountRows.Select(row =>
@@ -570,12 +569,12 @@ public partial class GachaAnalysisViewModel(
     }
 
     private void PopulateHistory(
-        IReadOnlyList<WishHistoryPeriod> history)
+        IReadOnlyList<GachaHistoryPeriod> history)
     {
         HistoryItems.Clear();
-        foreach (WishHistoryPeriod period in history)
+        foreach (GachaHistoryPeriod period in history)
         {
-            HistoryItems.Add(new WishHistoryDisplayItem(
+            HistoryItems.Add(new GachaHistoryDisplayItem(
                 period.Date.ToString("yyyy-MM-dd"),
                 period.PoolName,
                 $"{period.TotalPulls} 抽",
@@ -585,12 +584,12 @@ public partial class GachaAnalysisViewModel(
     }
 
     private void PopulateCalendar(
-        IReadOnlyList<WishCalendarDay> calendar)
+        IReadOnlyList<GachaCalendarDay> calendar)
     {
         CalendarItems.Clear();
-        foreach (WishCalendarDay day in calendar)
+        foreach (GachaCalendarDay day in calendar)
         {
-            CalendarItems.Add(new WishCalendarDisplayItem(
+            CalendarItems.Add(new GachaCalendarDisplayItem(
                 day.Date.ToString("MM-dd"),
                 $"{day.TotalPulls} 抽",
                 $"五星 {day.FiveStarCount} · 四星 {day.FourStarCount}",
@@ -599,32 +598,32 @@ public partial class GachaAnalysisViewModel(
     }
 
     private async Task PopulateItemsAsync(
-        IReadOnlyList<WishItemStatistics> items)
+        IReadOnlyList<GachaItemStatistics> items)
     {
-        WishItemStatisticsDisplayItem[] displayItems =
+        GachaItemStatisticsDisplayItem[] displayItems =
             await Task.WhenAll(items.Select(async item =>
-                new WishItemStatisticsDisplayItem(
+                new GachaItemStatisticsDisplayItem(
                     item,
                     await GetCachedIconPathAsync(
                         item.ItemId,
                         item.IconUrl))));
         ItemStatistics = displayItems;
-        var rows = new List<WishItemGridDisplayRow>();
-        foreach (IGrouping<int?, WishItemStatisticsDisplayItem> group in
+        var rows = new List<GachaItemGridDisplayRow>();
+        foreach (IGrouping<int?, GachaItemStatisticsDisplayItem> group in
             ItemStatistics.GroupBy(item => item.RankType))
         {
-            WishItemStatisticsDisplayItem[] groupItems = group.ToArray();
-            rows.Add(new WishItemGridDisplayRow(
+            GachaItemStatisticsDisplayItem[] groupItems = group.ToArray();
+            rows.Add(new GachaItemGridDisplayRow(
                 group.Key is int rank ? $"{rank} 星" : "未知星级",
                 []));
             rows.AddRange(groupItems
                 .Chunk(IconItemsPerRow)
-                .Select(row => new WishItemGridDisplayRow(null, row)));
+                .Select(row => new GachaItemGridDisplayRow(null, row)));
         }
         ItemGridRows = rows;
     }
 
-    private static string FormatHistoryItems(IReadOnlyList<WishHistoryItem> items)
+    private static string FormatHistoryItems(IReadOnlyList<GachaHistoryItem> items)
     {
         List<string> summaries = items
             .Where(item => item.RankType is >= 4)
@@ -643,17 +642,17 @@ public partial class GachaAnalysisViewModel(
             : string.Join("、", summaries);
     }
 
-    private async Task<WishPoolStatisticsDisplayItem> ToDisplayItemAsync(
-        WishPoolStatistics pool)
+    private async Task<GachaPoolStatisticsDisplayItem> ToDisplayItemAsync(
+        GachaPoolStatistics pool)
     {
         Dictionary<Guid, GameAccount> accountMap =
             accounts.ToDictionary(account => account.Id);
-        var fiveStars = new List<FiveStarWishDisplayItem>();
+        var fiveStars = new List<FiveStarGachaDisplayItem>();
         if (!IsArchiveMode)
         {
             fiveStars.AddRange(await Task.WhenAll(
                 pool.FiveStarHistory.Select(async item =>
-                    new FiveStarWishDisplayItem(
+                    new FiveStarGachaDisplayItem(
                     item.ItemName,
                     CreateFileImageSource(
                         await GetCachedIconPathAsync(
@@ -668,12 +667,12 @@ public partial class GachaAnalysisViewModel(
                         : string.Empty))));
         }
 
-        var itemCounts = new List<WishPoolItemCountDisplayItem>();
+        var itemCounts = new List<GachaPoolItemCountDisplayItem>();
         if (IsArchiveMode)
         {
             itemCounts.AddRange(await Task.WhenAll(
                 pool.ItemCounts.Select(async item =>
-                    new WishPoolItemCountDisplayItem(
+                    new GachaPoolItemCountDisplayItem(
                     item.ItemName,
                     CreateFileImageSource(
                         await GetCachedIconPathAsync(
@@ -683,7 +682,7 @@ public partial class GachaAnalysisViewModel(
                     $"× {item.Count}"))));
         }
 
-        return new WishPoolStatisticsDisplayItem(
+        return new GachaPoolStatisticsDisplayItem(
             pool.PoolName,
             $"总抽数 {pool.TotalPulls}",
             pool.StartTime is null
@@ -694,8 +693,8 @@ public partial class GachaAnalysisViewModel(
                 : "任意五星期望 —",
             pool.AverageUpFiveStarPulls is double upAverage
                 ? $"限定五星期望 {upAverage:F2} 抽"
-                : pool.PoolGroup is WishPoolGroup.CharacterEvent or
-                    WishPoolGroup.WeaponEvent
+                : pool.PoolGroup is GachaPoolGroup.CharacterEvent or
+                    GachaPoolGroup.WeaponEvent
                     ? "限定五星期望 —"
                     : "限定五星期望：不适用于该卡池",
             pool.MinimumFiveStarPulls is int minimum
@@ -709,11 +708,11 @@ public partial class GachaAnalysisViewModel(
             itemCounts,
             fiveStars
                 .Chunk(IconItemsPerRow)
-                .Select(row => new FiveStarWishDisplayRow(row))
+                .Select(row => new FiveStarGachaDisplayRow(row))
                 .ToArray(),
             itemCounts
                 .Chunk(IconItemsPerRow)
-                .Select(row => new WishPoolItemCountDisplayRow(row))
+                .Select(row => new GachaPoolItemCountDisplayRow(row))
                 .ToArray());
     }
 

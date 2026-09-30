@@ -47,3 +47,4 @@
 - 不清楚的产品决定记录到 `docs/project/OPEN_QUESTIONS.md`，不要在代码中静默选择不可逆方案。
 - 保持提交按阶段和职责拆分；不要把文档契约、数据库迁移和大规模 UI 重构混在一个提交中。
 - 新建或修改 C#、XAML、XML 或其他 XML 派生配置文件时，必须保留标准短版权头；具体范围、格式和自动补齐方式见 `docs/development/COPYRIGHT_HEADERS.md`。
+- 抽卡领域的内部命名统一使用 `Gacha`，不得新增 `Wish` 类型、命名空间、文件名、数据库对象或测试名称；`WishRecords` 仅允许作为数据库 Schema v1 的迁移来源，外部协议确有原始字段时必须限制在 Codec 边界。
