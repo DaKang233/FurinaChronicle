@@ -7,6 +7,8 @@
 - [项目宪章](project/PROJECT_CHARTER.md)
 - [范围与非目标](project/SCOPE_AND_NON_GOALS.md)
 - [路线图](project/ROADMAP.md)
+- [Phase 8A 退出评审](project/PHASE_8A_EXIT_REVIEW.md)
+- [Phase 8B 实施计划](project/PHASE_8B_PLAN.md)
 - [术语表](project/GLOSSARY.md)
 - [待确认事项](project/OPEN_QUESTIONS.md)
 
@@ -26,6 +28,7 @@
 - [可移植数据集](architecture/PORTABLE_DATASET.md)
 - [备份与恢复](architecture/BACKUP_AND_RESTORE.md)
 - [服务端扩展](architecture/SERVER_EXTENSIBILITY.md)
+- [Chronicle 时间线](architecture/CHRONICLE_TIMELINE.md)
 
 ## 决策与开发
 
@@ -33,6 +36,7 @@
 - [ADR 索引](decisions/README.md)
 - [测试要求](development/TESTING.md)
 - [版权头规范](development/COPYRIGHT_HEADERS.md)
+- [Chronicle Timeline v1 草案](specifications/CHRONICLE_TIMELINE_V1.md)
 
 ## 文档状态
 

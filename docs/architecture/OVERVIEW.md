@@ -45,6 +45,8 @@ Projection
 - 派生记录由基础数据计算或推断。
 - 投影面向查询、UI、统计和报告，可随时重建。
 
+Chronicle 游戏历程是跨数据域的派生投影，不是新的事实表。抽卡、挑战、角色状态等领域通过贡献者生成统一时间线条目；导入、覆盖、撤销和删除等档案操作使用独立的操作历史。具体见 [Chronicle 时间线架构](CHRONICLE_TIMELINE.md)。
+
 ## 当前实现与目标模型
 
 当前数据库使用 `PlayerArchive → GameAccount → GachaRecord`，`GachaRecord` 通过 `GameAccountId` 归属档案内账号副本。目标模型保留该归属方式，同时给 `GameAccount` 增加共享的 `GameRoleIdentityId`，用于识别不同档案中的副本来自同一个真实角色。该迁移尚未实现。
