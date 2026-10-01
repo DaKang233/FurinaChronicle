@@ -9,4 +9,9 @@ public partial class AccountOverviewView : ContentView
     {
         InitializeComponent();
     }
+
+    private void OnOverviewSizeChanged(object? sender, EventArgs e)
+    {
+        ResponsiveOverviewLayout.Update(OverviewItemsLayout, Width);
+    }
 }

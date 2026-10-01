@@ -11,22 +11,82 @@
     xmlns:viewModels="clr-namespace:FurinaChronicle.App.ViewModels"
     x:DataType="viewModels:GachaAnalysisViewModel">
 
-    <Grid RowDefinitions="Auto,*" RowSpacing="8">
-        <Label FontAttributes="Bold" FontSize="20" Text="抽卡历史" />
-        <CollectionView Grid.Row="1" ItemsSource="{Binding HistoryItems}">
+    <Grid RowDefinitions="Auto,Auto,*" RowSpacing="8">
+        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+            <Label FontAttributes="Bold" FontSize="20" Text="抽卡历史" />
+            <Button
+                Grid.Column="1"
+                Command="{Binding PreloadGachaBannerImagesCommand}"
+                IsEnabled="{Binding IsNotBusy}"
+                Text="预下载全部卡池图片" />
+            <Button
+                Grid.Column="2"
+                Command="{Binding ClearGachaBannerImagesCommand}"
+                IsEnabled="{Binding IsNotBusy}"
+                Text="清除卡池图片缓存" />
+        </Grid>
+        <Label
+            Grid.Row="1"
+            FontSize="11"
+            Text="{Binding BannerCacheStatus}"
+            TextColor="Gray" />
+        <CollectionView Grid.Row="2" ItemsSource="{Binding HistoryItems}">
             <CollectionView.EmptyView>
                 <Label Padding="16" Text="当前范围暂无抽卡历史。" />
             </CollectionView.EmptyView>
             <CollectionView.ItemTemplate>
                 <DataTemplate x:DataType="viewModels:GachaHistoryDisplayItem">
-                    <Border Margin="0,0,0,8" Padding="12">
-                        <Grid ColumnDefinitions="110,150,90,*" RowDefinitions="Auto,Auto" ColumnSpacing="8">
-                            <Label FontAttributes="Bold" Text="{Binding Date}" />
-                            <Label Grid.Column="1" Text="{Binding Pool}" />
-                            <Label Grid.Column="2" FontAttributes="Bold" Text="{Binding Total}" />
-                            <Label Grid.Column="3" FontSize="11" Text="{Binding Accounts}" />
-                            <Label Grid.Row="1" Grid.ColumnSpan="4" FontSize="12" Text="{Binding Items}" />
-                        </Grid>
+                    <Border Margin="0,0,0,10" Padding="14">
+                        <VerticalStackLayout Spacing="8">
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                                <Label
+                                    FontAttributes="Bold"
+                                    FontSize="16"
+                                    LineBreakMode="WordWrap"
+                                    Text="{Binding Title}" />
+                                <Label
+                                    Grid.Column="1"
+                                    FontAttributes="Bold"
+                                    Text="{Binding Total}" />
+                            </Grid>
+                            <Label FontSize="12" Text="{Binding Period}" />
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                                <Label FontAttributes="Bold" Text="{Binding Pool}" />
+                                <Label
+                                    Grid.Column="1"
+                                    FontSize="11"
+                                    HorizontalTextAlignment="End"
+                                    Text="{Binding Accounts}" />
+                            </Grid>
+                            <ScrollView Orientation="Horizontal">
+                                <HorizontalStackLayout
+                                    BindableLayout.ItemsSource="{Binding Banners}"
+                                    Spacing="8">
+                                    <BindableLayout.ItemTemplate>
+                                        <DataTemplate x:DataType="viewModels:GachaHistoryBannerDisplayItem">
+                                            <Border Padding="8" WidthRequest="260">
+                                                <VerticalStackLayout Spacing="4">
+                                                    <Image
+                                                        Aspect="AspectFit"
+                                                        HeightRequest="110"
+                                                        Source="{Binding BannerImage}"
+                                                        WidthRequest="240" />
+                                                    <Label FontAttributes="Bold" Text="{Binding Name}" />
+                                                    <Label FontSize="11" Text="{Binding Type}" />
+                                                    <Label FontSize="11" Text="{Binding FeaturedItems}" />
+                                                </VerticalStackLayout>
+                                            </Border>
+                                        </DataTemplate>
+                                    </BindableLayout.ItemTemplate>
+                                </HorizontalStackLayout>
+                            </ScrollView>
+                            <Label FontSize="12" LineBreakMode="WordWrap" Text="{Binding Items}" />
+                            <Label
+                                FontSize="10"
+                                LineBreakMode="WordWrap"
+                                Text="{Binding MetadataNote}"
+                                TextColor="Gray" />
+                        </VerticalStackLayout>
                     </Border>
                 </DataTemplate>
             </CollectionView.ItemTemplate>

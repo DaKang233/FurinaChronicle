@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 using FurinaChronicle.Core.Gacha;
+using FurinaChronicle.Core.Gacha.Metadata;
 
 namespace FurinaChronicle.Services.Gacha.Analytics;
 
@@ -60,8 +61,18 @@ public sealed record GachaPoolItemCount(
     int? RankType,
     int Count);
 
+public enum GachaEventMatchQuality
+{
+    Unmatched,
+    RegionUnverified,
+    Verified
+}
+
 public sealed record GachaHistoryPeriod(
-    DateOnly Date,
+    GachaEventPeriod? EventPeriod,
+    GachaEventMatchQuality MatchQuality,
+    DateTimeOffset StartTime,
+    DateTimeOffset EndTime,
     GachaPoolGroup PoolGroup,
     string PoolName,
     int TotalPulls,

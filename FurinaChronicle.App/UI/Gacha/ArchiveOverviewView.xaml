@@ -9,6 +9,7 @@
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
     xmlns:viewModels="clr-namespace:FurinaChronicle.App.ViewModels"
+    SizeChanged="OnOverviewSizeChanged"
     x:DataType="viewModels:GachaAnalysisViewModel">
 
     <Grid RowDefinitions="Auto,*" RowSpacing="8">
@@ -16,20 +17,34 @@
 
         <CollectionView
             Grid.Row="1"
-            ItemsSource="{Binding ArchiveOverviewRows}"
+            ItemsSource="{Binding PoolCards}"
             SelectionMode="None">
+            <CollectionView.ItemsLayout>
+                <GridItemsLayout
+                    x:Name="OverviewItemsLayout"
+                    HorizontalItemSpacing="10"
+                    Orientation="Vertical"
+                    Span="1"
+                    VerticalItemSpacing="10" />
+            </CollectionView.ItemsLayout>
             <CollectionView.EmptyView>
                 <Label Padding="16" HorizontalTextAlignment="Center" Text="当前档案范围暂无可统计的抽卡记录。" />
             </CollectionView.EmptyView>
             <CollectionView.ItemTemplate>
-                <DataTemplate x:DataType="viewModels:ArchiveOverviewDisplayRow">
-                    <Grid>
-                        <Border
-                            Margin="0,8,0,4"
-                            Padding="14"
-                            IsVisible="{Binding IsSummary}">
-                            <VerticalStackLayout Spacing="7">
+                <DataTemplate x:DataType="viewModels:GachaPoolStatisticsDisplayItem">
+                    <Border Padding="14">
+                        <VerticalStackLayout Spacing="7">
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                                 <Label FontAttributes="Bold" FontSize="19" Text="{Binding PoolName}" />
+                                <Button
+                                    Grid.Column="1"
+                                    Command="{Binding ToggleStatisticsCommand}"
+                                    FontSize="11"
+                                    Padding="8,4"
+                                    Text="{Binding StatisticsToggleText}" />
+                            </Grid>
+
+                            <VerticalStackLayout IsVisible="{Binding IsStatisticsExpanded}" Spacing="7">
                                 <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="5">
                                     <Label Text="{Binding Total}" />
                                     <Label Grid.Column="1" Text="{Binding AverageFiveStar}" />
@@ -40,13 +55,13 @@
                                 <Label FontSize="12" Text="{Binding Period}" />
                                 <Label FontSize="12" Text="{Binding AverageUp}" TextColor="{AppThemeBinding Light=#666666, Dark=#BBBBBB}" />
                             </VerticalStackLayout>
-                        </Border>
 
-                        <HorizontalStackLayout
-                            Margin="14,2"
-                            BindableLayout.ItemsSource="{Binding Items}"
-                            IsVisible="{Binding IsItemRow}"
-                            Spacing="3">
+                            <FlexLayout
+                                AlignItems="Start"
+                                BindableLayout.ItemsSource="{Binding VisibleItemCounts}"
+                                Direction="Row"
+                                JustifyContent="Start"
+                                Wrap="Wrap">
                             <BindableLayout.ItemTemplate>
                                 <DataTemplate x:DataType="viewModels:GachaPoolItemCountDisplayItem">
                                     <VerticalStackLayout Margin="3" WidthRequest="72" Spacing="2">
@@ -67,8 +82,9 @@
                                     </VerticalStackLayout>
                                 </DataTemplate>
                             </BindableLayout.ItemTemplate>
-                        </HorizontalStackLayout>
-                    </Grid>
+                            </FlexLayout>
+                        </VerticalStackLayout>
+                    </Border>
                 </DataTemplate>
             </CollectionView.ItemTemplate>
         </CollectionView>

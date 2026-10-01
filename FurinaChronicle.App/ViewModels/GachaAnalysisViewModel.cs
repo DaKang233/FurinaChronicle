@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Gacha;
+using FurinaChronicle.Core.Gacha.Metadata;
 using FurinaChronicle.Services.Gacha.Abstractions;
 using FurinaChronicle.Services.Gacha;
 using FurinaChronicle.Services.Gacha.Analytics;
@@ -24,10 +25,11 @@ public enum GachaAnalysisSection
 public partial class GachaAnalysisViewModel(
     BuildGachaAnalytics buildGachaAnalytics,
     GetGachaRecordPage getGachaRecordPage,
-    IGachaItemIconCache iconCache)
+    IGachaItemIconCache iconCache,
+    IGachaEventCatalog eventCatalog,
+    IGachaBannerImageCache bannerImageCache)
     : ObservableObject
 {
-    private const int IconItemsPerRow = 4;
     private PlayerArchive? archive;
     private GameAccount? selectedAccount;
     private IReadOnlyList<GameAccount> accounts = [];
@@ -38,9 +40,6 @@ public partial class GachaAnalysisViewModel(
     public ObservableCollection<GachaRecordAnalysisDisplayItem> DetailRecords { get; } = [];
     public ObservableCollection<GachaHistoryDisplayItem> HistoryItems { get; } = [];
     public ObservableCollection<GachaCalendarDisplayItem> CalendarItems { get; } = [];
-
-    [ObservableProperty]
-    public partial IReadOnlyList<ArchiveOverviewDisplayRow> ArchiveOverviewRows { get; set; } = [];
 
     [ObservableProperty]
     public partial IReadOnlyList<GachaItemStatisticsDisplayItem> ItemStatistics { get; set; } = [];
@@ -103,6 +102,9 @@ public partial class GachaAnalysisViewModel(
 
     [ObservableProperty]
     public partial string Summary { get; set; } = "暂无抽卡记录。";
+
+    [ObservableProperty]
+    public partial string? BannerCacheStatus { get; set; }
 
     [ObservableProperty]
     public partial PoolFilterOption? SelectedPoolFilter { get; set; } =
@@ -349,6 +351,96 @@ public partial class GachaAnalysisViewModel(
         }
     }
 
+    [RelayCommand]
+    private async Task PreloadGachaBannerImagesAsync()
+    {
+        if (IsBusy)
+        {
+            return;
+        }
+
+        IsBusy = true;
+        ErrorMessage = null;
+        BannerCacheStatus = "正在预下载卡池图片……";
+        try
+        {
+            IReadOnlyList<GachaEventPeriod> periods =
+                await eventCatalog.GetAllAsync(GachaGame.GenshinImpact);
+            GachaEventBanner[] banners = periods
+                .SelectMany(period => period.Banners)
+                .DistinctBy(banner => banner.Id, StringComparer.Ordinal)
+                .ToArray();
+            int succeeded = 0;
+            await Parallel.ForEachAsync(
+                banners,
+                new ParallelOptions { MaxDegreeOfParallelism = 4 },
+                async (banner, cancellationToken) =>
+                {
+                    string? path = await bannerImageCache.GetOrRefreshAsync(
+                        GachaGame.GenshinImpact,
+                        banner.Id,
+                        banner.ImageUrl,
+                        banner.BackupImageUrl,
+                        cancellationToken);
+                    if (path is not null)
+                    {
+                        Interlocked.Increment(ref succeeded);
+                    }
+                });
+            BannerCacheStatus =
+                $"卡池图片预下载完成：{succeeded} / {banners.Length}。";
+        }
+        catch (Exception exception)
+        {
+            ErrorMessage = exception.Message;
+            BannerCacheStatus = "卡池图片预下载未完成。";
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task ClearGachaBannerImagesAsync()
+    {
+        if (IsBusy)
+        {
+            return;
+        }
+
+        IsBusy = true;
+        ErrorMessage = null;
+        try
+        {
+            await bannerImageCache.ClearAsync();
+            BannerCacheStatus = "卡池图片缓存已清除。";
+        }
+        catch (Exception exception)
+        {
+            ErrorMessage = exception.Message;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+
+        if (ErrorMessage is null &&
+            CurrentSection == GachaAnalysisSection.History)
+        {
+            for (int index = 0; index < HistoryItems.Count; index++)
+            {
+                GachaHistoryDisplayItem item = HistoryItems[index];
+                HistoryItems[index] = item with
+                {
+                    Banners = item.Banners
+                        .Select(banner => banner with { BannerImage = null })
+                        .ToArray()
+                };
+            }
+        }
+    }
+
     private async Task ShowSectionAsync(GachaAnalysisSection section)
     {
         if (CurrentSection == section)
@@ -390,6 +482,9 @@ public partial class GachaAnalysisViewModel(
             GachaAnalyticsReport report = await buildGachaAnalytics.ExecuteAsync(
                 new GachaRecordQuery(ids),
                 GetCurrentComponent(),
+                accounts.ToDictionary(
+                    account => account.Id,
+                    account => account.ServerRegion),
                 CancellationToken.None);
             await PopulateCurrentSectionAsync(report);
         }
@@ -533,7 +628,7 @@ public partial class GachaAnalysisViewModel(
                 await PopulateOverviewAsync(report.Pools);
                 break;
             case GachaAnalysisSection.History:
-                PopulateHistory(report.History);
+                await PopulateHistoryAsync(report.History);
                 break;
             case GachaAnalysisSection.Calendar:
                 PopulateCalendar(report.Calendar);
@@ -552,35 +647,86 @@ public partial class GachaAnalysisViewModel(
         IReadOnlyList<GachaPoolStatistics> pools)
     {
         PoolCards = await Task.WhenAll(pools.Select(ToDisplayItemAsync));
-        if (!IsArchiveMode)
-        {
-            ArchiveOverviewRows = [];
-            return;
-        }
-
-        var rows = new List<ArchiveOverviewDisplayRow>();
-        foreach (GachaPoolStatisticsDisplayItem card in PoolCards)
-        {
-            rows.Add(new ArchiveOverviewDisplayRow(card, []));
-            rows.AddRange(card.ItemCountRows.Select(row =>
-                new ArchiveOverviewDisplayRow(null, row.Items)));
-        }
-        ArchiveOverviewRows = rows;
     }
 
-    private void PopulateHistory(
+    private async Task PopulateHistoryAsync(
         IReadOnlyList<GachaHistoryPeriod> history)
     {
         HistoryItems.Clear();
         foreach (GachaHistoryPeriod period in history)
         {
+            IReadOnlyList<GachaHistoryBannerDisplayItem> banners =
+                period.EventPeriod is null
+                    ? []
+                    : await Task.WhenAll(period.EventPeriod.Banners.Select(
+                        ToHistoryBannerDisplayItemAsync));
+            string title = period.EventPeriod is null
+                ? $"{period.StartTime:yyyy-MM-dd} · 未匹配卡池元数据"
+                : string.Join(
+                    " / ",
+                    period.EventPeriod.Banners.Select(banner => banner.Name));
+            string periodText = period.EventPeriod is null
+                ? $"记录时间 {period.StartTime:yyyy-MM-dd HH:mm} 至 " +
+                    $"{period.EndTime:yyyy-MM-dd HH:mm}"
+                : $"版本 {period.EventPeriod.Version} · " +
+                    $"第 {period.EventPeriod.PhaseOrder} 期 · " +
+                    $"{period.StartTime:yyyy-MM-dd HH:mm} 至 " +
+                    $"{period.EndTime:yyyy-MM-dd HH:mm}";
+            string metadataNote = period.MatchQuality switch
+            {
+                GachaEventMatchQuality.Verified =>
+                    $"来源：{FormatEventSource(period.EventPeriod!)} · 国服时间",
+                GachaEventMatchQuality.RegionUnverified =>
+                    $"来源：{FormatEventSource(period.EventPeriod!)} · " +
+                        "账号区服未知，匹配未经验证",
+                _ => "未找到适用的卡池事件元数据；记录按日期回退分组。"
+            };
             HistoryItems.Add(new GachaHistoryDisplayItem(
-                period.Date.ToString("yyyy-MM-dd"),
+                title,
+                periodText,
                 period.PoolName,
                 $"{period.TotalPulls} 抽",
                 FormatAccounts(period.GameAccountIds),
-                FormatHistoryItems(period.Items)));
+                FormatHistoryItems(period.Items),
+                metadataNote,
+                banners));
         }
+    }
+
+    private async Task<GachaHistoryBannerDisplayItem>
+        ToHistoryBannerDisplayItemAsync(GachaEventBanner banner)
+    {
+        string? path = await bannerImageCache.GetOrRefreshAsync(
+            GachaGame.GenshinImpact,
+            banner.Id,
+            banner.ImageUrl,
+            banner.BackupImageUrl);
+        return new GachaHistoryBannerDisplayItem(
+            banner.Name,
+            GetBannerTypeName(banner.GachaType),
+            CreateFileImageSource(path),
+            $"五星 UP {banner.UpFiveStarItemIds.Count} · " +
+                $"四星 UP {banner.UpFourStarItemIds.Count}");
+    }
+
+    private static string GetBannerTypeName(int gachaType)
+    {
+        return gachaType switch
+        {
+            301 => "角色活动祈愿-1",
+            400 => "角色活动祈愿-2",
+            302 => "武器活动祈愿",
+            500 => "集录祈愿",
+            _ => $"卡池类型 {gachaType}"
+        };
+    }
+
+    private static string FormatEventSource(GachaEventPeriod period)
+    {
+        string revision = period.SourceRevision.Length > 8
+            ? period.SourceRevision[..8]
+            : period.SourceRevision;
+        return $"{period.Source}@{revision}";
     }
 
     private void PopulateCalendar(
@@ -616,9 +762,7 @@ public partial class GachaAnalysisViewModel(
             rows.Add(new GachaItemGridDisplayRow(
                 group.Key is int rank ? $"{rank} 星" : "未知星级",
                 []));
-            rows.AddRange(groupItems
-                .Chunk(IconItemsPerRow)
-                .Select(row => new GachaItemGridDisplayRow(null, row)));
+            rows.Add(new GachaItemGridDisplayRow(null, groupItems));
         }
         ItemGridRows = rows;
     }
@@ -678,6 +822,7 @@ public partial class GachaAnalysisViewModel(
                         await GetCachedIconPathAsync(
                             item.ItemId,
                             item.IconUrl)),
+                    item.RankType,
                     item.RankType is int rank ? $"{rank} 星" : "未知",
                     $"× {item.Count}"))));
         }
@@ -703,17 +848,9 @@ public partial class GachaAnalysisViewModel(
             $"五星 {pool.FiveStarCount}（{pool.FiveStarPercentage:F2}%） · " +
                 $"四星 {pool.FourStarCount}（{pool.FourStarPercentage:F2}%） · " +
                 $"三星 {pool.ThreeStarCount}（{pool.ThreeStarPercentage:F2}%）",
-            $"距五星 {pool.PullsSinceLastFiveStar} 抽 · 距四星 {pool.PullsSinceLastFourStar} 抽",
+            $"距上个五星 {pool.PullsSinceLastFiveStar} 抽 · 距上个四星 {pool.PullsSinceLastFourStar} 抽",
             fiveStars,
-            itemCounts,
-            fiveStars
-                .Chunk(IconItemsPerRow)
-                .Select(row => new FiveStarGachaDisplayRow(row))
-                .ToArray(),
-            itemCounts
-                .Chunk(IconItemsPerRow)
-                .Select(row => new GachaPoolItemCountDisplayRow(row))
-                .ToArray());
+            itemCounts);
     }
 
     private Task<string?> GetCachedIconPathAsync(
@@ -753,7 +890,6 @@ public partial class GachaAnalysisViewModel(
     private void ClearResults()
     {
         PoolCards = [];
-        ArchiveOverviewRows = [];
         DetailRecords.Clear();
         HistoryItems.Clear();
         CalendarItems.Clear();

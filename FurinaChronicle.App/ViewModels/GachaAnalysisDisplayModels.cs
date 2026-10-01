@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Services.Gacha.Analytics;
@@ -63,16 +64,11 @@ public sealed record FiveStarGachaDisplayItem(
 public sealed record GachaPoolItemCountDisplayItem(
     string ItemName,
     ImageSource? IconUrl,
+    int? RankType,
     string Rank,
     string Count);
 
-public sealed record FiveStarGachaDisplayRow(
-    IReadOnlyList<FiveStarGachaDisplayItem> Items);
-
-public sealed record GachaPoolItemCountDisplayRow(
-    IReadOnlyList<GachaPoolItemCountDisplayItem> Items);
-
-public sealed record GachaPoolStatisticsDisplayItem(
+public sealed partial class GachaPoolStatisticsDisplayItem(
     string PoolName,
     string Total,
     string Period,
@@ -82,41 +78,65 @@ public sealed record GachaPoolStatisticsDisplayItem(
     string RankDistribution,
     string CurrentPity,
     IReadOnlyList<FiveStarGachaDisplayItem> FiveStarHistory,
-    IReadOnlyList<GachaPoolItemCountDisplayItem> ItemCounts,
-    IReadOnlyList<FiveStarGachaDisplayRow> FiveStarRows,
-    IReadOnlyList<GachaPoolItemCountDisplayRow> ItemCountRows);
-
-public sealed record ArchiveOverviewDisplayRow(
-    GachaPoolStatisticsDisplayItem? Summary,
-    IReadOnlyList<GachaPoolItemCountDisplayItem> Items)
+    IReadOnlyList<GachaPoolItemCountDisplayItem> ItemCounts)
+    : ObservableObject
 {
-    public bool IsSummary => Summary is not null;
+    public string PoolName { get; } = PoolName;
 
-    public bool IsItemRow => Summary is null;
+    public string Total { get; } = Total;
 
-    public string PoolName => Summary?.PoolName ?? string.Empty;
+    public string Period { get; } = Period;
 
-    public string Total => Summary?.Total ?? string.Empty;
+    public string AverageFiveStar { get; } = AverageFiveStar;
 
-    public string Period => Summary?.Period ?? string.Empty;
+    public string AverageUp { get; } = AverageUp;
 
-    public string AverageFiveStar => Summary?.AverageFiveStar ?? string.Empty;
+    public string Extremes { get; } = Extremes;
 
-    public string AverageUp => Summary?.AverageUp ?? string.Empty;
+    public string RankDistribution { get; } = RankDistribution;
 
-    public string Extremes => Summary?.Extremes ?? string.Empty;
+    public string CurrentPity { get; } = CurrentPity;
 
-    public string RankDistribution => Summary?.RankDistribution ?? string.Empty;
+    public IReadOnlyList<FiveStarGachaDisplayItem> FiveStarHistory { get; } =
+        FiveStarHistory;
 
-    public string CurrentPity => Summary?.CurrentPity ?? string.Empty;
+    public IReadOnlyList<GachaPoolItemCountDisplayItem> ItemCounts { get; } =
+        ItemCounts;
+
+    public IReadOnlyList<GachaPoolItemCountDisplayItem> FiveStarItemCounts { get; } =
+        ItemCounts.Where(item => item.RankType == 5).ToArray();
+
+    public IReadOnlyList<GachaPoolItemCountDisplayItem> VisibleItemCounts =>
+        IsStatisticsExpanded ? ItemCounts : FiveStarItemCounts;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StatisticsToggleText))]
+    [NotifyPropertyChangedFor(nameof(VisibleItemCounts))]
+    public partial bool IsStatisticsExpanded { get; set; } = true;
+
+    public string StatisticsToggleText =>
+        IsStatisticsExpanded ? "收起统计" : "展开统计";
+
+    [RelayCommand]
+    private void ToggleStatistics() =>
+        IsStatisticsExpanded = !IsStatisticsExpanded;
 }
 
+public sealed record GachaHistoryBannerDisplayItem(
+    string Name,
+    string Type,
+    ImageSource? BannerImage,
+    string FeaturedItems);
+
 public sealed record GachaHistoryDisplayItem(
-    string Date,
+    string Title,
+    string Period,
     string Pool,
     string Total,
     string Accounts,
-    string Items);
+    string Items,
+    string MetadataNote,
+    IReadOnlyList<GachaHistoryBannerDisplayItem> Banners);
 
 public sealed record GachaCalendarDisplayItem(
     string Date,
@@ -143,10 +163,10 @@ public sealed partial class GachaItemStatisticsDisplayItem(
 
     public bool CanShowTimes => source.RankType is 4 or 5;
 
-    public bool CanExpandTimes => source.RankType == 4;
+    public bool CanExpandTimes => source.RankType is 4 or 5 && source.Count > 10;
 
     public bool IsTimesVisible => source.RankType == 5 ||
-        source.RankType == 4 && IsExpanded;
+        source.RankType == 4 && (source.Count > 10 ? IsExpanded : true);
 
     public string Times => string.Join(
         Environment.NewLine,

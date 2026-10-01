@@ -1,6 +1,7 @@
 // Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
+using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.Gacha.Metadata;
 using FurinaChronicle.Services.Abstractions;
@@ -8,10 +9,12 @@ using FurinaChronicle.Services.Gacha.Abstractions;
 
 namespace FurinaChronicle.Services.Gacha.Analytics;
 
-public sealed class BuildGachaAnalytics(
-    IGachaRecordRepository repository,
-    IGachaItemMetadataProvider metadataProvider)
+public sealed class BuildGachaAnalytics
 {
+    private readonly IGachaRecordRepository repository;
+    private readonly IGachaItemMetadataProvider metadataProvider;
+    private readonly IGachaEventCatalog eventCatalog;
+
     private static readonly HashSet<string> StandardCharacterIds =
     [
         "10000003", // Jean
@@ -38,6 +41,23 @@ public sealed class BuildGachaAnalytics(
         "15502"  // Amos' Bow
     ];
 
+    public BuildGachaAnalytics(
+        IGachaRecordRepository repository,
+        IGachaItemMetadataProvider metadataProvider)
+        : this(repository, metadataProvider, EmptyGachaEventCatalog.Instance)
+    {
+    }
+
+    public BuildGachaAnalytics(
+        IGachaRecordRepository repository,
+        IGachaItemMetadataProvider metadataProvider,
+        IGachaEventCatalog eventCatalog)
+    {
+        this.repository = repository;
+        this.metadataProvider = metadataProvider;
+        this.eventCatalog = eventCatalog;
+    }
+
     public Task<GachaAnalyticsReport> ExecuteAsync(
         GachaRecordQuery query,
         CancellationToken cancellationToken = default)
@@ -51,6 +71,19 @@ public sealed class BuildGachaAnalytics(
     public async Task<GachaAnalyticsReport> ExecuteAsync(
         GachaRecordQuery query,
         GachaAnalyticsComponents components,
+        CancellationToken cancellationToken = default)
+    {
+        return await ExecuteAsync(
+            query,
+            components,
+            accountRegions: null,
+            cancellationToken);
+    }
+
+    public async Task<GachaAnalyticsReport> ExecuteAsync(
+        GachaRecordQuery query,
+        GachaAnalyticsComponents components,
+        IReadOnlyDictionary<Guid, GameServerRegion>? accountRegions,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(query);
@@ -86,10 +119,19 @@ public sealed class BuildGachaAnalytics(
                     .OrderBy(statistics => GetPoolOrder(statistics.PoolGroup))
                     .ToArray()
                 : [];
-        IReadOnlyList<GachaHistoryPeriod> history =
-            components.HasFlag(GachaAnalyticsComponents.History)
-                ? BuildHistory(records, metadata)
-                : [];
+        IReadOnlyList<GachaHistoryPeriod> history = [];
+        if (components.HasFlag(GachaAnalyticsComponents.History))
+        {
+            IReadOnlyList<GachaEventPeriod> eventPeriods =
+                await eventCatalog.GetAllAsync(
+                    GachaGame.GenshinImpact,
+                    cancellationToken);
+            history = BuildHistory(
+                records,
+                metadata,
+                eventPeriods,
+                accountRegions);
+        }
         IReadOnlyList<GachaCalendarDay> calendar =
             components.HasFlag(GachaAnalyticsComponents.Calendar)
                 ? BuildCalendar(records)
@@ -298,33 +340,118 @@ public sealed class BuildGachaAnalytics(
 
     private static IReadOnlyList<GachaHistoryPeriod> BuildHistory(
         IReadOnlyList<GachaRecord> records,
+        IReadOnlyDictionary<string, GachaItemMetadata?> metadata,
+        IReadOnlyList<GachaEventPeriod> eventPeriods,
+        IReadOnlyDictionary<Guid, GameServerRegion>? accountRegions)
+    {
+        GachaHistoryRecordMatch[] matches = records
+            .Select(record => MatchEventPeriod(
+                record,
+                eventPeriods,
+                accountRegions))
+            .ToArray();
+
+        IEnumerable<GachaHistoryPeriod> matched = matches
+            .Where(match => match.EventPeriod is not null)
+            .GroupBy(match => match.EventPeriod!.Id, StringComparer.Ordinal)
+            .Select(group =>
+            {
+                GachaHistoryRecordMatch first = group.First();
+                GachaEventPeriod period = first.EventPeriod!;
+                GachaRecord[] periodRecords = group
+                    .Select(match => match.Record)
+                    .ToArray();
+                return new GachaHistoryPeriod(
+                    period,
+                    group.Min(match => match.MatchQuality),
+                    period.StartsAt,
+                    period.EndsAt,
+                    period.PoolGroup,
+                    GachaPoolGroupResolver.GetDisplayName(period.PoolGroup),
+                    periodRecords.Sum(GetPullCount),
+                    periodRecords
+                        .Select(record => record.GameAccountId)
+                        .Distinct()
+                        .ToArray(),
+                    BuildHistoryItems(periodRecords, metadata));
+            });
+
+        IEnumerable<GachaHistoryPeriod> unmatched = matches
+            .Where(match => match.EventPeriod is null)
+            .GroupBy(match => new
+            {
+                Date = DateOnly.FromDateTime(match.Record.Time.Date),
+                Pool = GachaPoolGroupResolver.Resolve(match.Record)
+            })
+            .Select(group =>
+            {
+                GachaRecord[] periodRecords = group
+                    .Select(match => match.Record)
+                    .ToArray();
+                return new GachaHistoryPeriod(
+                    null,
+                    GachaEventMatchQuality.Unmatched,
+                    periodRecords.Min(record => record.Time),
+                    periodRecords.Max(record => record.Time),
+                    group.Key.Pool,
+                    GachaPoolGroupResolver.GetDisplayName(group.Key.Pool),
+                    periodRecords.Sum(GetPullCount),
+                    periodRecords
+                        .Select(record => record.GameAccountId)
+                        .Distinct()
+                        .ToArray(),
+                    BuildHistoryItems(periodRecords, metadata));
+            });
+
+        return matched
+            .Concat(unmatched)
+            .OrderByDescending(period => period.StartTime)
+            .ThenBy(period => GetPoolOrder(period.PoolGroup))
+            .ToArray();
+    }
+
+    private static IReadOnlyList<GachaHistoryItem> BuildHistoryItems(
+        IReadOnlyList<GachaRecord> records,
         IReadOnlyDictionary<string, GachaItemMetadata?> metadata)
     {
         return records
-            .GroupBy(record => new
-            {
-                Date = DateOnly.FromDateTime(record.Time.Date),
-                Pool = GachaPoolGroupResolver.Resolve(record)
-            })
-            .Select(group => new GachaHistoryPeriod(
-                group.Key.Date,
-                group.Key.Pool,
-                GachaPoolGroupResolver.GetDisplayName(group.Key.Pool),
-                group.Sum(GetPullCount),
-                group.Select(record => record.GameAccountId).Distinct().ToArray(),
-                group
-                    .GroupBy(GetItemKey)
-                    .Select(items => new GachaHistoryItem(
-                        GetItemName(items.First(), metadata),
-                        items.First().RankType,
-                        items.Sum(GetPullCount)))
-                    .OrderByDescending(item => item.RankType)
-                    .ThenByDescending(item => item.Count)
-                    .ThenBy(item => item.ItemName, StringComparer.Ordinal)
-                    .ToArray()))
-            .OrderByDescending(period => period.Date)
-            .ThenBy(period => GetPoolOrder(period.PoolGroup))
+            .GroupBy(GetItemKey)
+            .Select(items => new GachaHistoryItem(
+                GetItemName(items.First(), metadata),
+                items.First().RankType,
+                items.Sum(GetPullCount)))
+            .OrderByDescending(item => item.RankType)
+            .ThenByDescending(item => item.Count)
+            .ThenBy(item => item.ItemName, StringComparer.Ordinal)
             .ToArray();
+    }
+
+    private static GachaHistoryRecordMatch MatchEventPeriod(
+        GachaRecord record,
+        IReadOnlyList<GachaEventPeriod> eventPeriods,
+        IReadOnlyDictionary<Guid, GameServerRegion>? accountRegions)
+    {
+        GameServerRegion region = accountRegions is not null &&
+            accountRegions.TryGetValue(record.GameAccountId, out GameServerRegion value)
+                ? value
+                : GameServerRegion.Unknown;
+        GachaPoolGroup poolGroup = GachaPoolGroupResolver.Resolve(record);
+        GachaEventPeriod? eventPeriod = eventPeriods
+            .Where(period =>
+                period.PoolGroup == poolGroup &&
+                period.Contains(record.Time) &&
+                period.Supports(region))
+            .OrderBy(period => period.StartsAt)
+            .FirstOrDefault();
+
+        return new GachaHistoryRecordMatch(
+            record,
+            eventPeriod,
+            eventPeriod is null
+                ? GachaEventMatchQuality.Unmatched
+                : region == GameServerRegion.Unknown
+                    ? GachaEventMatchQuality.RegionUnverified
+                    : GachaEventMatchQuality.Verified);
     }
 
     private static bool IsLimitedFiveStar(
@@ -495,5 +622,23 @@ public sealed class BuildGachaAnalytics(
             GachaPoolGroup.Novice => 4,
             _ => 5
         };
+    }
+
+    private sealed record GachaHistoryRecordMatch(
+        GachaRecord Record,
+        GachaEventPeriod? EventPeriod,
+        GachaEventMatchQuality MatchQuality);
+
+    private sealed class EmptyGachaEventCatalog : IGachaEventCatalog
+    {
+        public static EmptyGachaEventCatalog Instance { get; } = new();
+
+        public ValueTask<IReadOnlyList<GachaEventPeriod>> GetAllAsync(
+            GachaGame game,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return ValueTask.FromResult<IReadOnlyList<GachaEventPeriod>>([]);
+        }
     }
 }

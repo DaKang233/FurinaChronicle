@@ -9,6 +9,7 @@
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
     xmlns:viewModels="clr-namespace:FurinaChronicle.App.ViewModels"
+    SizeChanged="OnOverviewSizeChanged"
     x:DataType="viewModels:GachaAnalysisViewModel">
 
     <Grid RowDefinitions="Auto,*" RowSpacing="8">
@@ -18,16 +19,36 @@
             <Button Grid.Column="2" Command="{Binding UseFiveStarListCommand}" Text="五星列表" />
         </Grid>
 
-        <ScrollView Grid.Row="1">
-            <VerticalStackLayout BindableLayout.ItemsSource="{Binding PoolCards}">
-                <BindableLayout.EmptyView>
-                    <Label Padding="16" HorizontalTextAlignment="Center" Text="当前账号暂无可统计的抽卡记录。" />
-                </BindableLayout.EmptyView>
-                <BindableLayout.ItemTemplate>
-                    <DataTemplate x:DataType="viewModels:GachaPoolStatisticsDisplayItem">
-                        <Border Margin="0,0,0,10" Padding="14">
-                            <VerticalStackLayout Spacing="7">
+        <CollectionView
+            Grid.Row="1"
+            ItemsSource="{Binding PoolCards}"
+            SelectionMode="None">
+            <CollectionView.ItemsLayout>
+                <GridItemsLayout
+                    x:Name="OverviewItemsLayout"
+                    HorizontalItemSpacing="10"
+                    Orientation="Vertical"
+                    Span="1"
+                    VerticalItemSpacing="10" />
+            </CollectionView.ItemsLayout>
+            <CollectionView.EmptyView>
+                <Label Padding="16" HorizontalTextAlignment="Center" Text="当前账号暂无可统计的抽卡记录。" />
+            </CollectionView.EmptyView>
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="viewModels:GachaPoolStatisticsDisplayItem">
+                    <Border Padding="14">
+                        <VerticalStackLayout Spacing="7">
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                                 <Label FontAttributes="Bold" FontSize="19" Text="{Binding PoolName}" />
+                                <Button
+                                    Grid.Column="1"
+                                    Command="{Binding ToggleStatisticsCommand}"
+                                    FontSize="11"
+                                    Padding="8,4"
+                                    Text="{Binding StatisticsToggleText}" />
+                            </Grid>
+
+                            <VerticalStackLayout IsVisible="{Binding IsStatisticsExpanded}" Spacing="7">
                                 <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="5">
                                     <Label Text="{Binding Total}" />
                                     <Label Grid.Column="1" Text="{Binding AverageFiveStar}" />
@@ -37,55 +58,50 @@
                                 </Grid>
                                 <Label FontSize="12" Text="{Binding Period}" />
                                 <Label FontSize="12" Text="{Binding AverageUp}" TextColor="{AppThemeBinding Light=#666666, Dark=#BBBBBB}" />
-
-                                <VerticalStackLayout
-                                    BindableLayout.ItemsSource="{Binding FiveStarHistory}"
-                                    IsVisible="{Binding Source={RelativeSource AncestorType={x:Type viewModels:GachaAnalysisViewModel}}, Path=IsFiveStarListMode}"
-                                    Spacing="4">
-                                    <BindableLayout.ItemTemplate>
-                                        <DataTemplate x:DataType="viewModels:FiveStarGachaDisplayItem">
-                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-                                                <Label Text="{Binding ItemName}" />
-                                                <Label Grid.Column="1" FontAttributes="Bold" HorizontalTextAlignment="End" Text="{Binding Pulls}" />
-                                            </Grid>
-                                        </DataTemplate>
-                                    </BindableLayout.ItemTemplate>
-                                </VerticalStackLayout>
-
-                                <VerticalStackLayout
-                                    BindableLayout.ItemsSource="{Binding FiveStarRows}"
-                                    IsVisible="{Binding Source={RelativeSource AncestorType={x:Type viewModels:GachaAnalysisViewModel}}, Path=IsFiveStarGridMode}"
-                                    Spacing="3">
-                                    <BindableLayout.ItemTemplate>
-                                        <DataTemplate x:DataType="viewModels:FiveStarGachaDisplayRow">
-                                            <HorizontalStackLayout BindableLayout.ItemsSource="{Binding Items}" Spacing="3">
-                                                <BindableLayout.ItemTemplate>
-                                                    <DataTemplate x:DataType="viewModels:FiveStarGachaDisplayItem">
-                                                        <VerticalStackLayout Margin="3" WidthRequest="72" Spacing="2">
-                                                            <Border HeightRequest="56" Padding="2" WidthRequest="56">
-                                                                <Grid>
-                                                                    <Image Aspect="AspectFit" Source="{Binding IconUrl}" />
-                                                                    <Label
-                                                                        FontSize="9"
-                                                                        HorizontalTextAlignment="Center"
-                                                                        LineBreakMode="TailTruncation"
-                                                                        Text="{Binding ItemName}"
-                                                                        VerticalOptions="End" />
-                                                                </Grid>
-                                                            </Border>
-                                                            <Label FontAttributes="Bold" FontSize="11" HorizontalTextAlignment="Center" Text="{Binding Pulls}" />
-                                                        </VerticalStackLayout>
-                                                    </DataTemplate>
-                                                </BindableLayout.ItemTemplate>
-                                            </HorizontalStackLayout>
-                                        </DataTemplate>
-                                    </BindableLayout.ItemTemplate>
-                                </VerticalStackLayout>
                             </VerticalStackLayout>
-                        </Border>
-                    </DataTemplate>
-                </BindableLayout.ItemTemplate>
-            </VerticalStackLayout>
-        </ScrollView>
+
+                            <VerticalStackLayout
+                                BindableLayout.ItemsSource="{Binding FiveStarHistory}"
+                                IsVisible="{Binding Source={RelativeSource AncestorType={x:Type viewModels:GachaAnalysisViewModel}}, Path=IsFiveStarListMode}"
+                                Spacing="4">
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="viewModels:FiveStarGachaDisplayItem">
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                                            <Label Text="{Binding ItemName}" />
+                                            <Label Grid.Column="1" FontAttributes="Bold" HorizontalTextAlignment="End" Text="{Binding Pulls}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </VerticalStackLayout>
+
+                            <FlexLayout
+                                AlignItems="Start"
+                                BindableLayout.ItemsSource="{Binding FiveStarHistory}"
+                                Direction="Row"
+                                IsVisible="{Binding Source={RelativeSource AncestorType={x:Type viewModels:GachaAnalysisViewModel}}, Path=IsFiveStarGridMode}"
+                                JustifyContent="Start"
+                                Wrap="Wrap">
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="viewModels:FiveStarGachaDisplayItem">
+                                        <VerticalStackLayout Margin="3" WidthRequest="72" Spacing="2">
+                                            <Label
+                                                FontSize="9"
+                                                HorizontalTextAlignment="Center"
+                                                LineBreakMode="TailTruncation"
+                                                Text="{Binding ItemName}"
+                                                VerticalOptions="Start" />
+                                            <Border HeightRequest="56" Padding="2" WidthRequest="56">
+                                                <Image Aspect="AspectFit" Source="{Binding IconUrl}" />
+                                            </Border>
+                                            <Label FontAttributes="Bold" FontSize="11" HorizontalTextAlignment="Center" Text="{Binding Pulls}" />
+                                        </VerticalStackLayout>
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </FlexLayout>
+                        </VerticalStackLayout>
+                    </Border>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
     </Grid>
 </ContentView>

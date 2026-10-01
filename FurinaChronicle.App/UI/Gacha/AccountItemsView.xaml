@@ -32,10 +32,13 @@
                             FontSize="17"
                             IsVisible="{Binding IsHeader}"
                             Text="{Binding GroupName}" />
-                        <HorizontalStackLayout
+                        <FlexLayout
+                            AlignItems="Start"
                             BindableLayout.ItemsSource="{Binding Items}"
+                            Direction="Row"
                             IsVisible="{Binding IsItemRow}"
-                            Spacing="4">
+                            JustifyContent="Start"
+                            Wrap="Wrap">
                             <BindableLayout.ItemTemplate>
                                 <DataTemplate x:DataType="viewModels:GachaItemStatisticsDisplayItem">
                                     <Border Margin="4" Padding="8" WidthRequest="132">
@@ -58,7 +61,7 @@
                                     </Border>
                                 </DataTemplate>
                             </BindableLayout.ItemTemplate>
-                        </HorizontalStackLayout>
+                        </FlexLayout>
                     </Grid>
                 </DataTemplate>
             </CollectionView.ItemTemplate>

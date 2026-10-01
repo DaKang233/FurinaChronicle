@@ -11,3 +11,4 @@
 - [0005：可选服务端能力分离](0005-optional-server-capabilities.md)
 - [0006：档案名称和唯一性策略](0006-archive-name-policy.md)
 - [0007：不可逆本地删除](0007-local-irreversible-deletion.md)
+- [0008：离线优先的卡池事件元数据](0008-offline-gacha-event-metadata.md)

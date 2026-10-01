@@ -1,6 +1,7 @@
 // Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
+using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.Gacha.Metadata;
 using FurinaChronicle.Infrastructure.Persistence;
@@ -225,6 +226,142 @@ public sealed class BuildGachaAnalyticsTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_HistoryGroupsRecordsByRealEventPeriod()
+    {
+        Guid accountId = Guid.NewGuid();
+        DateTimeOffset startsAt =
+            new(2026, 1, 1, 6, 0, 0, TimeSpan.FromHours(8));
+        var eventPeriod = new GachaEventPeriod(
+            "event-period",
+            GachaGame.GenshinImpact,
+            "6.0",
+            1,
+            GachaPoolGroup.CharacterEvent,
+            startsAt,
+            startsAt.AddDays(20),
+            new HashSet<GameServerRegion>
+            {
+                GameServerRegion.ChinaOfficial,
+                GameServerRegion.ChinaBilibili
+            },
+            [
+                new GachaEventBanner(
+                    "event-banner-301",
+                    "测试祈愿一",
+                    301,
+                    null,
+                    null,
+                    ["10000001"],
+                    ["10000002"]),
+                new GachaEventBanner(
+                    "event-banner-400",
+                    "测试祈愿二",
+                    400,
+                    null,
+                    null,
+                    ["10000003"],
+                    ["10000002"])
+            ],
+            "Test",
+            "revision");
+        GachaRecord[] records =
+        [
+            Record(
+                accountId,
+                "1",
+                "三星武器",
+                "weapon-3",
+                3,
+                startsAt.AddDays(1),
+                "301"),
+            Record(
+                accountId,
+                "2",
+                "五星甲",
+                "avatar-5",
+                5,
+                startsAt.AddDays(10),
+                "400")
+        ];
+        var service = new BuildGachaAnalytics(
+            new InMemoryGachaRecordRepository(records),
+            new StubMetadataProvider(),
+            new StubEventCatalog([eventPeriod]));
+
+        GachaAnalyticsReport report = await service.ExecuteAsync(
+            new GachaRecordQuery([accountId]),
+            GachaAnalyticsComponents.History,
+            new Dictionary<Guid, GameServerRegion>
+            {
+                [accountId] = GameServerRegion.ChinaOfficial
+            });
+
+        GachaHistoryPeriod history = Assert.Single(report.History);
+        Assert.Equal(eventPeriod, history.EventPeriod);
+        Assert.Equal(GachaEventMatchQuality.Verified, history.MatchQuality);
+        Assert.Equal(2, history.TotalPulls);
+        Assert.Equal(startsAt, history.StartTime);
+        Assert.Equal(startsAt.AddDays(20), history.EndTime);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_HistoryDoesNotApplyChinaEventsToGlobalAccount()
+    {
+        Guid accountId = Guid.NewGuid();
+        DateTimeOffset startsAt =
+            new(2026, 1, 1, 6, 0, 0, TimeSpan.FromHours(8));
+        var eventPeriod = new GachaEventPeriod(
+            "event-period",
+            GachaGame.GenshinImpact,
+            "6.0",
+            1,
+            GachaPoolGroup.CharacterEvent,
+            startsAt,
+            startsAt.AddDays(20),
+            new HashSet<GameServerRegion>
+            {
+                GameServerRegion.ChinaOfficial,
+                GameServerRegion.ChinaBilibili
+            },
+            [new GachaEventBanner(
+                "event-banner",
+                "测试祈愿",
+                301,
+                null,
+                null,
+                [],
+                [])],
+            "Test",
+            "revision");
+        var service = new BuildGachaAnalytics(
+            new InMemoryGachaRecordRepository(
+            [
+                Record(
+                    accountId,
+                    "1",
+                    "三星武器",
+                    "weapon-3",
+                    3,
+                    startsAt.AddDays(1),
+                    "301")
+            ]),
+            new StubMetadataProvider(),
+            new StubEventCatalog([eventPeriod]));
+
+        GachaAnalyticsReport report = await service.ExecuteAsync(
+            new GachaRecordQuery([accountId]),
+            GachaAnalyticsComponents.History,
+            new Dictionary<Guid, GameServerRegion>
+            {
+                [accountId] = GameServerRegion.Europe
+            });
+
+        GachaHistoryPeriod history = Assert.Single(report.History);
+        Assert.Null(history.EventPeriod);
+        Assert.Equal(GachaEventMatchQuality.Unmatched, history.MatchQuality);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_EmptyScopeReturnsEmptyReport()
     {
         Guid accountId = Guid.NewGuid();
@@ -294,6 +431,18 @@ public sealed class BuildGachaAnalyticsTests
                     "https://example.test/weapon-3.png")
                 : null;
             return ValueTask.FromResult(result);
+        }
+    }
+
+    private sealed class StubEventCatalog(
+        IReadOnlyList<GachaEventPeriod> periods) : IGachaEventCatalog
+    {
+        public ValueTask<IReadOnlyList<GachaEventPeriod>> GetAllAsync(
+            GachaGame game,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return ValueTask.FromResult(periods);
         }
     }
 }

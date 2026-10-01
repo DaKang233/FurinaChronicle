@@ -76,6 +76,9 @@ namespace FurinaChronicle.App
 			builder.Services.AddSingleton<IGachaMetadataRemoteSource>(
 				_ => new GenshinCalculatorMetadataSource());
 			builder.Services.AddSingleton<
+				IGachaEventCatalog,
+				EmbeddedGachaEventCatalog>();
+			builder.Services.AddSingleton<
 				IGachaLocalizationSource,
 				EmbeddedGachaLocalizationSource>();
 			builder.Services.AddSingleton<SqliteGachaItemMetadataProvider>();
@@ -91,6 +94,14 @@ namespace FurinaChronicle.App
 			builder.Services.AddSingleton<
 				IGachaItemIconCache,
 				FileGachaItemIconCache>();
+			builder.Services.AddSingleton(
+				new GachaBannerImageCacheOptions(
+					Path.Combine(
+						FileSystem.CacheDirectory,
+						"gacha-banner-images")));
+			builder.Services.AddSingleton<
+				IGachaBannerImageCache,
+				FileGachaBannerImageCache>();
 			builder.Services.AddTransient<ImportUigfGachaRecords>();
 			builder.Services.AddSingleton<
 				ITeyvatHelperUigfClient,
