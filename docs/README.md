@@ -36,6 +36,7 @@
 - [ADR 索引](decisions/README.md)
 - [测试要求](development/TESTING.md)
 - [版权头规范](development/COPYRIGHT_HEADERS.md)
+- [Chronicle 产品需求](specifications/CHRONICLE_PRODUCT_REQUIREMENTS.md)
 - [Chronicle Timeline v1 草案](specifications/CHRONICLE_TIMELINE_V1.md)
 
 ## 文档状态
@@ -43,6 +44,7 @@
 - `Accepted`：当前实现和新增代码必须遵守。
 - `Proposed`：推荐设计，尚未完成最终人工确认。
 - `Target`：已接受的目标架构，但代码迁移可能尚未完成。
+- `Accepted target`：产品或架构方向已经接受，但对应代码、迁移或字段冻结尚未全部完成。
 - `Historical`：仅用于说明历史，不再指导新增实现。
 
 文档描述目标模型时必须同时说明当前代码是否已经实现，避免 Agent 将规划误认为现状。

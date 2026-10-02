@@ -2,7 +2,7 @@
 
 状态：Draft
 
-本文件定义首版跨数据域游戏历程的内部可移植语义。它不是已发布的交换格式，字段名和枚举值只有在 ADR 0009 获得确认并完成 Phase 8B fixture 后才冻结。
+本文件定义首版跨数据域游戏历程的内部可移植语义。ADR 0009 与时间线产品方向已经接受，但本文件不是已发布的交换格式；字段名、自然键和枚举值须在 Phase 8B.0 fixture 评审后冻结。
 
 ## 1. 范围
 
@@ -15,7 +15,7 @@
 
 本规范不覆盖：
 
-- 具体 UI 布局；
+- 具体 UI 布局；展示模式和默认可见节点仅引用已接受的产品需求；
 - 各数据域全部业务字段；
 - 档案操作历史的完整格式；
 - 对外发布的 JSON Schema。
@@ -31,9 +31,16 @@ TemporalExtent
   Kind: Instant | Interval | UncertainInterval
   StartAt: DateTimeOffset
   EndAt: DateTimeOffset?
-  Precision: Exact | Minute | Day | Period | BetweenObservations | Unknown
+  Precision: Exact | Minute | Hour | Day | Week | Period | BetweenObservations | Unknown
   TimeBasis: SourceOffset | ServerZone | UserZone | Unknown
   OriginalOffsetMinutes: int?
+
+ChronicleTime
+  Occurred: TemporalExtent?
+  ObservedAt: DateTimeOffset?
+  FetchedAt: DateTimeOffset?
+  SortAtUtc: DateTimeOffset
+  SortBasis: Occurred | Observed | Fetched
 ```
 
 约束：
@@ -41,8 +48,10 @@ TemporalExtent
 1. `Instant` 不得设置不同于 `StartAt` 的 `EndAt`。
 2. `Interval` 和 `UncertainInterval` 必须有 `EndAt`，且不得早于 `StartAt`。
 3. 内部比较必须以 UTC 时刻进行；来源偏移存在时必须保留。
-4. 只知道日期时不得擅自填充精确时分秒，必须使用 `Day` 精度。
+4. 只知道日期或周时不得擅自填充精确时分秒；必须分别使用 `Day` 或 `Week`。周精度使用包含该周边界的区间表达，不选择虚假的周内瞬时值。
 5. 两次观察之间发现的变化必须使用 `UncertainInterval` 和 `BetweenObservations`，除非来源提供了真实发生时间。
+6. 来源没有发生/完成时间时，`Occurred` 必须为空；不得把 `ObservedAt` 或 `FetchedAt` 写入 `Occurred`。
+7. `SortBasis` 必须说明排序锚点来自发生、观察还是抓取时间，UI 据此显示“发生于”“观察于”或“采集于”。
 
 ## 4. 来源与可信度
 
@@ -50,7 +59,7 @@ TemporalExtent
 
 ```text
 Origin: OfficialApi | StandardImport | FurinaImport |
-        LocalObservation | LocalCollector | UserEntered | Derived
+        LocalObservation | LocalCollector | UserEntered | Derived | Unknown
 Confidence: Confirmed | High | Medium | Low | Unknown
 Completeness: Complete | Partial | Unknown
 ```
@@ -64,12 +73,15 @@ Completeness: Complete | Partial | Unknown
 ```text
 ChronicleEntry
   EntryId: string
+  PortableEntityKey: string?
   ProjectionVersion: int
+  ProjectionSequence: long
   GameAccountId: Guid
   Domain: string
   Kind: string
-  Temporal: TemporalExtent
-  SortAtUtc: DateTimeOffset
+  Timelines: set<Main | Character | Weapon | Challenge | string>
+  Milestone: string?
+  Time: ChronicleTime
   Origin: DataOrigin
   Confidence: Confidence
   Completeness: Completeness
@@ -83,35 +95,41 @@ ChronicleEntry
 
 要求：
 
-- `EntryId` 在同一投影版本中必须幂等；
+- `EntryId` 在同一本地账号副本和同一投影版本中必须幂等；
+- `PortableEntityKey` 存在时必须由共享角色身份和领域自然键生成，不得包含本地档案或账号副本 GUID；
+- `Timelines` 表示候选条目可进入哪些时间线；默认可见性和颗粒度由 Profile 决定，不由是否保存条目决定；
 - `SourceEntityId` 指向规范化记录或派生事实，不得只保存数据库行号；
 - `TitleKey` 和 `SummaryArguments` 用于本地化，稳定身份不得依赖本地化结果；
 - 图片、图标二进制和长正文不得写入条目主体；
 - `ProjectionVersion` 变化时允许重建新的条目身份，但迁移应尽量保持稳定。
 
-推荐的稳定身份输入为：
+推荐的本地投影身份输入为：
 
 ```text
 Domain + Kind + GameAccountId + SourceEntityType + SourceEntityId + ProjectionVersion
 ```
+
+该公式不定义跨档案/跨设备身份。导出、导入和同步必须使用规范化领域记录与 `PortableEntityKey`，不得把 `EntryId` 当作可移植主键。
 
 ## 6. 排序与游标
 
 默认顺序为：
 
 ```text
+ProjectionSequence <= AsOfSequence,
 SortAtUtc DESC, EntryId DESC
 ```
 
 `SortAtUtc`：
 
-- `Instant`：`StartAt`；
-- `Interval`：`StartAt`；
-- `UncertainInterval`：`EndAt`。
+- 已知 `Instant`：`StartAt`；
+- 已知 `Interval`：`StartAt`；
+- 已知 `UncertainInterval`：`EndAt`；
+- 未知发生时间：依次使用 `ObservedAt`、`FetchedAt`，并设置相应 `SortBasis`。
 
-游标必须至少包含 `SortAtUtc` 与 `EntryId`。请求游标后的下一页时，必须使用严格小于该复合键的记录，保证时间相同的条目不重复、不丢失。
+首次查询必须取得稳定的 `AsOfSequence`。游标必须至少包含 `AsOfSequence`、`SortAtUtc` 与 `EntryId`。请求下一页时，查询必须继续限制 `ProjectionSequence <= AsOfSequence`，并使用严格小于排序复合键的记录，保证同一次分页遍历期间刷新产生的记录不会插入后续页面。
 
-刷新期间新增较新的记录可以出现在后续的新查询中，但不得插入已发放游标所代表的旧页中。
+新查询可以取得更大的 `AsOfSequence` 并看到刷新结果。若实现不维护投影序列，则不得声称支持刷新期间稳定分页。
 
 ## 7. 查询范围
 
@@ -121,6 +139,8 @@ ChronicleScope
   Archive(PlayerArchiveId, optional GameAccountIds)
 
 ChronicleFilter
+  Timeline: Main | Character | Weapon | Challenge | string
+  Granularity: Default | Detailed
   Domains?
   Kinds?
   From?
@@ -128,6 +148,8 @@ ChronicleFilter
   Origins?
   MinimumConfidence?
   Importance?
+  Ranks?
+  ItemIds?
 ```
 
 档案查询必须在返回条目中保留 `GameAccountId`。同一共享角色身份在不同档案中的账号副本仍是不同数据范围，不得跨档案隐式去重。
@@ -161,14 +183,27 @@ IChronicleContributor<TRecord>
 - 明确投影版本；
 - 为缺失时间、未知来源和部分数据提供可测试的退化行为。
 
+贡献者只负责从规范化事实产生确定的候选事件。主时间线或领域时间线是否显示候选事件，由独立、版本化的 Profile 决定。Profile 变更不得反向修改领域事实。
+
 ## 10. 首批映射
 
-### 抽卡
+### 抽卡及获取里程碑
 
-- 一条 `GachaRecord` 产生一个 `Instant` 条目；
-- 使用记录时间作为 `OccurredAt`；
+- 每条 `GachaRecord` 可以产生抽卡候选事件，使用记录时间作为 `Occurred`；
+- 每次五星物品获取进入主时间线，并可派生距同账号、同保底池上一个五星的抽数；缺失中间记录时必须显示未知，不得给出虚假数值；
+- 四星角色第一次获取和第七次获取（达到满命）进入主时间线；数据不完整时必须标记为“本地记录中的首次”；
+- 角色时间线默认显示角色首次和第七次获取，详细模式可显示每次角色抽取；武器时间线默认显示各星级武器首次获取，详细模式增加每次四星/五星武器抽取；
+- 抽卡派生的角色/武器获取必须注明只覆盖抽卡记录，不代表活动、商店或其他途径；
 - 旧记录来源未知时不得默认标记为 `OfficialApi`；
 - 卡池事件名称和横幅是可替换元数据，不进入稳定身份。
+
+### 手工获取事实
+
+- 手工角色/武器获取是 `UserEntered` 的规范化领域事实，不是只存在于 UI 的注释；
+- 允许秒、分钟、小时、日、周精度；周精度按区间保存；
+- 角色原因首版包括砺行修远活动、周年庆活动自选常驻五星角色、周年庆活动自选限定五星角色和其他；自选活动显示可空的活动名称字段，“其他”必须有说明；
+- 武器原因首版使用自由文本，不擅自复用角色专属枚举；
+- 手工事实经领域去重与冲突处理后参与获取序号和首次/满命里程碑；修改和删除必须进入 Revision/OperationHistory。
 
 ### 角色与武器状态
 
@@ -179,9 +214,18 @@ IChronicleContributor<TRecord>
 
 ### 挑战
 
-- 赛季/期次使用官方周期；具体尝试在来源提供时间时使用事件或区间；
 - 挑战结果必须带游戏模式、期次自然身份和账号归属；
-- 同一期重复刷新采用领域合并策略，不因时间线投影重复写入事实。
+- 每次官方采集都先计算排除请求时间等传输字段后的规范化内容指纹；相同内容不形成新观察事件，有变化的内容形成不可变观察事件并保存 `ObservedAt`/`FetchedAt`；
+- 同一账号、模式、期次首次达到完成状态或首次观察到已完成时形成一个完成里程碑，并进入主时间线；后续分数等变化仍进入挑战时间线，但不重复主时间线完成节点；
+- 深境螺旋使用官方返回的最后完成 Chamber 时间，幻想真境剧诗使用最后完成剧幕时间；
+- 幽境危战使用采集时间。其他无法取得完成时间的挑战保持 `Occurred = null`，以观察/采集时间排序并明确标注；
+- 赛季/期次周期用于上下文和过滤，不得冒充实际完成时间。
+
+### 成就
+
+- 只有由版本化元数据标记为“重要”的成就默认进入主时间线；
+- 重要成就通常用于表达魔神任务等关键进度，但不得只靠本地化名称或关键词在运行时猜测；
+- 其他成就仍保存为领域事实，可供以后成就时间线使用。
 
 ## 11. 修订与操作历史
 
@@ -219,4 +263,9 @@ Phase 8B 至少提供以下固定数据：
 5. 同一角色在两个档案中的独立副本；
 6. 官方、导入、观察、手工和派生来源混合；
 7. 修订、撤销与不可逆删除后的重建结果。
-
+8. 主时间线只显示五星、四星角色首次/第七次、挑战完成和重要成就的默认过滤结果；
+9. 角色与武器默认/详细颗粒度及抽卡来源范围提示；
+10. 秒、日、周精度的手工获取事实及里程碑重算；
+11. 同一期挑战的相同响应、变化响应、首次完成和完成后变化；
+12. 缺少完成时间的幽境危战或挑战记录使用采集时间排序，且不伪造 `Occurred`；
+13. 分页期间插入一条旧时间的新投影，旧游标仍返回稳定快照。

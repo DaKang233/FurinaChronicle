@@ -45,7 +45,7 @@ Projection
 - 派生记录由基础数据计算或推断。
 - 投影面向查询、UI、统计和报告，可随时重建。
 
-Chronicle 游戏历程是跨数据域的派生投影，不是新的事实表。抽卡、挑战、角色状态等领域通过贡献者生成统一时间线条目；导入、覆盖、撤销和删除等档案操作使用独立的操作历史。具体见 [Chronicle 时间线架构](CHRONICLE_TIMELINE.md)。
+Chronicle 游戏历程是跨数据域的派生投影，不是新的事实表。抽卡、挑战、角色状态等领域通过贡献者生成统一时间线候选条目，再由主时间线和领域时间线 Profile 决定默认可见性；导入、覆盖、撤销和删除等档案操作使用独立的操作历史。具体见 [Chronicle 时间线架构](CHRONICLE_TIMELINE.md) 和 [Chronicle 产品需求](../specifications/CHRONICLE_PRODUCT_REQUIREMENTS.md)。
 
 ## 当前实现与目标模型
 

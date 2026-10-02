@@ -24,7 +24,10 @@ LocalObservation
 LocalCollector
 UserEntered
 Derived
+Unknown
 ```
+
+`Unknown` 用于无法可靠回溯来源的旧记录或外部数据。它不是可以被默认提升为 `OfficialApi` 的临时别名。
 
 记录还可以包含：
 

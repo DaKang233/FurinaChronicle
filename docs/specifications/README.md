@@ -8,4 +8,5 @@
 
 当前草案：
 
-- [Chronicle Timeline v1](CHRONICLE_TIMELINE_V1.md)：跨数据域历程的内部时间、来源、身份、排序和贡献者语义；等待 ADR 0009 确认和 Phase 8B fixture 验证。
+- [Chronicle 产品需求](CHRONICLE_PRODUCT_REQUIREMENTS.md)：已接受的主时间线、角色/武器/挑战时间线、显示模式、手工获取和验收行为。
+- [Chronicle Timeline v1](CHRONICLE_TIMELINE_V1.md)：跨数据域历程的内部时间、来源、身份、排序和贡献者语义；ADR 方向已接受，字段等待 Phase 8B.0 fixture 冻结。
