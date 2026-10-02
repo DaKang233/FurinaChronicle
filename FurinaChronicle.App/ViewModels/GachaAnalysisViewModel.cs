@@ -30,6 +30,8 @@ public partial class GachaAnalysisViewModel(
     IGachaBannerImageCache bannerImageCache)
     : ObservableObject
 {
+    private const int ArchiveOverviewInitialFiveStarItemCount = 12;
+
     private PlayerArchive? archive;
     private GameAccount? selectedAccount;
     private IReadOnlyList<GameAccount> accounts = [];
@@ -811,20 +813,25 @@ public partial class GachaAnalysisViewModel(
                         : string.Empty))));
         }
 
-        var itemCounts = new List<GachaPoolItemCountDisplayItem>();
+        GachaPoolItemCount[] archiveFiveStarItems = [];
+        IReadOnlyList<GachaPoolItemCountDisplayItem> initialArchiveItems = [];
+        Func<int, int, Task<IReadOnlyList<GachaPoolItemCountDisplayItem>>>?
+            loadArchiveItems = null;
         if (IsArchiveMode)
         {
-            itemCounts.AddRange(await Task.WhenAll(
-                pool.ItemCounts.Select(async item =>
-                    new GachaPoolItemCountDisplayItem(
-                    item.ItemName,
-                    CreateFileImageSource(
-                        await GetCachedIconPathAsync(
-                            item.ItemId,
-                            item.IconUrl)),
-                    item.RankType,
-                    item.RankType is int rank ? $"{rank} 星" : "未知",
-                    $"× {item.Count}"))));
+            // Archive item counts are aggregate results rather than chronological
+            // events. Preserve the analytics service order when paging them.
+            archiveFiveStarItems = pool.ItemCounts
+                .Where(item => item.RankType == 5)
+                .ToArray();
+            loadArchiveItems = (skip, take) =>
+                LoadArchiveItemCountDisplayItemsAsync(
+                    archiveFiveStarItems,
+                    skip,
+                    take);
+            initialArchiveItems = await loadArchiveItems(
+                0,
+                ArchiveOverviewInitialFiveStarItemCount);
         }
 
         return new GachaPoolStatisticsDisplayItem(
@@ -850,7 +857,31 @@ public partial class GachaAnalysisViewModel(
                 $"三星 {pool.ThreeStarCount}（{pool.ThreeStarPercentage:F2}%）",
             $"距上个五星 {pool.PullsSinceLastFiveStar} 抽 · 距上个四星 {pool.PullsSinceLastFourStar} 抽",
             fiveStars,
-            itemCounts);
+            initialArchiveItems,
+            archiveFiveStarItems.Length,
+            loadArchiveItems);
+    }
+
+    private async Task<IReadOnlyList<GachaPoolItemCountDisplayItem>>
+        LoadArchiveItemCountDisplayItemsAsync(
+            IReadOnlyList<GachaPoolItemCount> items,
+            int skip,
+            int take)
+    {
+        GachaPoolItemCount[] page = items
+            .Skip(skip)
+            .Take(take)
+            .ToArray();
+        return await Task.WhenAll(page.Select(async item =>
+            new GachaPoolItemCountDisplayItem(
+                item.ItemName,
+                CreateFileImageSource(
+                    await GetCachedIconPathAsync(
+                        item.ItemId,
+                        item.IconUrl)),
+                item.RankType,
+                item.RankType is int rank ? $"{rank} 星" : "未知",
+                $"× {item.Count}")));
     }
 
     private Task<string?> GetCachedIconPathAsync(

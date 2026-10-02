@@ -9,9 +9,4 @@ public partial class ArchiveOverviewView : ContentView
     {
         InitializeComponent();
     }
-
-    private void OnOverviewSizeChanged(object? sender, EventArgs e)
-    {
-        ResponsiveOverviewLayout.Update(OverviewItemsLayout, Width);
-    }
 }

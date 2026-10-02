@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Services.Gacha.Analytics;
+using System.Collections.ObjectModel;
 
 namespace FurinaChronicle.App.ViewModels;
 
@@ -78,9 +79,14 @@ public sealed partial class GachaPoolStatisticsDisplayItem(
     string RankDistribution,
     string CurrentPity,
     IReadOnlyList<FiveStarGachaDisplayItem> FiveStarHistory,
-    IReadOnlyList<GachaPoolItemCountDisplayItem> ItemCounts)
+    IReadOnlyList<GachaPoolItemCountDisplayItem> initialArchiveFiveStarItems,
+    int archiveFiveStarItemCount,
+    Func<int, int, Task<IReadOnlyList<GachaPoolItemCountDisplayItem>>>?
+        loadArchiveFiveStarItems)
     : ObservableObject
 {
+    private const int ArchiveFiveStarPageSize = 12;
+
     public string PoolName { get; } = PoolName;
 
     public string Total { get; } = Total;
@@ -100,19 +106,35 @@ public sealed partial class GachaPoolStatisticsDisplayItem(
     public IReadOnlyList<FiveStarGachaDisplayItem> FiveStarHistory { get; } =
         FiveStarHistory;
 
-    public IReadOnlyList<GachaPoolItemCountDisplayItem> ItemCounts { get; } =
-        ItemCounts;
+    public ObservableCollection<GachaPoolItemCountDisplayItem>
+        VisibleArchiveFiveStarItems { get; } =
+        new(initialArchiveFiveStarItems);
 
-    public IReadOnlyList<GachaPoolItemCountDisplayItem> FiveStarItemCounts { get; } =
-        ItemCounts.Where(item => item.RankType == 5).ToArray();
+    public bool CanLoadMoreArchiveFiveStars =>
+        loadArchiveFiveStarItems is not null &&
+        VisibleArchiveFiveStarItems.Count < archiveFiveStarItemCount;
 
-    public IReadOnlyList<GachaPoolItemCountDisplayItem> VisibleItemCounts =>
-        IsStatisticsExpanded ? ItemCounts : FiveStarItemCounts;
+    public bool IsNotLoadingArchiveFiveStars =>
+        !IsLoadingArchiveFiveStars;
+
+    public string LoadMoreArchiveFiveStarsText =>
+        $"加载更多五星物品（已显示 " +
+        $"{VisibleArchiveFiveStarItems.Count} / {archiveFiveStarItemCount}）";
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(StatisticsToggleText))]
-    [NotifyPropertyChangedFor(nameof(VisibleItemCounts))]
     public partial bool IsStatisticsExpanded { get; set; } = true;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsNotLoadingArchiveFiveStars))]
+    public partial bool IsLoadingArchiveFiveStars { get; set; }
+
+    public bool HasArchiveFiveStarLoadError =>
+        !string.IsNullOrWhiteSpace(ArchiveFiveStarLoadError);
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasArchiveFiveStarLoadError))]
+    public partial string? ArchiveFiveStarLoadError { get; set; }
 
     public string StatisticsToggleText =>
         IsStatisticsExpanded ? "收起统计" : "展开统计";
@@ -120,6 +142,41 @@ public sealed partial class GachaPoolStatisticsDisplayItem(
     [RelayCommand]
     private void ToggleStatistics() =>
         IsStatisticsExpanded = !IsStatisticsExpanded;
+
+    [RelayCommand]
+    private async Task LoadMoreArchiveFiveStarsAsync()
+    {
+        if (IsLoadingArchiveFiveStars ||
+            !CanLoadMoreArchiveFiveStars ||
+            loadArchiveFiveStarItems is null)
+        {
+            return;
+        }
+
+        IsLoadingArchiveFiveStars = true;
+        ArchiveFiveStarLoadError = null;
+        try
+        {
+            IReadOnlyList<GachaPoolItemCountDisplayItem> next =
+                await loadArchiveFiveStarItems(
+                    VisibleArchiveFiveStarItems.Count,
+                    ArchiveFiveStarPageSize);
+            foreach (GachaPoolItemCountDisplayItem item in next)
+            {
+                VisibleArchiveFiveStarItems.Add(item);
+            }
+            OnPropertyChanged(nameof(CanLoadMoreArchiveFiveStars));
+            OnPropertyChanged(nameof(LoadMoreArchiveFiveStarsText));
+        }
+        catch (Exception exception)
+        {
+            ArchiveFiveStarLoadError = exception.Message;
+        }
+        finally
+        {
+            IsLoadingArchiveFiveStars = false;
+        }
+    }
 }
 
 public sealed record GachaHistoryBannerDisplayItem(

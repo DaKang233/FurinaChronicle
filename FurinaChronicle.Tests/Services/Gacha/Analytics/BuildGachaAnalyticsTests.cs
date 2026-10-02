@@ -94,6 +94,40 @@ public sealed class BuildGachaAnalyticsTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_PoolItemCounts_UsesDefaultAggregateOrder()
+    {
+        Guid accountId = Guid.NewGuid();
+        DateTimeOffset time =
+            new(2026, 1, 1, 8, 0, 0, TimeSpan.FromHours(8));
+        GachaRecord[] records =
+        [
+            Record(accountId, "1", "Beta", "avatar-b", 5, time, "301"),
+            Record(accountId, "2", "Alpha", "avatar-a", 5, time.AddMinutes(1), "301"),
+            Record(accountId, "3", "Beta", "avatar-b", 5, time.AddMinutes(2), "301"),
+            Record(accountId, "4", "Alpha", "avatar-a", 5, time.AddMinutes(3), "301"),
+            Record(accountId, "5", "Gamma", "avatar-c", 5, time.AddMinutes(4), "301"),
+            Record(accountId, "6", "FourStar", "avatar-4", 4, time.AddMinutes(5), "301"),
+            Record(accountId, "7", "FourStar", "avatar-4", 4, time.AddMinutes(6), "301"),
+            Record(accountId, "8", "FourStar", "avatar-4", 4, time.AddMinutes(7), "301")
+        ];
+        var service = new BuildGachaAnalytics(
+            new InMemoryGachaRecordRepository(records),
+            new StubMetadataProvider());
+
+        GachaAnalyticsReport report = await service.ExecuteAsync(
+            new GachaRecordQuery([accountId]),
+            GachaAnalyticsComponents.Pools);
+
+        GachaPoolStatistics pool = Assert.Single(report.Pools);
+        Assert.Equal(
+            ["Alpha", "Beta", "Gamma", "FourStar"],
+            pool.ItemCounts.Select(item => item.ItemName));
+        Assert.Equal(
+            [2, 2, 1, 3],
+            pool.ItemCounts.Select(item => item.Count));
+    }
+
+    [Fact]
     public async Task ExecuteAsync_CalculatesCompletedFiveStarIntervals()
     {
         Guid accountId = Guid.NewGuid();
