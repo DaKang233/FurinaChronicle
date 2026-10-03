@@ -35,6 +35,7 @@
 - [决策记录](decisions/DECISION_REGISTER.md)
 - [ADR 索引](decisions/README.md)
 - [测试要求](development/TESTING.md)
+- [持续集成与发布构建](development/CONTINUOUS_INTEGRATION.md)
 - [版权头规范](development/COPYRIGHT_HEADERS.md)
 - [Chronicle 产品需求](specifications/CHRONICLE_PRODUCT_REQUIREMENTS.md)
 - [Chronicle Timeline v1 草案](specifications/CHRONICLE_TIMELINE_V1.md)

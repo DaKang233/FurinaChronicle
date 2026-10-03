@@ -14,7 +14,7 @@ jobs:
   check:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Check canonical source file headers
         shell: pwsh
         run: ./eng/copyright/Manage-CopyrightHeaders.ps1 -Mode Check

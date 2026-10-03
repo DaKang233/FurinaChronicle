@@ -1,0 +1,218 @@
+# Copyright (c) 2026 DaKang233.
+# SPDX-License-Identifier: MIT
+
+name: Build and test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-and-test-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_NOLOGO: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
+jobs:
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Restore test projects
+        run: dotnet restore ./FurinaChronicle.Tests/FurinaChronicle.Tests.csproj
+
+      - name: Run tests
+        run: >-
+          dotnet test ./FurinaChronicle.Tests/FurinaChronicle.Tests.csproj
+          --configuration Release
+          --no-restore
+          --logger "trx;LogFileName=furinachronicle-tests.trx"
+          --results-directory ./artifacts/test-results
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: FurinaChronicle-test-results-${{ github.run_id }}
+          path: artifacts/test-results
+          if-no-files-found: warn
+          retention-days: 14
+
+  windows:
+    name: Windows Release (win-x64)
+    needs: test
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up .NET and .NET MAUI for Windows
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+          workloads: maui
+
+      - name: Publish unpackaged Windows application
+        shell: pwsh
+        run: |
+          $outputPath = Join-Path $env:GITHUB_WORKSPACE 'artifacts\windows\win-x64'
+          dotnet publish .\FurinaChronicle.App\FurinaChronicle.App.csproj `
+            --framework net10.0-windows10.0.19041.0 `
+            --configuration Release `
+            --output $outputPath `
+            -p:RuntimeIdentifierOverride=win-x64 `
+            -p:WindowsPackageType=None `
+            -p:WindowsAppSDKSelfContained=true `
+            -p:SelfContained=true
+
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+          Copy-Item .\README.md, .\LICENSE.txt, .\THIRD-PARTY-NOTICES.txt $outputPath
+
+      - name: Upload Windows application
+        uses: actions/upload-artifact@v7
+        with:
+          name: FurinaChronicle-windows-win-x64-${{ github.sha }}
+          path: artifacts/windows/win-x64
+          if-no-files-found: error
+          retention-days: 30
+
+  android:
+    name: Android Release APK
+    needs: test
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Microsoft OpenJDK
+        uses: actions/setup-java@v6
+        with:
+          distribution: microsoft
+          java-version: 21
+
+      - name: Set up .NET and .NET MAUI for Android
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+          workloads: maui
+
+      - name: Ensure Android SDK dependencies
+        shell: pwsh
+        run: |
+          dotnet build .\FurinaChronicle.App\FurinaChronicle.App.csproj `
+            -t:InstallAndroidDependencies `
+            --framework net10.0-android `
+            -p:AndroidSdkDirectory="$env:ANDROID_SDK_ROOT" `
+            -p:JavaSdkDirectory="$env:JAVA_HOME" `
+            -p:AcceptAndroidSdkLicenses=true
+
+      - name: Publish signed Android APK
+        shell: pwsh
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')) && secrets.ANDROID_KEYSTORE_BASE64 || '' }}
+          ANDROID_KEY_ALIAS: ${{ (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')) && secrets.ANDROID_KEY_ALIAS || '' }}
+          ANDROID_KEY_PASSWORD: ${{ (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')) && secrets.ANDROID_KEY_PASSWORD || '' }}
+          ANDROID_STORE_PASSWORD: ${{ (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')) && secrets.ANDROID_STORE_PASSWORD || '' }}
+        run: |
+          $publishArguments = @(
+            'publish'
+            '.\FurinaChronicle.App\FurinaChronicle.App.csproj'
+            '--framework', 'net10.0-android'
+            '--configuration', 'Release'
+            '--no-restore'
+            "-p:AndroidSdkDirectory=$env:ANDROID_SDK_ROOT"
+            "-p:JavaSdkDirectory=$env:JAVA_HOME"
+            '-p:AndroidPackageFormats=apk'
+            '-p:EmbedAssembliesIntoApk=true'
+            '-p:ApplicationVersion=${{ github.run_number }}'
+          )
+
+          $signingValues = @(
+            $env:ANDROID_KEYSTORE_BASE64
+            $env:ANDROID_KEY_ALIAS
+            $env:ANDROID_KEY_PASSWORD
+            $env:ANDROID_STORE_PASSWORD
+          )
+          $configuredSigningValueCount = @($signingValues | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }).Count
+
+          if ($configuredSigningValueCount -ne 0 -and $configuredSigningValueCount -ne $signingValues.Count) {
+            throw 'Android signing is only partially configured. Configure all four ANDROID_* repository secrets or remove all of them.'
+          }
+
+          if ($configuredSigningValueCount -eq $signingValues.Count) {
+            $keyStorePath = Join-Path $env:RUNNER_TEMP 'furinachronicle-release.keystore'
+            [IO.File]::WriteAllBytes(
+              $keyStorePath,
+              [Convert]::FromBase64String($env:ANDROID_KEYSTORE_BASE64))
+
+            $publishArguments += @(
+              '-p:AndroidKeyStore=true'
+              "-p:AndroidSigningKeyStore=$keyStorePath"
+              "-p:AndroidSigningKeyAlias=$env:ANDROID_KEY_ALIAS"
+              '-p:AndroidSigningKeyPass=env:ANDROID_KEY_PASSWORD'
+              '-p:AndroidSigningStorePass=env:ANDROID_STORE_PASSWORD'
+            )
+          }
+          else {
+            Write-Warning 'Stable Android signing secrets are not configured. The APK will use the SDK-generated development signature and is intended for testing only.'
+          }
+
+          & dotnet @publishArguments
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+      - name: Collect Android APK
+        shell: pwsh
+        run: |
+          $publishPath = Join-Path $env:GITHUB_WORKSPACE 'FurinaChronicle.App\bin\Release\net10.0-android\publish'
+          $signedApk = Get-ChildItem $publishPath -File -Filter '*-Signed.apk' |
+            Sort-Object LastWriteTimeUtc -Descending |
+            Select-Object -First 1
+
+          if ($null -eq $signedApk) {
+            throw "No signed APK was produced under $publishPath."
+          }
+
+          $artifactPath = Join-Path $env:GITHUB_WORKSPACE 'artifacts\android'
+          New-Item -ItemType Directory -Path $artifactPath -Force | Out-Null
+          $artifactApk = Join-Path $artifactPath 'FurinaChronicle-android.apk'
+          Copy-Item $signedApk.FullName $artifactApk
+
+          $hash = (Get-FileHash $artifactApk -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  FurinaChronicle-android.apk" |
+            Set-Content (Join-Path $artifactPath 'SHA256SUMS.txt') -Encoding utf8NoBOM
+
+          Copy-Item .\README.md, .\LICENSE.txt, .\THIRD-PARTY-NOTICES.txt $artifactPath
+
+      - name: Upload Android application
+        uses: actions/upload-artifact@v7
+        with:
+          name: FurinaChronicle-android-${{ github.sha }}
+          path: artifacts/android
+          if-no-files-found: error
+          retention-days: 30
