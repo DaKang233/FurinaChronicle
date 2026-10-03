@@ -13,6 +13,7 @@ public partial class AppShell : Shell
     private readonly MainPage gachaPage;
     private readonly UserPage userPage;
     private readonly UserPageViewModel userPageViewModel;
+    private PassportFlyoutHeader? passportFlyoutHeader;
     private bool mainNavigationConfigured;
 
     public AppShell(
@@ -48,6 +49,21 @@ public partial class AppShell : Shell
         return GoToAsync(UserRoute, animate: true);
     }
 
+    public void ToggleWindowsSidebar()
+    {
+        if (OperatingSystem.IsAndroid())
+        {
+            return;
+        }
+
+        bool collapse = FlyoutBehavior == FlyoutBehavior.Locked;
+        FlyoutBehavior = collapse
+            ? FlyoutBehavior.Flyout
+            : FlyoutBehavior.Locked;
+        passportFlyoutHeader?.SetSidebarCollapsed(collapse);
+        FlyoutIsPresented = false;
+    }
+
     private string HomeRoute => OperatingSystem.IsAndroid()
         ? "//main/home"
         : "//home";
@@ -70,7 +86,8 @@ public partial class AppShell : Shell
         }
 
         FlyoutBehavior = FlyoutBehavior.Locked;
-        FlyoutHeader = new PassportFlyoutHeader(userPageViewModel);
+        passportFlyoutHeader = new PassportFlyoutHeader(userPageViewModel);
+        FlyoutHeader = passportFlyoutHeader;
         Items.Add(CreateFlyoutItem("主页", "home", homePage));
         Items.Add(CreateFlyoutItem("抽卡记录", "gacha", gachaPage));
         Items.Add(CreateFlyoutItem("用户", "user", userPage));

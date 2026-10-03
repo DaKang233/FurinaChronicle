@@ -20,4 +20,19 @@ public partial class PassportFlyoutHeader : ContentView
             await shell.ShowUserPageAsync();
         }
     }
+
+    private void OnSidebarToggleClicked(object? sender, EventArgs e)
+    {
+        if (Shell.Current is AppShell shell)
+        {
+            shell.ToggleWindowsSidebar();
+        }
+    }
+
+    public void SetSidebarCollapsed(bool isCollapsed)
+    {
+        SidebarToggleButton.Text = isCollapsed
+            ? "固定侧边栏"
+            : "收起侧边栏";
+    }
 }

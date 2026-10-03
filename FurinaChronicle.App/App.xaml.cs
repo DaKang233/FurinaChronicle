@@ -17,7 +17,13 @@ namespace FurinaChronicle.App
 
         protected override Window CreateWindow(IActivationState? activationState)
         {
-            return new Window(appShell);
+            var window = new Window(appShell);
+            if (OperatingSystem.IsWindows())
+            {
+                window.MinimumWidth = 1000;
+                window.MinimumHeight = 600;
+            }
+            return window;
         }
     }
 }

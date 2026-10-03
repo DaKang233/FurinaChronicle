@@ -81,6 +81,8 @@ public sealed record GachaHistoryPeriod(
 
 public sealed record GachaHistoryItem(
     string ItemName,
+    string? ItemId,
+    string? IconUrl,
     int? RankType,
     int Count);
 

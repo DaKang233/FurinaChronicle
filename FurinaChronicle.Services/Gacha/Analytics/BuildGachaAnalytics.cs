@@ -416,10 +416,16 @@ public sealed class BuildGachaAnalytics
     {
         return records
             .GroupBy(GetItemKey)
-            .Select(items => new GachaHistoryItem(
-                GetItemName(items.First(), metadata),
-                items.First().RankType,
-                items.Sum(GetPullCount)))
+            .Select(items =>
+            {
+                GachaRecord first = items.First();
+                return new GachaHistoryItem(
+                    GetItemName(first, metadata),
+                    first.ItemId,
+                    GetIconUrl(first, metadata),
+                    first.RankType,
+                    items.Sum(GetPullCount));
+            })
             .OrderByDescending(item => item.RankType)
             .ThenByDescending(item => item.Count)
             .ThenBy(item => item.ItemName, StringComparer.Ordinal)

@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Gacha;
+using FurinaChronicle.Core.Gacha.Metadata;
 using FurinaChronicle.Services.Gacha.Analytics;
 using System.Collections.ObjectModel;
 
@@ -183,7 +184,22 @@ public sealed record GachaHistoryBannerDisplayItem(
     string Name,
     string Type,
     ImageSource? BannerImage,
-    string FeaturedItems);
+    string FeaturedItems)
+{
+    public bool HasBannerImage => BannerImage is not null;
+}
+
+public sealed record GachaHistoryItemDisplayItem(
+    string ItemName,
+    ImageSource? IconUrl,
+    string Count,
+    int? RankType);
+
+public sealed record GachaHistoryVersionOption(
+    string Key,
+    string DisplayName,
+    DateTimeOffset StartsAt,
+    IReadOnlyList<GachaEventPeriod> EventPeriods);
 
 public sealed record GachaHistoryDisplayItem(
     string Title,
@@ -191,7 +207,8 @@ public sealed record GachaHistoryDisplayItem(
     string Pool,
     string Total,
     string Accounts,
-    string Items,
+    string ItemsText,
+    IReadOnlyList<GachaHistoryItemDisplayItem> ItemIcons,
     string MetadataNote,
     IReadOnlyList<GachaHistoryBannerDisplayItem> Banners);
 

@@ -27,6 +27,12 @@ public sealed class FileGachaBannerImageCache :
             httpClient);
     }
 
+    public Task<string?> GetCachedPathAsync(
+        GachaGame game,
+        string bannerId,
+        CancellationToken cancellationToken = default) =>
+        inner.GetCachedPathAsync(game, bannerId, cancellationToken);
+
     public async Task<string?> GetOrRefreshAsync(
         GachaGame game,
         string bannerId,

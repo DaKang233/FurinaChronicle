@@ -336,6 +336,11 @@ public sealed class BuildGachaAnalyticsTests
         Assert.Equal(2, history.TotalPulls);
         Assert.Equal(startsAt, history.StartTime);
         Assert.Equal(startsAt.AddDays(20), history.EndTime);
+        GachaHistoryItem fiveStar = Assert.Single(
+            history.Items,
+            item => item.RankType == 5);
+        Assert.Equal("avatar-5", fiveStar.ItemId);
+        Assert.NotNull(fiveStar.IconUrl);
     }
 
     [Fact]

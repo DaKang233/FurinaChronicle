@@ -10,19 +10,27 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
     xmlns:viewModels="clr-namespace:FurinaChronicle.App.ViewModels"
     x:DataType="viewModels:UserPageViewModel">
-    <Grid Padding="18,22,18,16" ColumnDefinitions="52,*" ColumnSpacing="12">
-        <Border HeightRequest="48" WidthRequest="48" StrokeShape="RoundRectangle 24">
-            <Grid>
-                <Label FontSize="24" HorizontalTextAlignment="Center" Text="👤" VerticalTextAlignment="Center" />
-                <Image Aspect="AspectFill" IsVisible="{Binding SelectedAccount.HasAvatar}" Source="{Binding SelectedAccount.AvatarUrl}" />
-            </Grid>
-        </Border>
-        <VerticalStackLayout Grid.Column="1" Spacing="2" VerticalOptions="Center">
-            <Label FontAttributes="Bold" LineBreakMode="TailTruncation" Text="{Binding SelectedAccount.DisplayName, FallbackValue=未登录}" />
-            <Label FontSize="11" Text="点击管理通行证账号" />
-        </VerticalStackLayout>
-        <Grid.GestureRecognizers>
-            <TapGestureRecognizer Tapped="OnTapped" />
-        </Grid.GestureRecognizers>
+    <Grid Padding="18,22,18,12" RowDefinitions="Auto,Auto" RowSpacing="10">
+        <Grid ColumnDefinitions="52,*" ColumnSpacing="12">
+            <Border HeightRequest="48" WidthRequest="48" StrokeShape="RoundRectangle 24">
+                <Grid>
+                    <Label FontSize="24" HorizontalTextAlignment="Center" Text="👤" VerticalTextAlignment="Center" />
+                    <Image Aspect="AspectFill" IsVisible="{Binding SelectedAccount.HasAvatar}" Source="{Binding SelectedAccount.AvatarUrl}" />
+                </Grid>
+            </Border>
+            <VerticalStackLayout Grid.Column="1" Spacing="2" VerticalOptions="Center">
+                <Label FontAttributes="Bold" LineBreakMode="TailTruncation" Text="{Binding SelectedAccount.DisplayName, FallbackValue=未登录}" />
+                <Label FontSize="11" Text="点击管理通行证账号" />
+            </VerticalStackLayout>
+            <Grid.GestureRecognizers>
+                <TapGestureRecognizer Tapped="OnTapped" />
+            </Grid.GestureRecognizers>
+        </Grid>
+        <Button
+            x:Name="SidebarToggleButton"
+            Grid.Row="1"
+            Clicked="OnSidebarToggleClicked"
+            FontSize="12"
+            Text="收起侧边栏" />
     </Grid>
 </ContentView>

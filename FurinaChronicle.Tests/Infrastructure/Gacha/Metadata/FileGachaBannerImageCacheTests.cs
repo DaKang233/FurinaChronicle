@@ -49,9 +49,13 @@ public sealed class FileGachaBannerImageCacheTests
                 "event-banner",
                 "https://example.test/primary.png",
                 "https://example.test/backup.png");
+            string? cached = await cache.GetCachedPathAsync(
+                GachaGame.GenshinImpact,
+                "event-banner");
 
             Assert.NotNull(first);
             Assert.Equal(first, second);
+            Assert.Equal(first, cached);
             Assert.True(File.Exists(first));
             Assert.Equal(2, requests);
         }

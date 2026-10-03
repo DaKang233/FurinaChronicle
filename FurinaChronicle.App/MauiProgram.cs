@@ -102,6 +102,7 @@ namespace FurinaChronicle.App
 			builder.Services.AddSingleton<
 				IGachaBannerImageCache,
 				FileGachaBannerImageCache>();
+			builder.Services.AddTransient<PreloadGachaBannerImages>();
 			builder.Services.AddTransient<ImportUigfGachaRecords>();
 			builder.Services.AddSingleton<
 				ITeyvatHelperUigfClient,

@@ -7,6 +7,11 @@ namespace FurinaChronicle.Services.Gacha.Abstractions;
 
 public interface IGachaBannerImageCache
 {
+    Task<string?> GetCachedPathAsync(
+        GachaGame game,
+        string bannerId,
+        CancellationToken cancellationToken = default);
+
     Task<string?> GetOrRefreshAsync(
         GachaGame game,
         string bannerId,

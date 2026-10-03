@@ -102,6 +102,21 @@ public sealed class FileGachaItemIconCache : IGachaItemIconCache, IDisposable
         }
     }
 
+    public Task<string?> GetCachedPathAsync(
+        GachaGame game,
+        string itemId,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (string.IsNullOrWhiteSpace(itemId))
+        {
+            return Task.FromResult<string?>(null);
+        }
+
+        string cachePath = GetCachePath(game, itemId.Trim());
+        return Task.FromResult(File.Exists(cachePath) ? cachePath : null);
+    }
+
     public async Task ClearAsync(
         CancellationToken cancellationToken = default)
     {
