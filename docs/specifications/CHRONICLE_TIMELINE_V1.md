@@ -2,7 +2,11 @@
 
 状态：Draft
 
-本文件定义首版跨数据域游戏历程的内部可移植语义。ADR 0009 与时间线产品方向已经接受，但本文件不是已发布的交换格式；字段名、自然键和枚举值须在 Phase 8B.0 fixture 评审后冻结。
+本文件定义首版 Chronicle 子系统的读取投影语义。ADR 0009、0010 的核心决定与产品行为继续 Accepted，但本文件不是已发布交换格式，也不是所有领域的共享持久化模型。
+
+字段名、投影身份、Profile、序列和游标在 8B.6 Chronicle 验证前冻结；若其中某部分更早进入持久化或公开格式，则提前冻结该部分。8B.0 只冻结真正共享且影响数据解释、跨端身份、公开兼容或迁移安全的最小契约，不等待整个草案。
+
+领域自治、数据优先、开放导出、Chronicle 派生的作用域见 [ADR 0011](../decisions/0011-domain-first-product-scope.md)。领域先独立保存、查询和导出，Chronicle 后消费。
 
 ## 1. 范围
 
@@ -19,10 +23,13 @@
 - 各数据域全部业务字段；
 - 档案操作历史的完整格式；
 - 对外发布的 JSON Schema。
+- 领域独立查询、历史查看和完整导出能力；这些不以 Contributor 或 Chronicle 查询服务为前置条件。
 
 ## 2. 规范性术语
 
 文中的“必须”“不得”“应”“可以”分别表示硬性要求、禁止要求、推荐要求和可选能力。
+
+这些术语描述草案实现后的契约要求，不表示具体字段已发布或已完成冻结。共享 Identity、Time、Provenance、Completeness 以各自基础文档为准；下面的 ChronicleTime、SortAtUtc、ChronicleEntry、EntryId、ProjectionSequence、Profile 和游标属于 Chronicle，不得反向成为所有领域的保存字段。
 
 ## 3. 时间范围
 
@@ -109,9 +116,11 @@ ChronicleEntry
 Domain + Kind + GameAccountId + SourceEntityType + SourceEntityId + ProjectionVersion
 ```
 
-该公式不定义跨档案/跨设备身份。导出、导入和同步必须使用规范化领域记录与 `PortableEntityKey`，不得把 `EntryId` 当作可移植主键。
+该公式不定义跨档案/跨设备身份。导出、导入及未来同步必须使用规范化领域记录的自然键或可移植实体键，不得把 EntryId 当作可移植主键。PortableEntityKey 在投影中可空不表示领域事实可以缺少跨端识别所需的身份；具体引用由所属领域 Portable 契约冻结，不能依赖 Chronicle 缓存。
 
 ## 6. 排序与游标
+
+本节是 Chronicle 子系统的分页候选方案，不是领域持久化或 8B.0 的通用前置条件。序列分配、重建生命周期以及修订/撤销/删除/Profile 变化后的旧游标行为仍须在 8B.6 fixture 评审中闭合；当前描述只覆盖新投影插入，不能据此宣称任意修改下均有稳定快照。
 
 默认顺序为：
 
@@ -167,7 +176,7 @@ ChronicleFilter
 
 ## 9. 贡献者
 
-每个数据域必须实现等价于以下语义的契约：
+选择参与 Chronicle 的数据域应在其独立保存、查询和导出能力成立后，实现等价于以下语义的契约；未参与的领域不因此失去完成资格：
 
 ```text
 IChronicleContributor<TRecord>
@@ -185,7 +194,11 @@ IChronicleContributor<TRecord>
 
 贡献者只负责从规范化事实产生确定的候选事件。主时间线或领域时间线是否显示候选事件，由独立、版本化的 Profile 决定。Profile 变更不得反向修改领域事实。
 
+不产生条目不能影响领域记录的保存、历史查看或完整导出；缺少时间时的投影退化由 Chronicle 冻结，不允许用当前时间伪造领域事实。
+
 ## 10. 首批映射
+
+下列映射保持已接受的最终产品行为，不要求所有对应领域在 8B.0 完整建模。手工获取键与周编码在领域保存/导出前冻结；挑战期次/观察/指纹在首批模式保存前冻结，完成判定在对应完成节点实现前冻结；真实重要成就分类在成就领域实施前冻结。
 
 ### 抽卡及获取里程碑
 
@@ -238,6 +251,8 @@ IChronicleContributor<TRecord>
 
 首版 Furina Dataset 应导出规范化领域记录的时间和来源字段。`ChronicleEntry` 可以作为可丢弃缓存随全量 Archive 携带，但接收方必须能忽略它。
 
+完整领域事实集合由领域导出器负责，不能从当前 Profile 可见条目反推。标准优先、Furina 机器可读载荷与人类可读出口见 [Portable/Export 边界](../architecture/PORTABLE_DATASET.md)。不启用 Chronicle 时这些出口仍应工作；完整 Archive 和未来自动同步不在本草案冻结。
+
 Markdown 可以输出按时间排序的可读历程，并明确以下内容：
 
 - 时间精度和不确定范围；
@@ -254,7 +269,7 @@ Markdown 可以输出按时间排序的可读历程，并明确以下内容：
 
 ## 14. 验收 fixture
 
-Phase 8B 至少提供以下固定数据：
+以下固定数据由 8B.6 消费已独立成立的领域来验证，不是 8B.0 的统一 blocker。真实分类目录和未实施领域可用明确的虚构 fixture，不视为已经产品化：
 
 1. 同秒多条抽卡，用于稳定排序和分页；
 2. 一条只有日期的事实；

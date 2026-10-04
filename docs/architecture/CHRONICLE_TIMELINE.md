@@ -4,9 +4,11 @@
 
 ## 目的
 
-`Chronicle` 是 FurinaChronicle 的核心读取能力：把分散在抽卡、成就、挑战、角色与武器状态、背包、资源流水、便签和游玩会话中的长期数据，按时间组织为可追溯的玩家历程。
+Chronicle 是 FurinaChronicle 对已有领域事实进行筛选、组合和叙事展示的综合派生视图，把适合时间叙事的长期数据组织为可追溯的玩家历程。它服务“本地优先的原神个人历史档案工具”，不是领域数据存在的理由或唯一读取渠道。
 
 时间线不是新的事实来源，也不是把所有业务记录复制进一张万能表。各数据域仍保存自己的规范化记录；时间线由这些记录构建为可重建的投影。Chronicle 也不等于“显示所有记录”：主时间线只挑选重要节点，角色、武器、挑战等领域时间线可以使用不同的默认颗粒度。
+
+遵循领域自治、数据优先、开放导出、Chronicle 派生。各领域先独立保存、查询、查看历史和导出，再选择参与 Chronicle；Contributor 不是领域成立的必要条件，完整领域导出不通过时间线完成。作用域见 [ADR 0011](../decisions/0011-domain-first-product-scope.md)。
 
 ## 两类历史必须分离
 
@@ -37,22 +39,18 @@
 
 ## 数据流
 
-```text
-Source Evidence
-      ↓
-Canonical Domain Record ───────────────┐
-      ↓                                │
-Derived Fact                           │
-      ↓                                │
-IChronicleContributor                  │
-      ↓                                │
-ChronicleEntry Projection              │
-      ↓                                │
-Timeline Profile / Visibility Policy   │
-      ↓                                │
-Query / Page / Markdown Report         │
-                                       │
-DataChangeSet → Archive Audit Timeline ┘（独立查询）
+```mermaid
+flowchart TD
+    Source["Source Evidence"] --> Facts["Canonical Domain Record"]
+    Facts --> History["领域查询与历史查看"]
+    Facts --> Export["领域完整导出"]
+    Facts --> Derived["可选 Derived Fact"]
+    Facts --> Contributor["适用时 IChronicleContributor"]
+    Derived --> Contributor
+    Contributor --> Entry["ChronicleEntry Projection"]
+    Entry --> Profile["Timeline Profile"]
+    Profile --> View["Chronicle Query / Report"]
+    ChangeSet["DataChangeSet"] --> Audit["独立档案操作历史"]
 ```
 
 `ChronicleEntry` 只保存展示和查询所需的引用、时间、摘要和来源信息。完整字段和证据始终回到所属数据域读取。
@@ -61,7 +59,7 @@ DataChangeSet → Archive Audit Timeline ┘（独立查询）
 
 贡献者把规范化事实投影为候选 `ChronicleEntry`；时间线 Profile 再决定某类条目是否默认可见。两层必须分离：
 
-- “主时间线不显示”不表示该事实可以不保存或不投影；
+- “主时间线不显示”不表示该事实可以不保存；参与领域时间线的候选事件与默认可见性分离，未参与 Chronicle 的事实仍按领域策略保存、查询和导出；
 - 主时间线默认只显示五星抽取、四星角色首次/第七次获取、挑战完成和重要成就等节点；
 - 角色时间线、武器时间线和挑战时间线可以展示更细的领域事件；
 - 用户提高颗粒度只改变查询和展示，不改写规范化事实；
@@ -98,6 +96,8 @@ DataChangeSet → Archive Audit Timeline ┘（独立查询）
 不得用 `ObservedAt` 猜测精确的 `OccurredAt`。只有来源确实提供业务发生时间时，才允许生成精确瞬时事件。
 
 ## 投影契约
+
+EntryId、ProjectionSequence、Profile、排序锚点和游标属于 Chronicle 子系统。只有真正共同的 Identity、Time、Provenance、Completeness 等语义进入共享基础，不能为 Chronicle 查询方便反向塑造领域事实。具体字段在 Chronicle 工作包评审；更早持久化/公开使用的部分须先冻结。
 
 概念上的 `ChronicleEntry` 至少包含：
 
@@ -139,7 +139,7 @@ IChronicleQueryService
 | 实时便签 | 状态观察 | 默认低重要级别观察；按保留策略降采样 |
 | 游玩会话 | 进程或系统观察 | 确定或近似区间 |
 
-角色/武器和挑战将作为基础架构完成后的首批验证域，尽早验证时间区间、状态差分、来源和可移植格式是否可用。
+角色/武器和挑战将作为基础架构完成后的首批独立验证域，先证明状态/观察历史查询和开放导出，再验证 Chronicle。上表对后续领域的映射只表示可能消费方式，不要求背包、经济或高频观察的全部数据进入时间线，也不决定它们的保留级别。
 
 ## 关联与聚合
 
@@ -158,6 +158,8 @@ IChronicleQueryService
 
 是否启用物化索引是性能决策，不改变公开数据语义。第一版允许直接查询各数据域并在服务层归并。
 
+本节是 Chronicle 实施门槛，不是整个 8B.0 的前置条件。修订、撤销、删除、重建及 Profile 变化时的序列/游标生命周期须在 8B.6 验证，不能把新插入记录的稳定分页方案直接当作完整历史快照承诺。
+
 ## 修订与删除
 
 - 时间线默认显示规范化记录的当前有效版本；
@@ -167,6 +169,7 @@ IChronicleQueryService
 
 ## 导出、备份和同步
 
+- 各领域直接提供标准、Furina 机器可读载荷和适用的人类可读导出；不经 Chronicle 也能带走完整领域数据；
 - Furina Dataset 和同步协议传输各数据域的规范化事实、来源和必要修订信息，不把 `ChronicleEntry` 当作唯一事实传输；
 - 全量 Archive 可以包含可丢弃的时间线索引，但导入端必须能忽略并重建；
 - Markdown 报告可以输出人类可读时间线，但不可再次导入；
@@ -176,4 +179,4 @@ IChronicleQueryService
 
 当前 `GachaRecord` 只有单一 `Time`，尚未统一实现来源、观察时间、置信度、完整度和投影版本。当前抽卡日历、历史与统计页面是抽卡域投影，但还没有跨数据域 `Chronicle` 查询契约。
 
-Phase 8B 先冻结共享值对象、来源、Profile 和可移植契约，并以抽卡及早期角色/武器、挑战模型验证；完整 Chronicle 页面应在至少两个不同时间语义的数据域稳定后实现。
+Phase 8B 先建立最小共享语义与领域 Portable/Export，保持 Gacha 并建立角色/武器和挑战的独立纵切，再在 8B.6 冻结并验证 Chronicle 子系统契约。完整 Chronicle 页面应在至少两个不同时间语义的数据域能够独立保存、查询和导出后实现，不是第一批迁移要求。

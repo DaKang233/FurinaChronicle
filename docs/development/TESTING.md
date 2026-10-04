@@ -2,6 +2,16 @@
 
 状态：Accepted
 
+这些是对应能力实现时的验收要求，不表示当前已有实现或 fixture。实施范围按 [Phase 8B 计划](../project/PHASE_8B_PLAN.md) 分包；Chronicle、完整 Archive 和未来 Sync 的测试不得被提升为所有领域或整个 8B.0 的前置条件。
+
+## 领域自治与开放导出
+
+- 禁用 Chronicle 或删除投影索引后，领域仍能保存、查询、查看历史和导出全部适用数据。
+- 首批角色/武器和挑战纵切分别验证输入、持久化、独立 Query/History、至少一种人类可读 Export，以及 Portable 重导入。
+- 没有 Contributor 的领域不因此缺少成立资格；Profile 不决定底层数据保留。
+- 可修改事实内容变化不改变稳定身份；内容判重不代替身份或静默合并疑似重复。
+- 人类可读输出可脱离 UI 查看，保留账号范围、来源、时间精度、不完整与派生说明，不要求可重新导入。
+
 ## 身份与档案
 
 - 同一自然角色可以在两个档案创建不同 `GameAccount.Id`，共享稳定 `GameRoleIdentityId`，记录互不影响。
@@ -54,6 +64,8 @@
 
 ## Chronicle 时间线
 
+本节在领域独立能力之后、8B.6 Chronicle 验证时执行。AsOfSequence 等字段是当前草案方案的标识，具体子系统契约须评审冻结；稳定分页行为要求继续有效，不把字段名当作已发布共享格式。
+
 - 同一规范化记录重复投影产生相同 `ChronicleEntry.EntryId` 和排序键。
 - 瞬时、区间和不确定区间不会丢失时间精度或原始偏移。
 - `OccurredAt`、`ObservedAt`、`FetchedAt` 和 `ImportedAt` 不得互相替代。
@@ -74,6 +86,8 @@
 
 ## 事务与安全
 
+- 只有确认的新空库允许初始化；未知/未来数据库版本或 application ID 不匹配时停止写入并保留原库，不删表重建。
+- 已知旧版通过显式事务迁移；迁移失败不破坏原数据，新 Schema 前完成相关 fixture。
 - 业务记录和对应 DataChangeSet 在同一提交边界完成。
 - 未来业务记录和 ChangeJournal 必须同事务写入。
 - 业务提交后的投影或 UI 刷新失败不删除已经保存的数据。

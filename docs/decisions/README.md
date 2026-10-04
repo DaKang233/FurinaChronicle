@@ -14,3 +14,4 @@
 - [0008：离线优先的卡池事件元数据](0008-offline-gacha-event-metadata.md)
 - [0009：Chronicle 作为派生投影](0009-chronicle-as-derived-projection.md)
 - [0010：经过筛选的多时间线产品模型](0010-curated-multiple-chronicle-timelines.md)
+- [0011：领域优先的产品定位与 Phase 8B 范围](0011-domain-first-product-scope.md)
