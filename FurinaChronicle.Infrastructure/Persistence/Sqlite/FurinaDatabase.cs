@@ -77,6 +77,7 @@ public sealed class FurinaDatabase : IAsyncDisposable
             if (applicationId == CurrentApplicationId &&
                 schemaVersion == CurrentSchemaVersion)
             {
+                await ValidateCurrentSchemaAsync(cancellationToken);
                 initialized = true;
                 return;
             }
@@ -111,6 +112,7 @@ public sealed class FurinaDatabase : IAsyncDisposable
                     CurrentSchemaVersion);
             }
 
+            await ValidateCurrentSchemaAsync(cancellationToken);
             initialized = true;
         }
         finally
@@ -300,6 +302,110 @@ public sealed class FurinaDatabase : IAsyncDisposable
         return schemaObjectCount == 0;
     }
 
+    private async Task ValidateCurrentSchemaAsync(
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        string quickCheck = await Connection.ExecuteScalarAsync<string>(
+            "PRAGMA quick_check;");
+        if (!string.Equals(quickCheck, "ok", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidDataException(
+                $"SQLite integrity check failed: {quickCheck}. The database was not modified.");
+        }
+
+        await ValidateTableColumnsAsync(
+            "PlayerArchives",
+            ["Id", "Name", "CreatedAtUtcTicks", "UpdatedAtUtcTicks"],
+            cancellationToken);
+        await ValidateTableColumnsAsync(
+            "GameRoleIdentities",
+            ["Id", "GameBiz", "Server", "Uid"],
+            cancellationToken);
+        await ValidateTableColumnsAsync(
+            "GameAccounts",
+            [
+                "Id",
+                "PlayerArchiveId",
+                "GameRoleIdentityId",
+                "Uid",
+                "ServerRegion",
+                "DisplayName",
+                "IsPlaceholder",
+                "CreatedAtUtcTicks",
+                "UpdatedAtUtcTicks",
+            ],
+            cancellationToken);
+        await ValidateTableColumnsAsync(
+            "GachaRecords",
+            [
+                "Id",
+                "GameAccountId",
+                "ExternalRecordId",
+                "ItemName",
+                "ItemId",
+                "ItemType",
+                "GachaType",
+                "UigfGachaType",
+                "RankType",
+                "Count",
+                "TimeUtcTicks",
+                "TimeOffsetMinutes",
+                "Origin",
+                "FetchedAtUtcTicks",
+                "FetchedAtOffsetMinutes",
+                "ImportedAtUtcTicks",
+                "ImportedAtOffsetMinutes",
+                "AcquisitionBatchId",
+            ],
+            cancellationToken);
+
+        List<ForeignKeyViolationRow> violations =
+            await Connection.QueryAsync<ForeignKeyViolationRow>(
+                "PRAGMA foreign_key_check;");
+        if (violations.Count > 0)
+        {
+            throw new InvalidDataException(
+                "SQLite foreign-key validation failed. The database was not modified.");
+        }
+    }
+
+    private async Task ValidateTableColumnsAsync(
+        string tableName,
+        IReadOnlyCollection<string> requiredColumns,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        int tableCount = await Connection.ExecuteScalarAsync<int>(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?;",
+            tableName);
+        if (tableCount != 1)
+        {
+            throw new InvalidDataException(
+                $"Required database table {tableName} is missing. The database was not modified.");
+        }
+
+        List<SchemaColumnRow> columns =
+            await Connection.QueryAsync<SchemaColumnRow>(
+                $"PRAGMA table_info({tableName});");
+        HashSet<string> columnNames = columns
+            .Select(column => column.Name)
+            .ToHashSet(StringComparer.Ordinal);
+        string[] missing = requiredColumns
+            .Where(column => !columnNames.Contains(column))
+            .ToArray();
+        if (missing.Length > 0)
+        {
+            throw new InvalidDataException(
+                $"Database table {tableName} is missing required columns: " +
+                $"{string.Join(", ", missing)}. The database was not modified.");
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+    }
+
     private async Task CreateCurrentSchemaAsync(
         CancellationToken cancellationToken)
     {
@@ -463,6 +569,17 @@ public sealed class FurinaDatabase : IAsyncDisposable
         public int ServerRegion { get; set; }
 
         public bool IsPlaceholder { get; set; }
+    }
+
+    private sealed class SchemaColumnRow
+    {
+        public string Name { get; set; } = string.Empty;
+    }
+
+    private sealed class ForeignKeyViolationRow
+    {
+        [Column("table")]
+        public string Table { get; set; } = string.Empty;
     }
 
     public async ValueTask DisposeAsync()

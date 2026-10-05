@@ -141,6 +141,45 @@ public sealed class FurinaDatabaseMigrationTests
     }
 
     [Fact]
+    public async Task InitializeAsync_DamagedCurrentSchema_RejectsAndPreservesOldData()
+    {
+        await using var fixture = MigrationFixture.Create();
+        fixture.CreatePreReleaseDatabase(
+            schemaVersion: CurrentSchemaVersion,
+            applicationId: CurrentApplicationId);
+
+        await using (FurinaDatabase database = fixture.OpenDatabase())
+        {
+            InvalidDataException exception =
+                await Assert.ThrowsAsync<InvalidDataException>(
+                    () => database.InitializeAsync());
+            Assert.Contains(
+                "missing",
+                exception.Message,
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        using SQLiteConnection connection = fixture.OpenRawConnection();
+        Assert.Equal(
+            CurrentSchemaVersion,
+            connection.ExecuteScalar<int>("PRAGMA user_version;"));
+        Assert.Equal(
+            CurrentApplicationId,
+            connection.ExecuteScalar<int>("PRAGMA application_id;"));
+        Assert.Equal(
+            "old-gacha",
+            connection.ExecuteScalar<string>(
+                "SELECT ExternalRecordId FROM GachaRecords LIMIT 1;"));
+        Assert.Equal(
+            0,
+            connection.ExecuteScalar<int>(
+                """
+                SELECT COUNT(*) FROM sqlite_master
+                WHERE type = 'table' AND name = 'GameRoleIdentities';
+                """));
+    }
+
+    [Fact]
     public async Task InitializeAsync_VersionOne_MigratesAndPreservesData()
     {
         await using var fixture = MigrationFixture.Create();
