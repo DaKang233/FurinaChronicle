@@ -24,6 +24,12 @@ public sealed record GachaPortableAccount(
     string? DisplayName,
     IReadOnlyList<GachaRecord> Records);
 
+public sealed record GachaPortableExportAccount(
+    Guid AccountReference,
+    GameRoleIdentity RoleIdentity,
+    string? DisplayName,
+    int RecordCount);
+
 public sealed record GachaPortableWriteResult(
     int AccountCount,
     int RecordCount,

@@ -3,6 +3,7 @@
 
 using System.Globalization;
 using System.IO.Compression;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using FurinaChronicle.Core.Gacha;
@@ -10,31 +11,15 @@ using FurinaChronicle.Services.Gacha.Portable;
 
 namespace FurinaChronicle.Infrastructure.Gacha.Portable;
 
-public sealed partial class GachaPortablePackageWriter(
-    GachaPortableLimits? limits = null)
-    : IGachaPortablePackageWriter
+public sealed partial class GachaPortablePackageWriter
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = true,
-        MaxDepth = GachaPortableLimits.DefaultMaximumJsonDepth,
-    };
-
-    private static readonly JsonSerializerOptions LineJsonOptions = new()
-    {
-        WriteIndented = false,
-        MaxDepth = GachaPortableLimits.DefaultMaximumJsonDepth,
-    };
-
-    private readonly GachaPortableLimits limits = limits ?? new();
-
     public async Task<GachaPortableWriteResult> WriteAsync(
         Stream destination,
-        GachaPortablePackage package,
+        IGachaPortableExportSnapshot snapshot,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(destination);
-        ArgumentNullException.ThrowIfNull(package);
+        ArgumentNullException.ThrowIfNull(snapshot);
         if (!destination.CanWrite)
         {
             throw new ArgumentException(
@@ -42,44 +27,77 @@ public sealed partial class GachaPortablePackageWriter(
                 nameof(destination));
         }
 
-        ValidatePackage(package);
-
+        ValidateSnapshot(snapshot);
         var manifests = new List<GachaPortableAccountManifestDto>(
-            package.Accounts.Count);
+            snapshot.Accounts.Count);
         long totalPayloadBytes = 0;
+        int totalRecordCount = 0;
+
         using (var archive = new ZipArchive(
             destination,
             ZipArchiveMode.Create,
             leaveOpen: true))
         {
-            foreach (GachaPortableAccount account in package.Accounts)
+            foreach (GachaPortableExportAccount account in snapshot.Accounts)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                StreamingPassResult uigfPass = default;
                 PortablePayloadDescriptor uigf = await WritePayloadAsync(
                     archive,
                     GachaPortableRules.GetUigfPath(account.AccountReference),
-                    stream => WriteUigfAsync(
-                        stream,
-                        package.GeneratedAt,
-                        account,
-                        cancellationToken),
+                    async stream =>
+                    {
+                        uigfPass = await WriteStreamingUigfAsync(
+                            stream,
+                            snapshot,
+                            account,
+                            cancellationToken);
+                    },
                     cancellationToken);
+
+                StreamingPassResult supplementPass = default;
                 PortablePayloadDescriptor supplement = await WritePayloadAsync(
                     archive,
                     GachaPortableRules.GetSupplementPath(account.AccountReference),
-                    stream => WriteSupplementAsync(
-                        stream,
-                        account,
-                        cancellationToken),
+                    async stream =>
+                    {
+                        supplementPass = await WriteStreamingSupplementAsync(
+                            stream,
+                            snapshot,
+                            account,
+                            cancellationToken);
+                    },
                     cancellationToken);
+
+                if (uigfPass.RecordCount != account.RecordCount ||
+                    supplementPass.RecordCount != account.RecordCount)
+                {
+                    throw GachaPortableRules.Error(
+                        GachaPortableErrorCode.RecordCountMismatch,
+                        "The export snapshot changed while it was being read.");
+                }
+
+                if (!CryptographicOperations.FixedTimeEquals(
+                        uigfPass.Fingerprint,
+                        supplementPass.Fingerprint))
+                {
+                    throw GachaPortableRules.Error(
+                        GachaPortableErrorCode.RecordMismatch,
+                        "The UIGF and supplement passes did not read the same records.");
+                }
+
+                totalRecordCount = checked(
+                    totalRecordCount + account.RecordCount);
                 totalPayloadBytes = checked(
                     totalPayloadBytes + uigf.Length + supplement.Length);
                 EnsureUncompressedLimit(totalPayloadBytes);
-
                 manifests.Add(ToManifest(account, uigf, supplement));
             }
 
-            GachaPortableManifestDto manifest = CreateManifest(package, manifests);
+            GachaPortableManifestDto manifest = CreateManifest(
+                snapshot,
+                manifests,
+                totalRecordCount);
             ZipArchiveEntry manifestEntry = archive.CreateEntry(
                 GachaPortableRules.ManifestPath,
                 CompressionLevel.Optimal);
@@ -105,40 +123,34 @@ public sealed partial class GachaPortablePackageWriter(
         }
 
         return new GachaPortableWriteResult(
-            package.Accounts.Count,
-            package.RecordCount,
+            snapshot.Accounts.Count,
+            totalRecordCount,
             totalPayloadBytes);
     }
 
-    private void ValidatePackage(GachaPortablePackage package)
+    private void ValidateSnapshot(IGachaPortableExportSnapshot snapshot)
     {
-        if (package.SourceArchive.ArchiveReference == Guid.Empty ||
-            package.SourceArchive.Name is null)
+        if (snapshot.SourceArchive.ArchiveReference == Guid.Empty ||
+            snapshot.SourceArchive.Name is null)
         {
             throw GachaPortableRules.Error(
                 GachaPortableErrorCode.InvalidPackage,
                 "The source archive reference and name are required.");
         }
 
-        if (package.Accounts.Count is < 1 ||
-            package.Accounts.Count > limits.MaximumAccountCount)
+        if (snapshot.Accounts.Count is < 1 ||
+            snapshot.Accounts.Count > limits.MaximumAccountCount)
         {
             throw GachaPortableRules.Error(
                 GachaPortableErrorCode.ResourceLimitExceeded,
                 "The account count is outside the Portable v1 limit.");
         }
 
-        if (package.RecordCount > limits.MaximumRecordCount)
-        {
-            throw GachaPortableRules.Error(
-                GachaPortableErrorCode.ResourceLimitExceeded,
-                "The record count exceeds the Portable v1 limit.");
-        }
-
+        int recordCount = 0;
         var accountReferences = new HashSet<Guid>();
         var naturalIdentities = new HashSet<string>(StringComparer.Ordinal);
         var identitiesById = new Dictionary<Guid, string>();
-        foreach (GachaPortableAccount account in package.Accounts)
+        foreach (GachaPortableExportAccount account in snapshot.Accounts)
         {
             if (account.AccountReference == Guid.Empty ||
                 !accountReferences.Add(account.AccountReference))
@@ -148,6 +160,14 @@ public sealed partial class GachaPortablePackageWriter(
                     "account_ref must be non-empty and unique.");
             }
 
+            if (account.RecordCount < 0)
+            {
+                throw GachaPortableRules.Error(
+                    GachaPortableErrorCode.InvalidPackage,
+                    "record_count cannot be negative.");
+            }
+
+            recordCount = checked(recordCount + account.RecordCount);
             GachaPortableRules.ValidateNaturalIdentity(
                 account.RoleIdentity.NaturalIdentity);
             string naturalName =
@@ -169,59 +189,31 @@ public sealed partial class GachaPortablePackageWriter(
             }
 
             identitiesById[roleId] = naturalName;
-            var recordIds = new HashSet<string>(StringComparer.Ordinal);
-            foreach (GachaRecord record in account.Records)
-            {
-                GachaPortableRules.ValidateRecord(
-                    record,
-                    account.AccountReference);
-                if (!recordIds.Add(record.ExternalRecordId))
-                {
-                    throw GachaPortableRules.Error(
-                        GachaPortableErrorCode.DuplicateReference,
-                        "Duplicate external_record_id within an account.",
-                        recordId: record.ExternalRecordId);
-                }
-            }
         }
-    }
 
-    private async Task<PortablePayloadDescriptor> WritePayloadAsync(
-        ZipArchive archive,
-        string path,
-        Func<Stream, Task> write,
-        CancellationToken cancellationToken)
-    {
-        ZipArchiveEntry entry = archive.CreateEntry(path, CompressionLevel.Optimal);
-        await using Stream entryStream = entry.Open();
-        await using var hashingStream = new HashingWriteStream(entryStream);
-        await write(hashingStream);
-        await hashingStream.FlushAsync(cancellationToken);
-        if (hashingStream.ByteCount > limits.MaximumEntryBytes)
+        if (recordCount > limits.MaximumRecordCount)
         {
             throw GachaPortableRules.Error(
                 GachaPortableErrorCode.ResourceLimitExceeded,
-                $"Entry exceeds the Portable v1 limit: {path}.",
-                path);
+                "The record count exceeds the Portable v1 limit.");
         }
-
-        return new PortablePayloadDescriptor(
-            path,
-            hashingStream.ByteCount,
-            hashingStream.CompleteHash());
     }
 
-    private static async Task WriteUigfAsync(
+    private static async Task<StreamingPassResult> WriteStreamingUigfAsync(
         Stream destination,
-        DateTimeOffset generatedAt,
-        GachaPortableAccount account,
+        IGachaPortableExportSnapshot snapshot,
+        GachaPortableExportAccount account,
         CancellationToken cancellationToken)
     {
+        using var fingerprint = new GachaRecordFingerprint();
+        int count = 0;
         await using var writer = new Utf8JsonWriter(destination);
         writer.WriteStartObject();
         writer.WritePropertyName("info");
         writer.WriteStartObject();
-        writer.WriteNumber("export_timestamp", generatedAt.ToUnixTimeSeconds());
+        writer.WriteNumber(
+            "export_timestamp",
+            snapshot.GeneratedAt.ToUnixTimeSeconds());
         writer.WriteString("export_app", "FurinaChronicle");
         writer.WriteString("export_app_version", "portable-1.0");
         writer.WriteString("version", GachaPortableRules.UigfVersion);
@@ -229,14 +221,23 @@ public sealed partial class GachaPortablePackageWriter(
         writer.WritePropertyName("hk4e");
         writer.WriteStartArray();
         writer.WriteStartObject();
-        writer.WriteString("uid", account.RoleIdentity.NaturalIdentity.Uid);
+        writer.WriteString(
+            "uid",
+            account.RoleIdentity.NaturalIdentity.Uid);
         writer.WriteNumber("timezone", 0);
         writer.WritePropertyName("list");
         writer.WriteStartArray();
-        foreach (GachaRecord record in account.Records)
+        await foreach (GachaRecord record in snapshot.ReadRecordsAsync(
+            account.AccountReference,
+            cancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
+            GachaPortableRules.ValidateRecord(
+                record,
+                account.AccountReference);
             WriteUigfRecord(writer, record);
+            fingerprint.Append(record);
+            count = checked(count + 1);
         }
 
         writer.WriteEndArray();
@@ -244,60 +245,33 @@ public sealed partial class GachaPortablePackageWriter(
         writer.WriteEndArray();
         writer.WriteEndObject();
         await writer.FlushAsync(cancellationToken);
+        return new StreamingPassResult(count, fingerprint.Complete());
     }
 
-    private static void WriteUigfRecord(
-        Utf8JsonWriter writer,
-        GachaRecord record)
-    {
-        writer.WriteStartObject();
-        writer.WriteString("gacha_type", record.GachaType);
-        writer.WriteString("item_id", record.ItemId);
-        writer.WriteString(
-            "count",
-            record.Count.ToString(CultureInfo.InvariantCulture));
-        writer.WriteString(
-            "time",
-            record.Time.UtcDateTime.ToString(
-                GachaPortableRules.TimeFormat,
-                CultureInfo.InvariantCulture));
-        if (record.ItemName is not null)
-        {
-            writer.WriteString("name", record.ItemName);
-        }
-
-        if (record.ItemType is not null)
-        {
-            writer.WriteString("item_type", record.ItemType);
-        }
-
-        if (record.RankType is int rankType)
-        {
-            writer.WriteString(
-                "rank_type",
-                rankType.ToString(CultureInfo.InvariantCulture));
-        }
-
-        writer.WriteString("id", record.ExternalRecordId);
-        writer.WriteString("uigf_gacha_type", record.UigfGachaType);
-        writer.WriteEndObject();
-    }
-
-    private async Task WriteSupplementAsync(
+    private async Task<StreamingPassResult> WriteStreamingSupplementAsync(
         Stream destination,
-        GachaPortableAccount account,
+        IGachaPortableExportSnapshot snapshot,
+        GachaPortableExportAccount account,
         CancellationToken cancellationToken)
     {
-        foreach (GachaRecord record in account.Records)
+        using var fingerprint = new GachaRecordFingerprint();
+        int count = 0;
+        await foreach (GachaRecord record in snapshot.ReadRecordsAsync(
+            account.AccountReference,
+            cancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
+            GachaPortableRules.ValidateRecord(
+                record,
+                account.AccountReference);
             byte[] line = JsonSerializer.SerializeToUtf8Bytes(
                 new GachaPortableSupplementDto
                 {
                     AccountReference = account.AccountReference,
                     ExternalRecordId = record.ExternalRecordId,
                     OccurredAtUtcTicks = record.Time.UtcDateTime.Ticks,
-                    OccurredAtOffsetMinutes = (int)record.Time.Offset.TotalMinutes,
+                    OccurredAtOffsetMinutes =
+                        checked((int)record.Time.Offset.TotalMinutes),
                     Origin = GachaPortableRules.FormatOrigin(
                         record.Provenance.Origin),
                     FetchedAt = record.Provenance.Timestamps.FetchedAt,
@@ -311,17 +285,22 @@ public sealed partial class GachaPortablePackageWriter(
                 throw GachaPortableRules.Error(
                     GachaPortableErrorCode.ResourceLimitExceeded,
                     "A supplement line exceeds the Portable v1 limit.",
-                    GachaPortableRules.GetSupplementPath(account.AccountReference),
+                    GachaPortableRules.GetSupplementPath(
+                        account.AccountReference),
                     record.ExternalRecordId);
             }
 
             await destination.WriteAsync(line, cancellationToken);
             await destination.WriteAsync("\n"u8.ToArray(), cancellationToken);
+            fingerprint.Append(record);
+            count = checked(count + 1);
         }
+
+        return new StreamingPassResult(count, fingerprint.Complete());
     }
 
     private static GachaPortableAccountManifestDto ToManifest(
-        GachaPortableAccount account,
+        GachaPortableExportAccount account,
         PortablePayloadDescriptor uigf,
         PortablePayloadDescriptor supplement)
     {
@@ -338,7 +317,7 @@ public sealed partial class GachaPortablePackageWriter(
             DisplayName = account.DisplayName,
             UigfPath = uigf.Path,
             SupplementPath = supplement.Path,
-            RecordCount = account.Records.Count,
+            RecordCount = account.RecordCount,
             UigfLength = uigf.Length,
             UigfSha256 = uigf.Sha256,
             SupplementLength = supplement.Length,
@@ -347,38 +326,83 @@ public sealed partial class GachaPortablePackageWriter(
     }
 
     private static GachaPortableManifestDto CreateManifest(
-        GachaPortablePackage package,
-        List<GachaPortableAccountManifestDto> accounts)
+        IGachaPortableExportSnapshot snapshot,
+        List<GachaPortableAccountManifestDto> accounts,
+        int recordCount)
     {
         return new GachaPortableManifestDto
         {
             Format = GachaPortableRules.Format,
             FormatVersion = GachaPortableRules.CurrentVersion,
             Game = GachaPortableRules.Game,
-            GeneratedAt = package.GeneratedAt,
+            GeneratedAt = snapshot.GeneratedAt,
             SourceArchive = new GachaPortableArchiveDto
             {
-                ArchiveReference = package.SourceArchive.ArchiveReference,
-                Name = package.SourceArchive.Name,
+                ArchiveReference = snapshot.SourceArchive.ArchiveReference,
+                Name = snapshot.SourceArchive.Name,
             },
             Scope = new GachaPortableScopeDto
             {
                 Kind = "selected_accounts",
                 AccountCount = accounts.Count,
-                RecordCount = accounts.Sum(account => account.RecordCount),
+                RecordCount = recordCount,
                 CompletenessAssertion = "none",
             },
             Accounts = accounts.Cast<GachaPortableAccountManifestDto?>().ToList(),
         };
     }
 
-    private void EnsureUncompressedLimit(long bytes)
+    private readonly record struct StreamingPassResult(
+        int RecordCount,
+        byte[] Fingerprint);
+
+    private sealed class GachaRecordFingerprint : IDisposable
     {
-        if (bytes > limits.MaximumUncompressedBytes)
+        private readonly IncrementalHash hash =
+            IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+
+        public void Append(GachaRecord record)
         {
-            throw GachaPortableRules.Error(
-                GachaPortableErrorCode.ResourceLimitExceeded,
-                "The uncompressed payload exceeds the Portable v1 limit.");
+            AppendString(record.ExternalRecordId);
+            AppendString(record.ItemName);
+            AppendString(record.ItemId);
+            AppendString(record.ItemType);
+            AppendString(record.GachaType);
+            AppendString(record.UigfGachaType);
+            AppendString(record.RankType?.ToString(CultureInfo.InvariantCulture));
+            AppendString(record.Count.ToString(CultureInfo.InvariantCulture));
+            AppendString(record.Time.UtcDateTime.Ticks.ToString(
+                CultureInfo.InvariantCulture));
+            AppendString(record.Time.Offset.TotalMinutes.ToString(
+                CultureInfo.InvariantCulture));
+            AppendString(((int)record.Provenance.Origin).ToString(
+                CultureInfo.InvariantCulture));
+            AppendTimestamp(record.Provenance.Timestamps.FetchedAt);
+            AppendTimestamp(record.Provenance.Timestamps.ImportedAt);
+            AppendString(record.Provenance.AcquisitionBatchId?.Value.ToString("D"));
+        }
+
+        public byte[] Complete() => hash.GetHashAndReset();
+
+        public void Dispose() => hash.Dispose();
+
+        private void AppendTimestamp(DateTimeOffset? value)
+        {
+            AppendString(value?.UtcDateTime.Ticks.ToString(
+                CultureInfo.InvariantCulture));
+            AppendString(value?.Offset.TotalMinutes.ToString(
+                CultureInfo.InvariantCulture));
+        }
+
+        private void AppendString(string? value)
+        {
+            byte[] bytes = value is null
+                ? []
+                : Encoding.UTF8.GetBytes(value);
+            Span<byte> length = stackalloc byte[sizeof(int)];
+            BitConverter.TryWriteBytes(length, value is null ? -1 : bytes.Length);
+            hash.AppendData(length);
+            hash.AppendData(bytes);
         }
     }
 }

@@ -9,12 +9,47 @@ public interface IGachaPortablePackageWriter
         Stream destination,
         GachaPortablePackage package,
         CancellationToken cancellationToken = default);
+
+    Task<GachaPortableWriteResult> WriteAsync(
+        Stream destination,
+        IGachaPortableExportSnapshot snapshot,
+        CancellationToken cancellationToken = default);
 }
 
 public interface IGachaPortablePackageReader
 {
     Task<GachaPortableReadResult> ReadAsync(
         Stream source,
+        CancellationToken cancellationToken = default);
+}
+
+public interface IGachaPortableExportSnapshot : IAsyncDisposable
+{
+    DateTimeOffset GeneratedAt { get; }
+
+    GachaPortableArchive SourceArchive { get; }
+
+    IReadOnlyList<GachaPortableExportAccount> Accounts { get; }
+
+    IAsyncEnumerable<FurinaChronicle.Core.Gacha.GachaRecord> ReadRecordsAsync(
+        Guid accountReference,
+        CancellationToken cancellationToken = default);
+}
+
+public interface IGachaPortableExportSnapshotFactory
+{
+    Task<IGachaPortableExportSnapshot> OpenAsync(
+        Guid playerArchiveId,
+        IReadOnlyCollection<Guid> gameAccountIds,
+        CancellationToken cancellationToken = default);
+}
+
+public interface IGachaPortableExportFileService
+{
+    Task<GachaPortableWriteResult> ExportAsync(
+        string destinationPath,
+        Guid playerArchiveId,
+        IReadOnlyCollection<Guid> gameAccountIds,
         CancellationToken cancellationToken = default);
 }
 

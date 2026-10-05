@@ -103,6 +103,12 @@ internal static class GachaServiceCollectionExtensions
         services.AddSingleton<
             IGachaPortablePackageReader,
             GachaPortablePackageReader>();
+        services.AddSingleton<
+            IGachaPortableExportSnapshotFactory,
+            SqliteGachaPortableExportSnapshotFactory>();
+        services.AddSingleton<
+            IGachaPortableExportFileService,
+            GachaPortableExportFileService>();
     }
 
     private static void AddRefreshing(IServiceCollection services)
