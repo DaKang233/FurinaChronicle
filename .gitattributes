@@ -3,6 +3,10 @@
 ###############################################################################
 * text=auto
 
+# Portable format fixtures and schemas have byte-sensitive examples.
+docs/specifications/schemas/*.json text eol=lf
+docs/specifications/examples/*.md text eol=lf
+
 ###############################################################################
 # Set default behavior for command prompt diff.
 #

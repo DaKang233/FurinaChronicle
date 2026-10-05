@@ -1,10 +1,10 @@
 # 格式规范
 
-此目录将保存 Furina Archive、Portable Dataset、JSON Schema 和示例。
+此目录保存 Furina Archive、Portable Dataset、JSON Schema 和示例。
 
-当前架构方向已经接受，但正式字段尚未冻结。8B.0 只冻结会影响数据解释、跨端身份、公开兼容或迁移安全的最小共享契约；首个数据集在 8B.2 实施前建立格式说明、Schema、最小和完整示例、版本迁移规则，发布时完成 Windows/Android 往返验证。完整 Archive 在 8C 实施前冻结，不要求所有领域 Schema 同时完成。
+当前架构方向已经接受。首个实际领域格式 [Furina Gacha Portable v1](GACHA_PORTABLE_V1.md) 已冻结为 Accepted、未发布，并提供 [支持矩阵](GACHA_PORTABLE_SUPPORT.md)、`schemas/` 下的机器校验规则及 `examples/` 下的最小/完整语义示例。公开发布仍需完成 Windows/Android 实际文件往返。完整 Archive 在 8C 实施前冻结，不要求所有领域 Schema 同时完成。
 
-在这些文件完成前，不得对外宣称 Furina 私有格式已经稳定。
+未完成对应格式的发布门槛前，不得对外宣称 Furina 私有格式已经稳定发布。
 
 ## 产品规范与子系统草案
 

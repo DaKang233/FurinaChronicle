@@ -141,3 +141,5 @@ Phase 8B.2 不执行生产 Apply，因此接收上下文只存在于只读 Plan/
 - 关联反例：重复标准 ID、缺失/孤立/冲突补充项、UID/时间不一致；
 - 容器反例：future major、哈希/长度不符、重复或穿越路径、截断、超限；
 - 支持范围反例：Unresolved 账号、缺少 UIGF 必需字段。
+
+机器校验规则位于 `schemas/gacha-portable-v1-manifest.schema.json` 和 `schemas/gacha-portable-v1-supplement.schema.json`；[示例](examples/GACHA_PORTABLE_V1_EXAMPLES.md)与[支持矩阵](GACHA_PORTABLE_SUPPORT.md)属于本规范的一部分。JSON Schema 只检查单个 JSON 文档的结构；ZIP 路径唯一性、跨文件引用、字节长度、哈希、记录一一对应和时间一致性仍由 Portable Validator 负责。

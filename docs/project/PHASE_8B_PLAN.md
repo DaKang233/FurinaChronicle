@@ -2,7 +2,7 @@
 
 状态：Accepted target
 
-阶段状态：In progress（Phase 8A 已于 2026-10-04 关闭；8B.0 最小契约和 8B.1 共享领域基础已于 2026-10-05 完成，下一工作包为 8B.2）
+阶段状态：In progress（Phase 8A 已于 2026-10-04 关闭；8B.0、8B.1 与 8B.2 实现工作包已完成，下一工作包为 8B.3）
 
 维护者已确认 ADR 0009、0010 和 Q06。本计划按 [ADR 0011](../decisions/0011-domain-first-product-scope.md) 收敛：最小共享基础先行，领域先独立保存、查询和导出，Chronicle 后消费。不要求一次冻结所有未来领域。
 
@@ -78,7 +78,7 @@
 
 ## 工作包 8B.2：领域 Portable / Export 基础
 
-实施状态：In progress（2026-10-06）
+实施状态：Completed（2026-10-06；格式 Accepted、未发布，生产 Apply 留待 8B.3/8B.4）
 
 - 为实际首批领域提供 Serializer、Validator、Importer、Exporter、Migrator 或等价的小接口，不先建设任意 Dataset 插件框架；
 - 优先保持 UIGF；首个 Furina 载荷补足账号身份、来源、时间和修订等标准无法表达的语义，冻结其与标准记录的关联；
@@ -90,6 +90,8 @@
 首个格式和本轮实施边界见 [Phase 8B.2 实施契约](PHASE_8B2_IMPLEMENTATION.md)、[Gacha Portable v1](../specifications/GACHA_PORTABLE_V1.md) 与 [ADR 0012](../decisions/0012-gacha-portable-v1.md)。生产 Apply 依赖 8B.3/8B.4 的 DataChangeSet 事务基础，本轮只提供校验、导出和只读计划，不使用临时 Upsert 绕过该门槛。
 
 退出标准：格式有说明、Schema、样例、迁移和兼容验证；不经过 SQLite 的格式往返可用；未知 future major 拒绝且数据库不变。公开发布仍须满足 Compatibility Policy 的跨平台往返要求。
+
+已完成：Gacha Portable v1 Codec、Schema、示例和支持矩阵；SQLite 一致快照与有界内存导出；临时文件复验后交付；只读 AddOnly Plan/Preview；CSV/XLSX 范围与来源说明；版本、损坏、身份、关联、时间、来源、大数据、取消及并发写 fixture。Windows 与 Android Release 编译通过。当前 Reader 为生成完整只读计划而在资源上限内物化 Portable Model；真正的有界导入 Apply、DataChangeSet、别名和接收上下文持久化仍属于后续工作包。
 
 ## 工作包 8B.3：变更集与修订基础
 

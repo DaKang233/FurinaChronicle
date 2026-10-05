@@ -214,6 +214,70 @@ public sealed class GachaPortablePackageCodecTests
         Assert.Equal(GachaPortableErrorCode.InputNotSeekable, exception.Code);
     }
 
+    [Fact]
+    public async Task WriteReadAsync_EmptyAccountIsValidSelectionWithoutCompletenessClaim()
+    {
+        GachaPortablePackage source = CreatePackage();
+        GachaPortableAccount account = source.Accounts[0] with { Records = [] };
+        source = source with { Accounts = [account] };
+        using var stream = new MemoryStream();
+
+        GachaPortableWriteResult written =
+            await new GachaPortablePackageWriter().WriteAsync(stream, source);
+        stream.Position = 0;
+        GachaPortableReadResult read =
+            await new GachaPortablePackageReader().ReadAsync(stream);
+
+        Assert.Equal(0, written.RecordCount);
+        Assert.Empty(Assert.Single(read.Package.Accounts).Records);
+    }
+
+    [Fact]
+    public async Task ReadAsync_UnknownOptionalFieldsAreIgnoredWithinMajorOne()
+    {
+        MemoryStream stream = await WritePackageAsync(CreatePackage());
+        MemoryStream changed = RewriteArchive(
+            stream,
+            entries =>
+            {
+                JsonObject manifest = JsonNode.Parse(entries["manifest.json"])!
+                    .AsObject();
+                manifest["future_optional"] = "safe";
+                entries["manifest.json"] = Encoding.UTF8.GetBytes(
+                    manifest.ToJsonString());
+            });
+
+        GachaPortableReadResult result =
+            await new GachaPortablePackageReader().ReadAsync(changed);
+
+        Assert.Equal("1.0", result.FormatVersion);
+        Assert.Equal(2, result.Package.RecordCount);
+    }
+
+    [Fact]
+    public async Task WriteAsync_SameRoleGuidForDifferentNaturalIdentitiesIsRejected()
+    {
+        GachaPortablePackage source = CreatePackage();
+        GachaPortableAccount first = source.Accounts[0];
+        var otherNaturalIdentity = new GameRoleNaturalIdentity(
+            "hk4e_cn",
+            "cn_gf01",
+            "100000002");
+        var second = new GachaPortableAccount(
+            Guid.Parse("20000000-0000-0000-0000-000000000002"),
+            new GameRoleIdentity(first.RoleIdentity.Id, otherNaturalIdentity),
+            "Other",
+            []);
+        source = source with { Accounts = [first, second] };
+        using var stream = new MemoryStream();
+
+        GachaPortableException exception =
+            await Assert.ThrowsAsync<GachaPortableException>(() =>
+                new GachaPortablePackageWriter().WriteAsync(stream, source));
+
+        Assert.Equal(GachaPortableErrorCode.InvalidReference, exception.Code);
+    }
+
     private static GachaPortablePackage CreatePackage()
     {
         Guid archiveId = Guid.Parse("10000000-0000-0000-0000-000000000001");

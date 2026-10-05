@@ -97,6 +97,29 @@ public sealed class GachaPortableDatabaseExportTests
             ".existing.fcgp.*.tmp"));
     }
 
+    [Fact]
+    public async Task ExportAsync_CancellationPreservesExistingTargetAndCleansStage()
+    {
+        await using TestContext context = await TestContext.CreateAsync(1);
+        string destination = Path.Combine(context.Directory, "existing.fcgp");
+        byte[] original = "existing-successful-export"u8.ToArray();
+        await File.WriteAllBytesAsync(destination, original);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            context.CreateExportService().ExportAsync(
+                destination,
+                context.Archive.Id,
+                [context.Account.Id],
+                cancellation.Token));
+
+        Assert.Equal(original, await File.ReadAllBytesAsync(destination));
+        Assert.Empty(Directory.GetFiles(
+            context.Directory,
+            ".existing.fcgp.*.tmp"));
+    }
+
     private static GachaRecord CreateRecord(Guid accountId, int index)
     {
         DateTimeOffset fetchedAt = new(
