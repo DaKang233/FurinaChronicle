@@ -7,6 +7,7 @@ using System.Text.Json;
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.Gacha.Metadata;
+using FurinaChronicle.Core.Records;
 using FurinaChronicle.Infrastructure.Gacha.Exporting;
 using FurinaChronicle.Infrastructure.Gacha.Metadata;
 using FurinaChronicle.Infrastructure.Gacha.Uigf.V4_2;
@@ -205,16 +206,20 @@ public sealed class GachaExportTests
                 StringSplitOptions.RemoveEmptyEntries);
 
         Assert.Equal(5, lines.Length);
-        Assert.Contains("保底内计数", lines[0]);
+        Assert.Contains("所选范围保底内计数", lines[0]);
+        Assert.Contains("数据来源", lines[0]);
+        Assert.Contains("完整性声明", lines[0]);
         Assert.StartsWith("800000001,", lines[1]);
-        Assert.Contains(",+08:00,", lines[1]);
-        Assert.EndsWith(",1,1", lines[1]);
+        Assert.Contains(",'+08:00,", lines[1]);
+        Assert.Contains(",1,1,", lines[1]);
         Assert.StartsWith("800000001,", lines[2]);
-        Assert.EndsWith(",2,2", lines[2]);
+        Assert.Contains(",2,2,", lines[2]);
         Assert.StartsWith("800000001,", lines[3]);
-        Assert.EndsWith(",3,1", lines[3]);
+        Assert.Contains(",3,1,", lines[3]);
         Assert.StartsWith("600000001,", lines[4]);
-        Assert.EndsWith(",1,1", lines[4]);
+        Assert.Contains(",1,1,", lines[4]);
+        Assert.Contains(",OfficialApi,", lines[1]);
+        Assert.EndsWith(",none", lines[1]);
     }
 
     [Fact]
@@ -290,11 +295,11 @@ public sealed class GachaExportTests
 
         string text = Encoding.UTF8.GetString(stream.ToArray());
         Assert.Contains($",{expectedType},", text);
-        Assert.DoesNotContain("キャラクター", text);
+        Assert.Contains("キャラクター", text);
     }
 
     [Fact]
-    public async Task TableWriter_MissingRankAndMetadata_RejectsExport()
+    public async Task TableWriter_MissingRankAndMetadata_StillProducesReadableExport()
     {
         GachaExportDocument source = CreateDocument();
         GachaExportAccount account = source.Accounts[0];
@@ -311,13 +316,17 @@ public sealed class GachaExportTests
             new EmptyGachaItemMetadataProvider());
         await using var stream = new MemoryStream();
 
-        await Assert.ThrowsAsync<InvalidDataException>(() =>
-            writer.WriteAsync(
-                stream,
-                document,
-                new GachaTableExportOptions(
-                    GachaTableFormat.Csv,
-                    GachaExportLanguages.SimplifiedChinese)));
+        await writer.WriteAsync(
+            stream,
+            document,
+            new GachaTableExportOptions(
+                GachaTableFormat.Csv,
+                GachaExportLanguages.SimplifiedChinese));
+
+        string text = Encoding.UTF8.GetString(stream.ToArray());
+        Assert.Contains("鸦羽弓", text);
+        Assert.Contains(",999999,", text);
+        Assert.Contains(",none", text);
     }
 
     [Fact]
@@ -510,7 +519,15 @@ public sealed class GachaExportTests
             [
                 new GachaExportAccount(asia, 8, asiaRecords),
                 new GachaExportAccount(america, -5, americaRecords)
-            ]);
+            ])
+        {
+            SourceArchive = new PlayerArchive(
+                archiveId,
+                "Export Archive",
+                DateTimeOffset.FromUnixTimeSeconds(1),
+                DateTimeOffset.FromUnixTimeSeconds(2)),
+            CompletenessAssertion = "none",
+        };
     }
 
     private static GachaRecord Record(
@@ -533,7 +550,18 @@ public sealed class GachaExportTests
             ItemType = itemType,
             GachaType = "301",
             UigfGachaType = "301",
-            Count = 1
+            Count = 1,
+            Provenance = new RecordProvenance(
+                DataOrigin.OfficialApi,
+                new RecordTimestamps(
+                    FetchedAt: new DateTimeOffset(
+                        2026,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        TimeSpan.FromHours(8))))
         };
     }
 }

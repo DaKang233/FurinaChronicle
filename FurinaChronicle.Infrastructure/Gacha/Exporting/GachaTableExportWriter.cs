@@ -83,8 +83,9 @@ public sealed class GachaTableExportWriter(
                 await writer.WriteLineAsync(
                     string.Join(
                         ",",
-                        row.Select((value, index) =>
-                            EscapeCsv(value, index is 4 or 5))));
+                        row.Select(value => EscapeCsv(
+                            value,
+                            neutralizeFormula: true))));
             },
             cancellationToken);
         await writer.FlushAsync(cancellationToken);
@@ -180,20 +181,39 @@ public sealed class GachaTableExportWriter(
                 int pityCount = pityByPool.GetValueOrDefault(poolKey) + 1;
                 pityByPool[poolKey] = pityCount;
 
-                string itemName = await resolver.GetItemNameAsync(
+                string itemName = await resolver.GetReadableItemNameAsync(
                     record,
                     language,
                     cancellationToken);
-                string itemType = await resolver.GetItemTypeAsync(
+                string itemType = await resolver.GetReadableItemTypeAsync(
                     record,
                     language,
                     cancellationToken);
                 string poolName =
                     GachaExportValueResolver.GetPoolName(record, language);
-                int rankType =
-                    await resolver.GetRankTypeAsync(
+                int? rankType =
+                    await resolver.GetReadableRankTypeAsync(
                         record,
                         cancellationToken);
+
+                string archiveName = document.SourceArchive?.Name ?? string.Empty;
+                string archiveId = document.SourceArchive?.Id.ToString("D") ??
+                    string.Empty;
+                string roleIdentityId = account.Account.RoleIdentity?.Id.Value
+                    .ToString("D") ?? string.Empty;
+                string gameBiz = account.Account.RoleIdentity?.NaturalIdentity
+                    .GameBiz ?? string.Empty;
+                string server = account.Account.RoleIdentity?.NaturalIdentity
+                    .Server ?? string.Empty;
+                string identityState = account.Account.RoleIdentity is null
+                    ? "unresolved"
+                    : "resolved";
+                string sourceProvider =
+                    record.Provenance.Source?.Provider ?? string.Empty;
+                string sourceRecordId =
+                    record.Provenance.Source?.SourceRecordId ?? string.Empty;
+                string sourceSnapshotId =
+                    record.Provenance.Source?.SourceSnapshotId ?? string.Empty;
 
                 await writeRow(
                 [
@@ -207,7 +227,30 @@ public sealed class GachaTableExportWriter(
                     itemType,
                     poolName,
                     index.ToString(CultureInfo.InvariantCulture),
-                    pityCount.ToString(CultureInfo.InvariantCulture)
+                    pityCount.ToString(CultureInfo.InvariantCulture),
+                    archiveName,
+                    archiveId,
+                    account.Account.Id.ToString("D"),
+                    roleIdentityId,
+                    gameBiz,
+                    server,
+                    identityState,
+                    record.ItemId ?? string.Empty,
+                    record.ItemName ?? string.Empty,
+                    record.ItemType ?? string.Empty,
+                    record.RankType?.ToString(CultureInfo.InvariantCulture) ??
+                        string.Empty,
+                    record.Count.ToString(CultureInfo.InvariantCulture),
+                    record.Provenance.Origin.ToString(),
+                    FormatTimestamp(record.Provenance.Timestamps.FetchedAt),
+                    FormatTimestamp(record.Provenance.Timestamps.ImportedAt),
+                    record.Provenance.AcquisitionBatchId?.Value.ToString("D") ??
+                        string.Empty,
+                    sourceProvider,
+                    sourceRecordId,
+                    sourceSnapshotId,
+                    document.ExportedAt.ToString("O", CultureInfo.InvariantCulture),
+                    document.CompletenessAssertion
                 ]);
 
                 if (rankType == 5)
@@ -225,19 +268,43 @@ public sealed class GachaTableExportWriter(
             GachaExportLanguages.TraditionalChinese =>
             [
                 "UID", "ExternalID", "時間", "時區偏移",
-                "物品名稱", "物品類型", "卡池", "序號", "保底內計數"
+                "物品名稱", "物品類型", "卡池", "所選範圍序號",
+                "所選範圍保底內計數", "來源檔案名稱", "來源檔案ID",
+                "帳號副本ID", "角色身份ID", "GameBiz", "伺服器",
+                "身份狀態", "原始物品ID", "原始物品名稱", "原始物品類型",
+                "原始星級", "數量", "資料來源", "抓取時間", "匯入時間",
+                "採集批次ID", "來源提供者", "來源記錄ID", "來源快照ID",
+                "匯出時間", "完整性聲明"
             ],
             GachaExportLanguages.English =>
             [
                 "UID", "ExternalID", "Time", "Timezone Offset",
-                "Item Name", "Item Type", "Gacha Type", "Index", "Pity Count"
+                "Item Name", "Item Type", "Gacha Type", "Selected-range Index",
+                "Selected-range Pity Count", "Source Archive Name",
+                "Source Archive ID", "Account Copy ID", "Role Identity ID",
+                "GameBiz", "Server", "Identity State", "Stored Item ID",
+                "Stored Item Name", "Stored Item Type", "Stored Rank",
+                "Count", "Data Origin", "Fetched At", "Imported At",
+                "Acquisition Batch ID", "Source Provider", "Source Record ID",
+                "Source Snapshot ID", "Exported At", "Completeness Assertion"
             ],
             _ =>
             [
                 "UID", "ExternalID", "时间", "时区偏移",
-                "物品名称", "物品类型", "卡池", "序号", "保底内计数"
+                "物品名称", "物品类型", "卡池", "所选范围序号",
+                "所选范围保底内计数", "来源档案名称", "来源档案ID",
+                "账号副本ID", "角色身份ID", "GameBiz", "服务器",
+                "身份状态", "原始物品ID", "原始物品名称", "原始物品类型",
+                "原始星级", "数量", "数据来源", "抓取时间", "导入时间",
+                "采集批次ID", "来源提供者", "来源记录ID", "来源快照ID",
+                "导出时间", "完整性声明"
             ]
         };
+    }
+
+    private static string FormatTimestamp(DateTimeOffset? value)
+    {
+        return value?.ToString("O", CultureInfo.InvariantCulture) ?? string.Empty;
     }
 
     private static string FormatOffset(TimeSpan offset)

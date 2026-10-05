@@ -35,7 +35,7 @@ public sealed class LoadGachaExportData(
                 nameof(gameAccountIds));
         }
 
-        _ = await archiveRepository.GetByIdAsync(
+        PlayerArchive sourceArchive = await archiveRepository.GetByIdAsync(
             playerArchiveId,
             cancellationToken)
             ?? throw new KeyNotFoundException("要导出的玩家档案不存在。");
@@ -85,7 +85,11 @@ public sealed class LoadGachaExportData(
 
         return new GachaExportDocument(
             timeProvider.GetUtcNow(),
-            exportAccounts);
+            exportAccounts)
+        {
+            SourceArchive = sourceArchive,
+            CompletenessAssertion = "none",
+        };
     }
 
     private async Task<IReadOnlyList<GachaRecord>> LoadAllRecordsAsync(

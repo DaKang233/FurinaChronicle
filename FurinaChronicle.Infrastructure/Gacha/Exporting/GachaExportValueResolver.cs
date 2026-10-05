@@ -104,6 +104,52 @@ internal sealed class GachaExportValueResolver(
             ?? throw MissingValue(record, "rank_type");
     }
 
+    public async ValueTask<string> GetReadableItemNameAsync(
+        GachaRecord record,
+        string language,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await GetItemNameAsync(record, language, cancellationToken);
+        }
+        catch (InvalidDataException)
+        {
+            return !string.IsNullOrWhiteSpace(record.ItemId)
+                ? $"Unknown ({record.ItemId})"
+                : "Unknown";
+        }
+    }
+
+    public async ValueTask<string> GetReadableItemTypeAsync(
+        GachaRecord record,
+        string language,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await GetItemTypeAsync(record, language, cancellationToken);
+        }
+        catch (InvalidDataException)
+        {
+            return "Unknown";
+        }
+    }
+
+    public async ValueTask<int?> GetReadableRankTypeAsync(
+        GachaRecord record,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await GetRankTypeAsync(record, cancellationToken);
+        }
+        catch (InvalidDataException)
+        {
+            return null;
+        }
+    }
+
     public static string GetPoolName(
         GachaRecord record,
         string language)

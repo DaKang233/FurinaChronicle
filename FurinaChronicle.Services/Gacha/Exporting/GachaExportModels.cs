@@ -11,6 +11,10 @@ public sealed record GachaExportDocument(
     IReadOnlyList<GachaExportAccount> Accounts)
 {
     public int RecordCount => Accounts.Sum(account => account.Records.Count);
+
+    public PlayerArchive? SourceArchive { get; init; }
+
+    public string CompletenessAssertion { get; init; } = "none";
 }
 
 public sealed record GachaExportAccount(
