@@ -1,6 +1,8 @@
 # 身份模型
 
-状态：Target
+状态：Accepted
+
+确认日期：2026-10-05
 
 ## 目标关系
 
@@ -32,6 +34,35 @@ GameBiz + Region/Server + UID
 
 显示名称不参与身份。
 
+当前产品和领域验收范围为原神。`GameBiz` 仍必须参与自然身份，以避免未来接入其他游戏时相同 UID 被错误合并；这不要求当前阶段为未实施游戏预先统一角色、装备、挑战或其他领域模型。
+
+### 规范编码
+
+自然身份进入比较、持久化或 UUID 计算前使用以下规范编码：
+
+- `GameBiz` 和 Region/Server 使用官方稳定代码，去除首尾空白并转换为 ASCII 小写；只允许 ASCII 字母、数字和下划线；
+- UID 去除首尾空白，只允许 ASCII 数字并保留前导零；
+- 当前原神映射为：`hk4e_cn + cn_gf01`、`hk4e_cn + cn_qd01`、`hk4e_global + os_usa`、`os_euro`、`os_asia` 或 `os_cht`；
+- 显示名称、本地化服务器名称和 Provider DTO 不进入规范身份。
+
+其他游戏接入时增加自己的规范映射，不预先扩展其他领域模型。
+
+### 确定性身份 GUID
+
+本地新建或旧库迁移得到的共享身份使用 RFC 9562 UUID v5。项目固定命名空间为：
+
+```text
+4252df90-5dca-4b4f-a01a-8c8026d19bc2
+```
+
+名称输入使用三个规范字段的无歧义长度前缀串：
+
+```text
+{GameBiz.Length}:{GameBiz}{Server.Length}:{Server}{UID.Length}:{UID}
+```
+
+同一规范自然身份在不同档案和设备上必须得到同一 GUID。外部 Furina 数据导入仍优先保留来源 GUID，并按下述别名规则处理来源 GUID 与目标 GUID 不同的情况。
+
 导入规则：
 
 - 目标不存在相同自然身份时，保留源 `GameRoleIdentityId`。
@@ -50,6 +81,12 @@ PlayerArchiveId + GameBiz + Region/Server + UID
 ```
 
 `PlayerArchiveId` 参与档案内副本约束，但不参与游戏角色的全局身份。
+
+### 旧库中的未解析身份
+
+Schema v2 迁移时，非占位账号且 UID、区服能够映射为合法原神自然身份的记录使用上述 UUID v5 规则建立共享身份。占位账号、未知区服或非法旧 UID 不得伪造自然身份：保留 `GameAccount` 和全部业务数据，将身份状态标记为 `Unresolved`，共享身份引用为空。
+
+`Unresolved` 账号仍可在原档案中查看和手工补全，但不得参与依赖稳定身份的跨档案自动合并或可移植引用。补全为合法自然身份后才能转为 `Resolved`。
 
 ## 导入时的本地 ID
 

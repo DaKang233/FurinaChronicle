@@ -78,10 +78,10 @@ Phase 8B 先建立足以承载多个独立领域的最小共享基础，再证�
 
 ## 当前实现与目标模型
 
-当前数据库使用 `PlayerArchive → GameAccount → GachaRecord`，`GachaRecord` 通过 `GameAccountId` 归属档案内账号副本。目标模型保留该归属方式，同时给 `GameAccount` 增加共享的 `GameRoleIdentityId`，用于识别不同档案中的副本来自同一个真实角色。该迁移尚未实现。
+当前数据库使用 `PlayerArchive → GameAccount → GachaRecord`，`GachaRecord` 通过 `GameAccountId` 归属档案内账号副本。Schema 3 已增加 `GameRoleIdentity` 与 `GameAccount.GameRoleIdentityId`：不同档案中的账号副本仍独立保存业务记录，但可以共享同一个稳定角色身份。无法形成合法自然身份的旧占位账号保留为空引用，并在领域模型中表现为 `Unresolved`。
 
-当前主数据库 Schema 版本为 2，抽卡表名为 `GachaRecords`。应用启动时会在事务中将版本 1 的历史表 `WishRecords` 及其旧索引迁移为 `GachaRecords`，保留原记录和外键；历史名称不得扩散到迁移边界之外。
+当前主数据库 Schema 版本为 3，抽卡表名为 `GachaRecords`。应用启动时会在事务中依次执行已知迁移：版本 1 的历史表 `WishRecords` 迁移为 `GachaRecords`，版本 2 的账号按规范自然身份迁移到共享身份表。迁移保留原业务记录和外键；历史名称不得扩散到迁移边界之外。
 
-目标要求未知/未来数据库版本或 application ID 不匹配时停止写入、保留原库；仅明确的新空库允许初始化。当前代码仍有不匹配时删表重建的路径，必须在新增 Schema 或迁移前修正并测试，不能把文档目标当作已实现。
+未知/未来数据库版本或 application ID 不匹配时停止写入、保留原库；仅明确的新空库允许初始化。已知迁移在事务中执行，失败回滚且不删表重建。Schema 3 成功升级后不提供数据库降级；旧版客户端必须把它视为未来版本并安全拒绝写入。
 
 服务端能力通过端口扩展，Core 和本地数据库不依赖服务端存在。

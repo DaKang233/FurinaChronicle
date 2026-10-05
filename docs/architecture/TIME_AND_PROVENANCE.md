@@ -12,6 +12,18 @@
 
 内部使用 UTC `DateTimeOffset` 或等价明确时区的表示。格式特有规则在 Codec 边界转换。例如 UIAF 的 UTC+8 规则不能污染内部通用时间模型。
 
+共享时间精度使用：
+
+```text
+Second
+Minute
+Hour
+Day
+Week
+```
+
+精度描述来源实际能够证明到什么程度，不能通过显示格式或排序需要提升精度。周精度必须由具体领域保存明确区间；周起始日和时区由首次使用该语义的领域冻结。
+
 ## DataOrigin
 
 至少区分：
@@ -42,6 +54,21 @@ Unknown
 - `RawPayloadHash`
 
 不得仅凭来源类型建立全局“谁永远覆盖谁”的优先级。不同数据域通过自己的 Merge Policy 决定。
+
+## Confidence 与 Completeness
+
+共享枚举为：
+
+```text
+Confidence: Confirmed | High | Medium | Low | Unknown
+Completeness: Complete | Partial | Unknown
+```
+
+`Confidence` 表示该记录所表达事实的可信程度，不是来源的全局优先级。
+
+`Completeness` 是共享基础枚举，但声明范围不全局统一。每个领域或数据类型必须定义 `Complete`、`Partial`、`Unknown` 在该类型上的具体含义。`Complete` 只相对于该类型明确声明的范围成立；不得从记录级、观察级或数据集级完整度推导更高层级的完整性，也不得仅因官方来源而默认标记为 `Complete`。
+
+任何持久化字段或公开 Portable 字段在首次使用 `Completeness` 前，必须由所属领域规范声明：被判断的对象、覆盖范围、判定证据，以及范围未知或证据不足时如何退化。共享枚举本身不提供默认判定算法。例如“一次官方响应在该接口页内完整”不等于“该期挑战历史完整”，更不等于“账号或档案完整”。聚合层只能报告自身能够证明的完整度，不能取子项最高值或仅因所有已知子项均为 `Complete` 而自动提升。
 
 ## 原始证据保留
 

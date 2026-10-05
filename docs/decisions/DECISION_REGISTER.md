@@ -25,5 +25,7 @@
 | D19 | Chronicle 使用可重建的跨域派生投影；游戏历程与档案操作历史分离 | Accepted | ADR 0009，维护者确认 |
 | D20 | Chronicle 使用多个经过筛选的时间线 Profile；主时间线只呈现重要节点，领域时间线可提高颗粒度 | Accepted | ADR 0010，维护者确认 |
 | D21 | 领域自治、数据优先、开放导出、Chronicle 派生；8B.0 只冻结当前解释/身份/兼容/数据安全所需最小契约，领域先独立成立，Chronicle 后消费 | Accepted | ADR 0011，维护者确认 |
+| D22 | 自然身份使用规范官方代码；本地新建和 v2 迁移使用固定命名空间 UUID v5；无法形成完整自然身份的旧账号保留为 `Unresolved` | Accepted | ADR 0002，维护者确认 |
+| D23 | `Completeness` 是共享枚举，但完整范围由每个领域或数据类型定义；低层级 `Complete` 不得推导更高层级完整性 | Accepted | ADR 0011，维护者确认 |
 
 当前工作包契约和后期服务决策集中记录在 [OPEN_QUESTIONS.md](../project/OPEN_QUESTIONS.md)，按实施时点闭合，不得由 Agent 静默改变语义。D19、D20 的核心决定及既有产品行为继续 Accepted；D21 收敛依赖关系，不冻结 Chronicle Draft 的字段或未来同步协议。

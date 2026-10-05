@@ -71,7 +71,7 @@ Confidence: Confirmed | High | Medium | Low | Unknown
 Completeness: Complete | Partial | Unknown
 ```
 
-`Confidence` 描述该条目所表达事实的可信程度，不是来源的全局排名。`Completeness` 描述记录是否覆盖声明范围，不表示内容真假。
+`Confidence` 描述该条目所表达事实的可信程度，不是来源的全局排名。`Completeness` 描述记录是否覆盖所属数据类型声明的范围，不表示内容真假。Chronicle 只转述或按自身规范重新判定可证明的范围，不得把领域记录、观察或数据集的 `Complete` 自动提升为时间线、账号或档案完整。
 
 派生条目必须引用其输入事实或可重建查询范围。官方事实与派生事实即使展示相同数值，也不得合并为同一来源。
 
