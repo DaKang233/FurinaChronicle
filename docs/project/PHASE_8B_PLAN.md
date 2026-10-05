@@ -2,7 +2,7 @@
 
 状态：Accepted target
 
-阶段状态：In progress（Phase 8A 已于 2026-10-04 关闭；8B.0 最小契约已于 2026-10-05 闭合，8B.1 正在实施）
+阶段状态：In progress（Phase 8A 已于 2026-10-04 关闭；8B.0 最小契约和 8B.1 共享领域基础已于 2026-10-05 完成，下一工作包为 8B.2）
 
 维护者已确认 ADR 0009、0010 和 Q06。本计划按 [ADR 0011](../decisions/0011-domain-first-product-scope.md) 收敛：最小共享基础先行，领域先独立保存、查询和导出，Chronicle 后消费。不要求一次冻结所有未来领域。
 
@@ -62,7 +62,7 @@
 
 ## 工作包 8B.1：共享领域基础
 
-实施状态：In progress
+实施状态：Completed（2026-10-05）
 
 - 增加 GameRoleIdentityId 与自然身份值对象，保持档案内账号副本独立；
 - 增加统一 DataOrigin、Confidence、Completeness 和当前领域所需的时间值对象；
@@ -70,7 +70,7 @@
 - 为当前旧库设计原子迁移：未知来源安全保留，缺少身份信息不捏造、不静默合并；
 - 在任何新增 Schema 前落实未知版本及 application ID 的 fail-safe，并验证失败原库不变。
 
-当前已完成：共享身份与数据质量 Core 类型、规范原神自然身份、固定命名空间 UUID v5、数据库 fail-safe，以及 Schema 2→3 的原子共享身份迁移。旧占位账号以 `Unresolved` 保留；共享时间/来源字段尚未接入现有领域记录，8B.1 尚未退出。
+当前已完成：共享身份、时间与来源 Core 类型；规范原神自然身份、固定命名空间 UUID v5、自然身份精确查找与跨档案复用；数据库 fail-safe；Schema 1/2/3→4 原子迁移；Gacha 最小来源承载；UIGF 导入和官方刷新接入；`Unresolved` 诊断。旧数据不虚构来源、抓取时间或导入时间。
 
 本轮最小字段、编码、输入映射和迁移 fixture 见 [Phase 8B.1 实施契约](PHASE_8B1_IMPLEMENTATION.md)。
 

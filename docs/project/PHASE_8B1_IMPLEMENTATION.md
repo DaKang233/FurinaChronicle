@@ -1,6 +1,6 @@
 # Phase 8B.1 实施契约
 
-状态：Accepted implementation baseline
+状态：Implemented（2026-10-05）
 
 基线：`feat/phase-8`，起始提交 `2521d11`（2026-10-05）
 
@@ -80,3 +80,11 @@ Schema 4 只为 `GachaRecords` 增加：
 
 8B.1 完成时必须能够报告所有 `Unresolved` 账号及所属档案和可靠原因。它们仍可本地查看，但不得参与依赖稳定身份的自动映射。本轮不建设完整修复 UI。
 
+## 实施结果
+
+- 身份查询、档案内判重和 UIGF 自动匹配已经改为规范自然身份；跨档案新副本复用现有共享身份。
+- 已解析身份在备注更新时保持，改变规范自然身份被拒绝；`Unresolved` 补全冲突不会改变账号或业务记录。
+- 共享时间与来源 Core 类型已实现并由纯规则测试覆盖。
+- 主数据库升级到 Schema 4；v1、v2、v3 均通过显式事务迁移，旧 Gacha 来源安全映射为 `Unknown`。
+- UIGF 导入写入 `StandardImport + ImportedAt + BatchId`；官方抽卡刷新写入 `OfficialApi + FetchedAt + BatchId`。
+- `Unresolved` 账号可以通过只读服务按档案和原因列出；修复 UI 留待实际产品工作。

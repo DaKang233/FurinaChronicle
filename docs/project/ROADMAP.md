@@ -19,7 +19,7 @@
 - 8B.4 保持 Gacha 独立能力并适配共享基础；8B.5 提前建立角色/武器和挑战的独立窄纵切，允许 fixture 输入，不要求完整 UI/API。
 - 8B.6 在领域独立保存、查询和导出后验证 Chronicle 消费；8B.7 汇总迁移、平台和回归门槛。
 - 具体字段、领域 Schema 和 Chronicle 查询细节在对应工作包首次持久化/公开使用前冻结，详见 [Phase 8B 实施计划](PHASE_8B_PLAN.md)。完整 Archive 和未来 Sync 不阻塞当前领域。
-- 当前状态：Ready，可以开始 8B.0；尚未开始数据库迁移或新数据域持久化实现。
+- 当前状态：In progress；8B.0 与 8B.1 已完成，主数据库为 Schema 4，下一步进入 8B.2 领域 Portable / Export 基础。
 
 ## Phase 8C：首个跨端闭环
 
