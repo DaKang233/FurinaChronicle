@@ -250,6 +250,50 @@ public sealed class FurinaDatabaseMigrationTests
     }
 
     [Fact]
+    public async Task InitializeAsync_VersionTwo_UsesUidDerivedRegionOverStaleStoredRegion()
+    {
+        await using var fixture = MigrationFixture.Create();
+        Guid firstArchiveId = Guid.NewGuid();
+        Guid secondArchiveId = Guid.NewGuid();
+        Guid firstAccountId = Guid.NewGuid();
+        Guid secondAccountId = Guid.NewGuid();
+        Guid unresolvedAccountId = Guid.NewGuid();
+        fixture.CreateVersionTwoDatabase(
+            firstArchiveId,
+            secondArchiveId,
+            firstAccountId,
+            secondAccountId,
+            unresolvedAccountId);
+        using (SQLiteConnection raw = fixture.OpenRawConnection())
+        {
+            raw.Execute(
+                "UPDATE GameAccounts SET ServerRegion = ? WHERE Id = ?;",
+                (int)GameServerRegion.America,
+                firstAccountId.ToString("D"));
+        }
+
+        await using (FurinaDatabase database = fixture.OpenDatabase())
+        {
+            await database.InitializeAsync();
+        }
+
+        using SQLiteConnection connection = fixture.OpenRawConnection();
+        Assert.Equal(
+            (int)GameServerRegion.Asia,
+            connection.ExecuteScalar<int>(
+                "SELECT ServerRegion FROM GameAccounts WHERE Id = ?;",
+                firstAccountId.ToString("D")));
+        Assert.Equal(
+            GenshinGameRoleIdentity
+                .CreateIdentity("800000001", GameServerRegion.Asia)
+                .Id
+                .ToString(),
+            connection.ExecuteScalar<string>(
+                "SELECT GameRoleIdentityId FROM GameAccounts WHERE Id = ?;",
+                firstAccountId.ToString("D")));
+    }
+
+    [Fact]
     public async Task InitializeAsync_InvalidVersionOneSchema_FailsWithoutChangingDatabase()
     {
         await using var fixture = MigrationFixture.Create();

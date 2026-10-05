@@ -98,6 +98,23 @@ public sealed class ImportUigfGachaRecords(
                 continue;
             }
 
+            GameServerRegion region = GameServerRegionResolver.Resolve(uid);
+            if (region == GameServerRegion.Unknown)
+            {
+                if (targetAccount is not null)
+                {
+                    throw AccountRejected(
+                        uid,
+                        "the server region cannot be inferred reliably from the UID");
+                }
+
+                invalidCount += sourceRecords.Length;
+                continue;
+            }
+
+            GameRoleNaturalIdentity naturalIdentity =
+                GenshinGameRoleIdentity.Create(uid, region);
+
             List<PreparedGachaRecord>? preparedRecords =
                 await PrepareAccountRecordsAsync(
                     sourceRecords,
@@ -119,14 +136,21 @@ public sealed class ImportUigfGachaRecords(
             GameAccount account;
             if (targetAccount is not null)
             {
+                if (targetAccount.RoleIdentity?.NaturalIdentity != naturalIdentity)
+                {
+                    throw AccountRejected(
+                        uid,
+                        "the target account does not have the same resolved natural identity");
+                }
+
                 account = targetAccount;
             }
             else if (!accountsByUid.TryGetValue(uid, out account!))
             {
                 GameAccount? existingAccount =
-                    await accountRepository.GetByArchiveIdAndUidAsync(
+                    await accountRepository.GetByArchiveIdAndNaturalIdentityAsync(
                         playerArchiveId,
-                        uid,
+                        naturalIdentity,
                         cancellationToken);
 
                 if (existingAccount is null)
@@ -134,6 +158,8 @@ public sealed class ImportUigfGachaRecords(
                     account = await CreateAccountAsync(
                         playerArchiveId,
                         uid,
+                        region,
+                        naturalIdentity,
                         cancellationToken);
                     createdAccountCount++;
                 }
@@ -254,17 +280,18 @@ public sealed class ImportUigfGachaRecords(
     private async Task<GameAccount> CreateAccountAsync(
         Guid playerArchiveId,
         string uid,
+        GameServerRegion region,
+        GameRoleNaturalIdentity naturalIdentity,
         CancellationToken cancellationToken)
     {
-        GameServerRegion region = GameServerRegionResolver.Resolve(uid);
-        if (region == GameServerRegion.Unknown)
-        {
-            throw new GachaImportFormatException($"Cannot infer a server region from UID {uid}.");
-        }
-
         DateTimeOffset now = DateTimeOffset.UtcNow;
         GameRoleIdentity roleIdentity =
-            GenshinGameRoleIdentity.CreateIdentity(uid, region);
+            await accountRepository.GetRoleIdentityByNaturalIdentityAsync(
+                naturalIdentity,
+                cancellationToken) ??
+            new GameRoleIdentity(
+                GameRoleIdentityId.FromNaturalIdentity(naturalIdentity),
+                naturalIdentity);
         var account = new GameAccount(
             Guid.NewGuid(),
             playerArchiveId,

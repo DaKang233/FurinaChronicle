@@ -171,10 +171,19 @@ public sealed class FurinaDatabase : IAsyncDisposable
         {
             cancellationToken.ThrowIfCancellationRequested();
 
+            GameServerRegion storedRegion =
+                (GameServerRegion)account.ServerRegion;
+            GameServerRegion inferredRegion =
+                GameServerRegionResolver.Resolve(account.Uid);
+            GameServerRegion resolvedRegion =
+                inferredRegion == GameServerRegion.Unknown
+                    ? storedRegion
+                    : inferredRegion;
+
             if (account.IsPlaceholder ||
                 !GenshinGameRoleIdentity.TryCreate(
                     account.Uid,
-                    (GameServerRegion)account.ServerRegion,
+                    resolvedRegion,
                     out GameRoleNaturalIdentity? naturalIdentity))
             {
                 continue;
@@ -216,10 +225,11 @@ public sealed class FurinaDatabase : IAsyncDisposable
             connection.Execute(
                 """
                 UPDATE GameAccounts
-                SET GameRoleIdentityId = ?
+                SET GameRoleIdentityId = ?, ServerRegion = ?
                 WHERE Id = ?;
                 """,
                 row.Id,
+                (int)resolvedRegion,
                 account.Id);
         }
 

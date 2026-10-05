@@ -37,22 +37,24 @@ public sealed class GameRoleNaturalIdentityTests
     }
 
     [Theory]
-    [InlineData(GameServerRegion.ChinaOfficial, "hk4e_cn", "cn_gf01")]
-    [InlineData(GameServerRegion.ChinaBilibili, "hk4e_cn", "cn_qd01")]
-    [InlineData(GameServerRegion.America, "hk4e_global", "os_usa")]
-    [InlineData(GameServerRegion.Europe, "hk4e_global", "os_euro")]
-    [InlineData(GameServerRegion.Asia, "hk4e_global", "os_asia")]
+    [InlineData("100000001", GameServerRegion.ChinaOfficial, "hk4e_cn", "cn_gf01")]
+    [InlineData("500000001", GameServerRegion.ChinaBilibili, "hk4e_cn", "cn_qd01")]
+    [InlineData("600000001", GameServerRegion.America, "hk4e_global", "os_usa")]
+    [InlineData("700000001", GameServerRegion.Europe, "hk4e_global", "os_euro")]
+    [InlineData("800000001", GameServerRegion.Asia, "hk4e_global", "os_asia")]
     [InlineData(
+        "900000001",
         GameServerRegion.TaiwanHongKongMacao,
         "hk4e_global",
         "os_cht")]
     public void GenshinCreate_KnownRegion_UsesOfficialCodes(
+        string uid,
         GameServerRegion region,
         string expectedGameBiz,
         string expectedServer)
     {
         GameRoleNaturalIdentity identity =
-            GenshinGameRoleIdentity.Create("123456789", region);
+            GenshinGameRoleIdentity.Create(uid, region);
 
         Assert.Equal(expectedGameBiz, identity.GameBiz);
         Assert.Equal(expectedServer, identity.Server);
@@ -62,11 +64,42 @@ public sealed class GameRoleNaturalIdentityTests
     public void GenshinTryCreate_UnknownRegion_ReturnsFalse()
     {
         bool created = GenshinGameRoleIdentity.TryCreate(
-            "123456789",
+            "400000001",
             GameServerRegion.Unknown,
             out GameRoleNaturalIdentity? identity);
 
         Assert.False(created);
         Assert.Null(identity);
+    }
+
+    [Fact]
+    public void GenshinCreate_DerivedRegionConflict_ThrowsArgumentException()
+    {
+        Assert.Throws<ArgumentException>(
+            () => GenshinGameRoleIdentity.Create(
+                "800000001",
+                GameServerRegion.America));
+    }
+
+    [Fact]
+    public void GenshinCreate_UnknownUidPrefix_UsesManualFallback()
+    {
+        GameRoleNaturalIdentity identity =
+            GenshinGameRoleIdentity.Create(
+                "400000001",
+                GameServerRegion.Asia);
+
+        Assert.Equal("hk4e_global", identity.GameBiz);
+        Assert.Equal("os_asia", identity.Server);
+    }
+
+    [Fact]
+    public void ResolveServerRegion_KnownUid_DoesNotRequireManualFallback()
+    {
+        Assert.Equal(
+            GameServerRegion.Asia,
+            GenshinGameRoleIdentity.ResolveServerRegion(
+                "800000001",
+                GameServerRegion.Unknown));
     }
 }

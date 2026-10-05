@@ -20,11 +20,11 @@ public sealed class GameAccountUseCaseTests
 
         GameAccount created = await service.ExecuteAsync(
             archive.Id,
-            " 123456789 ",
+            " 800000001 ",
             GameServerRegion.Asia,
             "  主账号  ");
 
-        Assert.Equal("123456789", created.Uid);
+        Assert.Equal("800000001", created.Uid);
         Assert.Equal("主账号", created.DisplayName);
         Assert.False(created.IsPlaceholder);
         Assert.Equal(
@@ -32,7 +32,7 @@ public sealed class GameAccountUseCaseTests
             created.IdentityResolutionState);
         Assert.Equal(
             GenshinGameRoleIdentity.CreateIdentity(
-                "123456789",
+                "800000001",
                 GameServerRegion.Asia),
             created.RoleIdentity);
         Assert.Equal(created, await accounts.GetByIdAsync(created.Id));
@@ -48,7 +48,7 @@ public sealed class GameAccountUseCaseTests
         await Assert.ThrowsAsync<KeyNotFoundException>(
             () => service.ExecuteAsync(
                 Guid.NewGuid(),
-                "123456789",
+                "800000001",
                 GameServerRegion.Asia,
                 null));
     }
@@ -68,19 +68,20 @@ public sealed class GameAccountUseCaseTests
     }
 
     [Fact]
-    public async Task Add_UnknownRegion_ThrowsArgumentException()
+    public async Task Add_KnownUid_DerivesRegionWithoutManualFallback()
     {
         var archives = new InMemoryPlayerArchiveRepository();
         PlayerArchive archive = ArchiveTestData.Archive();
         await archives.AddAsync(archive);
         var service = new AddGameAccount(archives, new InMemoryGameAccountRepository());
 
-        await Assert.ThrowsAsync<ArgumentException>(
-            () => service.ExecuteAsync(
-                archive.Id,
-                "123456789",
-                GameServerRegion.Unknown,
-                null));
+        GameAccount account = await service.ExecuteAsync(
+            archive.Id,
+            "800000001",
+            GameServerRegion.Unknown,
+            null);
+
+        Assert.Equal(GameServerRegion.Asia, account.ServerRegion);
     }
 
     [Fact]
@@ -96,7 +97,7 @@ public sealed class GameAccountUseCaseTests
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => service.ExecuteAsync(
                 archive.Id,
-                "123456789",
+                "800000001",
                 GameServerRegion.Asia,
                 null));
     }
@@ -116,11 +117,11 @@ public sealed class GameAccountUseCaseTests
 
         GameAccount updated = await service.ExecuteAsync(
             original.Id,
-            " 123456789 ",
+            " 800000001 ",
             GameServerRegion.Asia,
             "  已补全  ");
 
-        Assert.Equal("123456789", updated.Uid);
+        Assert.Equal("800000001", updated.Uid);
         Assert.Equal(GameServerRegion.Asia, updated.ServerRegion);
         Assert.Equal("已补全", updated.DisplayName);
         Assert.False(updated.IsPlaceholder);
@@ -135,8 +136,14 @@ public sealed class GameAccountUseCaseTests
     {
         var accounts = new InMemoryGameAccountRepository();
         var archiveId = Guid.NewGuid();
-        GameAccount first = ArchiveTestData.Account(archiveId, uid: "100000001");
-        GameAccount second = ArchiveTestData.Account(archiveId, uid: "100000002");
+        GameAccount first = ArchiveTestData.Account(
+            archiveId,
+            uid: "100000001",
+            region: GameServerRegion.ChinaOfficial);
+        GameAccount second = ArchiveTestData.Account(
+            archiveId,
+            uid: "100000002",
+            region: GameServerRegion.ChinaOfficial);
         await accounts.AddAsync(first);
         await accounts.AddAsync(second);
         var service = new UpdateGameAccount(accounts);
@@ -157,9 +164,110 @@ public sealed class GameAccountUseCaseTests
         await Assert.ThrowsAsync<KeyNotFoundException>(
             () => service.ExecuteAsync(
                 Guid.NewGuid(),
-                "123456789",
+                "800000001",
                 GameServerRegion.Asia,
                 null));
+    }
+
+    [Fact]
+    public async Task Add_SameNaturalIdentityInAnotherArchive_ReusesExistingNonV5Id()
+    {
+        var archives = new InMemoryPlayerArchiveRepository();
+        var accounts = new InMemoryGameAccountRepository();
+        PlayerArchive firstArchive = ArchiveTestData.Archive("A");
+        PlayerArchive secondArchive = ArchiveTestData.Archive("B");
+        await archives.AddAsync(firstArchive);
+        await archives.AddAsync(secondArchive);
+        GameRoleNaturalIdentity naturalIdentity =
+            GenshinGameRoleIdentity.Create(
+                "800000001",
+                GameServerRegion.Asia);
+        var importedIdentity = new GameRoleIdentity(
+            new GameRoleIdentityId(Guid.NewGuid()),
+            naturalIdentity);
+        await accounts.AddAsync(ArchiveTestData.Account(
+            firstArchive.Id,
+            uid: "800000001",
+            region: GameServerRegion.Asia,
+            roleIdentity: importedIdentity));
+
+        GameAccount created = await new AddGameAccount(archives, accounts)
+            .ExecuteAsync(
+                secondArchive.Id,
+                "800000001",
+                GameServerRegion.Asia,
+                null);
+
+        Assert.Equal(importedIdentity, created.RoleIdentity);
+    }
+
+    [Fact]
+    public async Task Update_ResolvedAccountDisplayName_PreservesNonV5Identity()
+    {
+        var accounts = new InMemoryGameAccountRepository();
+        GameRoleNaturalIdentity naturalIdentity =
+            GenshinGameRoleIdentity.Create(
+                "800000001",
+                GameServerRegion.Asia);
+        var importedIdentity = new GameRoleIdentity(
+            new GameRoleIdentityId(Guid.NewGuid()),
+            naturalIdentity);
+        GameAccount original = ArchiveTestData.Account(
+            Guid.NewGuid(),
+            uid: "800000001",
+            roleIdentity: importedIdentity);
+        await accounts.AddAsync(original);
+
+        GameAccount updated = await new UpdateGameAccount(accounts)
+            .ExecuteAsync(
+                original.Id,
+                original.Uid,
+                original.ServerRegion,
+                "新备注");
+
+        Assert.Equal(importedIdentity, updated.RoleIdentity);
+        Assert.Equal("新备注", updated.DisplayName);
+    }
+
+    [Fact]
+    public async Task Update_ResolvedAccountNaturalIdentityChange_IsRejectedWithoutMutation()
+    {
+        var accounts = new InMemoryGameAccountRepository();
+        GameAccount original = ArchiveTestData.Account(Guid.NewGuid());
+        await accounts.AddAsync(original);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => new UpdateGameAccount(accounts).ExecuteAsync(
+                original.Id,
+                "600000001",
+                GameServerRegion.America,
+                null));
+
+        Assert.Equal(original, await accounts.GetByIdAsync(original.Id));
+    }
+
+    [Fact]
+    public async Task Update_UnresolvedAccountConflict_IsRejectedWithoutMutation()
+    {
+        var accounts = new InMemoryGameAccountRepository();
+        Guid archiveId = Guid.NewGuid();
+        GameAccount existing = ArchiveTestData.Account(archiveId);
+        GameAccount unresolved = ArchiveTestData.Account(
+            archiveId,
+            uid: "legacy-id",
+            region: GameServerRegion.Unknown,
+            isPlaceholder: true);
+        await accounts.AddAsync(existing);
+        await accounts.AddAsync(unresolved);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => new UpdateGameAccount(accounts).ExecuteAsync(
+                unresolved.Id,
+                existing.Uid,
+                existing.ServerRegion,
+                null));
+
+        Assert.Equal(unresolved, await accounts.GetByIdAsync(unresolved.Id));
     }
 
     [Fact]

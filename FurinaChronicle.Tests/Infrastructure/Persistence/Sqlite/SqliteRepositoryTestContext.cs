@@ -57,7 +57,7 @@ internal sealed class SqliteRepositoryTestContext : IAsyncDisposable
 
     public static GameAccount CreateAccount(
         Guid archiveId,
-        string uid = "123456789",
+        string uid = "800000001",
         GameServerRegion region = GameServerRegion.Asia,
         string? displayName = "测试账号",
         Guid? id = null,
@@ -66,6 +66,17 @@ internal sealed class SqliteRepositoryTestContext : IAsyncDisposable
         GameRoleIdentity? roleIdentity = null)
     {
         DateTimeOffset createdAt = new(2026, 7, 16, 10, 0, 0, TimeSpan.Zero);
+        if (roleIdentity is null &&
+            !isPlaceholder &&
+            GenshinGameRoleIdentity.TryCreate(
+                uid,
+                region,
+                out GameRoleNaturalIdentity? naturalIdentity))
+        {
+            roleIdentity = new GameRoleIdentity(
+                GameRoleIdentityId.FromNaturalIdentity(naturalIdentity),
+                naturalIdentity);
+        }
 
         return new GameAccount(
             id ?? Guid.NewGuid(),

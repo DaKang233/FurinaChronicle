@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 using FurinaChronicle.Core.Archives;
+using FurinaChronicle.Core.Gacha;
+using FurinaChronicle.Services.Archives;
 using SQLite;
 
 namespace FurinaChronicle.Tests.Infrastructure.Persistence.Sqlite;
@@ -50,40 +52,110 @@ public sealed class SqliteGameAccountRepositoryTests
     }
 
     [Fact]
-    public async Task GetByArchiveIdAndUidAsync_MatchesBothArchiveIdAndUid()
+    public async Task GetByArchiveIdAndNaturalIdentityAsync_MatchesExactIdentity()
     {
         await using var context = SqliteRepositoryTestContext.Create();
         PlayerArchive archive1 = await AddArchiveAsync(context);
         PlayerArchive archive2 = await AddArchiveAsync(context);
+        GameRoleIdentity identity = GenshinGameRoleIdentity.CreateIdentity(
+            "800000001",
+            GameServerRegion.Asia);
         GameAccount account1 = SqliteRepositoryTestContext.CreateAccount(
             archive1.Id,
-            uid: "123456789",
-            region: GameServerRegion.Asia);
+            uid: "800000001",
+            region: GameServerRegion.Asia,
+            roleIdentity: identity);
         GameAccount account2 = SqliteRepositoryTestContext.CreateAccount(
             archive2.Id,
-            uid: "123456789",
-            region: GameServerRegion.Asia);
+            uid: "800000001",
+            region: GameServerRegion.Asia,
+            roleIdentity: identity);
         await context.Accounts.AddAsync(account1);
         await context.Accounts.AddAsync(account2);
 
-        GameAccount? loaded = await context.Accounts.GetByArchiveIdAndUidAsync(
+        GameAccount? loaded =
+            await context.Accounts.GetByArchiveIdAndNaturalIdentityAsync(
             archive1.Id,
-            "123456789");
+            identity.NaturalIdentity);
 
         Assert.Equal(account1, loaded);
     }
 
     [Fact]
-    public async Task FindByUidAsync_UnknownUid_ReturnsNull()
+    public async Task FindByNaturalIdentityAsync_UnknownIdentity_ReturnsNull()
     {
         await using var context = SqliteRepositoryTestContext.Create();
         var archive = await AddArchiveAsync(context);
+        GameRoleNaturalIdentity identity = GenshinGameRoleIdentity.Create(
+            "800000001",
+            GameServerRegion.Asia);
 
-        GameAccount? loaded = await context.Accounts.GetByArchiveIdAndUidAsync(
-            archive.Id,
-            "999999999");
+        GameAccount? loaded =
+            await context.Accounts.GetByArchiveIdAndNaturalIdentityAsync(
+                archive.Id,
+                identity);
 
         Assert.Null(loaded);
+    }
+
+    [Fact]
+    public async Task FindByNaturalIdentityAsync_SameUidDifferentFallbackRegions_AreDistinct()
+    {
+        await using var context = SqliteRepositoryTestContext.Create();
+        PlayerArchive archive = await AddArchiveAsync(context);
+        GameRoleIdentity asia = GenshinGameRoleIdentity.CreateIdentity(
+            "400000001",
+            GameServerRegion.Asia);
+        GameRoleIdentity america = GenshinGameRoleIdentity.CreateIdentity(
+            "400000001",
+            GameServerRegion.America);
+        GameAccount asiaAccount = SqliteRepositoryTestContext.CreateAccount(
+            archive.Id,
+            uid: "400000001",
+            region: GameServerRegion.Asia,
+            roleIdentity: asia);
+        GameAccount americaAccount = SqliteRepositoryTestContext.CreateAccount(
+            archive.Id,
+            uid: "400000001",
+            region: GameServerRegion.America,
+            roleIdentity: america);
+        await context.Accounts.AddAsync(asiaAccount);
+        await context.Accounts.AddAsync(americaAccount);
+
+        Assert.Equal(
+            asiaAccount,
+            await context.Accounts.GetByArchiveIdAndNaturalIdentityAsync(
+                archive.Id,
+                asia.NaturalIdentity));
+        Assert.Equal(
+            americaAccount,
+            await context.Accounts.GetByArchiveIdAndNaturalIdentityAsync(
+                archive.Id,
+                america.NaturalIdentity));
+    }
+
+    [Fact]
+    public async Task GetUnresolvedAsync_ReturnsOnlyAccountsWithoutRoleIdentity()
+    {
+        await using var context = SqliteRepositoryTestContext.Create();
+        PlayerArchive archive = await AddArchiveAsync(context);
+        GameAccount unresolved = SqliteRepositoryTestContext.CreateAccount(
+            archive.Id,
+            uid: "legacy-id",
+            region: GameServerRegion.Unknown,
+            isPlaceholder: true);
+        GameRoleIdentity identity = GenshinGameRoleIdentity.CreateIdentity(
+            "800000001",
+            GameServerRegion.Asia);
+        GameAccount resolved = SqliteRepositoryTestContext.CreateAccount(
+            archive.Id,
+            uid: "800000001",
+            region: GameServerRegion.Asia,
+            roleIdentity: identity);
+        await context.Accounts.AddAsync(unresolved);
+        await context.Accounts.AddAsync(resolved);
+
+        Assert.Equal([unresolved], await context.Accounts.GetUnresolvedAsync());
     }
 
     [Fact]
@@ -296,6 +368,69 @@ public sealed class SqliteGameAccountRepositoryTests
         await Assert.ThrowsAsync<InvalidDataException>(
             () => context.Accounts.AddAsync(account));
         Assert.Null(await context.Accounts.GetByIdAsync(account.Id));
+    }
+
+    [Fact]
+    public async Task AddAsync_EmptyAccountId_IsRejectedBeforeSqliteWrite()
+    {
+        await using var context = SqliteRepositoryTestContext.Create();
+        PlayerArchive archive = await AddArchiveAsync(context);
+        GameAccount account = SqliteRepositoryTestContext.CreateAccount(
+            archive.Id,
+            id: Guid.Empty);
+
+        await Assert.ThrowsAsync<InvalidDataException>(
+            () => context.Accounts.AddAsync(account));
+    }
+
+    [Fact]
+    public async Task AddAsync_EmptyArchiveId_IsRejectedBeforeSqliteWrite()
+    {
+        await using var context = SqliteRepositoryTestContext.Create();
+        GameAccount account = SqliteRepositoryTestContext.CreateAccount(
+            Guid.Empty);
+
+        await Assert.ThrowsAsync<InvalidDataException>(
+            () => context.Accounts.AddAsync(account));
+    }
+
+    [Fact]
+    public async Task CompleteUnresolvedAccount_ConflictLeavesAccountAndGachaUnchanged()
+    {
+        await using var context = SqliteRepositoryTestContext.Create();
+        PlayerArchive archive = await AddArchiveAsync(context);
+        GameAccount existing = SqliteRepositoryTestContext.CreateAccount(
+            archive.Id,
+            uid: "800000001",
+            region: GameServerRegion.Asia);
+        GameAccount unresolved = SqliteRepositoryTestContext.CreateAccount(
+            archive.Id,
+            uid: "legacy-id",
+            region: GameServerRegion.Unknown,
+            isPlaceholder: true);
+        await context.Accounts.AddAsync(existing);
+        await context.Accounts.AddAsync(unresolved);
+        var record = new GachaRecord(
+            unresolved.Id,
+            "p1-conflict-record",
+            "Test Item",
+            5,
+            new DateTimeOffset(2026, 10, 5, 12, 0, 0, TimeSpan.Zero));
+        await context.Gacha.SaveBatchAsync([record]);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => new UpdateGameAccount(context.Accounts).ExecuteAsync(
+                unresolved.Id,
+                existing.Uid,
+                existing.ServerRegion,
+                null));
+
+        Assert.Equal(
+            unresolved,
+            await context.Accounts.GetByIdAsync(unresolved.Id));
+        Assert.Equal(
+            [record],
+            await context.Gacha.GetRecentAsync(unresolved.Id, 10));
     }
 
     [Fact]

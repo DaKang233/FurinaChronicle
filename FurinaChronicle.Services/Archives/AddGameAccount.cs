@@ -21,15 +21,27 @@ namespace FurinaChronicle.Services.Archives
             string normalizedUid = uid.Trim();
             if (string.IsNullOrEmpty(normalizedUid)) throw new ArgumentException("UID 不能为空", nameof(uid));
             if (!normalizedUid.All(char.IsAsciiDigit)) throw new ArgumentException("UID 只能包含数字", nameof(uid));
-            if (serverRegion == GameServerRegion.Unknown) throw new ArgumentException("必须选择服务器区域",nameof(serverRegion));
-            if (!GameUidValidation.IsValidUid(normalizedUid)) throw new ArgumentException("无效的 UID。有效的 UID 是长度为 9~10 个的数字。", nameof(uid));
-            GameAccount? existing = await accountRepository.GetByArchiveIdAndUidAsync(playerArchiveId, normalizedUid, cancellationToken);
-            if (existing is not null) throw new InvalidOperationException("该档案下已存在相同 UID 的账号");
+            if (!GameUidValidation.IsStructurallyValidUid(normalizedUid)) throw new ArgumentException("无效的 UID。有效的 UID 是长度为 9~10 个的数字。", nameof(uid));
+            GameRoleNaturalIdentity naturalIdentity =
+                GenshinGameRoleIdentity.Create(normalizedUid, serverRegion);
+            GameAccount? existing =
+                await accountRepository.GetByArchiveIdAndNaturalIdentityAsync(
+                    playerArchiveId,
+                    naturalIdentity,
+                    cancellationToken);
+            if (existing is not null) throw new InvalidOperationException("该档案下已存在相同游戏角色的账号");
             string? normalizedDisplayName = string.IsNullOrWhiteSpace(displayName) ? null : displayName.Trim();
             if (!string.IsNullOrEmpty(normalizedDisplayName) && normalizedDisplayName.Length - uid.Length - 3 > 50) throw new ArgumentException("显示名称不能超过 50 个字符", nameof(displayName));
             DateTimeOffset now = DateTimeOffset.UtcNow;
             GameRoleIdentity roleIdentity =
-                GenshinGameRoleIdentity.CreateIdentity(
+                await accountRepository.GetRoleIdentityByNaturalIdentityAsync(
+                    naturalIdentity,
+                    cancellationToken) ??
+                new GameRoleIdentity(
+                    GameRoleIdentityId.FromNaturalIdentity(naturalIdentity),
+                    naturalIdentity);
+            GameServerRegion resolvedRegion =
+                GenshinGameRoleIdentity.ResolveServerRegion(
                     normalizedUid,
                     serverRegion);
 
@@ -37,7 +49,7 @@ namespace FurinaChronicle.Services.Archives
                 Guid.NewGuid(),
                 playerArchiveId,
                 normalizedUid,
-                serverRegion,
+                resolvedRegion,
                 normalizedDisplayName,
                 IsPlaceholder: false,
                 now,

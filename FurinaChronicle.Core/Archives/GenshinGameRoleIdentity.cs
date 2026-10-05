@@ -14,14 +14,16 @@ public static class GenshinGameRoleIdentity
         string uid,
         GameServerRegion serverRegion)
     {
-        if (!GameUidValidation.IsValidUid(uid))
+        if (!GameUidValidation.IsStructurallyValidUid(uid))
         {
             throw new ArgumentException(
                 "The UID is not a valid Genshin Impact UID.",
                 nameof(uid));
         }
 
-        (string gameBiz, string server) = serverRegion switch
+        GameServerRegion resolvedRegion = ResolveServerRegion(uid, serverRegion);
+
+        (string gameBiz, string server) = resolvedRegion switch
         {
             GameServerRegion.ChinaOfficial => (MainlandGameBiz, "cn_gf01"),
             GameServerRegion.ChinaBilibili => (MainlandGameBiz, "cn_qd01"),
@@ -44,16 +46,22 @@ public static class GenshinGameRoleIdentity
         [NotNullWhen(true)]
         out GameRoleNaturalIdentity? naturalIdentity)
     {
-        if (!GameUidValidation.IsValidUid(uid) ||
-            serverRegion == GameServerRegion.Unknown ||
-            !Enum.IsDefined(serverRegion))
+        if (!GameUidValidation.IsStructurallyValidUid(uid))
         {
             naturalIdentity = null;
             return false;
         }
 
-        naturalIdentity = Create(uid, serverRegion);
-        return true;
+        try
+        {
+            naturalIdentity = Create(uid, serverRegion);
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            naturalIdentity = null;
+            return false;
+        }
     }
 
     public static GameRoleIdentity CreateIdentity(
@@ -64,5 +72,41 @@ public static class GenshinGameRoleIdentity
         return new GameRoleIdentity(
             GameRoleIdentityId.FromNaturalIdentity(naturalIdentity),
             naturalIdentity);
+    }
+
+    public static GameServerRegion ResolveServerRegion(
+        string uid,
+        GameServerRegion manualFallback)
+    {
+        if (!GameUidValidation.IsStructurallyValidUid(uid))
+        {
+            throw new ArgumentException(
+                "The UID is not a structurally valid Genshin Impact UID.",
+                nameof(uid));
+        }
+
+        GameServerRegion inferred = GameServerRegionResolver.Resolve(uid);
+        if (inferred != GameServerRegion.Unknown)
+        {
+            if (manualFallback != GameServerRegion.Unknown &&
+                manualFallback != inferred)
+            {
+                throw new ArgumentException(
+                    "The selected server region conflicts with the UID-derived region.",
+                    nameof(manualFallback));
+            }
+
+            return inferred;
+        }
+
+        if (!Enum.IsDefined(manualFallback) ||
+            manualFallback == GameServerRegion.Unknown)
+        {
+            throw new ArgumentException(
+                "A valid manual server region is required when the UID region cannot be inferred.",
+                nameof(manualFallback));
+        }
+
+        return manualFallback;
     }
 }

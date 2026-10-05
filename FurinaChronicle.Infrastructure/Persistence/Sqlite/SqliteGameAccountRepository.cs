@@ -57,12 +57,12 @@ public sealed class SqliteGameAccountRepository(FurinaDatabase database)
         return rows.FirstOrDefault()?.ToDomain();
     }
 
-    public async Task<GameAccount?> GetByArchiveIdAndUidAsync(
+    public async Task<GameAccount?> GetByArchiveIdAndNaturalIdentityAsync(
         Guid archiveId,
-        string uid,
+        GameRoleNaturalIdentity naturalIdentity,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(uid);
+        ArgumentNullException.ThrowIfNull(naturalIdentity);
         if (archiveId == Guid.Empty)
         {
             throw new ArgumentException(
@@ -77,14 +77,61 @@ public sealed class SqliteGameAccountRepository(FurinaDatabase database)
             await database.Connection.QueryAsync<GameAccountReadRow>(
                 AccountSelect + "\n" +
                 """
-                WHERE ga.PlayerArchiveId = ? AND ga.Uid = ?
+                WHERE ga.PlayerArchiveId = ?
+                    AND gri.GameBiz = ?
+                    AND gri.Server = ?
+                    AND gri.Uid = ?
                 ORDER BY ga.CreatedAtUtcTicks
                 LIMIT 1;
                 """,
                 archiveId.ToString("D"),
-                uid.Trim());
+                naturalIdentity.GameBiz,
+                naturalIdentity.Server,
+                naturalIdentity.Uid);
 
         return rows.FirstOrDefault()?.ToDomain();
+    }
+
+    public async Task<GameRoleIdentity?> GetRoleIdentityByNaturalIdentityAsync(
+        GameRoleNaturalIdentity naturalIdentity,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(naturalIdentity);
+        await database.InitializeAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        List<GameRoleIdentityRow> rows =
+            await database.Connection.QueryAsync<GameRoleIdentityRow>(
+                """
+                SELECT Id, GameBiz, Server, Uid
+                FROM GameRoleIdentities
+                WHERE GameBiz = ? AND Server = ? AND Uid = ?
+                LIMIT 1;
+                """,
+                naturalIdentity.GameBiz,
+                naturalIdentity.Server,
+                naturalIdentity.Uid);
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return rows.FirstOrDefault()?.ToDomain();
+    }
+
+    public async Task<IReadOnlyList<GameAccount>> GetUnresolvedAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await database.InitializeAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        List<GameAccountReadRow> rows =
+            await database.Connection.QueryAsync<GameAccountReadRow>(
+                AccountSelect + "\n" +
+                """
+                WHERE ga.GameRoleIdentityId IS NULL
+                ORDER BY ga.PlayerArchiveId, ga.CreatedAtUtcTicks, ga.Id;
+                """);
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return rows.Select(row => row.ToDomain()).ToArray();
     }
 
     public async Task UpdateAsync(
@@ -240,6 +287,26 @@ public sealed class SqliteGameAccountRepository(FurinaDatabase database)
 
     private static void ValidateRoleIdentity(GameAccount gameAccount)
     {
+        if (gameAccount.Id == Guid.Empty)
+        {
+            throw new InvalidDataException("The game account ID cannot be empty.");
+        }
+
+        if (gameAccount.PlayerArchiveId == Guid.Empty)
+        {
+            throw new InvalidDataException("The player archive ID cannot be empty.");
+        }
+
+        if (string.IsNullOrWhiteSpace(gameAccount.Uid))
+        {
+            throw new InvalidDataException("The game account UID cannot be empty.");
+        }
+
+        if (!Enum.IsDefined(gameAccount.ServerRegion))
+        {
+            throw new InvalidDataException("The game account server region is invalid.");
+        }
+
         if (gameAccount.RoleIdentity is null)
         {
             return;

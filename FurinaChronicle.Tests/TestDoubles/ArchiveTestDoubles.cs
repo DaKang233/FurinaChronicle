@@ -92,14 +92,36 @@ internal sealed class InMemoryGameAccountRepository : IGameAccountRepository
         return Task.FromResult(account);
     }
 
-    public Task<GameAccount?> GetByArchiveIdAndUidAsync(
+    public Task<GameAccount?> GetByArchiveIdAndNaturalIdentityAsync(
         Guid archiveId,
-        string uid,
+        GameRoleNaturalIdentity naturalIdentity,
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         GameAccount? result = accounts.Values.FirstOrDefault(
-            account => account.PlayerArchiveId == archiveId && account.Uid == uid);
+            account => account.PlayerArchiveId == archiveId &&
+                account.RoleIdentity?.NaturalIdentity == naturalIdentity);
+        return Task.FromResult(result);
+    }
+
+    public Task<GameRoleIdentity?> GetRoleIdentityByNaturalIdentityAsync(
+        GameRoleNaturalIdentity naturalIdentity,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        GameRoleIdentity? result = accounts.Values
+            .Select(account => account.RoleIdentity)
+            .FirstOrDefault(identity => identity?.NaturalIdentity == naturalIdentity);
+        return Task.FromResult(result);
+    }
+
+    public Task<IReadOnlyList<GameAccount>> GetUnresolvedAsync(
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        IReadOnlyList<GameAccount> result = accounts.Values
+            .Where(account => account.RoleIdentity is null)
+            .ToArray();
         return Task.FromResult(result);
     }
 
@@ -225,13 +247,26 @@ internal static class ArchiveTestData
 
     public static GameAccount Account(
         Guid archiveId,
-        string uid = "123456789",
+        string uid = "800000001",
         GameServerRegion region = GameServerRegion.Asia,
         Guid? id = null,
         string? displayName = "测试账号",
-        bool isPlaceholder = false)
+        bool isPlaceholder = false,
+        GameRoleIdentity? roleIdentity = null)
     {
         DateTimeOffset now = new(2026, 7, 16, 10, 0, 0, TimeSpan.Zero);
+        if (roleIdentity is null &&
+            !isPlaceholder &&
+            GenshinGameRoleIdentity.TryCreate(
+                uid,
+                region,
+                out GameRoleNaturalIdentity? naturalIdentity))
+        {
+            roleIdentity = new GameRoleIdentity(
+                GameRoleIdentityId.FromNaturalIdentity(naturalIdentity),
+                naturalIdentity);
+        }
+
         return new GameAccount(
             id ?? Guid.NewGuid(),
             archiveId,
@@ -240,6 +275,7 @@ internal static class ArchiveTestData
             displayName,
             isPlaceholder,
             now,
-            now);
+            now,
+            roleIdentity);
     }
 }
