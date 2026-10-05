@@ -15,3 +15,4 @@
 - [0009：Chronicle 作为派生投影](0009-chronicle-as-derived-projection.md)
 - [0010：经过筛选的多时间线产品模型](0010-curated-multiple-chronicle-timelines.md)
 - [0011：领域优先的产品定位与 Phase 8B 范围](0011-domain-first-product-scope.md)
+- [0012：Gacha Portable v1 使用标准载荷与 Furina 补充载荷](0012-gacha-portable-v1.md)

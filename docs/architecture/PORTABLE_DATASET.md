@@ -90,4 +90,6 @@ Markdown 是不可导入的人类可读输出，分为：
 
 8B.0 冻结版本独立、引用重映射、稳定身份和兼容行为等最小原则。8B.2 及领域实施前冻结实际格式，并同时提供说明、Schema、最小/完整示例、迁移与兼容测试；发布要求遵守 [兼容策略](../principles/COMPATIBILITY_POLICY.md)。
 
+首个实际领域格式已经由 [ADR 0012](../decisions/0012-gacha-portable-v1.md) 冻结为 `furina-gacha-portable` v1：一个源档案的多个已解析原神账号副本使用单领域 ZIP，标准事实由 UIGF 4.2 承载，Furina 补充载荷保存账号引用、原始时间表示和来源。具体字段、支持范围和资源限制见 [Gacha Portable v1](../specifications/GACHA_PORTABLE_V1.md)。该格式当前为 Accepted、未发布，不预定完整 Archive 布局。
+
 验收必须覆盖不经过 SQLite 的格式往返、不启用 Chronicle 的领域导出、重导入幂等、未知 future major 拒绝且数据库不变，以及 Windows/Android 的语义一致。不得因为缩小 8B.0 范围而提前宣称格式稳定。

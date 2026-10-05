@@ -78,12 +78,16 @@
 
 ## 工作包 8B.2：领域 Portable / Export 基础
 
+实施状态：In progress（2026-10-06）
+
 - 为实际首批领域提供 Serializer、Validator、Importer、Exporter、Migrator 或等价的小接口，不先建设任意 Dataset 插件框架；
 - 优先保持 UIGF；首个 Furina 载荷补足账号身份、来源、时间和修订等标准无法表达的语义，冻结其与标准记录的关联；
 - 为领域查询提供至少一种人类可读导出路径，不经过 Chronicle；
 - 对实际载荷确定 Envelope/Payload、格式名称、独立版本和 Schema；大型集合流式处理；
 - 建立最小、完整、旧版、未来 major、损坏和大数据 fixture；
 - 不在此冻结完整 Archive、设备游标或未来同步协议。
+
+首个格式和本轮实施边界见 [Phase 8B.2 实施契约](PHASE_8B2_IMPLEMENTATION.md)、[Gacha Portable v1](../specifications/GACHA_PORTABLE_V1.md) 与 [ADR 0012](../decisions/0012-gacha-portable-v1.md)。生产 Apply 依赖 8B.3/8B.4 的 DataChangeSet 事务基础，本轮只提供校验、导出和只读计划，不使用临时 Upsert 绕过该门槛。
 
 退出标准：格式有说明、Schema、样例、迁移和兼容验证；不经过 SQLite 的格式往返可用；未知 future major 拒绝且数据库不变。公开发布仍须满足 Compatibility Policy 的跨平台往返要求。
 
