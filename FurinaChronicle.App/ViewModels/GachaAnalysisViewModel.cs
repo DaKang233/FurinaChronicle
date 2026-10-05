@@ -1001,14 +1001,14 @@ public partial class GachaAnalysisViewModel(
                 ? "暂无记录"
                 : $"{pool.StartTime:yyyy-MM-dd} 至 {pool.EndTime:yyyy-MM-dd}",
             pool.AverageFiveStarPulls is double average
-                ? $"任意五星期望 {average:F2} 抽"
-                : "任意五星期望 —",
+                ? $"任意五星均值 {average:F2} 抽"
+                : "任意五星均值 —",
             pool.AverageUpFiveStarPulls is double upAverage
-                ? $"限定五星期望 {upAverage:F2} 抽"
+                ? $"限定五星均值 {upAverage:F2} 抽"
                 : pool.PoolGroup is GachaPoolGroup.CharacterEvent or
                     GachaPoolGroup.WeaponEvent
-                    ? "限定五星期望 —"
-                    : "限定五星期望：不适用于该卡池",
+                    ? "限定五星均值 —"
+                    : "限定五星均值：不适用于该卡池",
             pool.MinimumFiveStarPulls is int minimum
                 ? $"五星极值 {minimum} / {pool.MaximumFiveStarPulls} 抽"
                 : "五星极值 —",
