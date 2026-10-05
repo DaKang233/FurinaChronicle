@@ -4,6 +4,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using FurinaChronicle.Core.Records;
 
 namespace FurinaChronicle.Core.Gacha
 {
@@ -23,5 +24,8 @@ namespace FurinaChronicle.Core.Gacha
         public string? UigfGachaType { get; init; }
 
         public int Count { get; init; } = 1;
+
+        public RecordProvenance Provenance { get; init; } =
+            RecordProvenance.Unknown;
     }
 }

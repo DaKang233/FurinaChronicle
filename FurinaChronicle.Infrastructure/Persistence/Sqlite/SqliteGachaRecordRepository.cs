@@ -66,7 +66,13 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
                         RankType,
                         Count,
                         TimeUtcTicks,
-                        TimeOffsetMinutes
+                        TimeOffsetMinutes,
+                        Origin,
+                        FetchedAtUtcTicks,
+                        FetchedAtOffsetMinutes,
+                        ImportedAtUtcTicks,
+                        ImportedAtOffsetMinutes,
+                        AcquisitionBatchId
                     FROM {GachaRecordRow.TableName}
                     WHERE GameAccountId = ?
                     ORDER BY
@@ -131,7 +137,13 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
                     RankType,
                     Count,
                     TimeUtcTicks,
-                    TimeOffsetMinutes
+                    TimeOffsetMinutes,
+                    Origin,
+                    FetchedAtUtcTicks,
+                    FetchedAtOffsetMinutes,
+                    ImportedAtUtcTicks,
+                    ImportedAtOffsetMinutes,
+                    AcquisitionBatchId
                 FROM {GachaRecordRow.TableName}
                 WHERE {where}
                 ORDER BY
@@ -226,7 +238,13 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
                                         RankType = COALESCE(?, RankType),
                                         Count = ?,
                                         TimeUtcTicks = ?,
-                                        TimeOffsetMinutes = ?
+                                        TimeOffsetMinutes = ?,
+                                        Origin = ?,
+                                        FetchedAtUtcTicks = ?,
+                                        FetchedAtOffsetMinutes = ?,
+                                        ImportedAtUtcTicks = ?,
+                                        ImportedAtOffsetMinutes = ?,
+                                        AcquisitionBatchId = ?
                                     WHERE GameAccountId = ? AND ExternalRecordId = ?;
                                     """,
                                     row.ItemName,
@@ -238,6 +256,12 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
                                     row.Count,
                                     row.TimeUtcTicks,
                                     row.TimeOffsetMinutes,
+                                    row.Origin,
+                                    row.FetchedAtUtcTicks,
+                                    row.FetchedAtOffsetMinutes,
+                                    row.ImportedAtUtcTicks,
+                                    row.ImportedAtOffsetMinutes,
+                                    row.AcquisitionBatchId,
                                     row.GameAccountId,
                                     row.ExternalRecordId);
                             }

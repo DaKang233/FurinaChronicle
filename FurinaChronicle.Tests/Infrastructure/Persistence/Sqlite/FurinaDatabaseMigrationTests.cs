@@ -10,10 +10,10 @@ namespace FurinaChronicle.Tests.Infrastructure.Persistence.Sqlite;
 public sealed class FurinaDatabaseMigrationTests
 {
     private const int CurrentApplicationId = 0x46554348;
-    private const int CurrentSchemaVersion = 3;
+    private const int CurrentSchemaVersion = 4;
 
     [Fact]
-    public async Task InitializeAsync_NewDatabase_CreatesCurrentVersionThreeSchema()
+    public async Task InitializeAsync_NewDatabase_CreatesCurrentVersionFourSchema()
     {
         await using var fixture = MigrationFixture.Create();
 
@@ -34,6 +34,12 @@ public sealed class FurinaDatabaseMigrationTests
         Assert.Contains("GachaType", gachaColumns);
         Assert.Contains("UigfGachaType", gachaColumns);
         Assert.Contains("Count", gachaColumns);
+        Assert.Contains("Origin", gachaColumns);
+        Assert.Contains("FetchedAtUtcTicks", gachaColumns);
+        Assert.Contains("FetchedAtOffsetMinutes", gachaColumns);
+        Assert.Contains("ImportedAtUtcTicks", gachaColumns);
+        Assert.Contains("ImportedAtOffsetMinutes", gachaColumns);
+        Assert.Contains("AcquisitionBatchId", gachaColumns);
 
         string[] indexes = connection.Query<NameRow>(
                 """
@@ -185,6 +191,7 @@ public sealed class FurinaDatabaseMigrationTests
         Assert.NotNull(
             reopened.ExecuteScalar<string?>(
                 "SELECT GameRoleIdentityId FROM GameAccounts LIMIT 1;"));
+        AssertLegacyGachaProvenanceIsUnknown(reopened, "gacha-1");
     }
 
     [Fact]
@@ -247,6 +254,72 @@ public sealed class FurinaDatabaseMigrationTests
             3,
             connection.ExecuteScalar<int>(
                 "SELECT COUNT(*) FROM GachaRecords;"));
+        AssertLegacyGachaProvenanceIsUnknown(connection, "resolved-1");
+    }
+
+    [Fact]
+    public async Task InitializeAsync_VersionThree_AddsUnknownProvenanceAndPreservesData()
+    {
+        await using var fixture = MigrationFixture.Create();
+        Guid firstArchiveId = Guid.NewGuid();
+        Guid secondArchiveId = Guid.NewGuid();
+        Guid firstAccountId = Guid.NewGuid();
+        Guid secondAccountId = Guid.NewGuid();
+        Guid unresolvedAccountId = Guid.NewGuid();
+        fixture.CreateVersionThreeDatabase(
+            firstArchiveId,
+            secondArchiveId,
+            firstAccountId,
+            secondAccountId,
+            unresolvedAccountId);
+
+        await using (FurinaDatabase database = fixture.OpenDatabase())
+        {
+            await database.InitializeAsync();
+            await database.InitializeAsync();
+        }
+
+        using SQLiteConnection connection = fixture.OpenRawConnection();
+        AssertCurrentSchema(connection);
+        Assert.Equal(
+            3,
+            connection.ExecuteScalar<int>(
+                "SELECT COUNT(*) FROM GachaRecords;"));
+        AssertLegacyGachaProvenanceIsUnknown(connection, "resolved-1");
+    }
+
+    [Fact]
+    public async Task InitializeAsync_VersionThreeLateMigrationFailure_RollsBackAddedColumns()
+    {
+        await using var fixture = MigrationFixture.Create();
+        fixture.CreateVersionThreeDatabase(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Guid.NewGuid());
+        fixture.AddConflictingVersionFourColumn();
+
+        await using (FurinaDatabase database = fixture.OpenDatabase())
+        {
+            await Assert.ThrowsAsync<SQLiteException>(
+                () => database.InitializeAsync());
+        }
+
+        using SQLiteConnection connection = fixture.OpenRawConnection();
+        Assert.Equal(
+            3,
+            connection.ExecuteScalar<int>("PRAGMA user_version;"));
+        string[] columns = connection
+            .Query<NameRow>("PRAGMA table_info(GachaRecords);")
+            .Select(row => row.Name)
+            .ToArray();
+        Assert.DoesNotContain("Origin", columns);
+        Assert.Contains("FetchedAtUtcTicks", columns);
+        Assert.Equal(
+            "resolved-1",
+            connection.ExecuteScalar<string>(
+                "SELECT ExternalRecordId FROM GachaRecords ORDER BY Id LIMIT 1;"));
     }
 
     [Fact]
@@ -438,6 +511,28 @@ public sealed class FurinaDatabaseMigrationTests
         Assert.Equal("CASCADE", gachaForeignKey.OnDelete);
     }
 
+    private static void AssertLegacyGachaProvenanceIsUnknown(
+        SQLiteConnection connection,
+        string externalRecordId)
+    {
+        LegacyProvenanceRow row = Assert.Single(
+            connection.Query<LegacyProvenanceRow>(
+                """
+                SELECT Origin, FetchedAtUtcTicks, FetchedAtOffsetMinutes,
+                       ImportedAtUtcTicks, ImportedAtOffsetMinutes,
+                       AcquisitionBatchId
+                FROM GachaRecords
+                WHERE ExternalRecordId = ?;
+                """,
+                externalRecordId));
+        Assert.Equal(0, row.Origin);
+        Assert.Null(row.FetchedAtUtcTicks);
+        Assert.Null(row.FetchedAtOffsetMinutes);
+        Assert.Null(row.ImportedAtUtcTicks);
+        Assert.Null(row.ImportedAtOffsetMinutes);
+        Assert.Null(row.AcquisitionBatchId);
+    }
+
     private sealed class NameRow
     {
         public string Name { get; set; } = string.Empty;
@@ -452,6 +547,21 @@ public sealed class FurinaDatabaseMigrationTests
     private sealed class IdentityReferenceRow
     {
         public string? GameRoleIdentityId { get; set; }
+    }
+
+    private sealed class LegacyProvenanceRow
+    {
+        public int Origin { get; set; }
+
+        public long? FetchedAtUtcTicks { get; set; }
+
+        public int? FetchedAtOffsetMinutes { get; set; }
+
+        public long? ImportedAtUtcTicks { get; set; }
+
+        public int? ImportedAtOffsetMinutes { get; set; }
+
+        public string? AcquisitionBatchId { get; set; }
     }
 
     private sealed class ForeignKeyDefinitionRow
@@ -774,6 +884,89 @@ public sealed class FurinaDatabaseMigrationTests
             connection.Execute(
                 $"PRAGMA application_id = {CurrentApplicationId};");
             connection.Execute("PRAGMA user_version = 2;");
+        }
+
+        public void CreateVersionThreeDatabase(
+            Guid firstArchiveId,
+            Guid secondArchiveId,
+            Guid firstResolvedAccountId,
+            Guid secondResolvedAccountId,
+            Guid unresolvedAccountId)
+        {
+            CreateVersionTwoDatabase(
+                firstArchiveId,
+                secondArchiveId,
+                firstResolvedAccountId,
+                secondResolvedAccountId,
+                unresolvedAccountId);
+
+            using SQLiteConnection connection = OpenRawConnection();
+            GameRoleIdentity identity =
+                GenshinGameRoleIdentity.CreateIdentity(
+                    "800000001",
+                    GameServerRegion.Asia);
+            connection.Execute(
+                """
+                CREATE TABLE GameRoleIdentities
+                (
+                    Id TEXT PRIMARY KEY NOT NULL,
+                    GameBiz TEXT NOT NULL,
+                    Server TEXT NOT NULL,
+                    Uid TEXT NOT NULL
+                );
+                """);
+            connection.Execute(
+                """
+                CREATE UNIQUE INDEX UX_GameRoleIdentities_NaturalIdentity
+                ON GameRoleIdentities(GameBiz, Server, Uid);
+                """);
+            connection.Execute(
+                """
+                ALTER TABLE GameAccounts
+                ADD COLUMN GameRoleIdentityId TEXT
+                    REFERENCES GameRoleIdentities(Id);
+                """);
+            connection.Execute(
+                """
+                INSERT INTO GameRoleIdentities (Id, GameBiz, Server, Uid)
+                VALUES (?, ?, ?, ?);
+                """,
+                identity.Id.ToString(),
+                identity.NaturalIdentity.GameBiz,
+                identity.NaturalIdentity.Server,
+                identity.NaturalIdentity.Uid);
+            connection.Execute(
+                """
+                UPDATE GameAccounts
+                SET GameRoleIdentityId = ?
+                WHERE Uid = ? AND IsPlaceholder = 0;
+                """,
+                identity.Id.ToString(),
+                identity.NaturalIdentity.Uid);
+            connection.Execute(
+                "DROP INDEX UX_GameAccounts_PlayerArchiveId_Uid;");
+            connection.Execute(
+                "CREATE INDEX IX_GameAccounts_GameRoleIdentityId ON GameAccounts(GameRoleIdentityId);");
+            connection.Execute(
+                """
+                CREATE UNIQUE INDEX UX_GameAccounts_Archive_RoleIdentity
+                ON GameAccounts(PlayerArchiveId, GameRoleIdentityId)
+                WHERE GameRoleIdentityId IS NOT NULL;
+                """);
+            connection.Execute(
+                """
+                CREATE UNIQUE INDEX UX_GameAccounts_Archive_UnresolvedIdentity
+                ON GameAccounts(PlayerArchiveId, Uid, ServerRegion)
+                WHERE GameRoleIdentityId IS NULL;
+                """);
+            connection.Execute("PRAGMA user_version = 3;");
+        }
+
+        public void AddConflictingVersionFourColumn()
+        {
+            using SQLiteConnection connection = OpenRawConnection();
+            connection.Execute(
+                "ALTER TABLE GachaRecords ADD COLUMN FetchedAtUtcTicks INTEGER;");
         }
 
         public void RemoveVersionOneIdentityColumn()

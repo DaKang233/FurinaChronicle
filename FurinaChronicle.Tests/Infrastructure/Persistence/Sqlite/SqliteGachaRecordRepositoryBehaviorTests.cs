@@ -3,6 +3,7 @@
 
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Gacha;
+using FurinaChronicle.Core.Records;
 using FurinaChronicle.Services.Gacha;
 using SQLite;
 
@@ -33,6 +34,48 @@ public sealed class SqliteGachaRecordRepositoryBehaviorTests
         Assert.Equal(1, result.InsertedCount);
         Assert.Equal(1, result.DuplicateCount);
         Assert.Single(await context.Gacha.GetRecentAsync(account.Id, 20));
+    }
+
+    [Fact]
+    public async Task SaveBatchAsync_ProvenanceRoundTripsWithOffsetsAndBatch()
+    {
+        await using var context = SqliteRepositoryTestContext.Create();
+        GameAccount account = await AddAccountAsync(context);
+        DateTimeOffset fetchedAt = new(
+            2026,
+            10,
+            5,
+            20,
+            15,
+            0,
+            TimeSpan.FromHours(8));
+        DateTimeOffset importedAt = fetchedAt.AddMinutes(1)
+            .ToOffset(TimeSpan.FromHours(-4));
+        var provenance = new RecordProvenance(
+            DataOrigin.OfficialApi,
+            new RecordTimestamps(
+                FetchedAt: fetchedAt,
+                ImportedAt: importedAt),
+            acquisitionBatchId: new AcquisitionBatchId(Guid.NewGuid()));
+        GachaRecord record = CreateGacha(
+            account.Id,
+            "provenance-roundtrip",
+            minute: 30) with
+        {
+            Provenance = provenance
+        };
+
+        await context.Gacha.SaveBatchAsync([record]);
+
+        GachaRecord loaded = Assert.Single(
+            await context.Gacha.GetRecentAsync(account.Id, 20));
+        Assert.Equal(record, loaded);
+        Assert.Equal(
+            fetchedAt.Offset,
+            loaded.Provenance.Timestamps.FetchedAt?.Offset);
+        Assert.Equal(
+            importedAt.Offset,
+            loaded.Provenance.Timestamps.ImportedAt?.Offset);
     }
 
     [Fact]
@@ -88,7 +131,11 @@ public sealed class SqliteGachaRecordRepositoryBehaviorTests
             GachaType = "302",
             UigfGachaType = "302",
             RankType = 4,
-            Time = existing.Time.AddMinutes(1)
+            Time = existing.Time.AddMinutes(1),
+            Provenance = new RecordProvenance(
+                DataOrigin.OfficialApi,
+                new RecordTimestamps(FetchedAt: DateTimeOffset.UtcNow),
+                acquisitionBatchId: AcquisitionBatchId.New())
         };
         await context.Gacha.SaveBatchAsync([existing]);
 
@@ -124,7 +171,11 @@ public sealed class SqliteGachaRecordRepositoryBehaviorTests
             UigfGachaType = "302",
             RankType = 4,
             Count = 2,
-            Time = existing.Time.AddMinutes(1)
+            Time = existing.Time.AddMinutes(1),
+            Provenance = new RecordProvenance(
+                DataOrigin.OfficialApi,
+                new RecordTimestamps(FetchedAt: DateTimeOffset.UtcNow),
+                acquisitionBatchId: AcquisitionBatchId.New())
         };
         await context.Gacha.SaveBatchAsync([existing]);
 
@@ -138,6 +189,46 @@ public sealed class SqliteGachaRecordRepositoryBehaviorTests
         GachaRecord stored = Assert.Single(
             await context.Gacha.GetRecentAsync(account.Id, 20));
         Assert.Equal(incoming, stored);
+    }
+
+    [Fact]
+    public async Task SaveBatchAsync_UnsupportedObservedAt_IsRejectedBeforeWrite()
+    {
+        await using var context = SqliteRepositoryTestContext.Create();
+        GameAccount account = await AddAccountAsync(context);
+        GachaRecord record = CreateGacha(
+            account.Id,
+            "unsupported-observation",
+            minute: 30) with
+        {
+            Provenance = new RecordProvenance(
+                DataOrigin.LocalObservation,
+                new RecordTimestamps(ObservedAt: DateTimeOffset.UtcNow))
+        };
+
+        await Assert.ThrowsAsync<NotSupportedException>(
+            () => context.Gacha.SaveBatchAsync([record]));
+        Assert.Empty(await context.Gacha.GetRecentAsync(account.Id, 20));
+    }
+
+    [Fact]
+    public async Task SaveBatchAsync_UnsupportedSourceReference_IsRejectedBeforeWrite()
+    {
+        await using var context = SqliteRepositoryTestContext.Create();
+        GameAccount account = await AddAccountAsync(context);
+        GachaRecord record = CreateGacha(
+            account.Id,
+            "unsupported-source",
+            minute: 30) with
+        {
+            Provenance = new RecordProvenance(
+                DataOrigin.OfficialApi,
+                source: new DataSourceReference(provider: "test"))
+        };
+
+        await Assert.ThrowsAsync<NotSupportedException>(
+            () => context.Gacha.SaveBatchAsync([record]));
+        Assert.Empty(await context.Gacha.GetRecentAsync(account.Id, 20));
     }
 
     [Fact]

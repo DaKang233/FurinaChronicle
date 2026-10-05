@@ -8,7 +8,8 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite;
 
 public sealed class FurinaDatabase : IAsyncDisposable
 {
-    private const int CurrentSchemaVersion = 3;
+    private const int CurrentSchemaVersion = 4;
+    private const int SharedIdentitySchemaVersion = 3;
     private const int PreSharedIdentitySchemaVersion = 2;
     private const int LegacyGachaSchemaVersion = 1;
     private const string LegacyGachaRecordsTableName = "WishRecords";
@@ -83,12 +84,17 @@ public sealed class FurinaDatabase : IAsyncDisposable
             if (applicationId == CurrentApplicationId &&
                 schemaVersion == LegacyGachaSchemaVersion)
             {
-                await MigrateVersionOneToVersionThreeAsync(cancellationToken);
+                await MigrateVersionOneToVersionFourAsync(cancellationToken);
             }
             else if (applicationId == CurrentApplicationId &&
                      schemaVersion == PreSharedIdentitySchemaVersion)
             {
-                await MigrateVersionTwoToVersionThreeAsync(cancellationToken);
+                await MigrateVersionTwoToVersionFourAsync(cancellationToken);
+            }
+            else if (applicationId == CurrentApplicationId &&
+                     schemaVersion == SharedIdentitySchemaVersion)
+            {
+                await MigrateVersionThreeToVersionFourAsync(cancellationToken);
             }
             else if (applicationId == 0 &&
                      schemaVersion == 0 &&
@@ -113,7 +119,7 @@ public sealed class FurinaDatabase : IAsyncDisposable
         }
     }
 
-    private async Task MigrateVersionOneToVersionThreeAsync(
+    private async Task MigrateVersionOneToVersionFourAsync(
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -133,10 +139,12 @@ public sealed class FurinaDatabase : IAsyncDisposable
                 "RENAME TO GachaRecords;");
             CreateGachaRecordIndexes(connection);
             MigrateVersionTwoToVersionThree(connection, cancellationToken);
+            MigrateVersionThreeToVersionFour(connection);
+            SetCurrentSchemaVersion(connection);
         });
     }
 
-    private async Task MigrateVersionTwoToVersionThreeAsync(
+    private async Task MigrateVersionTwoToVersionFourAsync(
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -145,6 +153,21 @@ public sealed class FurinaDatabase : IAsyncDisposable
         {
             cancellationToken.ThrowIfCancellationRequested();
             MigrateVersionTwoToVersionThree(connection, cancellationToken);
+            MigrateVersionThreeToVersionFour(connection);
+            SetCurrentSchemaVersion(connection);
+        });
+    }
+
+    private async Task MigrateVersionThreeToVersionFourAsync(
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        await Connection.RunInTransactionAsync(connection =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            MigrateVersionThreeToVersionFour(connection);
+            SetCurrentSchemaVersion(connection);
         });
     }
 
@@ -236,6 +259,27 @@ public sealed class FurinaDatabase : IAsyncDisposable
         connection.Execute(
             "DROP INDEX IF EXISTS UX_GameAccounts_PlayerArchiveId_Uid;");
         CreateGameAccountIdentityIndexes(connection);
+    }
+
+    private static void MigrateVersionThreeToVersionFour(
+        SQLiteConnection connection)
+    {
+        connection.Execute(
+            "ALTER TABLE GachaRecords ADD COLUMN Origin INTEGER NOT NULL DEFAULT 0;");
+        connection.Execute(
+            "ALTER TABLE GachaRecords ADD COLUMN FetchedAtUtcTicks INTEGER;");
+        connection.Execute(
+            "ALTER TABLE GachaRecords ADD COLUMN FetchedAtOffsetMinutes INTEGER;");
+        connection.Execute(
+            "ALTER TABLE GachaRecords ADD COLUMN ImportedAtUtcTicks INTEGER;");
+        connection.Execute(
+            "ALTER TABLE GachaRecords ADD COLUMN ImportedAtOffsetMinutes INTEGER;");
+        connection.Execute(
+            "ALTER TABLE GachaRecords ADD COLUMN AcquisitionBatchId TEXT;");
+    }
+
+    private static void SetCurrentSchemaVersion(SQLiteConnection connection)
+    {
         connection.Execute(
             $"PRAGMA user_version = {CurrentSchemaVersion};");
     }
@@ -315,6 +359,12 @@ public sealed class FurinaDatabase : IAsyncDisposable
                     Count INTEGER NOT NULL,
                     TimeUtcTicks INTEGER NOT NULL,
                     TimeOffsetMinutes INTEGER NOT NULL,
+                    Origin INTEGER NOT NULL,
+                    FetchedAtUtcTicks INTEGER,
+                    FetchedAtOffsetMinutes INTEGER,
+                    ImportedAtUtcTicks INTEGER,
+                    ImportedAtOffsetMinutes INTEGER,
+                    AcquisitionBatchId TEXT,
                     FOREIGN KEY (GameAccountId)
                         REFERENCES GameAccounts(Id)
                         ON DELETE CASCADE
