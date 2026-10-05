@@ -5,8 +5,10 @@ using System.Text;
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.Gacha.Metadata;
+using FurinaChronicle.Core.Records;
 using FurinaChronicle.Infrastructure.Gacha.Uigf.V4_2;
 using FurinaChronicle.Infrastructure.Persistence;
+using FurinaChronicle.Tests.Infrastructure.Persistence.Sqlite;
 using FurinaChronicle.Services.Gacha.Abstractions;
 using FurinaChronicle.Services.Gacha.Importing;
 using FurinaChronicle.Tests.Infrastructure.Gacha.Uigf.V4_2;
@@ -52,6 +54,50 @@ public sealed class ImportUigfGachaRecordsTests
         Assert.Equal(5, enriched.RankType);
         Assert.Equal("301", enriched.GachaType);
         Assert.Equal("301", enriched.UigfGachaType);
+        Assert.All(
+            asiaRecords,
+            record =>
+            {
+                Assert.Equal(
+                    DataOrigin.StandardImport,
+                    record.Provenance.Origin);
+                Assert.NotNull(record.Provenance.Timestamps.ImportedAt);
+                Assert.Null(record.Provenance.Timestamps.FetchedAt);
+                Assert.NotNull(record.Provenance.AcquisitionBatchId);
+            });
+        Assert.Single(
+            asiaRecords
+                .Select(record => record.Provenance.AcquisitionBatchId)
+                .Distinct());
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_UigfImport_PersistsProvenanceThroughSqliteRepository()
+    {
+        await using var context = SqliteRepositoryTestContext.Create();
+        PlayerArchive archive = SqliteRepositoryTestContext.CreateArchive();
+        await context.Archives.AddAsync(archive);
+        var service = new ImportUigfGachaRecords(
+            new UigfV42GachaReader(),
+            new TestMetadataProvider(),
+            context.Archives,
+            context.Accounts,
+            context.Gacha);
+
+        GachaImportResult result = await ExecuteAsync(
+            service,
+            TestUigfJson.Create(TestUigfJson.Record("1", "10000089")),
+            archive.Id);
+
+        Assert.Equal(1, result.ImportedCount);
+        GameAccount account = Assert.Single(
+            await context.Accounts.GetByArchiveIdAsync(archive.Id));
+        GachaRecord stored = Assert.Single(
+            await context.Gacha.GetRecentAsync(account.Id, 10));
+        Assert.Equal(DataOrigin.StandardImport, stored.Provenance.Origin);
+        Assert.NotNull(stored.Provenance.Timestamps.ImportedAt);
+        Assert.Null(stored.Provenance.Timestamps.FetchedAt);
+        Assert.NotNull(stored.Provenance.AcquisitionBatchId);
     }
 
     [Fact]

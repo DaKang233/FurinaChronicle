@@ -4,6 +4,7 @@
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.Gacha.Metadata;
+using FurinaChronicle.Core.Records;
 using FurinaChronicle.Services.Abstractions;
 using FurinaChronicle.Services.Gacha.Abstractions;
 using FurinaChronicle.Services.Gacha;
@@ -50,6 +51,11 @@ public sealed class ImportUigfGachaRecords(
         }
 
         GachaReadResult readResult = await reader.ReadAsync(source, cancellationToken);
+        DateTimeOffset importedAt = DateTimeOffset.UtcNow;
+        var importProvenance = new RecordProvenance(
+            DataOrigin.StandardImport,
+            new RecordTimestamps(ImportedAt: importedAt),
+            acquisitionBatchId: AcquisitionBatchId.New());
         Dictionary<Guid, List<GachaRecord>> recordsByAccount = [];
         Dictionary<string, GameAccount> accountsByUid = new(StringComparer.Ordinal);
         Dictionary<string, GachaItemMetadata?> metadataByItemId = new(StringComparer.Ordinal);
@@ -191,7 +197,8 @@ public sealed class ImportUigfGachaRecords(
                     ItemType = preparedRecord.ItemType,
                     GachaType = sourceRecord.GachaType,
                     UigfGachaType = sourceRecord.UigfGachaType,
-                    Count = sourceRecord.Count
+                    Count = sourceRecord.Count,
+                    Provenance = importProvenance
                 });
             }
         }

@@ -3,6 +3,7 @@
 
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Gacha;
+using FurinaChronicle.Core.Records;
 
 namespace FurinaChronicle.Services.Gacha.Refreshing;
 
@@ -56,7 +57,9 @@ public sealed record GachaRemoteRecord(
     DateTimeOffset Time,
     int Count = 1)
 {
-    public GachaRecord ToDomain(Guid gameAccountId)
+    public GachaRecord ToDomain(
+        Guid gameAccountId,
+        RecordProvenance? provenance = null)
     {
         return new GachaRecord(
             gameAccountId,
@@ -69,7 +72,8 @@ public sealed record GachaRemoteRecord(
             ItemType = ItemType,
             GachaType = GachaType,
             UigfGachaType = GachaType == "400" ? "301" : GachaType,
-            Count = Count
+            Count = Count,
+            Provenance = provenance ?? RecordProvenance.Unknown
         };
     }
 }

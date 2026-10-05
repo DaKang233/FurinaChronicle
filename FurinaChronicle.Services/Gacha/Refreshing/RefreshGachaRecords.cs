@@ -5,6 +5,7 @@ using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.Gacha.Metadata;
 using FurinaChronicle.Core.Passport;
+using FurinaChronicle.Core.Records;
 using FurinaChronicle.Services.Abstractions;
 using FurinaChronicle.Services.Gacha.Abstractions;
 using FurinaChronicle.Services.Passport;
@@ -35,6 +36,7 @@ public sealed class RefreshGachaRecords(
         }
 
         Uri sourceUrl = await ResolveSourceUrlAsync(request, cancellationToken);
+        AcquisitionBatchId batchId = AcquisitionBatchId.New();
         HashSet<string> localIds = request.Mode == GachaRefreshMode.Incremental
             ? await LoadExistingIdsAsync(request.GameAccount.Id, cancellationToken)
             : new HashSet<string>(StringComparer.Ordinal);
@@ -57,6 +59,11 @@ public sealed class RefreshGachaRecords(
                     gachaType,
                     endId,
                     cancellationToken);
+                DateTimeOffset fetchedAt = DateTimeOffset.UtcNow;
+                var pageProvenance = new RecordProvenance(
+                    DataOrigin.OfficialApi,
+                    new RecordTimestamps(FetchedAt: fetchedAt),
+                    acquisitionBatchId: batchId);
                 pageCount++;
 
                 bool reachedBoundary = false;
@@ -87,7 +94,9 @@ public sealed class RefreshGachaRecords(
                                 remote,
                                 metadataByName,
                                 cancellationToken);
-                        collected.Add(completed.ToDomain(request.GameAccount.Id));
+                        collected.Add(completed.ToDomain(
+                            request.GameAccount.Id,
+                            pageProvenance));
                     }
                 }
 

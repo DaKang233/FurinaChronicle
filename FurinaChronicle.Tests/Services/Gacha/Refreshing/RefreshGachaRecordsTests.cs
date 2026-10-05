@@ -5,10 +5,13 @@ using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.Gacha.Metadata;
 using FurinaChronicle.Core.Passport;
+using FurinaChronicle.Core.Records;
 using FurinaChronicle.Infrastructure.Persistence;
+using FurinaChronicle.Services.Abstractions;
 using FurinaChronicle.Services.Gacha.Abstractions;
 using FurinaChronicle.Services.Gacha.Refreshing;
 using FurinaChronicle.Services.Passport;
+using FurinaChronicle.Tests.Infrastructure.Persistence.Sqlite;
 
 namespace FurinaChronicle.Tests.Services.Gacha.Refreshing;
 
@@ -58,6 +61,16 @@ public sealed class RefreshGachaRecordsTests
         IReadOnlyList<GachaRecord> stored =
             await repository.GetRecentAsync(GameAccountId, 20);
         Assert.Contains(stored, item => item.ExternalRecordId == "103");
+        Assert.All(
+            stored.Where(item => item.ExternalRecordId is "102" or "103"),
+            item =>
+            {
+                Assert.Equal(DataOrigin.OfficialApi, item.Provenance.Origin);
+                Assert.NotNull(item.Provenance.Timestamps.FetchedAt);
+                Assert.Null(item.Provenance.Timestamps.ImportedAt);
+                Assert.NotNull(item.Provenance.AcquisitionBatchId);
+                Assert.Null(item.Provenance.Source);
+            });
         Assert.Contains(stored, item =>
             item.ExternalRecordId == "100" &&
             item.ItemName == "保留的本地名称" &&
@@ -103,7 +116,14 @@ public sealed class RefreshGachaRecordsTests
         Assert.Contains(stored, item =>
             item.ExternalRecordId == "100" &&
             item.ItemName == "Item 100" &&
-            item.RankType == 3);
+            item.RankType == 3 &&
+            item.Provenance.Origin == DataOrigin.OfficialApi);
+        AcquisitionBatchId?[] batchIds = stored
+            .Select(item => item.Provenance.AcquisitionBatchId)
+            .Distinct()
+            .ToArray();
+        Assert.Single(batchIds);
+        Assert.NotNull(batchIds[0]);
     }
 
     [Fact]
@@ -196,6 +216,35 @@ public sealed class RefreshGachaRecordsTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_OfficialRefresh_PersistsProvenanceThroughSqliteRepository()
+    {
+        await using var context = SqliteRepositoryTestContext.Create();
+        PlayerArchive archive = SqliteRepositoryTestContext.CreateArchive();
+        GameAccount account = SqliteRepositoryTestContext.CreateAccount(
+            archive.Id,
+            uid: GameAccount.Uid,
+            region: GameAccount.ServerRegion);
+        await context.Archives.AddAsync(archive);
+        await context.Accounts.AddAsync(account);
+        var client = new StubGachaLogClient();
+        client.Add("301", null, Page(Remote("sqlite-provenance")));
+        RefreshGachaRecords service = CreateService(context.Gacha, client);
+
+        await service.ExecuteAsync(new GachaRefreshRequest(
+            account,
+            GachaRefreshSource.ManualUrl,
+            ManualUrl: ValidUrl.AbsoluteUri));
+
+        GachaRecord stored = Assert.Single(
+            await context.Gacha.GetRecentAsync(account.Id, 10));
+        Assert.Equal(DataOrigin.OfficialApi, stored.Provenance.Origin);
+        Assert.NotNull(stored.Provenance.Timestamps.FetchedAt);
+        Assert.Null(stored.Provenance.Timestamps.ImportedAt);
+        Assert.NotNull(stored.Provenance.AcquisitionBatchId);
+        Assert.Null(stored.Provenance.Source);
+    }
+
+    [Fact]
     public async Task DiscoverIdentityAsync_UsesFirstNonEmptyPoolToFindUid()
     {
         var client = new StubGachaLogClient();
@@ -224,7 +273,7 @@ public sealed class RefreshGachaRecordsTests
     }
 
     private static RefreshGachaRecords CreateService(
-        InMemoryGachaRecordRepository repository,
+        IGachaRecordRepository repository,
         StubGachaLogClient client)
     {
         return new RefreshGachaRecords(
