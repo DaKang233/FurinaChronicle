@@ -33,7 +33,7 @@
 - Portable 与数据库/Chronicle 分离，格式版本独立、稳定引用和账号重映射、未知 future major 拒绝，标准优先；
 - 仅新空库初始化，已知旧版显式迁移；未知/未来数据库版本、application ID 不匹配时停止写入、保留原库，不删表重建。
 
-[身份模型](../architecture/IDENTITY_MODEL.md) 已于 2026-10-05 接受，其档案内副本、共享身份、自然身份和导入重映射语义不再作为开放产品问题。旧库的具体字段编码、稳定 GUID 生成和未知身份迁移仍须在 8B.1 首次 Schema 迁移前冻结并以 fixture 验证；这属于实施契约，不得通过静默默认值替代。
+[身份模型](../architecture/IDENTITY_MODEL.md) 已于 2026-10-05 接受，其档案内副本、共享身份、自然身份和导入重映射语义不再作为开放产品问题。自然身份字段编码、固定命名空间 UUID v5、Schema 3 迁移和 `Unresolved` 保留已经实现并由 fixture 覆盖；8B.1 后续实施不得把它们重新写成未冻结前置条件。
 
 退出标准：
 
@@ -71,6 +71,8 @@
 - 在任何新增 Schema 前落实未知版本及 application ID 的 fail-safe，并验证失败原库不变。
 
 当前已完成：共享身份与数据质量 Core 类型、规范原神自然身份、固定命名空间 UUID v5、数据库 fail-safe，以及 Schema 2→3 的原子共享身份迁移。旧占位账号以 `Unresolved` 保留；共享时间/来源字段尚未接入现有领域记录，8B.1 尚未退出。
+
+本轮最小字段、编码、输入映射和迁移 fixture 见 [Phase 8B.1 实施契约](PHASE_8B1_IMPLEMENTATION.md)。
 
 退出标准：Core 不依赖 SQLite、MAUI 或外部 DTO；当前采用的共享编码与迁移映射有说明及 fixture，旧数据库可安全原子升级。未知身份无法可靠迁移的情况必须明确报告，不默认为可迁移。
 

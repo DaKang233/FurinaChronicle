@@ -38,7 +38,8 @@ TemporalExtent
   Kind: Instant | Interval | UncertainInterval
   StartAt: DateTimeOffset
   EndAt: DateTimeOffset?
-  Precision: Exact | Minute | Hour | Day | Week | Period | BetweenObservations | Unknown
+  Precision: Second | Minute | Hour | Day | Week
+  RangeBasis: SourceRange | BetweenObservations | Unknown
   TimeBasis: SourceOffset | ServerZone | UserZone | Unknown
   OriginalOffsetMinutes: int?
 
@@ -56,7 +57,7 @@ ChronicleTime
 2. `Interval` 和 `UncertainInterval` 必须有 `EndAt`，且不得早于 `StartAt`。
 3. 内部比较必须以 UTC 时刻进行；来源偏移存在时必须保留。
 4. 只知道日期或周时不得擅自填充精确时分秒；必须分别使用 `Day` 或 `Week`。周精度使用包含该周边界的区间表达，不选择虚假的周内瞬时值。
-5. 两次观察之间发现的变化必须使用 `UncertainInterval` 和 `BetweenObservations`，除非来源提供了真实发生时间。
+5. 两次观察之间发现的变化必须使用 `UncertainInterval` 和 Chronicle 草案中的 `RangeBasis = BetweenObservations`，除非来源提供了真实发生时间。`RangeBasis` 不属于共享 `TimePrecision`，不得反向扩展 Accepted 枚举。
 6. 来源没有发生/完成时间时，`Occurred` 必须为空；不得把 `ObservedAt` 或 `FetchedAt` 写入 `Occurred`。
 7. `SortBasis` 必须说明排序锚点来自发生、观察还是抓取时间，UI 据此显示“发生于”“观察于”或“采集于”。
 
