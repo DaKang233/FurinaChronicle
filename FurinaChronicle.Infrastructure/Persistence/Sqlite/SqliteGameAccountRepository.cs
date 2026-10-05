@@ -116,6 +116,27 @@ public sealed class SqliteGameAccountRepository(FurinaDatabase database)
         return rows.FirstOrDefault()?.ToDomain();
     }
 
+    public async Task<GameRoleIdentity?> GetRoleIdentityByIdAsync(
+        GameRoleIdentityId roleIdentityId,
+        CancellationToken cancellationToken = default)
+    {
+        await database.InitializeAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        List<GameRoleIdentityRow> rows =
+            await database.Connection.QueryAsync<GameRoleIdentityRow>(
+                """
+                SELECT Id, GameBiz, Server, Uid
+                FROM GameRoleIdentities
+                WHERE Id = ?
+                LIMIT 1;
+                """,
+                roleIdentityId.Value.ToString("D"));
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return rows.FirstOrDefault()?.ToDomain();
+    }
+
     public async Task<IReadOnlyList<GameAccount>> GetUnresolvedAsync(
         CancellationToken cancellationToken = default)
     {

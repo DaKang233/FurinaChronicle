@@ -138,6 +138,28 @@ namespace FurinaChronicle.Infrastructure.Persistence
             }
         }
 
+        public async Task<IReadOnlyList<GachaRecord>> GetByExternalRecordIdsAsync(
+            Guid gameAccountId,
+            IReadOnlyCollection<string> externalRecordIds,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(externalRecordIds);
+            HashSet<string> ids = externalRecordIds.ToHashSet(
+                StringComparer.Ordinal);
+            await gate.WaitAsync(cancellationToken);
+            try
+            {
+                return records.Where(record =>
+                        record.GameAccountId == gameAccountId &&
+                        ids.Contains(record.ExternalRecordId))
+                    .ToArray();
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }
+
         public async Task<GachaSaveResult> SaveBatchAsync(
             IReadOnlyCollection<GachaRecord> newRecords,
             CancellationToken cancellationToken = default,

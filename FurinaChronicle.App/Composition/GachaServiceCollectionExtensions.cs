@@ -109,6 +109,7 @@ internal static class GachaServiceCollectionExtensions
         services.AddSingleton<
             IGachaPortableExportFileService,
             GachaPortableExportFileService>();
+        services.AddTransient<PlanGachaPortableImport>();
     }
 
     private static void AddRefreshing(IServiceCollection services)

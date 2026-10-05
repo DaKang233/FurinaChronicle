@@ -31,6 +31,11 @@ namespace FurinaChronicle.Services.Abstractions
             GachaRecordQuery query,
             CancellationToken cancellationToken = default);
 
+        Task<IReadOnlyList<GachaRecord>> GetByExternalRecordIdsAsync(
+            Guid gameAccountId,
+            IReadOnlyCollection<string> externalRecordIds,
+            CancellationToken cancellationToken = default);
+
         Task<GachaSaveResult> SaveBatchAsync(
             IReadOnlyCollection<GachaRecord> records,
             CancellationToken cancellationToken = default,

@@ -189,6 +189,85 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
                 arguments);
         }
 
+        public async Task<IReadOnlyList<GachaRecord>> GetByExternalRecordIdsAsync(
+            Guid gameAccountId,
+            IReadOnlyCollection<string> externalRecordIds,
+            CancellationToken cancellationToken = default)
+        {
+            if (gameAccountId == Guid.Empty)
+            {
+                throw new ArgumentException(
+                    "游戏账号 ID 不能为空。",
+                    nameof(gameAccountId));
+            }
+
+            ArgumentNullException.ThrowIfNull(externalRecordIds);
+            string[] ids = externalRecordIds
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            if (ids.Length != externalRecordIds.Count)
+            {
+                throw new ArgumentException(
+                    "外部记录 ID 必须非空且不能重复。",
+                    nameof(externalRecordIds));
+            }
+
+            if (ids.Length == 0)
+            {
+                return [];
+            }
+
+            await database.InitializeAsync(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            var result = new List<GachaRecord>(ids.Length);
+            const int maximumIdsPerQuery = 500;
+            for (int offset = 0; offset < ids.Length; offset += maximumIdsPerQuery)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                string[] batch = ids
+                    .Skip(offset)
+                    .Take(maximumIdsPerQuery)
+                    .ToArray();
+                string placeholders = string.Join(", ", batch.Select(_ => "?"));
+                object[] arguments =
+                [
+                    gameAccountId.ToString("D"),
+                    .. batch.Cast<object>(),
+                ];
+                List<GachaRecordRow> rows =
+                    await database.Connection.QueryAsync<GachaRecordRow>(
+                        $"""
+                        SELECT
+                            Id,
+                            GameAccountId,
+                            ExternalRecordId,
+                            ItemName,
+                            ItemId,
+                            ItemType,
+                            GachaType,
+                            UigfGachaType,
+                            RankType,
+                            Count,
+                            TimeUtcTicks,
+                            TimeOffsetMinutes,
+                            Origin,
+                            FetchedAtUtcTicks,
+                            FetchedAtOffsetMinutes,
+                            ImportedAtUtcTicks,
+                            ImportedAtOffsetMinutes,
+                            AcquisitionBatchId
+                        FROM {GachaRecordRow.TableName}
+                        WHERE GameAccountId = ?
+                            AND ExternalRecordId IN ({placeholders});
+                        """,
+                        arguments);
+                result.AddRange(rows.Select(row => row.ToDomain()));
+            }
+
+            return result;
+        }
+
         public async Task<GachaSaveResult> SaveBatchAsync(
             IReadOnlyCollection<GachaRecord> records,
             CancellationToken cancellationToken = default,

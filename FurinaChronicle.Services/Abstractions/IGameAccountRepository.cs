@@ -19,6 +19,9 @@ namespace FurinaChronicle.Services.Abstractions
         Task<GameRoleIdentity?> GetRoleIdentityByNaturalIdentityAsync(
             GameRoleNaturalIdentity naturalIdentity,
             CancellationToken cancellationToken = default);
+        Task<GameRoleIdentity?> GetRoleIdentityByIdAsync(
+            GameRoleIdentityId roleIdentityId,
+            CancellationToken cancellationToken = default);
         Task<IReadOnlyList<GameAccount>> GetUnresolvedAsync(
             CancellationToken cancellationToken = default);
         Task AddAsync(GameAccount account,  CancellationToken cancellationToken = default);

@@ -170,6 +170,15 @@ public sealed class GetRecentGachaRecordsTests
                 "该测试替身只用于测试最近记录查询。");
         }
 
+        public Task<IReadOnlyList<GachaRecord>> GetByExternalRecordIdsAsync(
+            Guid gameAccountId,
+            IReadOnlyCollection<string> externalRecordIds,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException(
+                "该测试替身只用于测试最近记录查询。");
+        }
+
 
         public Task<GachaSaveResult> SaveBatchAsync(
             IReadOnlyCollection<GachaRecord> records,

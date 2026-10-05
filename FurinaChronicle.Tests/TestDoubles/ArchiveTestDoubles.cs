@@ -115,6 +115,17 @@ internal sealed class InMemoryGameAccountRepository : IGameAccountRepository
         return Task.FromResult(result);
     }
 
+    public Task<GameRoleIdentity?> GetRoleIdentityByIdAsync(
+        GameRoleIdentityId roleIdentityId,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        GameRoleIdentity? result = accounts.Values
+            .Select(account => account.RoleIdentity)
+            .FirstOrDefault(identity => identity?.Id == roleIdentityId);
+        return Task.FromResult(result);
+    }
+
     public Task<IReadOnlyList<GameAccount>> GetUnresolvedAsync(
         CancellationToken cancellationToken = default)
     {
