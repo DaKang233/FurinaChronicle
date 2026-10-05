@@ -72,6 +72,8 @@ public sealed class TeyvatHelperUigfImportSource(
         }
 
         DateTimeOffset now = DateTimeOffset.UtcNow;
+        GameRoleIdentity roleIdentity =
+            GenshinGameRoleIdentity.CreateIdentity(selected.Uid, region);
         var gameAccount = new GameAccount(
             Guid.NewGuid(),
             Guid.NewGuid(),
@@ -80,7 +82,8 @@ public sealed class TeyvatHelperUigfImportSource(
             DisplayName: null,
             IsPlaceholder: false,
             now,
-            now);
+            now,
+            roleIdentity);
 
         // Do not cache this URI: its authkey is temporary and must be generated
         // immediately before it is sent to the explicitly selected third party.

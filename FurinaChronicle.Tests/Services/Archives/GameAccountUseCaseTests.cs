@@ -27,6 +27,14 @@ public sealed class GameAccountUseCaseTests
         Assert.Equal("123456789", created.Uid);
         Assert.Equal("主账号", created.DisplayName);
         Assert.False(created.IsPlaceholder);
+        Assert.Equal(
+            GameRoleIdentityResolutionState.Resolved,
+            created.IdentityResolutionState);
+        Assert.Equal(
+            GenshinGameRoleIdentity.CreateIdentity(
+                "123456789",
+                GameServerRegion.Asia),
+            created.RoleIdentity);
         Assert.Equal(created, await accounts.GetByIdAsync(created.Id));
     }
 
@@ -116,6 +124,9 @@ public sealed class GameAccountUseCaseTests
         Assert.Equal(GameServerRegion.Asia, updated.ServerRegion);
         Assert.Equal("已补全", updated.DisplayName);
         Assert.False(updated.IsPlaceholder);
+        Assert.Equal(
+            GameRoleIdentityResolutionState.Resolved,
+            updated.IdentityResolutionState);
         Assert.Equal(updated, await accounts.GetByIdAsync(original.Id));
     }
 

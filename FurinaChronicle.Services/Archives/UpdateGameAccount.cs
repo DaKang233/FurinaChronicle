@@ -60,13 +60,19 @@ public sealed class UpdateGameAccount(IGameAccountRepository repository)
             throw new InvalidOperationException("该档案下已经存在相同 UID 的账号。");
         }
 
+        GameRoleIdentity roleIdentity =
+            GenshinGameRoleIdentity.CreateIdentity(
+                normalizedUid,
+                serverRegion);
+
         GameAccount updated = current with
         {
             Uid = normalizedUid,
             ServerRegion = serverRegion,
             DisplayName = normalizedDisplayName,
             IsPlaceholder = false,
-            UpdatedAt = DateTimeOffset.UtcNow
+            UpdatedAt = DateTimeOffset.UtcNow,
+            RoleIdentity = roleIdentity,
         };
 
         await repository.UpdateAsync(updated, cancellationToken);

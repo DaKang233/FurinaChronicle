@@ -28,8 +28,21 @@ namespace FurinaChronicle.Services.Archives
             string? normalizedDisplayName = string.IsNullOrWhiteSpace(displayName) ? null : displayName.Trim();
             if (!string.IsNullOrEmpty(normalizedDisplayName) && normalizedDisplayName.Length - uid.Length - 3 > 50) throw new ArgumentException("显示名称不能超过 50 个字符", nameof(displayName));
             DateTimeOffset now = DateTimeOffset.UtcNow;
+            GameRoleIdentity roleIdentity =
+                GenshinGameRoleIdentity.CreateIdentity(
+                    normalizedUid,
+                    serverRegion);
 
-            var account = new GameAccount(Guid.NewGuid(), playerArchiveId, normalizedUid, serverRegion, normalizedDisplayName, IsPlaceholder: false, now, now);
+            var account = new GameAccount(
+                Guid.NewGuid(),
+                playerArchiveId,
+                normalizedUid,
+                serverRegion,
+                normalizedDisplayName,
+                IsPlaceholder: false,
+                now,
+                now,
+                roleIdentity);
             await accountRepository.AddAsync(account, cancellationToken);
             return account;
         }

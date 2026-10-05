@@ -263,6 +263,8 @@ public sealed class ImportUigfGachaRecords(
         }
 
         DateTimeOffset now = DateTimeOffset.UtcNow;
+        GameRoleIdentity roleIdentity =
+            GenshinGameRoleIdentity.CreateIdentity(uid, region);
         var account = new GameAccount(
             Guid.NewGuid(),
             playerArchiveId,
@@ -271,7 +273,8 @@ public sealed class ImportUigfGachaRecords(
             uid,
             IsPlaceholder: false,
             now,
-            now);
+            now,
+            roleIdentity);
         await accountRepository.AddAsync(account, cancellationToken);
         return account;
     }
