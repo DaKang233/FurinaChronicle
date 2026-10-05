@@ -13,7 +13,15 @@ public sealed class SqliteGameAccountRepositoryTests
     {
         await using var context = SqliteRepositoryTestContext.Create();
         PlayerArchive archive = await AddArchiveAsync(context);
-        GameAccount account = SqliteRepositoryTestContext.CreateAccount(archive.Id);
+        GameRoleIdentity roleIdentity =
+            GenshinGameRoleIdentity.CreateIdentity(
+                "800000001",
+                GameServerRegion.Asia);
+        GameAccount account = SqliteRepositoryTestContext.CreateAccount(
+            archive.Id,
+            uid: "800000001",
+            region: GameServerRegion.Asia,
+            roleIdentity: roleIdentity);
 
         await context.Accounts.AddAsync(account);
 
@@ -153,6 +161,141 @@ public sealed class SqliteGameAccountRepositoryTests
         IReadOnlyList<GameAccount> loaded2 = await context.Accounts.GetByArchiveIdAsync(archive2.Id);
 
         Assert.Equal(2, loaded1.Count + loaded2.Count);
+    }
+
+    [Fact]
+    public async Task AddAsync_SameResolvedIdentityInDifferentArchives_SharesIdentityId()
+    {
+        await using var context = SqliteRepositoryTestContext.Create();
+        PlayerArchive firstArchive = await AddArchiveAsync(context, "档案 A");
+        PlayerArchive secondArchive = await AddArchiveAsync(context, "档案 B");
+        GameRoleIdentity roleIdentity =
+            GenshinGameRoleIdentity.CreateIdentity(
+                "800000001",
+                GameServerRegion.Asia);
+        GameAccount first = SqliteRepositoryTestContext.CreateAccount(
+            firstArchive.Id,
+            uid: roleIdentity.NaturalIdentity.Uid,
+            roleIdentity: roleIdentity);
+        GameAccount second = SqliteRepositoryTestContext.CreateAccount(
+            secondArchive.Id,
+            uid: roleIdentity.NaturalIdentity.Uid,
+            roleIdentity: roleIdentity);
+
+        await context.Accounts.AddAsync(first);
+        await context.Accounts.AddAsync(second);
+
+        GameAccount loadedFirst = Assert.IsType<GameAccount>(
+            await context.Accounts.GetByIdAsync(first.Id));
+        GameAccount loadedSecond = Assert.IsType<GameAccount>(
+            await context.Accounts.GetByIdAsync(second.Id));
+        Assert.Equal(
+            GameRoleIdentityResolutionState.Resolved,
+            loadedFirst.IdentityResolutionState);
+        Assert.Equal(loadedFirst.RoleIdentity, loadedSecond.RoleIdentity);
+    }
+
+    [Fact]
+    public async Task AddAsync_SameResolvedIdentityInOneArchive_IsRejected()
+    {
+        await using var context = SqliteRepositoryTestContext.Create();
+        PlayerArchive archive = await AddArchiveAsync(context);
+        GameRoleIdentity roleIdentity =
+            GenshinGameRoleIdentity.CreateIdentity(
+                "800000001",
+                GameServerRegion.Asia);
+        GameAccount first = SqliteRepositoryTestContext.CreateAccount(
+            archive.Id,
+            uid: roleIdentity.NaturalIdentity.Uid,
+            roleIdentity: roleIdentity);
+        GameAccount duplicate = SqliteRepositoryTestContext.CreateAccount(
+            archive.Id,
+            uid: roleIdentity.NaturalIdentity.Uid,
+            roleIdentity: roleIdentity);
+        await context.Accounts.AddAsync(first);
+
+        await Assert.ThrowsAsync<SQLiteException>(
+            () => context.Accounts.AddAsync(duplicate));
+    }
+
+    [Fact]
+    public async Task AddAsync_SameIdentityIdForDifferentNaturalIdentity_IsRejected()
+    {
+        await using var context = SqliteRepositoryTestContext.Create();
+        PlayerArchive firstArchive = await AddArchiveAsync(context, "档案 A");
+        PlayerArchive secondArchive = await AddArchiveAsync(context, "档案 B");
+        GameRoleIdentity firstIdentity =
+            GenshinGameRoleIdentity.CreateIdentity(
+                "800000001",
+                GameServerRegion.Asia);
+        var conflictingIdentity = new GameRoleIdentity(
+            firstIdentity.Id,
+            new GameRoleNaturalIdentity(
+                "hk4e_global",
+                "os_usa",
+                "600000001"));
+        GameAccount first = SqliteRepositoryTestContext.CreateAccount(
+            firstArchive.Id,
+            uid: firstIdentity.NaturalIdentity.Uid,
+            roleIdentity: firstIdentity);
+        GameAccount conflicting = SqliteRepositoryTestContext.CreateAccount(
+            secondArchive.Id,
+            uid: conflictingIdentity.NaturalIdentity.Uid,
+            region: GameServerRegion.America,
+            roleIdentity: conflictingIdentity);
+        await context.Accounts.AddAsync(first);
+
+        await Assert.ThrowsAsync<InvalidDataException>(
+            () => context.Accounts.AddAsync(conflicting));
+        Assert.Null(await context.Accounts.GetByIdAsync(conflicting.Id));
+    }
+
+    [Fact]
+    public async Task AddAsync_SameNaturalIdentityWithDifferentId_IsRejected()
+    {
+        await using var context = SqliteRepositoryTestContext.Create();
+        PlayerArchive firstArchive = await AddArchiveAsync(context, "档案 A");
+        PlayerArchive secondArchive = await AddArchiveAsync(context, "档案 B");
+        GameRoleIdentity firstIdentity =
+            GenshinGameRoleIdentity.CreateIdentity(
+                "800000001",
+                GameServerRegion.Asia);
+        var conflictingIdentity = new GameRoleIdentity(
+            new GameRoleIdentityId(Guid.NewGuid()),
+            firstIdentity.NaturalIdentity);
+        GameAccount first = SqliteRepositoryTestContext.CreateAccount(
+            firstArchive.Id,
+            uid: firstIdentity.NaturalIdentity.Uid,
+            roleIdentity: firstIdentity);
+        GameAccount conflicting = SqliteRepositoryTestContext.CreateAccount(
+            secondArchive.Id,
+            uid: conflictingIdentity.NaturalIdentity.Uid,
+            roleIdentity: conflictingIdentity);
+        await context.Accounts.AddAsync(first);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => context.Accounts.AddAsync(conflicting));
+        Assert.Null(await context.Accounts.GetByIdAsync(conflicting.Id));
+    }
+
+    [Fact]
+    public async Task AddAsync_AccountFieldsDoNotMatchResolvedIdentity_IsRejected()
+    {
+        await using var context = SqliteRepositoryTestContext.Create();
+        PlayerArchive archive = await AddArchiveAsync(context);
+        GameRoleIdentity roleIdentity =
+            GenshinGameRoleIdentity.CreateIdentity(
+                "800000001",
+                GameServerRegion.Asia);
+        GameAccount account = SqliteRepositoryTestContext.CreateAccount(
+            archive.Id,
+            uid: "600000001",
+            region: GameServerRegion.America,
+            roleIdentity: roleIdentity);
+
+        await Assert.ThrowsAsync<InvalidDataException>(
+            () => context.Accounts.AddAsync(account));
+        Assert.Null(await context.Accounts.GetByIdAsync(account.Id));
     }
 
     [Fact]

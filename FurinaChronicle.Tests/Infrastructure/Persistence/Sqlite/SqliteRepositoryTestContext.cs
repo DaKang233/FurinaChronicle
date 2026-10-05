@@ -62,7 +62,8 @@ internal sealed class SqliteRepositoryTestContext : IAsyncDisposable
         string? displayName = "测试账号",
         Guid? id = null,
         bool isPlaceholder = false,
-        DateTimeOffset? updatedAt = null)
+        DateTimeOffset? updatedAt = null,
+        GameRoleIdentity? roleIdentity = null)
     {
         DateTimeOffset createdAt = new(2026, 7, 16, 10, 0, 0, TimeSpan.Zero);
 
@@ -74,7 +75,8 @@ internal sealed class SqliteRepositoryTestContext : IAsyncDisposable
             displayName,
             isPlaceholder,
             createdAt,
-            updatedAt ?? createdAt);
+            updatedAt ?? createdAt,
+            roleIdentity);
     }
 
     public async ValueTask DisposeAsync()

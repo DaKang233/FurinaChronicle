@@ -1,13 +1,15 @@
 // Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
+using FurinaChronicle.Core.Archives;
 using SQLite;
 
 namespace FurinaChronicle.Infrastructure.Persistence.Sqlite;
 
 public sealed class FurinaDatabase : IAsyncDisposable
 {
-    private const int CurrentSchemaVersion = 2;
+    private const int CurrentSchemaVersion = 3;
+    private const int PreSharedIdentitySchemaVersion = 2;
     private const int LegacyGachaSchemaVersion = 1;
     private const string LegacyGachaRecordsTableName = "WishRecords";
     private const string LegacyGachaRecordsUniqueIndexName =
@@ -72,14 +74,35 @@ public sealed class FurinaDatabase : IAsyncDisposable
                 "PRAGMA application_id;");
 
             if (applicationId == CurrentApplicationId &&
+                schemaVersion == CurrentSchemaVersion)
+            {
+                initialized = true;
+                return;
+            }
+
+            if (applicationId == CurrentApplicationId &&
                 schemaVersion == LegacyGachaSchemaVersion)
             {
-                await MigrateVersionOneToVersionTwoAsync(cancellationToken);
+                await MigrateVersionOneToVersionThreeAsync(cancellationToken);
             }
-            else if (schemaVersion != CurrentSchemaVersion ||
-                     applicationId != CurrentApplicationId)
+            else if (applicationId == CurrentApplicationId &&
+                     schemaVersion == PreSharedIdentitySchemaVersion)
             {
-                await RecreateCurrentSchemaAsync(cancellationToken);
+                await MigrateVersionTwoToVersionThreeAsync(cancellationToken);
+            }
+            else if (applicationId == 0 &&
+                     schemaVersion == 0 &&
+                     await IsEmptyDatabaseAsync(cancellationToken))
+            {
+                await CreateCurrentSchemaAsync(cancellationToken);
+            }
+            else
+            {
+                throw new FurinaDatabaseCompatibilityException(
+                    applicationId,
+                    schemaVersion,
+                    CurrentApplicationId,
+                    CurrentSchemaVersion);
             }
 
             initialized = true;
@@ -90,7 +113,7 @@ public sealed class FurinaDatabase : IAsyncDisposable
         }
     }
 
-    private async Task MigrateVersionOneToVersionTwoAsync(
+    private async Task MigrateVersionOneToVersionThreeAsync(
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -109,12 +132,11 @@ public sealed class FurinaDatabase : IAsyncDisposable
                 $"ALTER TABLE {LegacyGachaRecordsTableName} " +
                 "RENAME TO GachaRecords;");
             CreateGachaRecordIndexes(connection);
-            connection.Execute(
-                $"PRAGMA user_version = {CurrentSchemaVersion};");
+            MigrateVersionTwoToVersionThree(connection, cancellationToken);
         });
     }
 
-    private async Task RecreateCurrentSchemaAsync(
+    private async Task MigrateVersionTwoToVersionThreeAsync(
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -122,14 +144,116 @@ public sealed class FurinaDatabase : IAsyncDisposable
         await Connection.RunInTransactionAsync(connection =>
         {
             cancellationToken.ThrowIfCancellationRequested();
+            MigrateVersionTwoToVersionThree(connection, cancellationToken);
+        });
+    }
 
-            // Pre-release schemas are intentionally unsupported. Drop children
-            // before parents so the operation also works with foreign keys on.
-            connection.Execute("DROP TABLE IF EXISTS GachaRecords;");
+    private static void MigrateVersionTwoToVersionThree(
+        SQLiteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        CreateGameRoleIdentityTable(connection);
+        connection.Execute(
+            """
+            ALTER TABLE GameAccounts
+            ADD COLUMN GameRoleIdentityId TEXT
+                REFERENCES GameRoleIdentities(Id);
+            """);
+
+        List<LegacyGameAccountIdentityRow> accounts = connection
+            .Query<LegacyGameAccountIdentityRow>(
+                """
+                SELECT Id, Uid, ServerRegion, IsPlaceholder
+                FROM GameAccounts;
+                """);
+
+        foreach (LegacyGameAccountIdentityRow account in accounts)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (account.IsPlaceholder ||
+                !GenshinGameRoleIdentity.TryCreate(
+                    account.Uid,
+                    (GameServerRegion)account.ServerRegion,
+                    out GameRoleNaturalIdentity? naturalIdentity))
+            {
+                continue;
+            }
+
+            var roleIdentity = new GameRoleIdentity(
+                GameRoleIdentityId.FromNaturalIdentity(naturalIdentity),
+                naturalIdentity);
+            GameRoleIdentityRow row =
+                GameRoleIdentityRow.FromDomain(roleIdentity);
+
             connection.Execute(
-                $"DROP TABLE IF EXISTS {LegacyGachaRecordsTableName};");
-            connection.Execute("DROP TABLE IF EXISTS GameAccounts;");
-            connection.Execute("DROP TABLE IF EXISTS PlayerArchives;");
+                """
+                INSERT OR IGNORE INTO GameRoleIdentities
+                    (Id, GameBiz, Server, Uid)
+                VALUES (?, ?, ?, ?);
+                """,
+                row.Id,
+                row.GameBiz,
+                row.Server,
+                row.Uid);
+
+            int matchingIdentityCount = connection.ExecuteScalar<int>(
+                """
+                SELECT COUNT(*)
+                FROM GameRoleIdentities
+                WHERE Id = ? AND GameBiz = ? AND Server = ? AND Uid = ?;
+                """,
+                row.Id,
+                row.GameBiz,
+                row.Server,
+                row.Uid);
+            if (matchingIdentityCount != 1)
+            {
+                throw new InvalidDataException(
+                    $"Role identity collision while migrating game account {account.Id}.");
+            }
+
+            connection.Execute(
+                """
+                UPDATE GameAccounts
+                SET GameRoleIdentityId = ?
+                WHERE Id = ?;
+                """,
+                row.Id,
+                account.Id);
+        }
+
+        connection.Execute(
+            "DROP INDEX IF EXISTS UX_GameAccounts_PlayerArchiveId_Uid;");
+        CreateGameAccountIdentityIndexes(connection);
+        connection.Execute(
+            $"PRAGMA user_version = {CurrentSchemaVersion};");
+    }
+
+    private async Task<bool> IsEmptyDatabaseAsync(
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        int schemaObjectCount = await Connection.ExecuteScalarAsync<int>(
+            """
+            SELECT COUNT(*)
+            FROM sqlite_master
+            WHERE name NOT LIKE 'sqlite_%';
+            """);
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return schemaObjectCount == 0;
+    }
+
+    private async Task CreateCurrentSchemaAsync(
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        await Connection.RunInTransactionAsync(connection =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
 
             connection.Execute(
                 """
@@ -142,12 +266,15 @@ public sealed class FurinaDatabase : IAsyncDisposable
                 );
                 """);
 
+            CreateGameRoleIdentityTable(connection);
+
             connection.Execute(
                 """
                 CREATE TABLE GameAccounts
                 (
                     Id TEXT PRIMARY KEY NOT NULL,
                     PlayerArchiveId TEXT NOT NULL,
+                    GameRoleIdentityId TEXT,
                     Uid TEXT NOT NULL,
                     ServerRegion INTEGER NOT NULL,
                     DisplayName TEXT,
@@ -156,7 +283,9 @@ public sealed class FurinaDatabase : IAsyncDisposable
                     UpdatedAtUtcTicks INTEGER NOT NULL,
                     FOREIGN KEY (PlayerArchiveId)
                         REFERENCES PlayerArchives(Id)
-                        ON DELETE CASCADE
+                        ON DELETE CASCADE,
+                    FOREIGN KEY (GameRoleIdentityId)
+                        REFERENCES GameRoleIdentities(Id)
                 );
                 """);
 
@@ -188,11 +317,7 @@ public sealed class FurinaDatabase : IAsyncDisposable
                 ON GameAccounts(PlayerArchiveId);
                 """);
 
-            connection.Execute(
-                """
-                CREATE UNIQUE INDEX UX_GameAccounts_PlayerArchiveId_Uid
-                ON GameAccounts(PlayerArchiveId, Uid);
-                """);
+            CreateGameAccountIdentityIndexes(connection);
 
             CreateGachaRecordIndexes(connection);
 
@@ -222,6 +347,62 @@ public sealed class FurinaDatabase : IAsyncDisposable
             CREATE INDEX IX_GachaRecords_GameAccountId
             ON GachaRecords(GameAccountId);
             """);
+    }
+
+    private static void CreateGameRoleIdentityTable(
+        SQLiteConnection connection)
+    {
+        connection.Execute(
+            """
+            CREATE TABLE GameRoleIdentities
+            (
+                Id TEXT PRIMARY KEY NOT NULL,
+                GameBiz TEXT NOT NULL,
+                Server TEXT NOT NULL,
+                Uid TEXT NOT NULL
+            );
+            """);
+
+        connection.Execute(
+            """
+            CREATE UNIQUE INDEX UX_GameRoleIdentities_NaturalIdentity
+            ON GameRoleIdentities(GameBiz, Server, Uid);
+            """);
+    }
+
+    private static void CreateGameAccountIdentityIndexes(
+        SQLiteConnection connection)
+    {
+        connection.Execute(
+            """
+            CREATE INDEX IX_GameAccounts_GameRoleIdentityId
+            ON GameAccounts(GameRoleIdentityId);
+            """);
+
+        connection.Execute(
+            """
+            CREATE UNIQUE INDEX UX_GameAccounts_Archive_RoleIdentity
+            ON GameAccounts(PlayerArchiveId, GameRoleIdentityId)
+            WHERE GameRoleIdentityId IS NOT NULL;
+            """);
+
+        connection.Execute(
+            """
+            CREATE UNIQUE INDEX UX_GameAccounts_Archive_UnresolvedIdentity
+            ON GameAccounts(PlayerArchiveId, Uid, ServerRegion)
+            WHERE GameRoleIdentityId IS NULL;
+            """);
+    }
+
+    private sealed class LegacyGameAccountIdentityRow
+    {
+        public string Id { get; set; } = string.Empty;
+
+        public string Uid { get; set; } = string.Empty;
+
+        public int ServerRegion { get; set; }
+
+        public bool IsPlaceholder { get; set; }
     }
 
     public async ValueTask DisposeAsync()

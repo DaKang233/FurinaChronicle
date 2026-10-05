@@ -20,6 +20,8 @@ internal sealed class GameAccountRow
     [NotNull]
     public string PlayerArchiveId { get; set; } = string.Empty;
 
+    public string? GameRoleIdentityId { get; set; }
+
     [NotNull]
     public string Uid { get; set; } = string.Empty;
 
@@ -39,6 +41,7 @@ internal sealed class GameAccountRow
         {
             Id = account.Id.ToString("D"),
             PlayerArchiveId = account.PlayerArchiveId.ToString("D"),
+            GameRoleIdentityId = account.GameRoleIdentityId?.ToString(),
             Uid = account.Uid,
             ServerRegion = (int)account.ServerRegion,
             DisplayName = account.DisplayName,
@@ -48,16 +51,4 @@ internal sealed class GameAccountRow
         };
     }
 
-    public GameAccount ToDomain()
-    {
-        return new GameAccount(
-            Guid.Parse(Id),
-            Guid.Parse(PlayerArchiveId),
-            Uid,
-            (GameServerRegion)ServerRegion,
-            DisplayName,
-            IsPlaceholder,
-            new DateTimeOffset(CreatedAtUtcTicks, TimeSpan.Zero),
-            new DateTimeOffset(UpdatedAtUtcTicks, TimeSpan.Zero));
-    }
 }
