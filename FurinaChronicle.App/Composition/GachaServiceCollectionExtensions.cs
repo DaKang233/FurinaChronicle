@@ -8,6 +8,7 @@ using FurinaChronicle.Infrastructure.Gacha.Metadata.Abstractions;
 using FurinaChronicle.Infrastructure.Gacha.Metadata.Localization;
 using FurinaChronicle.Infrastructure.Gacha.Metadata.Persistence;
 using FurinaChronicle.Infrastructure.Gacha.Metadata.Remote;
+using FurinaChronicle.Infrastructure.Gacha.Portable;
 using FurinaChronicle.Infrastructure.Gacha.Refreshing;
 using FurinaChronicle.Infrastructure.Gacha.Uigf.Compatibility;
 using FurinaChronicle.Infrastructure.Gacha.Uigf.V4_2;
@@ -18,6 +19,7 @@ using FurinaChronicle.Services.Gacha.Abstractions;
 using FurinaChronicle.Services.Gacha.Analytics;
 using FurinaChronicle.Services.Gacha.Exporting;
 using FurinaChronicle.Services.Gacha.Importing;
+using FurinaChronicle.Services.Gacha.Portable;
 using FurinaChronicle.Services.Gacha.Refreshing;
 
 namespace FurinaChronicle.App.Composition;
@@ -29,6 +31,7 @@ internal static class GachaServiceCollectionExtensions
     {
         AddQueries(services);
         AddImportAndExport(services);
+        AddPortable(services);
         AddMetadata(services);
         AddRefreshing(services);
 
@@ -89,6 +92,17 @@ internal static class GachaServiceCollectionExtensions
                 Path.Combine(FileSystem.CacheDirectory, "gacha-banner-images")));
         services.AddSingleton<IGachaBannerImageCache, FileGachaBannerImageCache>();
         services.AddTransient<PreloadGachaBannerImages>();
+    }
+
+    private static void AddPortable(IServiceCollection services)
+    {
+        services.AddSingleton(new GachaPortableLimits());
+        services.AddSingleton<
+            IGachaPortablePackageWriter,
+            GachaPortablePackageWriter>();
+        services.AddSingleton<
+            IGachaPortablePackageReader,
+            GachaPortablePackageReader>();
     }
 
     private static void AddRefreshing(IServiceCollection services)
