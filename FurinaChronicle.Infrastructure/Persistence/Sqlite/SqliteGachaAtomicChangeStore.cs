@@ -7,13 +7,16 @@ using System.Security.Cryptography;
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.History;
 using FurinaChronicle.Core.Records;
+using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Services.Gacha.History;
+using FurinaChronicle.Services.Gacha.Portable;
 using SQLite;
 
 namespace FurinaChronicle.Infrastructure.Persistence.Sqlite;
 
 public sealed class SqliteGachaAtomicChangeStore
-    : IGachaAtomicChangeStore
+    : IGachaAtomicChangeStore,
+      IGachaPortableImportApplier
 {
     internal const int SnapshotFormatVersion = 1;
     internal const string EntityKind = "gacha_record";
@@ -774,6 +777,275 @@ public sealed class SqliteGachaAtomicChangeStore
             "The irreversible Gacha deletion did not produce a result.");
     }
 
+    public async Task<GachaPortableApplyResult> ApplyAsync(
+        GachaPortableApplyRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(request.Package);
+        ArgumentNullException.ThrowIfNull(request.Plan);
+        if (request.ReceiptBatchId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "Receipt batch ID cannot be empty.",
+                nameof(request));
+        }
+        await database.InitializeAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        GachaPortableApplyResult? result = null;
+        await database.Connection.RunInTransactionAsync(connection =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            CommitResultRow? committed = ReadCommitResult(
+                connection,
+                request.OperationId);
+            if (committed is not null)
+            {
+                result = ReadCommittedPortableResult(
+                    connection,
+                    committed);
+                return;
+            }
+
+            PortablePreparation preparation;
+            try
+            {
+                preparation = PreparePortableApply(
+                    connection,
+                    request,
+                    cancellationToken);
+            }
+            catch (PortableApplySuppressedException exception)
+            {
+                result = new GachaPortableApplyResult(
+                    ChangeExecutionStatus.Suppressed,
+                    ChangeSetId: null,
+                    TargetArchiveId: exception.Warning.ArchiveId,
+                    Accounts: [],
+                    InsertedRecordCount: 0,
+                    SkippedRecordCount: 0,
+                    exception.Message,
+                    exception.Warning);
+                return;
+            }
+            catch (PortableApplyConflictException exception)
+            {
+                result = new GachaPortableApplyResult(
+                    ChangeExecutionStatus.Conflict,
+                    ChangeSetId: null,
+                    TargetArchiveId: null,
+                    Accounts: [],
+                    InsertedRecordCount: 0,
+                    SkippedRecordCount: 0,
+                    exception.Message);
+                return;
+            }
+
+            bool hasPersistentChange =
+                preparation.CreateArchive ||
+                preparation.IdentitiesToInsert.Count > 0 ||
+                preparation.Accounts.Any(account => account.CreateAccount) ||
+                preparation.AliasesToInsert.Count > 0 ||
+                preparation.Mutations.Count > 0;
+            if (!hasPersistentChange)
+            {
+                InsertPortableNoOpCommitResult(connection, request);
+                result = new GachaPortableApplyResult(
+                    ChangeExecutionStatus.NoOp,
+                    ChangeSetId: null,
+                    preparation.ArchiveId,
+                    preparation.Accounts.Select(
+                        account => account.ToResult()).ToArray(),
+                    InsertedRecordCount: 0,
+                    preparation.Accounts.Sum(
+                        account => account.SkippedRecordCount));
+                return;
+            }
+
+            if (preparation.CreateArchive)
+            {
+                connection.Execute(
+                    """
+                    INSERT INTO PlayerArchives
+                        (Id, Name, CreatedAtUtcTicks, UpdatedAtUtcTicks)
+                    VALUES (?, ?, ?, ?);
+                    """,
+                    preparation.ArchiveId.ToString("D"),
+                    request.Plan.Archive.ProposedName,
+                    request.ReceivedAt.UtcDateTime.Ticks,
+                    request.ReceivedAt.UtcDateTime.Ticks);
+            }
+            foreach (GameRoleIdentity identity in
+                     preparation.IdentitiesToInsert)
+            {
+                connection.Insert(GameRoleIdentityRow.FromDomain(identity));
+            }
+            foreach (PreparedPortableAccount account in
+                     preparation.Accounts.Where(account =>
+                         account.CreateAccount))
+            {
+                connection.Execute(
+                    """
+                    INSERT INTO GameAccounts
+                        (Id, PlayerArchiveId, GameRoleIdentityId, Uid,
+                         ServerRegion, DisplayName, IsPlaceholder,
+                         CreatedAtUtcTicks, UpdatedAtUtcTicks)
+                    VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?);
+                    """,
+                    account.TargetAccountId.ToString("D"),
+                    preparation.ArchiveId.ToString("D"),
+                    account.TargetIdentityId.ToString(),
+                    account.Source.RoleIdentity.NaturalIdentity.Uid,
+                    (int)MapServerRegion(
+                        account.Source.RoleIdentity.NaturalIdentity),
+                    account.Source.DisplayName,
+                    request.ReceivedAt.UtcDateTime.Ticks,
+                    request.ReceivedAt.UtcDateTime.Ticks);
+            }
+            foreach (PreparedMutation mutation in preparation.Mutations)
+            {
+                ApplyBusinessMutation(connection, mutation);
+            }
+
+            Guid changeSetId = Guid.NewGuid();
+            InsertPortableChangeSet(
+                connection,
+                request,
+                changeSetId,
+                preparation.ArchiveId,
+                preparation.Mutations.Count);
+            foreach ((GameRoleIdentityId source, GameRoleIdentityId target)
+                     in preparation.AliasesToInsert)
+            {
+                connection.Execute(
+                    """
+                    INSERT INTO RoleIdentityAliases
+                        (SourceIdentityId, TargetIdentityId,
+                         CreatedByChangeSetId)
+                    VALUES (?, ?, ?);
+                    """,
+                    source.ToString(),
+                    target.ToString(),
+                    changeSetId.ToString("D"));
+            }
+
+            bool infrastructureChanged =
+                preparation.CreateArchive ||
+                preparation.IdentitiesToInsert.Count > 0 ||
+                preparation.Accounts.Any(account => account.CreateAccount) ||
+                preparation.AliasesToInsert.Count > 0;
+            bool undoEligible =
+                !infrastructureChanged &&
+                preparation.Mutations.Count > 0 &&
+                ReadUndoLimit(connection, preparation.ArchiveId) > 0;
+            long materialBytes = 0;
+            foreach (PreparedMutation mutation in preparation.Mutations)
+            {
+                InsertEntityChangeAndRevision(
+                    connection,
+                    changeSetId,
+                    request.ReceivedAt,
+                    mutation);
+                if (undoEligible)
+                {
+                    materialBytes += InsertUndoMaterial(
+                        connection,
+                        changeSetId,
+                        mutation);
+                }
+            }
+            connection.Execute(
+                """
+                INSERT INTO OperationHistory
+                    (ChangeSetId, IsUndoEligible, IneligibilityReason,
+                     UndoneByChangeSetId, MaterialBytes)
+                VALUES (?, ?, ?, NULL, ?);
+                """,
+                changeSetId.ToString("D"),
+                undoEligible,
+                (int)(undoEligible
+                    ? UndoIneligibilityReason.None
+                    : UndoIneligibilityReason.Disabled),
+                materialBytes);
+
+            Guid receiptId = Guid.NewGuid();
+            connection.Execute(
+                """
+                INSERT INTO PortableImportReceipts
+                    (ReceiptId, ChangeSetId, PackageFingerprint,
+                     ReceivedAtUtcTicks, ReceivedAtOffsetMinutes,
+                     ReceiptBatchId, SourceArchiveId, TargetArchiveId,
+                     AccountCount, RecordCount)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                receiptId.ToString("D"),
+                changeSetId.ToString("D"),
+                request.Plan.PackageFingerprint,
+                request.ReceivedAt.UtcDateTime.Ticks,
+                checked((int)request.ReceivedAt.Offset.TotalMinutes),
+                request.ReceiptBatchId.ToString("D"),
+                request.Package.SourceArchive.ArchiveReference.ToString("D"),
+                preparation.ArchiveId.ToString("D"),
+                preparation.Accounts.Count,
+                preparation.Mutations.Count);
+            foreach (PreparedPortableAccount account in
+                     preparation.Accounts)
+            {
+                connection.Execute(
+                    """
+                    INSERT INTO PortableImportReceiptAccounts
+                        (ReceiptId, SourceAccountId, TargetAccountId,
+                         SourceRoleIdentityId, TargetRoleIdentityId)
+                    VALUES (?, ?, ?, ?, ?);
+                    """,
+                    receiptId.ToString("D"),
+                    account.Source.AccountReference.ToString("D"),
+                    account.TargetAccountId.ToString("D"),
+                    account.Source.RoleIdentity.Id.ToString(),
+                    account.TargetIdentityId.ToString());
+            }
+            foreach (ActiveTombstone tombstone in
+                     preparation.ConfirmedReintroductions)
+            {
+                connection.Execute(
+                    """
+                    UPDATE LocalOnlyTombstones
+                    SET IsActive = 0, ReintroducedByChangeSetId = ?
+                    WHERE TombstoneKey = ? AND TombstoneVersion = ?
+                        AND IsActive = 1;
+                    """,
+                    changeSetId.ToString("D"),
+                    tombstone.TombstoneKey,
+                    tombstone.TombstoneVersion);
+            }
+            InsertPortableCommitResult(
+                connection,
+                request,
+                changeSetId,
+                preparation.Mutations.Count);
+            if (undoEligible)
+            {
+                ApplyCapacityLimits(
+                    connection,
+                    [preparation.ArchiveId]);
+            }
+
+            result = new GachaPortableApplyResult(
+                ChangeExecutionStatus.Applied,
+                changeSetId,
+                preparation.ArchiveId,
+                preparation.Accounts.Select(
+                    account => account.ToResult()).ToArray(),
+                preparation.Mutations.Count,
+                preparation.Accounts.Sum(
+                    account => account.SkippedRecordCount));
+        });
+
+        return result ?? throw new InvalidOperationException(
+            "The Portable Gacha apply transaction did not produce a result.");
+    }
+
     public async Task<int> GetUndoLimitAsync(
         Guid archiveId,
         CancellationToken cancellationToken = default)
@@ -880,6 +1152,345 @@ public sealed class SqliteGachaAtomicChangeStore
                 (UndoIneligibilityReason)row.IneligibilityReason,
                 ParseOptionalGuid(row.UndoneByChangeSetId)))
             .ToArray();
+    }
+
+    private static PortablePreparation PreparePortableApply(
+        SQLiteConnection connection,
+        GachaPortableApplyRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!request.Plan.CanApply)
+        {
+            throw new PortableApplyConflictException(
+                "The Portable import plan is not applicable.");
+        }
+        string fingerprint =
+            GachaPortablePackageFingerprint.Compute(request.Package);
+        if (!string.Equals(
+                fingerprint,
+                request.Plan.PackageFingerprint,
+                StringComparison.Ordinal))
+        {
+            throw new PortableApplyConflictException(
+                "The Portable package changed after it was planned.");
+        }
+        if (request.Package.Accounts.Count != request.Plan.Accounts.Count)
+        {
+            throw new PortableApplyConflictException(
+                "The Portable account set changed after it was planned.");
+        }
+
+        Guid archiveId;
+        bool createArchive;
+        if (request.Plan.Archive.Kind ==
+            GachaPortableArchivePlanKind.CreateNew)
+        {
+            archiveId = request.Plan.Archive.ProposedArchiveId ??
+                throw new PortableApplyConflictException(
+                    "The plan has no proposed archive ID.");
+            createArchive = true;
+            if (connection.ExecuteScalar<int>(
+                    "SELECT COUNT(*) FROM PlayerArchives WHERE Id = ?;",
+                    archiveId.ToString("D")) != 0)
+            {
+                throw new PortableApplyConflictException(
+                    "The proposed archive ID is already in use.");
+            }
+            if (request.Plan.RequireUniqueArchiveNames &&
+                connection.ExecuteScalar<int>(
+                    "SELECT COUNT(*) FROM PlayerArchives WHERE Name = ?;",
+                    request.Plan.Archive.ProposedName) != 0)
+            {
+                throw new PortableApplyConflictException(
+                    "The proposed archive name is no longer unique.");
+            }
+        }
+        else if (request.Plan.Archive.Kind ==
+                 GachaPortableArchivePlanKind.MapExisting)
+        {
+            archiveId = request.Plan.Archive.TargetArchiveId ??
+                throw new PortableApplyConflictException(
+                    "The plan has no target archive ID.");
+            createArchive = false;
+            PortableArchiveStateRow? archive =
+                connection.Query<PortableArchiveStateRow>(
+                        """
+                        SELECT Id, Name, UpdatedAtUtcTicks
+                        FROM PlayerArchives
+                        WHERE Id = ?;
+                        """,
+                        archiveId.ToString("D"))
+                    .SingleOrDefault();
+            if (archive is null ||
+                archive.Name != request.Plan.Archive.ProposedName ||
+                request.Plan.Archive.TargetArchiveUpdatedAt is null ||
+                archive.UpdatedAtUtcTicks != request.Plan.Archive
+                    .TargetArchiveUpdatedAt.Value.UtcDateTime.Ticks)
+            {
+                throw new PortableApplyConflictException(
+                    "The target archive changed after it was planned.");
+            }
+        }
+        else
+        {
+            throw new PortableApplyConflictException(
+                "The Portable import still requires an archive selection.");
+        }
+
+        Dictionary<Guid, GachaPortableAccountImportPlan> plans =
+            request.Plan.Accounts.ToDictionary(
+                plan => plan.SourceAccountReference);
+        if (plans.Count != request.Plan.Accounts.Count ||
+            request.Package.Accounts.Any(account =>
+                !plans.ContainsKey(account.AccountReference)))
+        {
+            throw new PortableApplyConflictException(
+                "The Portable account mapping is ambiguous.");
+        }
+
+        var identitiesToInsert = new Dictionary<
+            GameRoleIdentityId,
+            GameRoleIdentity>();
+        var aliasesToInsert = new List<(
+            GameRoleIdentityId Source,
+            GameRoleIdentityId Target)>();
+        var accounts = new List<PreparedPortableAccount>(
+            request.Package.Accounts.Count);
+        var mutations = new List<PreparedMutation>();
+        var confirmedReintroductions = new List<ActiveTombstone>();
+        IReadOnlyList<TombstoneReintroductionConfirmation> confirmations =
+            request.ReintroductionConfirmations ?? [];
+
+        foreach (GachaPortableAccount source in request.Package.Accounts)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            GachaPortableAccountImportPlan plan =
+                plans[source.AccountReference];
+            GameRoleIdentityId targetIdentityId =
+                plan.Identity.TargetIdentityId ??
+                throw new PortableApplyConflictException(
+                    "The account plan has no target identity.");
+            PortableIdentityStateRow? sourceIdentity =
+                ReadIdentity(connection, source.RoleIdentity.Id);
+            if (sourceIdentity is not null &&
+                sourceIdentity.ToNaturalIdentity() !=
+                    source.RoleIdentity.NaturalIdentity)
+            {
+                throw new PortableApplyConflictException(
+                    "The source identity GUID now refers to another natural identity.");
+            }
+
+            PortableIdentityStateRow? targetIdentity =
+                ReadIdentity(connection, targetIdentityId);
+            if (targetIdentity is null)
+            {
+                if (plan.Identity.Kind !=
+                        GachaPortableIdentityPlanKind.PreserveSource ||
+                    targetIdentityId != source.RoleIdentity.Id)
+                {
+                    throw new PortableApplyConflictException(
+                        "The planned target identity no longer exists.");
+                }
+
+                identitiesToInsert[targetIdentityId] =
+                    source.RoleIdentity;
+            }
+            else if (targetIdentity.ToNaturalIdentity() !=
+                     source.RoleIdentity.NaturalIdentity)
+            {
+                throw new PortableApplyConflictException(
+                    "The target identity no longer matches the source natural identity.");
+            }
+
+            if (source.RoleIdentity.Id != targetIdentityId)
+            {
+                PortableAliasRow? alias = connection
+                    .Query<PortableAliasRow>(
+                        """
+                        SELECT SourceIdentityId, TargetIdentityId
+                        FROM RoleIdentityAliases
+                        WHERE SourceIdentityId = ?;
+                        """,
+                        source.RoleIdentity.Id.ToString())
+                    .SingleOrDefault();
+                if (alias is not null &&
+                    alias.TargetIdentityId != targetIdentityId.ToString())
+                {
+                    throw new PortableApplyConflictException(
+                        "The source identity already has another alias target.");
+                }
+                if (connection.ExecuteScalar<int>(
+                        """
+                        SELECT COUNT(*)
+                        FROM RoleIdentityAliases
+                        WHERE SourceIdentityId = ?;
+                        """,
+                        targetIdentityId.ToString()) != 0)
+                {
+                    throw new PortableApplyConflictException(
+                        "The planned identity alias would create an alias chain.");
+                }
+                if (alias is null)
+                {
+                    aliasesToInsert.Add(
+                        (source.RoleIdentity.Id, targetIdentityId));
+                }
+            }
+
+            Guid targetAccountId;
+            bool createAccount;
+            PortableAccountStateRow? targetAccount = null;
+            if (plan.TargetAccountId is Guid existingAccountId)
+            {
+                targetAccountId = existingAccountId;
+                createAccount = false;
+                targetAccount = ReadPortableAccount(
+                    connection,
+                    targetAccountId);
+                if (targetAccount is null ||
+                    targetAccount.PlayerArchiveId !=
+                        archiveId.ToString("D") ||
+                    targetAccount.GameRoleIdentityId !=
+                        targetIdentityId.ToString() ||
+                    plan.TargetAccountUpdatedAt is null ||
+                    targetAccount.UpdatedAtUtcTicks !=
+                        plan.TargetAccountUpdatedAt.Value.UtcDateTime.Ticks)
+                {
+                    throw new PortableApplyConflictException(
+                        "A target account changed after it was planned.");
+                }
+                int actualCount = connection.ExecuteScalar<int>(
+                    """
+                    SELECT COUNT(*)
+                    FROM GachaRecords
+                    WHERE GameAccountId = ?;
+                    """,
+                    targetAccountId.ToString("D"));
+                if (actualCount != plan.TargetRecordCountAtPlan)
+                {
+                    throw new PortableApplyConflictException(
+                        "A target account record count changed after it was planned.");
+                }
+            }
+            else
+            {
+                targetAccountId = plan.ProposedAccountId ??
+                    throw new PortableApplyConflictException(
+                        "The plan has no proposed account ID.");
+                createAccount = true;
+                if (connection.ExecuteScalar<int>(
+                        "SELECT COUNT(*) FROM GameAccounts WHERE Id = ?;",
+                        targetAccountId.ToString("D")) != 0)
+                {
+                    throw new PortableApplyConflictException(
+                        "The proposed account ID is already in use.");
+                }
+            }
+
+            int inserted = 0;
+            int skipped = 0;
+            foreach (GachaRecord sourceRecord in source.Records)
+            {
+                var reference = new GachaFactReference(
+                    targetAccountId,
+                    sourceRecord.ExternalRecordId);
+                GachaRecord targetRecord =
+                    sourceRecord with { GameAccountId = targetAccountId };
+                GachaRecordRow proposed =
+                    GachaRecordRow.FromDomain(targetRecord);
+                GachaFactReadRow? current =
+                    ReadCurrent(connection, reference);
+                if (current is not null)
+                {
+                    if (!PortableFactsEqual(
+                            current.ToGachaRow().ToDomain(),
+                            targetRecord))
+                    {
+                        throw new PortableApplyConflictException(
+                            $"Gacha fact {reference} changed after planning.");
+                    }
+                    skipped++;
+                    continue;
+                }
+
+                proposed.Version = 1;
+                string tombstoneKey = CreateTombstoneKey(
+                    archiveId,
+                    targetIdentityId,
+                    reference.ExternalRecordId);
+                TombstoneRow? tombstone = connection
+                    .Query<TombstoneRow>(
+                        """
+                        SELECT TombstoneKey, TombstoneVersion,
+                               ArchiveId, IsActive
+                        FROM LocalOnlyTombstones
+                        WHERE TombstoneKey = ? AND IsActive = 1;
+                        """,
+                        tombstoneKey)
+                    .SingleOrDefault();
+                if (tombstone is not null)
+                {
+                    bool confirmed = confirmations.Any(confirmation =>
+                        confirmation.TombstoneKey == tombstoneKey &&
+                        confirmation.TombstoneVersion ==
+                            tombstone.TombstoneVersion &&
+                        confirmation.Reference == reference);
+                    if (!confirmed)
+                    {
+                        throw new PortableApplySuppressedException(
+                            new TombstoneReintroductionWarning(
+                                tombstoneKey,
+                                tombstone.TombstoneVersion,
+                                reference,
+                                archiveId));
+                    }
+                    confirmedReintroductions.Add(
+                        new ActiveTombstone(
+                            tombstoneKey,
+                            tombstone.TombstoneVersion));
+                }
+
+                mutations.Add(new PreparedMutation(
+                    archiveId,
+                    Before: null,
+                    proposed,
+                    GachaRecordChangeKind.Substantive,
+                    EntityChangeKind.Insert));
+                inserted++;
+            }
+
+            if (inserted != plan.AddCount ||
+                skipped != plan.SkipCount ||
+                plan.ConflictCount != 0)
+            {
+                throw new PortableApplyConflictException(
+                    "The target Gacha facts changed after they were planned.");
+            }
+            accounts.Add(new PreparedPortableAccount(
+                source,
+                targetAccountId,
+                targetIdentityId,
+                createAccount,
+                inserted,
+                skipped));
+        }
+
+        if (mutations.Count != request.Plan.Preview.AddCount ||
+            accounts.Sum(account => account.SkippedRecordCount) !=
+                request.Plan.Preview.SkipCount)
+        {
+            throw new PortableApplyConflictException(
+                "The Portable preview no longer matches the current target.");
+        }
+
+        return new PortablePreparation(
+            archiveId,
+            createArchive,
+            identitiesToInsert.Values.ToArray(),
+            aliasesToInsert,
+            accounts,
+            mutations,
+            confirmedReintroductions);
     }
 
     private static PreparedMutation? PrepareMutation(
@@ -1077,6 +1688,41 @@ public sealed class SqliteGachaAtomicChangeStore
             archiveId.ToString("D"));
     }
 
+    private static void InsertPortableChangeSet(
+        SQLiteConnection connection,
+        GachaPortableApplyRequest request,
+        Guid changeSetId,
+        Guid archiveId,
+        int affectedRecordCount)
+    {
+        connection.Execute(
+            """
+            INSERT INTO DataChangeSets
+                (ChangeSetId, OperationId, OperationKind,
+                 StartedAtUtcTicks, StartedAtOffsetMinutes,
+                 CommittedAtUtcTicks, CommittedAtOffsetMinutes,
+                 Origin, Summary, AffectedRecordCount, UndoOfChangeSetId)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL);
+            """,
+            changeSetId.ToString("D"),
+            request.OperationId.ToString(),
+            (int)DataChangeOperationKind.Import,
+            request.ReceivedAt.UtcDateTime.Ticks,
+            checked((int)request.ReceivedAt.Offset.TotalMinutes),
+            request.ReceivedAt.UtcDateTime.Ticks,
+            checked((int)request.ReceivedAt.Offset.TotalMinutes),
+            (int)DataOrigin.FurinaImport,
+            "Apply Gacha Portable v1 package",
+            affectedRecordCount);
+        connection.Execute(
+            """
+            INSERT INTO DataChangeSetArchives (ChangeSetId, ArchiveId)
+            VALUES (?, ?);
+            """,
+            changeSetId.ToString("D"),
+            archiveId.ToString("D"));
+    }
+
     private static void InsertEntityChangeAndRevision(
         SQLiteConnection connection,
         Guid changeSetId,
@@ -1209,6 +1855,109 @@ public sealed class SqliteGachaAtomicChangeStore
             changeSetId.ToString("D"),
             (int)ChangeExecutionStatus.Applied,
             request.CommittedAt.UtcDateTime.Ticks);
+    }
+
+    private static void InsertPortableCommitResult(
+        SQLiteConnection connection,
+        GachaPortableApplyRequest request,
+        Guid changeSetId,
+        int affectedRecordCount)
+    {
+        connection.Execute(
+            """
+            INSERT INTO OperationCommitResults
+                (OperationId, ChangeSetId, Status,
+                 AffectedRecordCount, CommittedAtUtcTicks)
+            VALUES (?, ?, ?, ?, ?);
+            """,
+            request.OperationId.ToString(),
+            changeSetId.ToString("D"),
+            (int)ChangeExecutionStatus.Applied,
+            affectedRecordCount,
+            request.ReceivedAt.UtcDateTime.Ticks);
+    }
+
+    private static void InsertPortableNoOpCommitResult(
+        SQLiteConnection connection,
+        GachaPortableApplyRequest request)
+    {
+        connection.Execute(
+            """
+            INSERT INTO OperationCommitResults
+                (OperationId, ChangeSetId, Status,
+                 AffectedRecordCount, CommittedAtUtcTicks)
+            VALUES (?, NULL, ?, 0, ?);
+            """,
+            request.OperationId.ToString(),
+            (int)ChangeExecutionStatus.NoOp,
+            request.ReceivedAt.UtcDateTime.Ticks);
+    }
+
+    private static GachaPortableApplyResult ReadCommittedPortableResult(
+        SQLiteConnection connection,
+        CommitResultRow committed)
+    {
+        if (committed.ChangeSetId is null)
+        {
+            return new GachaPortableApplyResult(
+                ChangeExecutionStatus.AlreadyCommitted,
+                ChangeSetId: null,
+                TargetArchiveId: null,
+                Accounts: [],
+                InsertedRecordCount: 0,
+                SkippedRecordCount: 0);
+        }
+
+        PortableReceiptReadRow? receipt =
+            connection.Query<PortableReceiptReadRow>(
+                    """
+                    SELECT ReceiptId, TargetArchiveId, RecordCount
+                    FROM PortableImportReceipts
+                    WHERE ChangeSetId = ?;
+                    """,
+                    committed.ChangeSetId)
+                .SingleOrDefault();
+        if (receipt is null)
+        {
+            return new GachaPortableApplyResult(
+                ChangeExecutionStatus.AlreadyCommitted,
+                ParseOptionalGuid(committed.ChangeSetId),
+                TargetArchiveId: null,
+                Accounts: [],
+                committed.AffectedRecordCount,
+                SkippedRecordCount: 0);
+        }
+
+        GachaPortableAccountApplyResult[] accounts =
+            connection.Query<PortableReceiptAccountReadRow>(
+                    """
+                    SELECT SourceAccountId, TargetAccountId,
+                           TargetRoleIdentityId
+                    FROM PortableImportReceiptAccounts
+                    WHERE ReceiptId = ?;
+                    """,
+                    receipt.ReceiptId)
+                .Select(row => new GachaPortableAccountApplyResult(
+                    ParseRequiredGuid(
+                        row.SourceAccountId,
+                        "source account"),
+                    ParseRequiredGuid(
+                        row.TargetAccountId,
+                        "target account"),
+                    new GameRoleIdentityId(
+                        ParseRequiredGuid(
+                            row.TargetRoleIdentityId,
+                            "target role identity")),
+                    InsertedRecordCount: 0,
+                    SkippedRecordCount: 0))
+                .ToArray();
+        return new GachaPortableApplyResult(
+            ChangeExecutionStatus.AlreadyCommitted,
+            ParseRequiredGuid(committed.ChangeSetId, "change set"),
+            ParseRequiredGuid(receipt.TargetArchiveId, "target archive"),
+            accounts,
+            receipt.RecordCount,
+            SkippedRecordCount: 0);
     }
 
     private static CommitResultRow? ReadCommitResult(
@@ -1495,6 +2244,61 @@ public sealed class SqliteGachaAtomicChangeStore
             reference.ExternalRecordId)
         .SingleOrDefault();
 
+    private static PortableIdentityStateRow? ReadIdentity(
+        SQLiteConnection connection,
+        GameRoleIdentityId identityId) =>
+        connection.Query<PortableIdentityStateRow>(
+                """
+                SELECT Id, GameBiz, Server, Uid
+                FROM GameRoleIdentities
+                WHERE Id = ?;
+                """,
+                identityId.ToString())
+            .SingleOrDefault();
+
+    private static PortableAccountStateRow? ReadPortableAccount(
+        SQLiteConnection connection,
+        Guid accountId) =>
+        connection.Query<PortableAccountStateRow>(
+                """
+                SELECT Id, PlayerArchiveId, GameRoleIdentityId,
+                       UpdatedAtUtcTicks
+                FROM GameAccounts
+                WHERE Id = ?;
+                """,
+                accountId.ToString("D"))
+            .SingleOrDefault();
+
+    private static bool PortableFactsEqual(
+        GachaRecord target,
+        GachaRecord source) =>
+        target.ItemName == source.ItemName &&
+        target.ItemId == source.ItemId &&
+        target.ItemType == source.ItemType &&
+        target.GachaType == source.GachaType &&
+        target.UigfGachaType == source.UigfGachaType &&
+        target.RankType == source.RankType &&
+        target.Count == source.Count &&
+        target.Time.UtcDateTime.Ticks ==
+            source.Time.UtcDateTime.Ticks &&
+        target.Time.Offset == source.Time.Offset;
+
+    private static GameServerRegion MapServerRegion(
+        GameRoleNaturalIdentity identity)
+    {
+        return identity.Server switch
+        {
+            "cn_gf01" => GameServerRegion.ChinaOfficial,
+            "cn_qd01" => GameServerRegion.ChinaBilibili,
+            "os_usa" => GameServerRegion.America,
+            "os_euro" => GameServerRegion.Europe,
+            "os_asia" => GameServerRegion.Asia,
+            "os_cht" => GameServerRegion.TaiwanHongKongMacao,
+            _ => throw new PortableApplyConflictException(
+                $"Unsupported Genshin server {identity.Server}.")
+        };
+    }
+
     private static Guid ReadArchiveId(
         SQLiteConnection connection,
         Guid gameAccountId)
@@ -1549,6 +2353,19 @@ public sealed class SqliteGachaAtomicChangeStore
                 "Irreversible Gacha deletion requires a resolved role identity.");
     }
 
+    private static string CreateTombstoneKey(
+        Guid archiveId,
+        GameRoleIdentityId roleIdentityId,
+        string externalRecordId)
+    {
+        string canonical =
+            $"gacha|{archiveId:D}|{roleIdentityId.ToString().ToLowerInvariant()}|" +
+            externalRecordId;
+        return Convert.ToHexString(
+                SHA256.HashData(Encoding.UTF8.GetBytes(canonical)))
+            .ToLowerInvariant();
+    }
+
     private static string? TryCreateTombstoneKey(
         SQLiteConnection connection,
         Guid archiveId,
@@ -1578,12 +2395,13 @@ public sealed class SqliteGachaAtomicChangeStore
             return null;
         }
 
-        string canonical =
-            $"gacha|{archiveId:D}|{scope.GameRoleIdentityId.ToLowerInvariant()}|" +
-            reference.ExternalRecordId;
-        return Convert.ToHexString(
-                SHA256.HashData(Encoding.UTF8.GetBytes(canonical)))
-            .ToLowerInvariant();
+        return CreateTombstoneKey(
+            archiveId,
+            new GameRoleIdentityId(
+                ParseRequiredGuid(
+                    scope.GameRoleIdentityId,
+                    "role identity")),
+            reference.ExternalRecordId);
     }
 
     private static string? SerializeSnapshot(GachaRecordRow? row) =>
@@ -1823,6 +2641,105 @@ public sealed class SqliteGachaAtomicChangeStore
         public string PlayerArchiveId { get; set; } = string.Empty;
 
         public string? GameRoleIdentityId { get; set; }
+    }
+
+    private sealed record PortablePreparation(
+        Guid ArchiveId,
+        bool CreateArchive,
+        IReadOnlyList<GameRoleIdentity> IdentitiesToInsert,
+        IReadOnlyList<(
+            GameRoleIdentityId Source,
+            GameRoleIdentityId Target)> AliasesToInsert,
+        IReadOnlyList<PreparedPortableAccount> Accounts,
+        IReadOnlyList<PreparedMutation> Mutations,
+        IReadOnlyList<ActiveTombstone> ConfirmedReintroductions);
+
+    private sealed record PreparedPortableAccount(
+        GachaPortableAccount Source,
+        Guid TargetAccountId,
+        GameRoleIdentityId TargetIdentityId,
+        bool CreateAccount,
+        int InsertedRecordCount,
+        int SkippedRecordCount)
+    {
+        public GachaPortableAccountApplyResult ToResult() =>
+            new(
+                Source.AccountReference,
+                TargetAccountId,
+                TargetIdentityId,
+                InsertedRecordCount,
+                SkippedRecordCount);
+    }
+
+    private sealed class PortableArchiveStateRow
+    {
+        public string Id { get; set; } = string.Empty;
+
+        public string Name { get; set; } = string.Empty;
+
+        public long UpdatedAtUtcTicks { get; set; }
+    }
+
+    private sealed class PortableIdentityStateRow
+    {
+        public string Id { get; set; } = string.Empty;
+
+        public string GameBiz { get; set; } = string.Empty;
+
+        public string Server { get; set; } = string.Empty;
+
+        public string Uid { get; set; } = string.Empty;
+
+        public GameRoleNaturalIdentity ToNaturalIdentity() =>
+            new(GameBiz, Server, Uid);
+    }
+
+    private sealed class PortableAliasRow
+    {
+        public string SourceIdentityId { get; set; } = string.Empty;
+
+        public string TargetIdentityId { get; set; } = string.Empty;
+    }
+
+    private sealed class PortableAccountStateRow
+    {
+        public string Id { get; set; } = string.Empty;
+
+        public string PlayerArchiveId { get; set; } = string.Empty;
+
+        public string? GameRoleIdentityId { get; set; }
+
+        public long UpdatedAtUtcTicks { get; set; }
+    }
+
+    private sealed class PortableReceiptReadRow
+    {
+        public string ReceiptId { get; set; } = string.Empty;
+
+        public string TargetArchiveId { get; set; } = string.Empty;
+
+        public int RecordCount { get; set; }
+    }
+
+    private sealed class PortableReceiptAccountReadRow
+    {
+        public string SourceAccountId { get; set; } = string.Empty;
+
+        public string TargetAccountId { get; set; } = string.Empty;
+
+        public string TargetRoleIdentityId { get; set; } = string.Empty;
+    }
+
+    private sealed class PortableApplyConflictException(string message)
+        : Exception(message);
+
+    private sealed class PortableApplySuppressedException(
+        TombstoneReintroductionWarning warning)
+        : Exception(
+            "The Portable import would reintroduce a locally deleted Gacha fact.")
+    {
+        public TombstoneReintroductionWarning Warning { get; } =
+            warning;
     }
 
     private sealed class UnknownStorageCapacityProvider

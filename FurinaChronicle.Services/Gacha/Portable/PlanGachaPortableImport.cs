@@ -45,7 +45,9 @@ public sealed class PlanGachaPortableImport(
                 archivePlan,
                 [],
                 importContext,
-                new GachaPortableImportPreview(0, 0, 0, 0, 0, 0));
+                new GachaPortableImportPreview(0, 0, 0, 0, 0, 0),
+                GachaPortablePackageFingerprint.Compute(request.Package),
+                request.RequireUniqueArchiveNames);
         }
 
         var accountPlans = new List<GachaPortableAccountImportPlan>(
@@ -71,7 +73,9 @@ public sealed class PlanGachaPortableImport(
                 accountPlans.Sum(plan => plan.ConflictCount),
                 accountPlans.Count(plan =>
                     plan.Identity.Kind ==
-                        GachaPortableIdentityPlanKind.AliasSourceToTarget)));
+                        GachaPortableIdentityPlanKind.AliasSourceToTarget)),
+            GachaPortablePackageFingerprint.Compute(request.Package),
+            request.RequireUniqueArchiveNames);
     }
 
     private async Task<GachaPortableAccountImportPlan> PlanAccountAsync(

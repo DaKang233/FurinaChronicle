@@ -3,6 +3,8 @@
 
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Records;
+using FurinaChronicle.Core.History;
+using FurinaChronicle.Services.Gacha.History;
 
 namespace FurinaChronicle.Services.Gacha.Portable;
 
@@ -81,11 +83,46 @@ public sealed record GachaPortableImportPlan(
     GachaPortableArchivePlan Archive,
     IReadOnlyList<GachaPortableAccountImportPlan> Accounts,
     GachaPortableImportContext ImportContext,
-    GachaPortableImportPreview Preview)
+    GachaPortableImportPreview Preview,
+    string PackageFingerprint,
+    bool RequireUniqueArchiveNames)
 {
     public bool CanApply =>
         Archive.Kind != GachaPortableArchivePlanKind.RequiresSelection &&
         Accounts.All(account =>
             account.Identity.Kind != GachaPortableIdentityPlanKind.Collision) &&
         Preview.ConflictCount == 0;
+}
+
+public sealed record GachaPortableApplyRequest(
+    GachaPortablePackage Package,
+    GachaPortableImportPlan Plan,
+    OperationId OperationId,
+    DateTimeOffset ReceivedAt,
+    Guid ReceiptBatchId,
+    IReadOnlyList<TombstoneReintroductionConfirmation>?
+        ReintroductionConfirmations = null);
+
+public sealed record GachaPortableAccountApplyResult(
+    Guid SourceAccountReference,
+    Guid TargetAccountId,
+    GameRoleIdentityId TargetRoleIdentityId,
+    int InsertedRecordCount,
+    int SkippedRecordCount);
+
+public sealed record GachaPortableApplyResult(
+    ChangeExecutionStatus Status,
+    Guid? ChangeSetId,
+    Guid? TargetArchiveId,
+    IReadOnlyList<GachaPortableAccountApplyResult> Accounts,
+    int InsertedRecordCount,
+    int SkippedRecordCount,
+    string? ConflictReason = null,
+    TombstoneReintroductionWarning? ReintroductionWarning = null);
+
+public interface IGachaPortableImportApplier
+{
+    Task<GachaPortableApplyResult> ApplyAsync(
+        GachaPortableApplyRequest request,
+        CancellationToken cancellationToken = default);
 }
