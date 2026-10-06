@@ -9,6 +9,9 @@ using FurinaChronicle.Infrastructure.Gacha.Metadata.Abstractions;
 
 namespace FurinaChronicle.Infrastructure.Gacha.Metadata.Remote;
 
+/// <summary>
+/// GenshinCalculatorMetadataSource 是一个从米哈游"计算器"API下载并解析原神角色与武器抽卡元数据的远程元数据源实现，支持重试与取消，并根据是否传入 HttpClient 管理其生命周期（实现 IDisposable）。
+/// </summary>
 public sealed class GenshinCalculatorMetadataSource : IGachaMetadataRemoteSource, IDisposable
 {
     public const string AvatarListUrl =
