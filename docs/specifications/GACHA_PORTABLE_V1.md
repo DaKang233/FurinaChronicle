@@ -105,7 +105,7 @@ JSON 使用 UTF-8，无 BOM。时间使用 RFC 3339 `DateTimeOffset` 字符串�
 
 补充载荷保存来源端 `Origin / FetchedAt / ImportedAt / AcquisitionBatchId`。读取后的 ImportPlan 另行产生目标接收上下文：`FurinaImport`、新的本地导入时间、批次、包标识和映射结果。二者不能互相覆盖；本次接收也不能把来源端声明提升为已重新验证的官方证据。
 
-Phase 8B.2 不执行生产 Apply，因此接收上下文只存在于只读 Plan/Preview。它的实际持久化在 8B.3/8B.4 首次写入前冻结。
+Phase 8B.2 关闭时接收上下文只存在于只读 Plan/Preview。Phase 8B.3 已按 ADR 0013 将本机接收时间、批次、包语义指纹、账号映射和 ChangeSet 持久化为独立 Receipt；来源端 provenance 仍原样保存在 Gacha 事实中。Receipt 不属于 Portable v1 载荷，完整产品 UI 与大包受控暂存读取留给 8B.4。
 
 ## 版本与兼容
 

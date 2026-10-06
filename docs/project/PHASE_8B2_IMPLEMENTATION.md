@@ -2,6 +2,8 @@
 
 状态：Implementation complete；Accepted、未发布
 
+后续状态：Phase 8B.3 已完成 Schema 5、DataChangeSet、身份别名、接收收据和生产 AddOnly Apply，并通过真实数据库 A→B→再导出语义 fixture。本文后文“尚未实现”的表述记录 8B.2 关闭时状态；当前限制以 [Phase 8B.3 实施契约](PHASE_8B3_IMPLEMENTATION.md) 与 [支持矩阵](../specifications/GACHA_PORTABLE_SUPPORT.md) 为准。
+
 确认日期：2026-10-06
 
 基线：`feat/phase-8`，起始提交 `8a3ac23`

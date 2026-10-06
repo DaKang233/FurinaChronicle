@@ -8,6 +8,7 @@ using FurinaChronicle.Infrastructure.Gacha.Portable;
 using FurinaChronicle.Infrastructure.Persistence.Sqlite;
 using FurinaChronicle.Services.Gacha;
 using FurinaChronicle.Services.Gacha.Portable;
+using FurinaChronicle.Core.History;
 
 namespace FurinaChronicle.Tests.Infrastructure.Gacha.Portable;
 
@@ -66,6 +67,82 @@ public sealed class GachaPortableDatabaseExportTests
         GachaPortableReadResult read =
             await new GachaPortablePackageReader().ReadAsync(output);
         Assert.Equal(2, Assert.Single(read.Package.Accounts).Records.Count);
+    }
+
+    [Fact]
+    public async Task DatabaseAExport_DatabaseBApply_ReExportPreservesSupportedSemantics()
+    {
+        await using TestContext source = await TestContext.CreateAsync(3);
+        using var firstPackageBytes = new MemoryStream();
+        await using (IGachaPortableExportSnapshot sourceSnapshot =
+            await source.CreateSnapshotFactory().OpenAsync(
+                source.Archive.Id,
+                [source.Account.Id]))
+        {
+            await new GachaPortablePackageWriter().WriteAsync(
+                firstPackageBytes,
+                sourceSnapshot);
+        }
+        firstPackageBytes.Position = 0;
+        GachaPortablePackage firstPackage =
+            (await new GachaPortablePackageReader().ReadAsync(
+                firstPackageBytes)).Package;
+
+        await using var destination = await EmptyTestContext.CreateAsync();
+        GachaPortableImportPlan plan =
+            await new PlanGachaPortableImport(
+                destination.Archives,
+                destination.Accounts,
+                destination.Gacha,
+                new FixedTimeProvider())
+            .ExecuteAsync(new GachaPortableImportPlanRequest(firstPackage));
+        GachaPortableApplyResult applied =
+            await destination.Atomic.ApplyAsync(
+                new GachaPortableApplyRequest(
+                    firstPackage,
+                    plan,
+                    OperationId.New(),
+                    new DateTimeOffset(
+                        2026,
+                        10,
+                        6,
+                        9,
+                        0,
+                        0,
+                        TimeSpan.FromHours(8)),
+                    Guid.NewGuid()));
+        Assert.Equal(ChangeExecutionStatus.Applied, applied.Status);
+
+        using var secondPackageBytes = new MemoryStream();
+        await using (IGachaPortableExportSnapshot destinationSnapshot =
+            await destination.CreateSnapshotFactory().OpenAsync(
+                applied.TargetArchiveId!.Value,
+                applied.Accounts.Select(account =>
+                    account.TargetAccountId).ToArray()))
+        {
+            await new GachaPortablePackageWriter().WriteAsync(
+                secondPackageBytes,
+                destinationSnapshot);
+        }
+        secondPackageBytes.Position = 0;
+        GachaPortablePackage secondPackage =
+            (await new GachaPortablePackageReader().ReadAsync(
+                secondPackageBytes)).Package;
+
+        Assert.Equal(
+            firstPackage.SourceArchive.Name,
+            secondPackage.SourceArchive.Name);
+        GachaPortableAccount firstAccount =
+            Assert.Single(firstPackage.Accounts);
+        GachaPortableAccount secondAccount =
+            Assert.Single(secondPackage.Accounts);
+        Assert.Equal(
+            firstAccount.RoleIdentity,
+            secondAccount.RoleIdentity);
+        Assert.Equal(firstAccount.DisplayName, secondAccount.DisplayName);
+        Assert.Equal(
+            firstAccount.Records.Select(ToSemanticRecord),
+            secondAccount.Records.Select(ToSemanticRecord));
     }
 
     [Fact]
@@ -156,6 +233,21 @@ public sealed class GachaPortableDatabaseExportTests
                     Guid.Parse("40000000-0000-0000-0000-000000000001"))),
         };
     }
+
+    private static object ToSemanticRecord(GachaRecord record) =>
+        new
+        {
+            record.ExternalRecordId,
+            record.ItemName,
+            record.ItemId,
+            record.ItemType,
+            record.GachaType,
+            record.UigfGachaType,
+            record.RankType,
+            record.Count,
+            record.Time,
+            record.Provenance
+        };
 
     private sealed class TestContext : IAsyncDisposable
     {
@@ -278,5 +370,65 @@ public sealed class GachaPortableDatabaseExportTests
             0,
             0,
             TimeSpan.Zero);
+    }
+
+    private sealed class EmptyTestContext : IAsyncDisposable
+    {
+        private EmptyTestContext(
+            string directory,
+            SqliteDatabaseOptions options,
+            FurinaDatabase database)
+        {
+            Directory = directory;
+            Options = options;
+            Database = database;
+            Archives = new SqlitePlayerArchiveRepository(database);
+            Accounts = new SqliteGameAccountRepository(database);
+            Gacha = new SqliteGachaRecordRepository(database);
+            Atomic = new SqliteGachaAtomicChangeStore(database);
+        }
+
+        public string Directory { get; }
+
+        public SqliteDatabaseOptions Options { get; }
+
+        public FurinaDatabase Database { get; }
+
+        public SqlitePlayerArchiveRepository Archives { get; }
+
+        public SqliteGameAccountRepository Accounts { get; }
+
+        public SqliteGachaRecordRepository Gacha { get; }
+
+        public SqliteGachaAtomicChangeStore Atomic { get; }
+
+        public static async Task<EmptyTestContext> CreateAsync()
+        {
+            string directory = Path.Combine(
+                Path.GetTempPath(),
+                "FurinaChronicleTests",
+                Guid.NewGuid().ToString("N"));
+            System.IO.Directory.CreateDirectory(directory);
+            var options = new SqliteDatabaseOptions(
+                Path.Combine(directory, "target.db3"));
+            var database = new FurinaDatabase(options);
+            await database.InitializeAsync();
+            return new EmptyTestContext(directory, options, database);
+        }
+
+        public SqliteGachaPortableExportSnapshotFactory
+            CreateSnapshotFactory() =>
+            new(Database, Options, new FixedTimeProvider());
+
+        public async ValueTask DisposeAsync()
+        {
+            await Database.DisposeAsync();
+            if (System.IO.Directory.Exists(Directory))
+            {
+                System.IO.Directory.Delete(
+                    Directory,
+                    recursive: true);
+            }
+        }
     }
 }

@@ -2,7 +2,7 @@
 
 状态：Accepted target
 
-阶段状态：In progress（Phase 8A 已于 2026-10-04 关闭；8B.0、8B.1 与 8B.2 实现工作包已完成，下一工作包为 8B.3）
+阶段状态：In progress（Phase 8A 已于 2026-10-04 关闭；8B.0～8B.3 实现工作包已完成，下一工作包为 8B.4）
 
 维护者已确认 ADR 0009、0010 和 Q06。本计划按 [ADR 0011](../decisions/0011-domain-first-product-scope.md) 收敛：最小共享基础先行，领域先独立保存、查询和导出，Chronicle 后消费。不要求一次冻结所有未来领域。
 
@@ -78,7 +78,7 @@
 
 ## 工作包 8B.2：领域 Portable / Export 基础
 
-实施状态：Completed（2026-10-06；格式 Accepted、未发布，生产 Apply 留待 8B.3/8B.4）
+实施状态：Completed（2026-10-06；格式 Accepted、未发布；生产 AddOnly Apply 已在 8B.3 完成，产品 UI 留待 8B.4）
 
 - 为实际首批领域提供 Serializer、Validator、Importer、Exporter、Migrator 或等价的小接口，不先建设任意 Dataset 插件框架；
 - 优先保持 UIGF；首个 Furina 载荷补足账号身份、来源、时间和修订等标准无法表达的语义，冻结其与标准记录的关联；
@@ -87,7 +87,7 @@
 - 建立最小、完整、旧版、未来 major、损坏和大数据 fixture；
 - 不在此冻结完整 Archive、设备游标或未来同步协议。
 
-首个格式和本轮实施边界见 [Phase 8B.2 实施契约](PHASE_8B2_IMPLEMENTATION.md)、[Gacha Portable v1](../specifications/GACHA_PORTABLE_V1.md) 与 [ADR 0012](../decisions/0012-gacha-portable-v1.md)。生产 Apply 依赖 8B.3/8B.4 的 DataChangeSet 事务基础，本轮只提供校验、导出和只读计划，不使用临时 Upsert 绕过该门槛。
+首个格式和本轮实施边界见 [Phase 8B.2 实施契约](PHASE_8B2_IMPLEMENTATION.md)、[Gacha Portable v1](../specifications/GACHA_PORTABLE_V1.md) 与 [ADR 0012](../decisions/0012-gacha-portable-v1.md)。8B.2 关闭时只提供校验、导出和只读计划；后续 8B.3 已在 DataChangeSet 事务基础上完成生产 AddOnly Apply，不使用临时 Upsert 绕过该门槛。
 
 退出标准：格式有说明、Schema、样例、迁移和兼容验证；不经过 SQLite 的格式往返可用；未知 future major 拒绝且数据库不变。公开发布仍须满足 Compatibility Policy 的跨平台往返要求。
 
@@ -95,7 +95,7 @@
 
 ## 工作包 8B.3：变更集与修订基础
 
-实施状态：In progress（2026-10-06；契约已由 ADR 0013 与实施文档冻结）
+实施状态：Completed（2026-10-06；契约、Schema 5、Gacha 窄纵切及 Portable AddOnly Apply 已实现）
 
 - 定义一次用户可理解操作的 DataChangeSet；
 - 可信全量刷新覆盖、导入覆盖和手工纠正形成 Revision；

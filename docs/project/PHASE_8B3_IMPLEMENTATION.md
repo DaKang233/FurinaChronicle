@@ -2,6 +2,8 @@
 
 状态：Accepted implementation contract
 
+实施状态：Completed（2026-10-06）
+
 确认日期：2026-10-06
 
 基线：`feat/phase-8`，起始提交 `7c2f969`
@@ -77,3 +79,41 @@ Gacha Tombstone 键为规范字符串 `gacha|archive_id|role_identity_id|externa
 8B.3 只提供 Gacha 内部服务/测试纵切和 Portable AddOnly 服务。现有 UIGF、刷新、手工纠正、账号/档案删除 UI 尚未全面接管；低层 Gacha Save/Delete 必须维护当前版本令牌，因而会安全阻止过期 Undo。Tombstone 抑制未接入的产品入口不得暴露不可逆删除功能。
 
 完整旧入口适配、Portable UI、真实大包受控暂存读取和产品级删除流程留给 8B.4。
+
+## 实施结果
+
+Schema 5 已在单一事务迁移中完成。v1、v2、v3、v4 均通过显式路径升级；旧 Gacha 行以 `Version = 1` 作为当前基线，不生成虚构的 ChangeSet、Revision 或历史时间。新增持久化范围包括：
+
+- `DataChangeSets`、`DataChangeSetArchives`、`EntityChanges`；
+- `GachaRevisions`、`OperationHistory`、`UndoMaterials`、`ArchiveUndoSettings`；
+- `OperationCommitResults`、`LocalOnlyTombstones`；
+- `RoleIdentityAliases`、`PortableImportReceipts` 及账号映射。
+
+已实现并验证：
+
+- Gacha Insert/Update/Delete 的原子 ChangeSet、私有版本 1 快照和 OperationId 幂等；
+- 纯抓取时间/批次变化只推进 current version，不制造业务 Revision；
+- Insert/Update/Delete 反向 ChangeSet、版本前置条件、A→B→A 冲突和跨档案整体撤销；
+- 每档案默认 3、0 保留旧材料并停止新捕获、1～1000、调低立即淘汰专用材料但不删 Revision；
+- 容量已知且不足时返回绑定候选与目标的清理确认；确认前无修改，确认后在同一事务重验；
+- 不可逆删除清除当前事实及可恢复快照，整项失去撤销资格；自动重引入受抑制，显式确认后 Tombstone 转为非活动；
+- Portable AddOnly 在实际 SQLite 中原子创建档案、共享身份、账号副本、别名、Gacha 事实、接收收据和 ChangeSet；
+- Portable 计划通过语义 SHA-256 绑定输入，并在事务中重验档案、账号、身份、数量和记录内容；纯重复新请求为 NoOp；
+- 数据库 A 导出 → 数据库 B Apply → 再导出保持当前 Portable v1 支持字段的语义。
+
+验证结果：
+
+- `dotnet test` Release：421/421 通过；
+- Windows Release 构建：通过；
+- Android Release 构建（`E:\AndroidSDK`）：通过；
+- `git diff --check`：通过。
+
+以上是自动化与平台编译证据，不替代 Windows/Android 实机 Portable 文件选择、跨设备互传或真实大包运行验收。
+
+## 8B.4 交接
+
+- 现有 UIGF、SToken/URL/缓存刷新和手工入口仍调用低层 `SaveBatchAsync`；它们会推进版本令牌，但尚未生成完整 ChangeSet/Revision。
+- 现有账号/档案删除 UI 尚未接管可撤销或不可逆命令；不可逆删除内部端口不得在 Tombstone 抑制覆盖全部自动入口前暴露。
+- Portable AddOnly 已有稳定服务入口和真实 SQLite Apply，但尚无选文件→预览→确认 UI。
+- 当前 Reader 为生成 Plan 仍在既定资源上限内物化整个模型；尚不能宣称 2,000,000 条记录的端到端有界内存 Apply。
+- 新建档案或账号的 Portable 操作因父实体恢复尚未产品化而不进入撤销栈；导入既有账号的纯记录新增可以安全撤销。
