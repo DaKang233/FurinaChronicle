@@ -1,0 +1,23 @@
+<!--
+  Copyright (c) 2026 DaKang233.
+  SPDX-License-Identifier: MIT
+-->
+
+<Project>
+  <!--
+    This is the only manually maintained application-version source.
+    Git-derived values are resolved by build/FurinaVersion.targets and are
+    never written back to this file.
+  -->
+  <PropertyGroup>
+    <FurinaVersionMajor Condition="'$(FurinaVersionMajor)' == ''">0</FurinaVersionMajor>
+    <FurinaVersionMinor Condition="'$(FurinaVersionMinor)' == ''">8</FurinaVersionMinor>
+    <FurinaVersionPatch Condition="'$(FurinaVersionPatch)' == ''">4</FurinaVersionPatch>
+    <FurinaPhaseLabel Condition="'$(FurinaPhaseLabel)' == ''">8B.3</FurinaPhaseLabel>
+
+    <FurinaVersionPrefix>$(FurinaVersionMajor).$(FurinaVersionMinor).$(FurinaVersionPatch)</FurinaVersionPrefix>
+    <FurinaRepositoryRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)'))</FurinaRepositoryRoot>
+    <ApplicationDisplayVersion>$(FurinaVersionPrefix)</ApplicationDisplayVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+  </PropertyGroup>
+</Project>

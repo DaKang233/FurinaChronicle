@@ -1,6 +1,7 @@
 // Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
+using FurinaChronicle.App.Diagnostics;
 using FurinaChronicle.App.Startup;
 using FurinaChronicle.App.ViewModels;
 
@@ -11,6 +12,9 @@ internal static class PresentationServiceCollectionExtensions
     public static IServiceCollection AddPresentation(
         this IServiceCollection services)
     {
+        services.AddSingleton(_ =>
+            ApplicationVersionInfo.FromAssembly(typeof(MauiProgram).Assembly));
+
         services.AddTransient<MainPageViewModel>();
         services.AddTransient<GachaAnalysisViewModel>();
         services.AddSingleton<UserPageViewModel>();

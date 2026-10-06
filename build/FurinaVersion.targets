@@ -1,0 +1,177 @@
+<!--
+  Copyright (c) 2026 DaKang233.
+  SPDX-License-Identifier: MIT
+-->
+
+<Project>
+  <PropertyGroup>
+    <FurinaGitExecutable Condition="'$(FurinaGitExecutable)' == ''">git</FurinaGitExecutable>
+    <FurinaDevelopmentFallbackBuild Condition="'$(FurinaDevelopmentFallbackBuild)' == ''">1</FurinaDevelopmentFallbackBuild>
+  </PropertyGroup>
+
+  <Target Name="ResolveFurinaVersion"
+          BeforeTargets="PrepareForBuild;MauiGeneratePackageAppxManifest;_GetAndroidPackageName;GetAssemblyAttributes;GenerateAssemblyInfo"
+          Condition="'$(IsCrossTargetingBuild)' != 'true'">
+    <Exec Command="&quot;$(FurinaGitExecutable)&quot; -C &quot;$(FurinaRepositoryRoot).&quot; rev-parse --is-inside-work-tree"
+          ConsoleToMsBuild="true"
+          IgnoreExitCode="true"
+          StandardOutputImportance="Low"
+          StandardErrorImportance="Low">
+      <Output TaskParameter="ConsoleOutput" ItemName="_FurinaGitWorkTreeOutput" />
+      <Output TaskParameter="ExitCode" PropertyName="_FurinaGitWorkTreeExitCode" />
+    </Exec>
+
+    <PropertyGroup>
+      <_FurinaGitWorkTreeRaw>@(_FurinaGitWorkTreeOutput)</_FurinaGitWorkTreeRaw>
+      <_FurinaGitWorkTreeText>$([System.String]::Copy('$(_FurinaGitWorkTreeRaw)').Trim())</_FurinaGitWorkTreeText>
+      <_FurinaGitAvailable Condition="'$(_FurinaGitWorkTreeExitCode)' == '0' and '$(_FurinaGitWorkTreeText)' == 'true'">true</_FurinaGitAvailable>
+      <_FurinaGitAvailable Condition="'$(_FurinaGitAvailable)' == ''">false</_FurinaGitAvailable>
+    </PropertyGroup>
+
+    <Exec Command="&quot;$(FurinaGitExecutable)&quot; -C &quot;$(FurinaRepositoryRoot).&quot; rev-parse --is-shallow-repository"
+          Condition="'$(_FurinaGitAvailable)' == 'true'"
+          ConsoleToMsBuild="true"
+          IgnoreExitCode="true"
+          StandardOutputImportance="Low"
+          StandardErrorImportance="Low">
+      <Output TaskParameter="ConsoleOutput" ItemName="_FurinaGitShallowOutput" />
+      <Output TaskParameter="ExitCode" PropertyName="_FurinaGitShallowExitCode" />
+    </Exec>
+
+    <PropertyGroup>
+      <_FurinaGitShallowRaw>@(_FurinaGitShallowOutput)</_FurinaGitShallowRaw>
+      <_FurinaGitShallow>$([System.String]::Copy('$(_FurinaGitShallowRaw)').Trim().ToLowerInvariant())</_FurinaGitShallow>
+    </PropertyGroup>
+
+    <Exec Command="&quot;$(FurinaGitExecutable)&quot; -C &quot;$(FurinaRepositoryRoot).&quot; rev-list --count HEAD"
+          Condition="'$(_FurinaGitAvailable)' == 'true' and '$(_FurinaGitShallowExitCode)' == '0' and '$(_FurinaGitShallow)' == 'false' and '$(FurinaBuildNumber)' == ''"
+          ConsoleToMsBuild="true"
+          IgnoreExitCode="true"
+          StandardOutputImportance="Low"
+          StandardErrorImportance="Low">
+      <Output TaskParameter="ConsoleOutput" ItemName="_FurinaGitCountOutput" />
+      <Output TaskParameter="ExitCode" PropertyName="_FurinaGitCountExitCode" />
+    </Exec>
+
+    <Exec Command="&quot;$(FurinaGitExecutable)&quot; -C &quot;$(FurinaRepositoryRoot).&quot; rev-parse --short=7 HEAD"
+          Condition="'$(_FurinaGitAvailable)' == 'true' and '$(FurinaGitCommit)' == ''"
+          ConsoleToMsBuild="true"
+          IgnoreExitCode="true"
+          StandardOutputImportance="Low"
+          StandardErrorImportance="Low">
+      <Output TaskParameter="ConsoleOutput" ItemName="_FurinaGitCommitOutput" />
+      <Output TaskParameter="ExitCode" PropertyName="_FurinaGitCommitExitCode" />
+    </Exec>
+
+    <Exec Command="&quot;$(FurinaGitExecutable)&quot; -C &quot;$(FurinaRepositoryRoot).&quot; status --porcelain --untracked-files=normal"
+          Condition="'$(_FurinaGitAvailable)' == 'true' and '$(FurinaGitDirty)' == ''"
+          ConsoleToMsBuild="true"
+          IgnoreExitCode="true"
+          StandardOutputImportance="Low"
+          StandardErrorImportance="Low">
+      <Output TaskParameter="ConsoleOutput" ItemName="_FurinaGitStatusOutput" />
+      <Output TaskParameter="ExitCode" PropertyName="_FurinaGitStatusExitCode" />
+    </Exec>
+
+    <PropertyGroup>
+      <_FurinaGitCountRaw>@(_FurinaGitCountOutput)</_FurinaGitCountRaw>
+      <_FurinaGitCommitRaw>@(_FurinaGitCommitOutput)</_FurinaGitCommitRaw>
+      <_FurinaGitStatusRaw>@(_FurinaGitStatusOutput)</_FurinaGitStatusRaw>
+      <_FurinaGitCount>$([System.String]::Copy('$(_FurinaGitCountRaw)').Trim())</_FurinaGitCount>
+      <_FurinaGitCommit>$([System.String]::Copy('$(_FurinaGitCommitRaw)').Trim())</_FurinaGitCommit>
+
+      <FurinaResolvedBuild Condition="'$(FurinaBuildNumber)' != ''">$(FurinaBuildNumber)</FurinaResolvedBuild>
+      <FurinaVersionSource Condition="'$(FurinaBuildNumber)' != ''">explicit</FurinaVersionSource>
+      <FurinaVersionIsReliable Condition="'$(FurinaBuildNumber)' != ''">true</FurinaVersionIsReliable>
+
+      <FurinaResolvedBuild Condition="'$(FurinaResolvedBuild)' == '' and '$(_FurinaGitAvailable)' == 'true' and '$(_FurinaGitShallow)' == 'false' and '$(_FurinaGitCountExitCode)' == '0'">$(_FurinaGitCount)</FurinaResolvedBuild>
+      <FurinaVersionSource Condition="'$(FurinaVersionSource)' == '' and '$(FurinaResolvedBuild)' != ''">git-commit-count</FurinaVersionSource>
+      <FurinaVersionIsReliable Condition="'$(FurinaVersionIsReliable)' == '' and '$(FurinaResolvedBuild)' != ''">true</FurinaVersionIsReliable>
+
+      <FurinaResolvedBuild Condition="'$(FurinaResolvedBuild)' == ''">$(FurinaDevelopmentFallbackBuild)</FurinaResolvedBuild>
+      <FurinaVersionSource Condition="'$(FurinaVersionSource)' == ''">development-fallback</FurinaVersionSource>
+      <FurinaVersionIsReliable Condition="'$(FurinaVersionIsReliable)' == ''">false</FurinaVersionIsReliable>
+
+      <FurinaResolvedCommit Condition="'$(FurinaGitCommit)' != ''">$(FurinaGitCommit)</FurinaResolvedCommit>
+      <FurinaResolvedCommit Condition="'$(FurinaResolvedCommit)' == '' and '$(_FurinaGitCommitExitCode)' == '0'">$(_FurinaGitCommit)</FurinaResolvedCommit>
+      <FurinaResolvedCommit Condition="'$(FurinaResolvedCommit)' == ''">nogit</FurinaResolvedCommit>
+
+      <FurinaResolvedDirty Condition="'$(FurinaGitDirty)' != ''">$([System.String]::Copy('$(FurinaGitDirty)').Trim().ToLowerInvariant())</FurinaResolvedDirty>
+      <FurinaResolvedDirty Condition="'$(FurinaResolvedDirty)' == '' and '$(_FurinaGitStatusExitCode)' == '0' and '$(_FurinaGitStatusRaw)' == ''">false</FurinaResolvedDirty>
+      <FurinaResolvedDirty Condition="'$(FurinaResolvedDirty)' == '' and '$(_FurinaGitStatusExitCode)' == '0' and '$(_FurinaGitStatusRaw)' != ''">true</FurinaResolvedDirty>
+      <FurinaResolvedDirty Condition="'$(FurinaResolvedDirty)' == ''">unknown</FurinaResolvedDirty>
+
+      <_FurinaBuildIsInteger>$([System.Text.RegularExpressions.Regex]::IsMatch('$(FurinaResolvedBuild)', '^[1-9][0-9]*$'))</_FurinaBuildIsInteger>
+      <_FurinaBuildNumber64 Condition="'$(_FurinaBuildIsInteger)' == 'True'">$([System.Int64]::Parse('$(FurinaResolvedBuild)'))</_FurinaBuildNumber64>
+      <_FurinaPhaseForMetadata>$([System.Text.RegularExpressions.Regex]::Replace('$(FurinaPhaseLabel)', '[^0-9A-Za-z.-]', '-'))</_FurinaPhaseForMetadata>
+      <_FurinaDirtySuffix Condition="'$(FurinaResolvedDirty)' == 'true'">.dirty</_FurinaDirtySuffix>
+      <_FurinaDirtySuffix Condition="'$(FurinaResolvedDirty)' == 'unknown'">.dirty-unknown</_FurinaDirtySuffix>
+
+      <FurinaFullVersion>$(FurinaVersionPrefix).$(FurinaResolvedBuild)</FurinaFullVersion>
+      <ApplicationDisplayVersion>$(FurinaVersionPrefix)</ApplicationDisplayVersion>
+      <ApplicationVersion>$(FurinaResolvedBuild)</ApplicationVersion>
+      <Version>$(FurinaFullVersion)</Version>
+      <AssemblyVersion>$(FurinaVersionPrefix).0</AssemblyVersion>
+      <FileVersion>$(FurinaVersionPrefix).0</FileVersion>
+      <InformationalVersion>$(FurinaFullVersion)+phase.$(_FurinaPhaseForMetadata).sha.$(FurinaResolvedCommit)$(_FurinaDirtySuffix)</InformationalVersion>
+    </PropertyGroup>
+
+    <Error Condition="'$(_FurinaBuildIsInteger)' != 'True'"
+           Text="Furina Build must be a positive integer. Resolved value: '$(FurinaResolvedBuild)'. Set FurinaBuildNumber explicitly when Git history is unavailable." />
+    <Error Condition="'$(_FurinaBuildNumber64)' != '' and $(_FurinaBuildNumber64) &gt; 2100000000"
+           Text="Furina Build '$(FurinaResolvedBuild)' exceeds the supported Android versionCode range (2100000000)." />
+    <Error Condition="'$(FurinaResolvedDirty)' != 'true' and '$(FurinaResolvedDirty)' != 'false' and '$(FurinaResolvedDirty)' != 'unknown'"
+           Text="FurinaGitDirty must be true, false, or unknown. Resolved value: '$(FurinaResolvedDirty)'." />
+    <Error Condition="'$(FurinaRequireReliableVersion)' == 'true' and '$(FurinaVersionIsReliable)' != 'true'"
+           Text="A reliable Furina Build could not be resolved. Use a full Git clone or pass FurinaBuildNumber (and optionally FurinaGitCommit/FurinaGitDirty) explicitly." />
+
+    <Warning Condition="'$(FurinaVersionIsReliable)' != 'true'"
+             Text="Using explicitly non-release Furina version fallback $(FurinaFullVersion). Publish is blocked until a full Git history or FurinaBuildNumber is supplied." />
+
+    <ItemGroup>
+      <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+        <_Parameter1>FurinaVersion</_Parameter1>
+        <_Parameter2>$(FurinaFullVersion)</_Parameter2>
+      </AssemblyAttribute>
+      <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+        <_Parameter1>FurinaVersionPrefix</_Parameter1>
+        <_Parameter2>$(FurinaVersionPrefix)</_Parameter2>
+      </AssemblyAttribute>
+      <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+        <_Parameter1>FurinaPhaseLabel</_Parameter1>
+        <_Parameter2>$(FurinaPhaseLabel)</_Parameter2>
+      </AssemblyAttribute>
+      <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+        <_Parameter1>FurinaGitCommit</_Parameter1>
+        <_Parameter2>$(FurinaResolvedCommit)</_Parameter2>
+      </AssemblyAttribute>
+      <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+        <_Parameter1>FurinaGitDirty</_Parameter1>
+        <_Parameter2>$(FurinaResolvedDirty)</_Parameter2>
+      </AssemblyAttribute>
+      <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+        <_Parameter1>FurinaVersionSource</_Parameter1>
+        <_Parameter2>$(FurinaVersionSource)</_Parameter2>
+      </AssemblyAttribute>
+      <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+        <_Parameter1>FurinaVersionReliable</_Parameter1>
+        <_Parameter2>$(FurinaVersionIsReliable)</_Parameter2>
+      </AssemblyAttribute>
+    </ItemGroup>
+  </Target>
+
+  <Target Name="ValidateFurinaPublishVersion"
+          BeforeTargets="Publish"
+          DependsOnTargets="ResolveFurinaVersion"
+          Condition="'$(IsCrossTargetingBuild)' != 'true'">
+    <Error Condition="'$(FurinaVersionIsReliable)' != 'true'"
+           Text="Publish requires a reliable Furina Build. Fetch full Git history or pass FurinaBuildNumber explicitly." />
+  </Target>
+
+  <Target Name="PrintFurinaVersion"
+          DependsOnTargets="ResolveFurinaVersion"
+          Condition="'$(IsCrossTargetingBuild)' != 'true'">
+    <Message Importance="High"
+             Text="FurinaVersion Full=$(FurinaFullVersion) Display=$(ApplicationDisplayVersion) Build=$(ApplicationVersion) Phase=$(FurinaPhaseLabel) Commit=$(FurinaResolvedCommit) Dirty=$(FurinaResolvedDirty) Reliable=$(FurinaVersionIsReliable) Source=$(FurinaVersionSource) Shallow=$(_FurinaGitShallow) GitAvailable=$(_FurinaGitAvailable) GitProbeExit=$(_FurinaGitWorkTreeExitCode) GitProbeOutput=$(_FurinaGitWorkTreeText)" />
+  </Target>
+</Project>

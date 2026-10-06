@@ -29,6 +29,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Set up .NET
         uses: actions/setup-dotnet@v6
@@ -64,6 +66,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Set up .NET and .NET MAUI for Windows
         uses: actions/setup-dotnet@v6
@@ -82,7 +86,8 @@ jobs:
             -p:RuntimeIdentifierOverride=win-x64 `
             -p:WindowsPackageType=None `
             -p:WindowsAppSDKSelfContained=true `
-            -p:SelfContained=true
+            -p:SelfContained=true `
+            -p:FurinaRequireReliableVersion=true
 
           if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE
@@ -107,6 +112,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Set up Microsoft OpenJDK
         uses: actions/setup-java@v6
@@ -148,7 +155,7 @@ jobs:
             "-p:JavaSdkDirectory=$env:JAVA_HOME"
             '-p:AndroidPackageFormats=apk'
             '-p:EmbedAssembliesIntoApk=true'
-            '-p:ApplicationVersion=${{ github.run_number }}'
+            '-p:FurinaRequireReliableVersion=true'
           )
 
           $signingValues = @(

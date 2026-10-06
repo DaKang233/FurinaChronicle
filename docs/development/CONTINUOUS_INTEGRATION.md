@@ -17,6 +17,8 @@
 
 仓库根目录的 `global.json` 将 SDK 限定在 .NET 10，并允许使用当前 .NET 10 的最新功能带和补丁版本，避免托管运行器预装更高主版本 SDK 后错误选择其他 SDK 或 MAUI 工作负载。
 
+所有 job 均以 `fetch-depth: 0` 检出完整 Git 历史，使 Windows 与 Android 从同一 `HEAD` commit count 得到相同 Build。发布命令设置 `FurinaRequireReliableVersion=true`；如果 checkout 意外变为 shallow、Git 不可用且发布流程没有显式提供可靠 Build，工作流必须失败。Android 不再使用 `github.run_number` 维护第二套 versionCode。完整规则见[版本策略](VERSIONING.md)。
+
 测试结果保留 14 天，Windows 与 Android 构建产物保留 30 天。构建通过只证明自动化测试和编译发布成功，不代替 Windows、Android 真机运行验收。
 
 ## Android 签名
