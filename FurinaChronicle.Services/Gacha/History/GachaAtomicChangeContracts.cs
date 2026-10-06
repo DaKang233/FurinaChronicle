@@ -122,6 +122,47 @@ public sealed record GachaAtomicChangeResult(
     string? ConflictReason = null,
     ChangeExecutionStatus? OriginalStatus = null);
 
+public sealed class GachaUndoRequest
+{
+    public GachaUndoRequest(
+        OperationId operationId,
+        Guid archiveId,
+        DateTimeOffset startedAt,
+        DateTimeOffset committedAt,
+        string summary = "Undo latest Gacha change")
+    {
+        if (archiveId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "Archive ID cannot be empty.",
+                nameof(archiveId));
+        }
+        if (committedAt < startedAt)
+        {
+            throw new ArgumentException(
+                "Commit time cannot be earlier than start time.",
+                nameof(committedAt));
+        }
+        ArgumentException.ThrowIfNullOrWhiteSpace(summary);
+
+        OperationId = operationId;
+        ArchiveId = archiveId;
+        StartedAt = startedAt;
+        CommittedAt = committedAt;
+        Summary = summary;
+    }
+
+    public OperationId OperationId { get; }
+
+    public Guid ArchiveId { get; }
+
+    public DateTimeOffset StartedAt { get; }
+
+    public DateTimeOffset CommittedAt { get; }
+
+    public string Summary { get; }
+}
+
 public interface IGachaAtomicChangeStore
 {
     Task<GachaFactState?> GetCurrentAsync(
@@ -130,5 +171,9 @@ public interface IGachaAtomicChangeStore
 
     Task<GachaAtomicChangeResult> CommitAsync(
         GachaAtomicChangeRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<GachaAtomicChangeResult> UndoLatestAsync(
+        GachaUndoRequest request,
         CancellationToken cancellationToken = default);
 }

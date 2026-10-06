@@ -219,6 +219,190 @@ public sealed class SqliteGachaAtomicChangeStoreTests
         Assert.Equal(3, final.Version.Value);
     }
 
+    [Fact]
+    public async Task UndoLatestAsync_InsertCreatesInverseChangeSetAndRemovesFact()
+    {
+        await using SqliteRepositoryTestContext context =
+            await CreateContextAsync();
+        Guid accountId = await AddAccountAsync(context);
+        GachaFactReference reference = new(accountId, "1001");
+        await context.AtomicGacha.CommitAsync(CreateRequest(
+            DataChangeOperationKind.Import,
+            new GachaFactMutation(
+                reference,
+                CreateRecord(accountId, "1001"))));
+        GachaFactState inserted = Assert.IsType<GachaFactState>(
+            await context.AtomicGacha.GetCurrentAsync(reference));
+
+        GachaAtomicChangeResult result =
+            await context.AtomicGacha.UndoLatestAsync(
+                CreateUndoRequest(inserted.ArchiveId));
+
+        Assert.Equal(ChangeExecutionStatus.Applied, result.Status);
+        Assert.Null(await context.AtomicGacha.GetCurrentAsync(reference));
+        using SQLiteConnection raw = context.OpenRawConnection();
+        Assert.Equal(2, Count(raw, "DataChangeSets"));
+        Assert.Equal(2, Count(raw, "GachaRevisions"));
+        Assert.Equal(0, Count(raw, "UndoMaterials"));
+        Assert.Equal(
+            (int)UndoIneligibilityReason.AlreadyUndone,
+            raw.ExecuteScalar<int>(
+                """
+                SELECT IneligibilityReason
+                FROM OperationHistory
+                WHERE UndoneByChangeSetId IS NOT NULL;
+                """));
+    }
+
+    [Fact]
+    public async Task UndoLatestAsync_UpdateRestoresOriginalFactAndProvenanceWithNewVersion()
+    {
+        await using SqliteRepositoryTestContext context =
+            await CreateContextAsync();
+        Guid accountId = await AddAccountAsync(context);
+        GachaFactReference reference = new(accountId, "1001");
+        await context.AtomicGacha.CommitAsync(CreateRequest(
+            DataChangeOperationKind.Import,
+            new GachaFactMutation(
+                reference,
+                CreateRecord(accountId, "1001"))));
+        GachaFactState before = Assert.IsType<GachaFactState>(
+            await context.AtomicGacha.GetCurrentAsync(reference));
+        DateTimeOffset importedAt =
+            new(2026, 10, 6, 9, 0, 0, TimeSpan.FromHours(8));
+        GachaRecord corrected = before.Record with
+        {
+            ItemName = "Incorrect",
+            Provenance = new RecordProvenance(
+                DataOrigin.UserEntered,
+                new RecordTimestamps(ImportedAt: importedAt))
+        };
+        await context.AtomicGacha.CommitAsync(CreateRequest(
+            DataChangeOperationKind.Correction,
+            new GachaFactMutation(reference, corrected, before.Version)));
+
+        GachaAtomicChangeResult result =
+            await context.AtomicGacha.UndoLatestAsync(
+                CreateUndoRequest(before.ArchiveId));
+
+        Assert.Equal(ChangeExecutionStatus.Applied, result.Status);
+        GachaFactState restored = Assert.IsType<GachaFactState>(
+            await context.AtomicGacha.GetCurrentAsync(reference));
+        Assert.Equal("Furina", restored.Record.ItemName);
+        Assert.Equal(
+            DataOrigin.StandardImport,
+            restored.Record.Provenance.Origin);
+        Assert.Null(restored.Record.Provenance.Timestamps.ImportedAt);
+        Assert.Equal(3, restored.Version.Value);
+    }
+
+    [Fact]
+    public async Task UndoLatestAsync_DeleteRestoresOriginalFact()
+    {
+        await using SqliteRepositoryTestContext context =
+            await CreateContextAsync();
+        Guid accountId = await AddAccountAsync(context);
+        GachaFactReference reference = new(accountId, "1001");
+        await context.AtomicGacha.CommitAsync(CreateRequest(
+            DataChangeOperationKind.Import,
+            new GachaFactMutation(
+                reference,
+                CreateRecord(accountId, "1001"))));
+        GachaFactState current = Assert.IsType<GachaFactState>(
+            await context.AtomicGacha.GetCurrentAsync(reference));
+        await context.AtomicGacha.CommitAsync(CreateRequest(
+            DataChangeOperationKind.Delete,
+            new GachaFactMutation(reference, null, current.Version)));
+
+        GachaAtomicChangeResult result =
+            await context.AtomicGacha.UndoLatestAsync(
+                CreateUndoRequest(current.ArchiveId));
+
+        Assert.Equal(ChangeExecutionStatus.Applied, result.Status);
+        GachaFactState restored = Assert.IsType<GachaFactState>(
+            await context.AtomicGacha.GetCurrentAsync(reference));
+        Assert.Equal("Furina", restored.Record.ItemName);
+        Assert.Equal(2, restored.Version.Value);
+    }
+
+    [Fact]
+    public async Task UndoLatestAsync_LaterLegacyWriteReturnsConflictWithoutPartialChange()
+    {
+        await using SqliteRepositoryTestContext context =
+            await CreateContextAsync();
+        Guid accountId = await AddAccountAsync(context);
+        GachaRecord record = CreateRecord(accountId, "1001");
+        GachaFactReference reference = new(accountId, "1001");
+        await context.AtomicGacha.CommitAsync(CreateRequest(
+            DataChangeOperationKind.Import,
+            new GachaFactMutation(reference, record)));
+        GachaFactState inserted = Assert.IsType<GachaFactState>(
+            await context.AtomicGacha.GetCurrentAsync(reference));
+        await context.Gacha.SaveBatchAsync(
+            [record with { ItemName = "Later" }],
+            conflictPolicy: GachaRecordConflictPolicy.ReplaceExisting);
+
+        GachaAtomicChangeResult result =
+            await context.AtomicGacha.UndoLatestAsync(
+                CreateUndoRequest(inserted.ArchiveId));
+
+        Assert.Equal(ChangeExecutionStatus.Conflict, result.Status);
+        GachaFactState current = Assert.IsType<GachaFactState>(
+            await context.AtomicGacha.GetCurrentAsync(reference));
+        Assert.Equal("Later", current.Record.ItemName);
+        using SQLiteConnection raw = context.OpenRawConnection();
+        Assert.Equal(1, Count(raw, "DataChangeSets"));
+    }
+
+    [Fact]
+    public async Task UndoLatestAsync_CrossArchiveOperationIsRevertedAsOneUnit()
+    {
+        await using SqliteRepositoryTestContext context =
+            await CreateContextAsync();
+        (Guid firstArchiveId, Guid firstAccountId) =
+            await AddArchiveAccountAsync(context, "First");
+        (_, Guid secondAccountId) =
+            await AddArchiveAccountAsync(context, "Second");
+        GachaFactReference first = new(firstAccountId, "1001");
+        GachaFactReference second = new(secondAccountId, "2001");
+        GachaAtomicChangeResult committed =
+            await context.AtomicGacha.CommitAsync(CreateRequest(
+                DataChangeOperationKind.Import,
+                new GachaFactMutation(
+                    first,
+                    CreateRecord(firstAccountId, "1001")),
+                new GachaFactMutation(
+                    second,
+                    CreateRecord(secondAccountId, "2001"))));
+
+        GachaAtomicChangeResult undone =
+            await context.AtomicGacha.UndoLatestAsync(
+                CreateUndoRequest(firstArchiveId));
+
+        Assert.Equal(ChangeExecutionStatus.Applied, undone.Status);
+        Assert.Null(await context.AtomicGacha.GetCurrentAsync(first));
+        Assert.Null(await context.AtomicGacha.GetCurrentAsync(second));
+        using SQLiteConnection raw = context.OpenRawConnection();
+        Assert.Equal(
+            2,
+            raw.ExecuteScalar<int>(
+                """
+                SELECT COUNT(*)
+                FROM DataChangeSetArchives
+                WHERE ChangeSetId = ?;
+                """,
+                committed.ChangeSetId!.Value.ToString("D")));
+        Assert.Equal(
+            2,
+            raw.ExecuteScalar<int>(
+                """
+                SELECT COUNT(*)
+                FROM DataChangeSetArchives
+                WHERE ChangeSetId = ?;
+                """,
+                undone.ChangeSetId!.Value.ToString("D")));
+    }
+
     private static async Task<SqliteRepositoryTestContext> CreateContextAsync()
     {
         SqliteRepositoryTestContext context =
@@ -230,12 +414,23 @@ public sealed class SqliteGachaAtomicChangeStoreTests
     private static async Task<Guid> AddAccountAsync(
         SqliteRepositoryTestContext context)
     {
-        var archive = SqliteRepositoryTestContext.CreateArchive();
+        (_, Guid accountId) =
+            await AddArchiveAccountAsync(context, "测试档案");
+        return accountId;
+    }
+
+    private static async Task<(Guid ArchiveId, Guid AccountId)>
+        AddArchiveAccountAsync(
+            SqliteRepositoryTestContext context,
+            string archiveName)
+    {
+        var archive =
+            SqliteRepositoryTestContext.CreateArchive(archiveName);
         var account =
             SqliteRepositoryTestContext.CreateAccount(archive.Id);
         await context.Archives.AddAsync(archive);
         await context.Accounts.AddAsync(account);
-        return account.Id;
+        return (archive.Id, account.Id);
     }
 
     private static GachaAtomicChangeRequest CreateRequest(
@@ -277,6 +472,17 @@ public sealed class SqliteGachaAtomicChangeStoreTests
             UigfGachaType = "301",
             Provenance = new RecordProvenance(DataOrigin.StandardImport)
         };
+
+    private static GachaUndoRequest CreateUndoRequest(Guid archiveId)
+    {
+        DateTimeOffset time =
+            new(2026, 10, 6, 16, 0, 0, TimeSpan.FromHours(8));
+        return new GachaUndoRequest(
+            OperationId.New(),
+            archiveId,
+            time,
+            time.AddSeconds(1));
+    }
 
     private static int Count(SQLiteConnection connection, string table) =>
         connection.ExecuteScalar<int>($"SELECT COUNT(*) FROM {table};");

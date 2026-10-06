@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.History;
+using FurinaChronicle.Core.Records;
 using FurinaChronicle.Services.Gacha.History;
 using SQLite;
 
@@ -236,6 +237,276 @@ public sealed class SqliteGachaAtomicChangeStore(FurinaDatabase database)
             "The Gacha atomic transaction did not produce a result.");
     }
 
+    public async Task<GachaAtomicChangeResult> UndoLatestAsync(
+        GachaUndoRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        await database.InitializeAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        GachaAtomicChangeResult? result = null;
+        await database.Connection.RunInTransactionAsync(connection =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            CommitResultRow? committed = ReadCommitResult(
+                connection,
+                request.OperationId);
+            if (committed is not null)
+            {
+                result = ToAlreadyCommittedResult(committed);
+                return;
+            }
+
+            string? originalChangeSetId = connection.ExecuteScalar<string?>(
+                """
+                SELECT d.ChangeSetId
+                FROM DataChangeSets d
+                INNER JOIN DataChangeSetArchives a
+                    ON a.ChangeSetId = d.ChangeSetId
+                INNER JOIN OperationHistory h
+                    ON h.ChangeSetId = d.ChangeSetId
+                WHERE a.ArchiveId = ? AND h.IsUndoEligible = 1
+                ORDER BY d.rowid DESC
+                LIMIT 1;
+                """,
+                request.ArchiveId.ToString("D"));
+            if (originalChangeSetId is null)
+            {
+                result = new GachaAtomicChangeResult(
+                    ChangeExecutionStatus.Conflict,
+                    ChangeSetId: null,
+                    AffectedRecordCount: 0,
+                    "The archive has no eligible Gacha operation to undo.");
+                return;
+            }
+
+            Guid[] archiveIds = connection.Query<ArchiveIdRow>(
+                    """
+                    SELECT ArchiveId
+                    FROM DataChangeSetArchives
+                    WHERE ChangeSetId = ?;
+                    """,
+                    originalChangeSetId)
+                .Select(row => ParseRequiredGuid(row.ArchiveId, "archive"))
+                .ToArray();
+            foreach (Guid archiveId in archiveIds)
+            {
+                string? latest = connection.ExecuteScalar<string?>(
+                    """
+                    SELECT d.ChangeSetId
+                    FROM DataChangeSets d
+                    INNER JOIN DataChangeSetArchives a
+                        ON a.ChangeSetId = d.ChangeSetId
+                    INNER JOIN OperationHistory h
+                        ON h.ChangeSetId = d.ChangeSetId
+                    WHERE a.ArchiveId = ? AND h.IsUndoEligible = 1
+                    ORDER BY d.rowid DESC
+                    LIMIT 1;
+                    """,
+                    archiveId.ToString("D"));
+                if (!string.Equals(
+                        latest,
+                        originalChangeSetId,
+                        StringComparison.Ordinal))
+                {
+                    result = new GachaAtomicChangeResult(
+                        ChangeExecutionStatus.Conflict,
+                        ChangeSetId: null,
+                        AffectedRecordCount: 0,
+                        "A cross-archive change is not the latest eligible operation in every archive.");
+                    return;
+                }
+            }
+
+            List<UndoMaterialRow> materials =
+                connection.Query<UndoMaterialRow>(
+                    """
+                    SELECT ChangeSetId, EntityKind, EntityReference,
+                           ChangeKind, ExpectedAfterVersion,
+                           SnapshotFormatVersion,
+                           BeforeSnapshotJson, AfterSnapshotJson,
+                           MaterialBytes
+                    FROM UndoMaterials
+                    WHERE ChangeSetId = ?
+                    ORDER BY Id;
+                    """,
+                    originalChangeSetId);
+            if (materials.Count == 0 ||
+                materials.Any(material =>
+                    material.EntityKind != EntityKind ||
+                    material.SnapshotFormatVersion !=
+                        SnapshotFormatVersion))
+            {
+                result = new GachaAtomicChangeResult(
+                    ChangeExecutionStatus.Conflict,
+                    ChangeSetId: null,
+                    AffectedRecordCount: 0,
+                    "Undo material is missing or uses an unsupported format.");
+                return;
+            }
+
+            var inverse = new List<PreparedMutation>(materials.Count);
+            foreach (UndoMaterialRow material in materials)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                GachaRecordRow? originalBefore =
+                    DeserializeSnapshot(material.BeforeSnapshotJson);
+                GachaRecordRow? originalAfter =
+                    DeserializeSnapshot(material.AfterSnapshotJson);
+                GachaRecordRow identity =
+                    originalAfter ?? originalBefore ??
+                    throw new InvalidDataException(
+                        "Undo material has no Gacha snapshot.");
+                var reference = new GachaFactReference(
+                    ParseRequiredGuid(
+                        identity.GameAccountId,
+                        "game account"),
+                    identity.ExternalRecordId);
+                GachaFactReadRow? current =
+                    ReadCurrent(connection, reference);
+                EntityChangeKind originalKind =
+                    (EntityChangeKind)material.ChangeKind;
+
+                if (originalKind is EntityChangeKind.Insert or
+                    EntityChangeKind.Update)
+                {
+                    if (current is null ||
+                        material.ExpectedAfterVersion is null ||
+                        current.Version != material.ExpectedAfterVersion.Value)
+                    {
+                        result = new GachaAtomicChangeResult(
+                            ChangeExecutionStatus.Conflict,
+                            ChangeSetId: null,
+                            AffectedRecordCount: 0,
+                            $"Gacha fact {reference} changed after the original operation.");
+                        return;
+                    }
+                }
+                else if (originalKind == EntityChangeKind.Delete &&
+                         current is not null)
+                {
+                    result = new GachaAtomicChangeResult(
+                        ChangeExecutionStatus.Conflict,
+                        ChangeSetId: null,
+                        AffectedRecordCount: 0,
+                        $"Deleted Gacha fact {reference} has been reintroduced.");
+                    return;
+                }
+
+                Guid archiveId = archiveIds.Contains(
+                        ReadArchiveId(
+                            connection,
+                            reference.GameAccountId))
+                    ? ReadArchiveId(
+                        connection,
+                        reference.GameAccountId)
+                    : throw new InvalidDataException(
+                        "Undo material references an unrelated archive.");
+                switch (originalKind)
+                {
+                    case EntityChangeKind.Insert:
+                        inverse.Add(new PreparedMutation(
+                            archiveId,
+                            current!.ToGachaRow(),
+                            After: null,
+                            GachaRecordChangeKind.Substantive,
+                            EntityChangeKind.Delete));
+                        break;
+                    case EntityChangeKind.Update:
+                        GachaRecordRow restored =
+                            originalBefore ??
+                            throw new InvalidDataException(
+                                "Update undo material has no before snapshot.");
+                        restored.Id = current!.Id;
+                        restored.Version = checked(current.Version + 1);
+                        inverse.Add(new PreparedMutation(
+                            archiveId,
+                            current.ToGachaRow(),
+                            restored,
+                            GachaRecordChangeKind.Substantive,
+                            EntityChangeKind.Update));
+                        break;
+                    case EntityChangeKind.Delete:
+                        GachaRecordRow reinserted =
+                            originalBefore ??
+                            throw new InvalidDataException(
+                                "Delete undo material has no before snapshot.");
+                        reinserted.Id = 0;
+                        reinserted.Version = checked(reinserted.Version + 1);
+                        inverse.Add(new PreparedMutation(
+                            archiveId,
+                            Before: null,
+                            reinserted,
+                            GachaRecordChangeKind.Substantive,
+                            EntityChangeKind.Insert));
+                        break;
+                    default:
+                        throw new InvalidDataException(
+                            "Undo material has an invalid change kind.");
+                }
+            }
+
+            foreach (PreparedMutation mutation in inverse)
+            {
+                ApplyBusinessMutation(connection, mutation);
+            }
+
+            Guid undoChangeSetId = Guid.NewGuid();
+            InsertUndoChangeSet(
+                connection,
+                request,
+                undoChangeSetId,
+                ParseRequiredGuid(
+                    originalChangeSetId,
+                    "original change set"),
+                archiveIds,
+                inverse.Count);
+            foreach (PreparedMutation mutation in inverse)
+            {
+                InsertEntityChangeAndRevision(
+                    connection,
+                    undoChangeSetId,
+                    request.CommittedAt,
+                    mutation);
+            }
+            connection.Execute(
+                """
+                INSERT INTO OperationHistory
+                    (ChangeSetId, IsUndoEligible, IneligibilityReason,
+                     UndoneByChangeSetId, MaterialBytes)
+                VALUES (?, 0, ?, NULL, 0);
+                """,
+                undoChangeSetId.ToString("D"),
+                (int)UndoIneligibilityReason.InverseOperation);
+            connection.Execute(
+                """
+                UPDATE OperationHistory
+                SET IsUndoEligible = 0, IneligibilityReason = ?,
+                    UndoneByChangeSetId = ?, MaterialBytes = 0
+                WHERE ChangeSetId = ? AND IsUndoEligible = 1;
+                """,
+                (int)UndoIneligibilityReason.AlreadyUndone,
+                undoChangeSetId.ToString("D"),
+                originalChangeSetId);
+            connection.Execute(
+                "DELETE FROM UndoMaterials WHERE ChangeSetId = ?;",
+                originalChangeSetId);
+            InsertUndoCommitResult(
+                connection,
+                request,
+                undoChangeSetId,
+                inverse.Count);
+            result = new GachaAtomicChangeResult(
+                ChangeExecutionStatus.Applied,
+                undoChangeSetId,
+                inverse.Count);
+        });
+
+        return result ?? throw new InvalidOperationException(
+            "The Gacha undo transaction did not produce a result.");
+    }
+
     private static PreparedMutation? PrepareMutation(
         GachaFactMutation mutation,
         GachaFactReadRow? current,
@@ -358,6 +629,46 @@ public sealed class SqliteGachaAtomicChangeStore(FurinaDatabase database)
         }
     }
 
+    private static void InsertUndoChangeSet(
+        SQLiteConnection connection,
+        GachaUndoRequest request,
+        Guid changeSetId,
+        Guid originalChangeSetId,
+        IEnumerable<Guid> archiveIds,
+        int affectedRecordCount)
+    {
+        connection.Execute(
+            """
+            INSERT INTO DataChangeSets
+                (ChangeSetId, OperationId, OperationKind,
+                 StartedAtUtcTicks, StartedAtOffsetMinutes,
+                 CommittedAtUtcTicks, CommittedAtOffsetMinutes,
+                 Origin, Summary, AffectedRecordCount, UndoOfChangeSetId)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """,
+            changeSetId.ToString("D"),
+            request.OperationId.ToString(),
+            (int)DataChangeOperationKind.Undo,
+            request.StartedAt.UtcDateTime.Ticks,
+            checked((int)request.StartedAt.Offset.TotalMinutes),
+            request.CommittedAt.UtcDateTime.Ticks,
+            checked((int)request.CommittedAt.Offset.TotalMinutes),
+            (int)DataOrigin.UserEntered,
+            request.Summary,
+            affectedRecordCount,
+            originalChangeSetId.ToString("D"));
+        foreach (Guid archiveId in archiveIds)
+        {
+            connection.Execute(
+                """
+                INSERT INTO DataChangeSetArchives (ChangeSetId, ArchiveId)
+                VALUES (?, ?);
+                """,
+                changeSetId.ToString("D"),
+                archiveId.ToString("D"));
+        }
+    }
+
     private static void InsertEntityChangeAndRevision(
         SQLiteConnection connection,
         Guid changeSetId,
@@ -453,6 +764,47 @@ public sealed class SqliteGachaAtomicChangeStore(FurinaDatabase database)
             affectedRecordCount,
             request.CommittedAt.UtcDateTime.Ticks);
     }
+
+    private static void InsertUndoCommitResult(
+        SQLiteConnection connection,
+        GachaUndoRequest request,
+        Guid changeSetId,
+        int affectedRecordCount)
+    {
+        connection.Execute(
+            """
+            INSERT INTO OperationCommitResults
+                (OperationId, ChangeSetId, Status,
+                 AffectedRecordCount, CommittedAtUtcTicks)
+            VALUES (?, ?, ?, ?, ?);
+            """,
+            request.OperationId.ToString(),
+            changeSetId.ToString("D"),
+            (int)ChangeExecutionStatus.Applied,
+            affectedRecordCount,
+            request.CommittedAt.UtcDateTime.Ticks);
+    }
+
+    private static CommitResultRow? ReadCommitResult(
+        SQLiteConnection connection,
+        OperationId operationId) =>
+        connection.Query<CommitResultRow>(
+            """
+            SELECT OperationId, ChangeSetId, Status,
+                   AffectedRecordCount, CommittedAtUtcTicks
+            FROM OperationCommitResults
+            WHERE OperationId = ?;
+            """,
+            operationId.ToString())
+        .SingleOrDefault();
+
+    private static GachaAtomicChangeResult ToAlreadyCommittedResult(
+        CommitResultRow committed) =>
+        new(
+            ChangeExecutionStatus.AlreadyCommitted,
+            ParseOptionalGuid(committed.ChangeSetId),
+            committed.AffectedRecordCount,
+            OriginalStatus: (ChangeExecutionStatus)committed.Status);
 
     private static void ApplyCapacityLimits(
         SQLiteConnection connection,
@@ -550,6 +902,20 @@ public sealed class SqliteGachaAtomicChangeStore(FurinaDatabase database)
             : JsonSerializer.Serialize(
                 GachaRevisionSnapshot.FromRow(row));
 
+    private static GachaRecordRow? DeserializeSnapshot(string? json)
+    {
+        if (json is null)
+        {
+            return null;
+        }
+
+        GachaRevisionSnapshot snapshot =
+            JsonSerializer.Deserialize<GachaRevisionSnapshot>(json) ??
+            throw new InvalidDataException(
+                "The stored Gacha revision snapshot is invalid.");
+        return snapshot.ToRow();
+    }
+
     private static Guid ParseRequiredGuid(string value, string field) =>
         Guid.TryParseExact(value, "D", out Guid parsed) &&
         parsed != Guid.Empty
@@ -621,6 +987,29 @@ public sealed class SqliteGachaAtomicChangeStore(FurinaDatabase database)
                 row.ImportedAtOffsetMinutes,
                 row.AcquisitionBatchId,
                 row.Version);
+
+        public GachaRecordRow ToRow() =>
+            new()
+            {
+                GameAccountId = GameAccountId,
+                ExternalRecordId = ExternalRecordId,
+                ItemName = ItemName,
+                ItemId = ItemId,
+                ItemType = ItemType,
+                GachaType = GachaType,
+                UigfGachaType = UigfGachaType,
+                RankType = RankType,
+                Count = Count,
+                TimeUtcTicks = TimeUtcTicks,
+                TimeOffsetMinutes = TimeOffsetMinutes,
+                Origin = Origin,
+                FetchedAtUtcTicks = FetchedAtUtcTicks,
+                FetchedAtOffsetMinutes = FetchedAtOffsetMinutes,
+                ImportedAtUtcTicks = ImportedAtUtcTicks,
+                ImportedAtOffsetMinutes = ImportedAtOffsetMinutes,
+                AcquisitionBatchId = AcquisitionBatchId,
+                Version = Version
+            };
     }
 
     private sealed class GachaFactReadRow : GachaRecordRow
@@ -668,5 +1057,31 @@ public sealed class SqliteGachaAtomicChangeStore(FurinaDatabase database)
     private sealed class ChangeSetIdRow
     {
         public string ChangeSetId { get; set; } = string.Empty;
+    }
+
+    private sealed class ArchiveIdRow
+    {
+        public string ArchiveId { get; set; } = string.Empty;
+    }
+
+    private sealed class UndoMaterialRow
+    {
+        public string ChangeSetId { get; set; } = string.Empty;
+
+        public string EntityKind { get; set; } = string.Empty;
+
+        public string EntityReference { get; set; } = string.Empty;
+
+        public int ChangeKind { get; set; }
+
+        public long? ExpectedAfterVersion { get; set; }
+
+        public int SnapshotFormatVersion { get; set; }
+
+        public string? BeforeSnapshotJson { get; set; }
+
+        public string? AfterSnapshotJson { get; set; }
+
+        public long MaterialBytes { get; set; }
     }
 }
