@@ -167,6 +167,79 @@ public sealed class BuildGachaAnalyticsTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_CharacterTruePullHistory_SkipsStandardFiveStarsAndAllows180Pulls()
+    {
+        Guid accountId = Guid.NewGuid();
+        DateTimeOffset start =
+            new(2026, 1, 1, 8, 0, 0, TimeSpan.FromHours(8));
+        GachaRecord[] records =
+        [
+            Record(accountId, "1", "限定五星甲", "10000089", 5, start, "301"),
+            Record(accountId, "2", "三星武器", "weapon-3", 3, start.AddMinutes(1), "301")
+                with { Count = 89 },
+            Record(accountId, "3", "迪卢克", "10000016", 5, start.AddMinutes(2), "301"),
+            Record(accountId, "4", "三星武器", "weapon-3", 3, start.AddMinutes(3), "400")
+                with { Count = 89 },
+            Record(accountId, "5", "限定五星乙", "10000087", 5, start.AddMinutes(4), "400")
+        ];
+        var service = new BuildGachaAnalytics(
+            new InMemoryGachaRecordRepository(records),
+            new StubMetadataProvider());
+
+        GachaAnalyticsReport report = await service.ExecuteAsync(
+            new GachaRecordQuery([accountId]),
+            GachaAnalyticsComponents.Pools);
+
+        GachaPoolStatistics character = Assert.Single(report.Pools);
+        Assert.Equal(
+            ["限定五星乙", "限定五星甲"],
+            character.LimitedFiveStarHistory.Select(item => item.ItemName));
+        Assert.Equal(
+            [180, null],
+            character.LimitedFiveStarHistory.Select(
+                item => item.PullsSincePreviousLimitedFiveStar));
+        Assert.DoesNotContain(
+            character.LimitedFiveStarHistory,
+            item => item.ItemName == "迪卢克");
+        Assert.All(
+            character.LimitedFiveStarHistory
+                .Where(item => item.PullsSincePreviousLimitedFiveStar is not null),
+            item => Assert.InRange(
+                item.PullsSincePreviousLimitedFiveStar!.Value,
+                1,
+                180));
+        Assert.Equal(180D, character.AverageUpFiveStarPulls);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_CharacterTruePullHistory_DoesNotExposeIntervalsOver180()
+    {
+        Guid accountId = Guid.NewGuid();
+        DateTimeOffset start =
+            new(2026, 1, 1, 8, 0, 0, TimeSpan.FromHours(8));
+        GachaRecord[] records =
+        [
+            Record(accountId, "1", "限定五星甲", "10000089", 5, start, "301"),
+            Record(accountId, "2", "三星武器", "weapon-3", 3, start.AddMinutes(1), "301")
+                with { Count = 180 },
+            Record(accountId, "3", "限定五星乙", "10000087", 5, start.AddMinutes(2), "301")
+        ];
+        var service = new BuildGachaAnalytics(
+            new InMemoryGachaRecordRepository(records),
+            new StubMetadataProvider());
+
+        GachaAnalyticsReport report = await service.ExecuteAsync(
+            new GachaRecordQuery([accountId]),
+            GachaAnalyticsComponents.Pools);
+
+        GachaPoolStatistics character = Assert.Single(report.Pools);
+        LimitedFiveStarGacha newest = character.LimitedFiveStarHistory[0];
+        Assert.Equal("限定五星乙", newest.ItemName);
+        Assert.Null(newest.PullsSincePreviousLimitedFiveStar);
+        Assert.Null(character.AverageUpFiveStarPulls);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_CalculatesWeaponLimitedFiveStarIntervals()
     {
         Guid accountId = Guid.NewGuid();

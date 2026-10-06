@@ -43,6 +43,7 @@ public sealed record GachaPoolStatistics(
     int PullsSinceLastFiveStar,
     int PullsSinceLastFourStar,
     IReadOnlyList<FiveStarGacha> FiveStarHistory,
+    IReadOnlyList<LimitedFiveStarGacha> LimitedFiveStarHistory,
     IReadOnlyList<GachaPoolItemCount> ItemCounts);
 
 public sealed record FiveStarGacha(
@@ -53,6 +54,15 @@ public sealed record FiveStarGacha(
     string? IconUrl,
     DateTimeOffset Time,
     int Pulls);
+
+public sealed record LimitedFiveStarGacha(
+    Guid GameAccountId,
+    string ExternalRecordId,
+    string ItemName,
+    string? ItemId,
+    string? IconUrl,
+    DateTimeOffset Time,
+    int? PullsSincePreviousLimitedFiveStar);
 
 public sealed record GachaPoolItemCount(
     string ItemName,

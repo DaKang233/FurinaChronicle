@@ -8,31 +8,40 @@
     x:Class="FurinaChronicle.App.UI.Gacha.ArchiveOverviewView"
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:ui="clr-namespace:FurinaChronicle.App.UI.Gacha"
     xmlns:viewModels="clr-namespace:FurinaChronicle.App.ViewModels"
+    SizeChanged="OnOverviewSizeChanged"
     x:DataType="viewModels:GachaAnalysisViewModel">
 
     <Grid RowDefinitions="Auto,*" RowSpacing="8">
-        <Label FontAttributes="Bold" FontSize="20" Text="档案数据总览" />
+        <Label
+            x:Name="OverviewHeader"
+            FontAttributes="Bold"
+            FontSize="20"
+            SizeChanged="OnOverviewSizeChanged"
+            Text="档案数据总览" />
 
         <CollectionView
+            x:Name="OverviewCollection"
             Grid.Row="1"
             ItemsSource="{Binding PoolCards}"
             SelectionMode="None">
             <CollectionView.ItemsLayout>
-                <GridItemsLayout
-                    x:Name="OverviewItemsLayout"
-                    HorizontalItemSpacing="10"
-                    Orientation="Vertical"
-                    Span="{OnPlatform WinUI=2, Default=1}"
-                    VerticalItemSpacing="10" />
+                <LinearItemsLayout
+                    ItemSpacing="10"
+                    Orientation="Vertical" />
             </CollectionView.ItemsLayout>
             <CollectionView.EmptyView>
                 <Label Padding="16" HorizontalTextAlignment="Center" Text="当前档案范围暂无可统计的抽卡记录。" />
             </CollectionView.EmptyView>
             <CollectionView.ItemTemplate>
                 <DataTemplate x:DataType="viewModels:GachaPoolStatisticsDisplayItem">
-                    <Border Padding="14">
-                        <VerticalStackLayout Spacing="7">
+                    <Border
+                        Padding="14"
+                        HeightRequest="{Binding Source={RelativeSource AncestorType={x:Type ui:ArchiveOverviewView}}, Path=OverviewCardHeight}"
+                        VerticalOptions="Fill"
+                        WidthRequest="{OnPlatform WinUI=380, Default=-1}">
+                        <Grid RowDefinitions="Auto,Auto,*" RowSpacing="7">
                             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                                 <Label FontAttributes="Bold" FontSize="19" Text="{Binding PoolName}" />
                                 <Button
@@ -43,7 +52,10 @@
                                     Text="{Binding StatisticsToggleText}" />
                             </Grid>
 
-                            <VerticalStackLayout IsVisible="{Binding IsStatisticsExpanded}" Spacing="7">
+                            <VerticalStackLayout
+                                Grid.Row="1"
+                                IsVisible="{Binding IsStatisticsExpanded}"
+                                Spacing="7">
                                 <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="5">
                                     <Label Text="{Binding Total}" />
                                     <Label Grid.Column="1" Text="{Binding AverageFiveStar}" />
@@ -55,47 +67,51 @@
                                 <Label FontSize="12" Text="{Binding AverageUp}" TextColor="{AppThemeBinding Light=#666666, Dark=#BBBBBB}" />
                             </VerticalStackLayout>
 
-                            <FlexLayout
-                                AlignItems="Start"
-                                BindableLayout.ItemsSource="{Binding VisibleArchiveFiveStarItems}"
-                                Direction="Row"
-                                JustifyContent="Start"
-                                Wrap="Wrap">
-                            <BindableLayout.ItemTemplate>
-                                <DataTemplate x:DataType="viewModels:GachaPoolItemCountDisplayItem">
-                                    <VerticalStackLayout Margin="3" WidthRequest="72" Spacing="2">
-                                        <Border HeightRequest="56" Padding="2" WidthRequest="56">
-                                            <Grid>
-                                                <Image Aspect="AspectFit" Source="{Binding IconUrl}" />
-                                                <Label
-                                                    BackgroundColor="#CC333333"
-                                                    FontAttributes="Bold"
-                                                    HorizontalOptions="End"
-                                                    Padding="4,1"
-                                                    Text="{Binding Count}"
-                                                    TextColor="White"
-                                                    VerticalOptions="Start" />
-                                            </Grid>
-                                        </Border>
-                                        <Label FontSize="10" HorizontalTextAlignment="Center" LineBreakMode="TailTruncation" Text="{Binding ItemName}" />
-                                    </VerticalStackLayout>
-                                </DataTemplate>
-                            </BindableLayout.ItemTemplate>
-                            </FlexLayout>
-                            <ActivityIndicator
-                                IsRunning="{Binding IsLoadingArchiveFiveStars}"
-                                IsVisible="{Binding IsLoadingArchiveFiveStars}" />
-                            <Button
-                                Command="{Binding LoadMoreArchiveFiveStarsCommand}"
-                                IsEnabled="{Binding IsNotLoadingArchiveFiveStars}"
-                                IsVisible="{Binding CanLoadMoreArchiveFiveStars}"
-                                Text="{Binding LoadMoreArchiveFiveStarsText}" />
-                            <Label
-                                FontSize="11"
-                                IsVisible="{Binding HasArchiveFiveStarLoadError}"
-                                Text="{Binding ArchiveFiveStarLoadError}"
-                                TextColor="Red" />
-                        </VerticalStackLayout>
+                            <ScrollView Grid.Row="2" Orientation="Vertical">
+                                <VerticalStackLayout Spacing="7">
+                                    <FlexLayout
+                                        AlignItems="Start"
+                                        BindableLayout.ItemsSource="{Binding VisibleArchiveFiveStarItems}"
+                                        Direction="Row"
+                                        JustifyContent="Start"
+                                        Wrap="Wrap">
+                                        <BindableLayout.ItemTemplate>
+                                            <DataTemplate x:DataType="viewModels:GachaPoolItemCountDisplayItem">
+                                                <VerticalStackLayout Margin="3" WidthRequest="72" Spacing="2">
+                                                    <Border HeightRequest="56" Padding="2" WidthRequest="56">
+                                                        <Grid>
+                                                            <Image Aspect="AspectFit" Source="{Binding IconUrl}" />
+                                                            <Label
+                                                                BackgroundColor="#CC333333"
+                                                                FontAttributes="Bold"
+                                                                HorizontalOptions="End"
+                                                                Padding="4,1"
+                                                                Text="{Binding Count}"
+                                                                TextColor="White"
+                                                                VerticalOptions="Start" />
+                                                        </Grid>
+                                                    </Border>
+                                                    <Label FontSize="10" HorizontalTextAlignment="Center" LineBreakMode="TailTruncation" Text="{Binding ItemName}" />
+                                                </VerticalStackLayout>
+                                            </DataTemplate>
+                                        </BindableLayout.ItemTemplate>
+                                    </FlexLayout>
+                                    <ActivityIndicator
+                                        IsRunning="{Binding IsLoadingArchiveFiveStars}"
+                                        IsVisible="{Binding IsLoadingArchiveFiveStars}" />
+                                    <Button
+                                        Command="{Binding LoadMoreArchiveFiveStarsCommand}"
+                                        IsEnabled="{Binding IsNotLoadingArchiveFiveStars}"
+                                        IsVisible="{Binding CanLoadMoreArchiveFiveStars}"
+                                        Text="{Binding LoadMoreArchiveFiveStarsText}" />
+                                    <Label
+                                        FontSize="11"
+                                        IsVisible="{Binding HasArchiveFiveStarLoadError}"
+                                        Text="{Binding ArchiveFiveStarLoadError}"
+                                        TextColor="Red" />
+                                </VerticalStackLayout>
+                            </ScrollView>
+                        </Grid>
                     </Border>
                 </DataTemplate>
             </CollectionView.ItemTemplate>

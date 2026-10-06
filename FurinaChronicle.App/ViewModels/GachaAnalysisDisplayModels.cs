@@ -80,6 +80,8 @@ public sealed partial class GachaPoolStatisticsDisplayItem(
     string RankDistribution,
     string CurrentPity,
     IReadOnlyList<FiveStarGachaDisplayItem> FiveStarHistory,
+    IReadOnlyList<FiveStarGachaDisplayItem> LimitedFiveStarHistory,
+    bool canShowTruePulls,
     IReadOnlyList<GachaPoolItemCountDisplayItem> initialArchiveFiveStarItems,
     int archiveFiveStarItemCount,
     Func<int, int, Task<IReadOnlyList<GachaPoolItemCountDisplayItem>>>?
@@ -104,8 +106,21 @@ public sealed partial class GachaPoolStatisticsDisplayItem(
 
     public string CurrentPity { get; } = CurrentPity;
 
-    public IReadOnlyList<FiveStarGachaDisplayItem> FiveStarHistory { get; } =
+    private IReadOnlyList<FiveStarGachaDisplayItem> NormalFiveStarHistory { get; } =
         FiveStarHistory;
+
+    private IReadOnlyList<FiveStarGachaDisplayItem> LimitedFiveStarHistory { get; } =
+        LimitedFiveStarHistory;
+
+    public IReadOnlyList<FiveStarGachaDisplayItem> FiveStarHistory =>
+        IsShowingTruePulls
+            ? LimitedFiveStarHistory
+            : NormalFiveStarHistory;
+
+    public bool CanShowTruePulls { get; } = canShowTruePulls;
+
+    public string TruePullsToggleText =>
+        IsShowingTruePulls ? "显示普通抽数" : "显示真实抽数";
 
     public ObservableCollection<GachaPoolItemCountDisplayItem>
         VisibleArchiveFiveStarItems { get; } =
@@ -127,6 +142,11 @@ public sealed partial class GachaPoolStatisticsDisplayItem(
     public partial bool IsStatisticsExpanded { get; set; } = true;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(FiveStarHistory))]
+    [NotifyPropertyChangedFor(nameof(TruePullsToggleText))]
+    public partial bool IsShowingTruePulls { get; set; }
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsNotLoadingArchiveFiveStars))]
     public partial bool IsLoadingArchiveFiveStars { get; set; }
 
@@ -143,6 +163,15 @@ public sealed partial class GachaPoolStatisticsDisplayItem(
     [RelayCommand]
     private void ToggleStatistics() =>
         IsStatisticsExpanded = !IsStatisticsExpanded;
+
+    [RelayCommand]
+    private void ToggleTruePulls()
+    {
+        if (CanShowTruePulls)
+        {
+            IsShowingTruePulls = !IsShowingTruePulls;
+        }
+    }
 
     [RelayCommand]
     private async Task LoadMoreArchiveFiveStarsAsync()

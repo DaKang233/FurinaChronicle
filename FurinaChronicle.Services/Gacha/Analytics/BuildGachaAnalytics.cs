@@ -234,6 +234,7 @@ public sealed class BuildGachaAnalytics
         var fiveStarPities = new List<int>();
         var limitedFiveStarPities = new List<int>();
         var fiveStarHistory = new List<FiveStarGacha>();
+        var limitedFiveStarHistory = new List<LimitedFiveStarGacha>();
         int sinceFive = 0;
         int sinceFour = 0;
 
@@ -273,14 +274,23 @@ public sealed class BuildGachaAnalytics
 
                     if (IsLimitedFiveStar(record, pool))
                     {
+                        int? completedLimitedInterval = null;
                         if (hasLimitedFiveStarBoundary &&
                             IsValidLimitedFiveStarInterval(
                                 pool,
                                 accountSinceLimitedFive))
                         {
-                            limitedFiveStarPities.Add(
-                                accountSinceLimitedFive);
+                            completedLimitedInterval = accountSinceLimitedFive;
+                            limitedFiveStarPities.Add(completedLimitedInterval.Value);
                         }
+                        limitedFiveStarHistory.Add(new LimitedFiveStarGacha(
+                            record.GameAccountId,
+                            record.ExternalRecordId,
+                            GetItemName(record, metadata),
+                            record.ItemId,
+                            GetIconUrl(record, metadata),
+                            record.Time,
+                            completedLimitedInterval));
                         hasLimitedFiveStarBoundary = true;
                         accountSinceLimitedFive = 0;
                     }
@@ -315,6 +325,12 @@ public sealed class BuildGachaAnalytics
             sinceFive,
             sinceFour,
             fiveStarHistory
+                .OrderByDescending(item => item.Time)
+                .ThenByDescending(
+                    item => item.ExternalRecordId,
+                    StringComparer.Ordinal)
+                .ToArray(),
+            limitedFiveStarHistory
                 .OrderByDescending(item => item.Time)
                 .ThenByDescending(
                     item => item.ExternalRecordId,

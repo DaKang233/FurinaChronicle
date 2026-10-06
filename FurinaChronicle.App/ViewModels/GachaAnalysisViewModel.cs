@@ -954,6 +954,7 @@ public partial class GachaAnalysisViewModel(
         Dictionary<Guid, GameAccount> accountMap =
             accounts.ToDictionary(account => account.Id);
         var fiveStars = new List<FiveStarGachaDisplayItem>();
+        var limitedFiveStars = new List<FiveStarGachaDisplayItem>();
         if (!IsArchiveMode)
         {
             fiveStars.AddRange(await Task.WhenAll(
@@ -965,6 +966,23 @@ public partial class GachaAnalysisViewModel(
                             item.ItemId,
                             item.IconUrl)),
                     $"{item.Pulls} 抽",
+                    item.Time.ToString("yyyy-MM-dd HH:mm"),
+                    accountMap.TryGetValue(
+                        item.GameAccountId,
+                        out GameAccount? account)
+                        ? account.DisplayName ?? account.Uid
+                        : string.Empty))));
+            limitedFiveStars.AddRange(await Task.WhenAll(
+                pool.LimitedFiveStarHistory.Select(async item =>
+                    new FiveStarGachaDisplayItem(
+                    item.ItemName,
+                    CreateFileImageSource(
+                        await GetCachedIconPathAsync(
+                            item.ItemId,
+                            item.IconUrl)),
+                    item.PullsSincePreviousLimitedFiveStar is int pulls
+                        ? $"{pulls} 抽"
+                        : "—",
                     item.Time.ToString("yyyy-MM-dd HH:mm"),
                     accountMap.TryGetValue(
                         item.GameAccountId,
@@ -1017,6 +1035,9 @@ public partial class GachaAnalysisViewModel(
                 $"三星 {pool.ThreeStarCount}（{pool.ThreeStarPercentage:F2}%）",
             $"距上个五星 {pool.PullsSinceLastFiveStar} 抽 · 距上个四星 {pool.PullsSinceLastFourStar} 抽",
             fiveStars,
+            limitedFiveStars,
+            !IsArchiveMode &&
+                pool.PoolGroup == GachaPoolGroup.CharacterEvent,
             initialArchiveItems,
             archiveFiveStarItems.Length,
             loadArchiveItems);
