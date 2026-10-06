@@ -32,7 +32,9 @@ public sealed class GachaAtomicChangeRequest
         IEnumerable<GachaFactMutation> mutations,
         bool captureUndo = true,
         Guid? undoOfChangeSetId = null,
-        Guid? cleanupConfirmationId = null)
+        Guid? cleanupConfirmationId = null,
+        IEnumerable<TombstoneReintroductionConfirmation>?
+            reintroductionConfirmations = null)
     {
         if (!Enum.IsDefined(operationKind))
         {
@@ -96,6 +98,8 @@ public sealed class GachaAtomicChangeRequest
         CaptureUndo = captureUndo;
         UndoOfChangeSetId = undoOfChangeSetId;
         CleanupConfirmationId = cleanupConfirmationId;
+        ReintroductionConfirmations =
+            reintroductionConfirmations?.ToArray() ?? [];
     }
 
     public OperationId OperationId { get; }
@@ -117,6 +121,9 @@ public sealed class GachaAtomicChangeRequest
     public Guid? UndoOfChangeSetId { get; }
 
     public Guid? CleanupConfirmationId { get; }
+
+    public IReadOnlyList<TombstoneReintroductionConfirmation>
+        ReintroductionConfirmations { get; }
 }
 
 public sealed record GachaAtomicChangeResult(
@@ -125,7 +132,58 @@ public sealed record GachaAtomicChangeResult(
     int AffectedRecordCount,
     string? ConflictReason = null,
     ChangeExecutionStatus? OriginalStatus = null,
-    HistoryCleanupPlan? CleanupPlan = null);
+    HistoryCleanupPlan? CleanupPlan = null,
+    TombstoneReintroductionWarning? ReintroductionWarning = null);
+
+public sealed record TombstoneReintroductionConfirmation(
+    string TombstoneKey,
+    long TombstoneVersion,
+    GachaFactReference Reference);
+
+public sealed record TombstoneReintroductionWarning(
+    string TombstoneKey,
+    long TombstoneVersion,
+    GachaFactReference Reference,
+    Guid ArchiveId);
+
+public sealed class GachaIrreversibleDeleteRequest
+{
+    public GachaIrreversibleDeleteRequest(
+        OperationId operationId,
+        GachaFactReference reference,
+        FactVersion expectedVersion,
+        DateTimeOffset startedAt,
+        DateTimeOffset committedAt,
+        string summary = "Irreversibly delete local Gacha fact")
+    {
+        if (committedAt < startedAt)
+        {
+            throw new ArgumentException(
+                "Commit time cannot be earlier than start time.",
+                nameof(committedAt));
+        }
+        ArgumentException.ThrowIfNullOrWhiteSpace(summary);
+
+        OperationId = operationId;
+        Reference = reference;
+        ExpectedVersion = expectedVersion;
+        StartedAt = startedAt;
+        CommittedAt = committedAt;
+        Summary = summary;
+    }
+
+    public OperationId OperationId { get; }
+
+    public GachaFactReference Reference { get; }
+
+    public FactVersion ExpectedVersion { get; }
+
+    public DateTimeOffset StartedAt { get; }
+
+    public DateTimeOffset CommittedAt { get; }
+
+    public string Summary { get; }
+}
 
 public sealed record HistoryStorageCapacity(long? AvailableBytes)
 {
@@ -217,6 +275,10 @@ public interface IGachaAtomicChangeStore
 
     Task<GachaAtomicChangeResult> UndoLatestAsync(
         GachaUndoRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<GachaAtomicChangeResult> IrreversiblyDeleteAsync(
+        GachaIrreversibleDeleteRequest request,
         CancellationToken cancellationToken = default);
 
     Task<int> GetUndoLimitAsync(

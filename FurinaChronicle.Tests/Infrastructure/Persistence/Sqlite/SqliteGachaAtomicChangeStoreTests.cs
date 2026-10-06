@@ -607,6 +607,191 @@ public sealed class SqliteGachaAtomicChangeStoreTests
                 (int)UndoIneligibilityReason.CapacityEvicted));
     }
 
+    [Fact]
+    public async Task IrreversiblyDeleteAsync_RemovesFactRecoveryMaterialAndCreatesMinimalTombstone()
+    {
+        await using SqliteRepositoryTestContext context =
+            await CreateContextAsync();
+        (Guid archiveId, Guid accountId) =
+            await AddArchiveAccountAsync(context, "Delete");
+        GachaFactReference reference = new(accountId, "secret-record");
+        await context.AtomicGacha.CommitAsync(CreateRequest(
+            DataChangeOperationKind.Import,
+            new GachaFactMutation(
+                reference,
+                CreateRecord(accountId, reference.ExternalRecordId))));
+        GachaFactState current = Assert.IsType<GachaFactState>(
+            await context.AtomicGacha.GetCurrentAsync(reference));
+
+        GachaAtomicChangeResult result =
+            await context.AtomicGacha.IrreversiblyDeleteAsync(
+                CreateIrreversibleDeleteRequest(
+                    reference,
+                    current.Version));
+
+        Assert.Equal(ChangeExecutionStatus.Applied, result.Status);
+        Assert.Null(await context.AtomicGacha.GetCurrentAsync(reference));
+        using SQLiteConnection raw = context.OpenRawConnection();
+        Assert.Equal(0, Count(raw, "GachaRevisions"));
+        Assert.Equal(0, Count(raw, "UndoMaterials"));
+        TombstoneInspectionRow tombstone = Assert.Single(
+            raw.Query<TombstoneInspectionRow>(
+                """
+                SELECT TombstoneKey, TombstoneVersion, ArchiveId, IsActive
+                FROM LocalOnlyTombstones;
+                """));
+        Assert.Equal(64, tombstone.TombstoneKey.Length);
+        Assert.DoesNotContain(
+            reference.ExternalRecordId,
+            tombstone.TombstoneKey,
+            StringComparison.Ordinal);
+        Assert.Equal(archiveId.ToString("D"), tombstone.ArchiveId);
+        Assert.True(tombstone.IsActive);
+
+        GachaAtomicChangeResult undo =
+            await context.AtomicGacha.UndoLatestAsync(
+                CreateUndoRequest(archiveId));
+        Assert.Equal(ChangeExecutionStatus.Conflict, undo.Status);
+        Assert.Null(await context.AtomicGacha.GetCurrentAsync(reference));
+    }
+
+    [Fact]
+    public async Task CommitAsync_ActiveTombstoneSuppressesChangedContentUntilExplicitConfirmation()
+    {
+        await using SqliteRepositoryTestContext context =
+            await CreateContextAsync();
+        (_, Guid accountId) =
+            await AddArchiveAccountAsync(context, "Delete");
+        GachaFactReference reference = new(accountId, "1001");
+        await context.AtomicGacha.CommitAsync(CreateRequest(
+            DataChangeOperationKind.Import,
+            new GachaFactMutation(
+                reference,
+                CreateRecord(accountId, "1001"))));
+        GachaFactState current = Assert.IsType<GachaFactState>(
+            await context.AtomicGacha.GetCurrentAsync(reference));
+        await context.AtomicGacha.IrreversiblyDeleteAsync(
+            CreateIrreversibleDeleteRequest(reference, current.Version));
+        OperationId operationId = OperationId.New();
+        DateTimeOffset time =
+            new(2026, 10, 6, 18, 0, 0, TimeSpan.FromHours(8));
+        GachaFactMutation mutation = new(
+            reference,
+            CreateRecord(accountId, "1001") with
+            {
+                ItemName = "Changed after deletion"
+            });
+        var automatic = new GachaAtomicChangeRequest(
+            operationId,
+            DataChangeOperationKind.Import,
+            DataOrigin.StandardImport,
+            "automatic reintroduction",
+            time,
+            time.AddSeconds(1),
+            [mutation]);
+
+        GachaAtomicChangeResult suppressed =
+            await context.AtomicGacha.CommitAsync(automatic);
+
+        Assert.Equal(ChangeExecutionStatus.Suppressed, suppressed.Status);
+        TombstoneReintroductionWarning warning =
+            Assert.IsType<TombstoneReintroductionWarning>(
+                suppressed.ReintroductionWarning);
+        Assert.Null(await context.AtomicGacha.GetCurrentAsync(reference));
+        var explicitRequest = new GachaAtomicChangeRequest(
+            operationId,
+            DataChangeOperationKind.Import,
+            DataOrigin.StandardImport,
+            "explicit reintroduction",
+            time,
+            time.AddSeconds(1),
+            [mutation],
+            reintroductionConfirmations:
+            [
+                new TombstoneReintroductionConfirmation(
+                    warning.TombstoneKey,
+                    warning.TombstoneVersion,
+                    reference)
+            ]);
+
+        GachaAtomicChangeResult applied =
+            await context.AtomicGacha.CommitAsync(explicitRequest);
+
+        Assert.Equal(ChangeExecutionStatus.Applied, applied.Status);
+        GachaFactState restored = Assert.IsType<GachaFactState>(
+            await context.AtomicGacha.GetCurrentAsync(reference));
+        Assert.Equal("Changed after deletion", restored.Record.ItemName);
+        using SQLiteConnection raw = context.OpenRawConnection();
+        Assert.Equal(
+            0,
+            raw.ExecuteScalar<int>(
+                "SELECT IsActive FROM LocalOnlyTombstones;"));
+        Assert.Equal(
+            applied.ChangeSetId!.Value.ToString("D"),
+            raw.ExecuteScalar<string>(
+                """
+                SELECT ReintroducedByChangeSetId
+                FROM LocalOnlyTombstones;
+                """));
+    }
+
+    [Fact]
+    public async Task IrreversiblyDeleteAsync_OneFactInvalidatesWholeCrossArchiveUndo()
+    {
+        await using SqliteRepositoryTestContext context =
+            await CreateContextAsync();
+        (Guid firstArchiveId, Guid firstAccountId) =
+            await AddArchiveAccountAsync(context, "First");
+        (_, Guid secondAccountId) =
+            await AddArchiveAccountAsync(context, "Second");
+        GachaFactReference first = new(firstAccountId, "1001");
+        GachaFactReference second = new(secondAccountId, "2001");
+        GachaAtomicChangeResult imported =
+            await context.AtomicGacha.CommitAsync(CreateRequest(
+                DataChangeOperationKind.Import,
+                new GachaFactMutation(
+                    first,
+                    CreateRecord(firstAccountId, "1001")),
+                new GachaFactMutation(
+                    second,
+                    CreateRecord(secondAccountId, "2001"))));
+        GachaFactState firstState = Assert.IsType<GachaFactState>(
+            await context.AtomicGacha.GetCurrentAsync(first));
+
+        await context.AtomicGacha.IrreversiblyDeleteAsync(
+            CreateIrreversibleDeleteRequest(
+                first,
+                firstState.Version));
+
+        Assert.Null(await context.AtomicGacha.GetCurrentAsync(first));
+        Assert.NotNull(await context.AtomicGacha.GetCurrentAsync(second));
+        using SQLiteConnection raw = context.OpenRawConnection();
+        Assert.Equal(
+            (int)UndoIneligibilityReason.IrreversibleDeletion,
+            raw.ExecuteScalar<int>(
+                """
+                SELECT IneligibilityReason
+                FROM OperationHistory
+                WHERE ChangeSetId = ?;
+                """,
+                imported.ChangeSetId!.Value.ToString("D")));
+        Assert.Equal(
+            0,
+            raw.ExecuteScalar<int>(
+                """
+                SELECT COUNT(*)
+                FROM UndoMaterials
+                WHERE ChangeSetId = ?;
+                """,
+                imported.ChangeSetId.Value.ToString("D")));
+
+        GachaAtomicChangeResult undo =
+            await context.AtomicGacha.UndoLatestAsync(
+                CreateUndoRequest(firstArchiveId));
+        Assert.Equal(ChangeExecutionStatus.Conflict, undo.Status);
+        Assert.NotNull(await context.AtomicGacha.GetCurrentAsync(second));
+    }
+
     private static async Task<SqliteRepositoryTestContext> CreateContextAsync()
     {
         SqliteRepositoryTestContext context =
@@ -688,6 +873,21 @@ public sealed class SqliteGachaAtomicChangeStoreTests
             time.AddSeconds(1));
     }
 
+    private static GachaIrreversibleDeleteRequest
+        CreateIrreversibleDeleteRequest(
+            GachaFactReference reference,
+            FactVersion expectedVersion)
+    {
+        DateTimeOffset time =
+            new(2026, 10, 6, 18, 0, 0, TimeSpan.FromHours(8));
+        return new GachaIrreversibleDeleteRequest(
+            OperationId.New(),
+            reference,
+            expectedVersion,
+            time,
+            time.AddSeconds(1));
+    }
+
     private static int Count(SQLiteConnection connection, string table) =>
         connection.ExecuteScalar<int>($"SELECT COUNT(*) FROM {table};");
 
@@ -703,5 +903,16 @@ public sealed class SqliteGachaAtomicChangeStoreTests
     {
         public HistoryStorageCapacity GetCapacity() =>
             new(availableBytes);
+    }
+
+    private sealed class TombstoneInspectionRow
+    {
+        public string TombstoneKey { get; set; } = string.Empty;
+
+        public long TombstoneVersion { get; set; }
+
+        public string ArchiveId { get; set; } = string.Empty;
+
+        public bool IsActive { get; set; }
     }
 }

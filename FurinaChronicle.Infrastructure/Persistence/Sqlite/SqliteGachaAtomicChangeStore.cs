@@ -137,6 +137,48 @@ public sealed class SqliteGachaAtomicChangeStore
                 return;
             }
 
+            var confirmedReintroductions =
+                new List<ActiveTombstone>();
+            foreach (PreparedMutation mutation in prepared.Where(
+                         item => item.EntityChangeKind ==
+                             EntityChangeKind.Insert))
+            {
+                ActiveTombstone? tombstone = ReadActiveTombstone(
+                    connection,
+                    mutation.ArchiveId,
+                    mutation.Reference);
+                if (tombstone is null)
+                {
+                    continue;
+                }
+
+                bool confirmed = request.ReintroductionConfirmations.Any(
+                    confirmation =>
+                        confirmation.TombstoneKey ==
+                            tombstone.TombstoneKey &&
+                        confirmation.TombstoneVersion ==
+                            tombstone.TombstoneVersion &&
+                        confirmation.Reference == mutation.Reference);
+                if (!confirmed)
+                {
+                    result = new GachaAtomicChangeResult(
+                        ChangeExecutionStatus.Suppressed,
+                        ChangeSetId: null,
+                        AffectedRecordCount: 0,
+                        ConflictReason:
+                            "The Gacha fact was irreversibly deleted on this device.",
+                        ReintroductionWarning:
+                            new TombstoneReintroductionWarning(
+                                tombstone.TombstoneKey,
+                                tombstone.TombstoneVersion,
+                                mutation.Reference,
+                                mutation.ArchiveId));
+                    return;
+                }
+
+                confirmedReintroductions.Add(tombstone);
+            }
+
             if (prepared.Count == 0)
             {
                 InsertCommitResult(
@@ -277,6 +319,21 @@ public sealed class SqliteGachaAtomicChangeStore
                 changeSetId,
                 ChangeExecutionStatus.Applied,
                 prepared.Count);
+
+            foreach (ActiveTombstone tombstone in
+                     confirmedReintroductions)
+            {
+                connection.Execute(
+                    """
+                    UPDATE LocalOnlyTombstones
+                    SET IsActive = 0, ReintroducedByChangeSetId = ?
+                    WHERE TombstoneKey = ? AND TombstoneVersion = ?
+                        AND IsActive = 1;
+                    """,
+                    changeSetId.ToString("D"),
+                    tombstone.TombstoneKey,
+                    tombstone.TombstoneVersion);
+            }
 
             if (undoEligible)
             {
@@ -450,15 +507,25 @@ public sealed class SqliteGachaAtomicChangeStore
                     return;
                 }
 
-                Guid archiveId = archiveIds.Contains(
-                        ReadArchiveId(
-                            connection,
-                            reference.GameAccountId))
-                    ? ReadArchiveId(
-                        connection,
-                        reference.GameAccountId)
+                Guid factArchiveId = ReadArchiveId(
+                    connection,
+                    reference.GameAccountId);
+                Guid archiveId = archiveIds.Contains(factArchiveId)
+                    ? factArchiveId
                     : throw new InvalidDataException(
                         "Undo material references an unrelated archive.");
+                if (ReadActiveTombstone(
+                        connection,
+                        archiveId,
+                        reference) is not null)
+                {
+                    result = new GachaAtomicChangeResult(
+                        ChangeExecutionStatus.Conflict,
+                        ChangeSetId: null,
+                        AffectedRecordCount: 0,
+                        $"Gacha fact {reference} was irreversibly deleted.");
+                    return;
+                }
                 switch (originalKind)
                 {
                     case EntityChangeKind.Insert:
@@ -561,6 +628,150 @@ public sealed class SqliteGachaAtomicChangeStore
 
         return result ?? throw new InvalidOperationException(
             "The Gacha undo transaction did not produce a result.");
+    }
+
+    public async Task<GachaAtomicChangeResult> IrreversiblyDeleteAsync(
+        GachaIrreversibleDeleteRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        await database.InitializeAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        GachaAtomicChangeResult? result = null;
+        await database.Connection.RunInTransactionAsync(connection =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            CommitResultRow? committed = ReadCommitResult(
+                connection,
+                request.OperationId);
+            if (committed is not null)
+            {
+                result = ToAlreadyCommittedResult(committed);
+                return;
+            }
+
+            GachaFactReadRow? current =
+                ReadCurrent(connection, request.Reference);
+            if (current is null ||
+                current.Version != request.ExpectedVersion.Value)
+            {
+                result = new GachaAtomicChangeResult(
+                    ChangeExecutionStatus.Conflict,
+                    ChangeSetId: null,
+                    AffectedRecordCount: 0,
+                    "The Gacha fact no longer has the expected version.");
+                return;
+            }
+
+            Guid archiveId = ParseRequiredGuid(
+                current.ArchiveId,
+                "archive");
+            string tombstoneKey = CreateTombstoneKey(
+                connection,
+                archiveId,
+                request.Reference);
+            string entityReference = request.Reference.ToString();
+            Guid[] affectedChangeSetIds =
+                connection.Query<ChangeSetIdRow>(
+                        """
+                        SELECT DISTINCT ChangeSetId
+                        FROM EntityChanges
+                        WHERE EntityKind = ? AND EntityReference = ?;
+                        """,
+                        EntityKind,
+                        entityReference)
+                    .Select(row => ParseRequiredGuid(
+                        row.ChangeSetId,
+                        "change set"))
+                    .ToArray();
+
+            if (connection.Delete(current.ToGachaRow()) != 1)
+            {
+                throw new InvalidOperationException(
+                    "The irreversible Gacha deletion did not affect one row.");
+            }
+            connection.Execute(
+                """
+                DELETE FROM GachaRevisions
+                WHERE GameAccountId = ? AND ExternalRecordId = ?;
+                """,
+                request.Reference.GameAccountId.ToString("D"),
+                request.Reference.ExternalRecordId);
+            foreach (Guid affectedChangeSetId in affectedChangeSetIds)
+            {
+                connection.Execute(
+                    "DELETE FROM UndoMaterials WHERE ChangeSetId = ?;",
+                    affectedChangeSetId.ToString("D"));
+                connection.Execute(
+                    """
+                    UPDATE OperationHistory
+                    SET IsUndoEligible = 0, IneligibilityReason = ?,
+                        MaterialBytes = 0
+                    WHERE ChangeSetId = ?;
+                    """,
+                    (int)UndoIneligibilityReason.IrreversibleDeletion,
+                    affectedChangeSetId.ToString("D"));
+            }
+
+            Guid changeSetId = Guid.NewGuid();
+            InsertIrreversibleDeleteChangeSet(
+                connection,
+                request,
+                changeSetId,
+                archiveId);
+            connection.Execute(
+                """
+                INSERT INTO EntityChanges
+                    (ChangeSetId, EntityKind, EntityReference, ChangeKind,
+                     BeforeVersion, AfterVersion)
+                VALUES (?, ?, ?, ?, ?, NULL);
+                """,
+                changeSetId.ToString("D"),
+                EntityKind,
+                entityReference,
+                (int)EntityChangeKind.Delete,
+                current.Version);
+            connection.Execute(
+                """
+                INSERT INTO OperationHistory
+                    (ChangeSetId, IsUndoEligible, IneligibilityReason,
+                     UndoneByChangeSetId, MaterialBytes)
+                VALUES (?, 0, ?, NULL, 0);
+                """,
+                changeSetId.ToString("D"),
+                (int)UndoIneligibilityReason.IrreversibleDeletion);
+            connection.Execute(
+                """
+                INSERT INTO LocalOnlyTombstones
+                    (TombstoneKey, TombstoneVersion, ArchiveId, IsActive,
+                     DeletedByChangeSetId, DeletedAtUtcTicks,
+                     ReintroducedByChangeSetId)
+                VALUES (?, 1, ?, 1, ?, ?, NULL)
+                ON CONFLICT(TombstoneKey)
+                DO UPDATE SET
+                    TombstoneVersion = TombstoneVersion + 1,
+                    IsActive = 1,
+                    DeletedByChangeSetId = excluded.DeletedByChangeSetId,
+                    DeletedAtUtcTicks = excluded.DeletedAtUtcTicks,
+                    ReintroducedByChangeSetId = NULL;
+                """,
+                tombstoneKey,
+                archiveId.ToString("D"),
+                changeSetId.ToString("D"),
+                request.CommittedAt.UtcDateTime.Ticks);
+            InsertIrreversibleDeleteCommitResult(
+                connection,
+                request,
+                changeSetId);
+            result = new GachaAtomicChangeResult(
+                ChangeExecutionStatus.Applied,
+                changeSetId,
+                AffectedRecordCount: 1);
+        });
+
+        return result ?? throw new InvalidOperationException(
+            "The irreversible Gacha deletion did not produce a result.");
     }
 
     public async Task<int> GetUndoLimitAsync(
@@ -833,6 +1044,39 @@ public sealed class SqliteGachaAtomicChangeStore
         }
     }
 
+    private static void InsertIrreversibleDeleteChangeSet(
+        SQLiteConnection connection,
+        GachaIrreversibleDeleteRequest request,
+        Guid changeSetId,
+        Guid archiveId)
+    {
+        connection.Execute(
+            """
+            INSERT INTO DataChangeSets
+                (ChangeSetId, OperationId, OperationKind,
+                 StartedAtUtcTicks, StartedAtOffsetMinutes,
+                 CommittedAtUtcTicks, CommittedAtOffsetMinutes,
+                 Origin, Summary, AffectedRecordCount, UndoOfChangeSetId)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL);
+            """,
+            changeSetId.ToString("D"),
+            request.OperationId.ToString(),
+            (int)DataChangeOperationKind.IrreversibleDelete,
+            request.StartedAt.UtcDateTime.Ticks,
+            checked((int)request.StartedAt.Offset.TotalMinutes),
+            request.CommittedAt.UtcDateTime.Ticks,
+            checked((int)request.CommittedAt.Offset.TotalMinutes),
+            (int)DataOrigin.UserEntered,
+            request.Summary);
+        connection.Execute(
+            """
+            INSERT INTO DataChangeSetArchives (ChangeSetId, ArchiveId)
+            VALUES (?, ?);
+            """,
+            changeSetId.ToString("D"),
+            archiveId.ToString("D"));
+    }
+
     private static void InsertEntityChangeAndRevision(
         SQLiteConnection connection,
         Guid changeSetId,
@@ -946,6 +1190,24 @@ public sealed class SqliteGachaAtomicChangeStore
             changeSetId.ToString("D"),
             (int)ChangeExecutionStatus.Applied,
             affectedRecordCount,
+            request.CommittedAt.UtcDateTime.Ticks);
+    }
+
+    private static void InsertIrreversibleDeleteCommitResult(
+        SQLiteConnection connection,
+        GachaIrreversibleDeleteRequest request,
+        Guid changeSetId)
+    {
+        connection.Execute(
+            """
+            INSERT INTO OperationCommitResults
+                (OperationId, ChangeSetId, Status,
+                 AffectedRecordCount, CommittedAtUtcTicks)
+            VALUES (?, ?, ?, 1, ?);
+            """,
+            request.OperationId.ToString(),
+            changeSetId.ToString("D"),
+            (int)ChangeExecutionStatus.Applied,
             request.CommittedAt.UtcDateTime.Ticks);
     }
 
@@ -1246,6 +1508,84 @@ public sealed class SqliteGachaAtomicChangeStore
             : ParseRequiredGuid(archiveId, "archive");
     }
 
+    private static ActiveTombstone? ReadActiveTombstone(
+        SQLiteConnection connection,
+        Guid archiveId,
+        GachaFactReference reference)
+    {
+        string? key = TryCreateTombstoneKey(
+            connection,
+            archiveId,
+            reference);
+        if (key is null)
+        {
+            return null;
+        }
+        TombstoneRow? row = connection.Query<TombstoneRow>(
+                """
+                SELECT TombstoneKey, TombstoneVersion, ArchiveId, IsActive
+                FROM LocalOnlyTombstones
+                WHERE TombstoneKey = ? AND IsActive = 1;
+                """,
+                key)
+            .SingleOrDefault();
+        return row is null
+            ? null
+            : new ActiveTombstone(
+                row.TombstoneKey,
+                row.TombstoneVersion);
+    }
+
+    private static string CreateTombstoneKey(
+        SQLiteConnection connection,
+        Guid archiveId,
+        GachaFactReference reference)
+    {
+        return TryCreateTombstoneKey(
+                connection,
+                archiveId,
+                reference) ??
+            throw new InvalidOperationException(
+                "Irreversible Gacha deletion requires a resolved role identity.");
+    }
+
+    private static string? TryCreateTombstoneKey(
+        SQLiteConnection connection,
+        Guid archiveId,
+        GachaFactReference reference)
+    {
+        AccountIdentityScopeRow? scope =
+            connection.Query<AccountIdentityScopeRow>(
+                    """
+                    SELECT PlayerArchiveId, GameRoleIdentityId
+                    FROM GameAccounts
+                    WHERE Id = ?;
+                    """,
+                    reference.GameAccountId.ToString("D"))
+                .SingleOrDefault();
+        if (scope is null ||
+            !Guid.TryParseExact(
+                scope.PlayerArchiveId,
+                "D",
+                out Guid storedArchiveId) ||
+            storedArchiveId != archiveId)
+        {
+            throw new InvalidDataException(
+                "The Gacha fact account has an invalid archive scope.");
+        }
+        if (string.IsNullOrWhiteSpace(scope.GameRoleIdentityId))
+        {
+            return null;
+        }
+
+        string canonical =
+            $"gacha|{archiveId:D}|{scope.GameRoleIdentityId.ToLowerInvariant()}|" +
+            reference.ExternalRecordId;
+        return Convert.ToHexString(
+                SHA256.HashData(Encoding.UTF8.GetBytes(canonical)))
+            .ToLowerInvariant();
+    }
+
     private static string? SerializeSnapshot(GachaRecordRow? row) =>
         row is null
             ? null
@@ -1461,6 +1801,28 @@ public sealed class SqliteGachaAtomicChangeStore
         public int IneligibilityReason { get; set; }
 
         public string? UndoneByChangeSetId { get; set; }
+    }
+
+    private sealed class TombstoneRow
+    {
+        public string TombstoneKey { get; set; } = string.Empty;
+
+        public long TombstoneVersion { get; set; }
+
+        public string ArchiveId { get; set; } = string.Empty;
+
+        public bool IsActive { get; set; }
+    }
+
+    private sealed record ActiveTombstone(
+        string TombstoneKey,
+        long TombstoneVersion);
+
+    private sealed class AccountIdentityScopeRow
+    {
+        public string PlayerArchiveId { get; set; } = string.Empty;
+
+        public string? GameRoleIdentityId { get; set; }
     }
 
     private sealed class UnknownStorageCapacityProvider
