@@ -29,5 +29,7 @@
 | D23 | `Completeness` 是共享枚举，但完整范围由每个领域或数据类型定义；低层级 `Complete` 不得推导更高层级完整性 | Accepted | ADR 0011，维护者确认 |
 | D24 | 原神区服在 UID 可可靠推导时以 UID 为准；手工区服仅作无法判断时的保险。已解析自然身份变更在专门纠正流程前拒绝 | Accepted | ADR 0002，维护者确认 |
 | D25 | 首个 Furina 领域格式为单源档案、多已解析账号副本的 Gacha Portable v1 ZIP；标准事实使用 UIGF 4.2，补充载荷保存身份、时间表示与来源；8B.2 不绕过 DataChangeSet 执行生产写入 | Accepted | ADR 0012，维护者确认 |
+| D26 | 变更集与业务事实原子提交；Gacha 使用稳定事实引用和本地版本令牌；撤销仅限最新安全操作，反向操作不可再次撤销；跨档案资格整体生效 | Accepted | ADR 0013，维护者确认 |
+| D27 | 纯抓取时间或批次刷新不产生业务 Revision；不可逆删除使用不含事实内容的本地 Tombstone 哈希，显式重引入通过版本化确认停用抑制 | Accepted | ADR 0013，维护者确认 |
 
 当前工作包契约和后期服务决策集中记录在 [OPEN_QUESTIONS.md](../project/OPEN_QUESTIONS.md)，按实施时点闭合，不得由 Agent 静默改变语义。D19、D20 的核心决定及既有产品行为继续 Accepted；D21 收敛依赖关系，不冻结 Chronicle Draft 的字段或未来同步协议。

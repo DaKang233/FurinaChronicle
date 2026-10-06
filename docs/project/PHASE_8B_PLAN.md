@@ -95,11 +95,15 @@
 
 ## 工作包 8B.3：变更集与修订基础
 
+实施状态：In progress（2026-10-06；契约已由 ADR 0013 与实施文档冻结）
+
 - 定义一次用户可理解操作的 DataChangeSet；
 - 可信全量刷新覆盖、导入覆盖和手工纠正形成 Revision；
 - 建立按档案计数的 OperationHistory，默认 3、可关闭、上限 1000；
 - 明确存储不足确认、跨档案原子操作和不可逆删除边界；
 - 保持 Revision、有限撤销与未来 ChangeJournal 的职责分离，不实现完整 Journal、设备游标或网络冲突处理。
+
+本轮具体变化分类、版本前置条件、跨档案资格、容量淘汰、不可逆 Tombstone 和 Portable AddOnly Apply 边界见 [Phase 8B.3 实施契约](PHASE_8B3_IMPLEMENTATION.md) 与 [ADR 0013](../decisions/0013-atomic-revisions-and-bounded-undo.md)。
 
 退出标准：业务记录和变更集同事务提交；重复输入不无限增加修订；撤销不会跨档案错误恢复或恢复已不可逆删除的数据。当前事务边界可在未来扩展，不以实现同步为条件。
 
