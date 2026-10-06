@@ -8,7 +8,8 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite;
 
 public sealed class FurinaDatabase : IAsyncDisposable
 {
-    private const int CurrentSchemaVersion = 4;
+    private const int CurrentSchemaVersion = 5;
+    private const int ProvenanceSchemaVersion = 4;
     private const int SharedIdentitySchemaVersion = 3;
     private const int PreSharedIdentitySchemaVersion = 2;
     private const int LegacyGachaSchemaVersion = 1;
@@ -85,17 +86,22 @@ public sealed class FurinaDatabase : IAsyncDisposable
             if (applicationId == CurrentApplicationId &&
                 schemaVersion == LegacyGachaSchemaVersion)
             {
-                await MigrateVersionOneToVersionFourAsync(cancellationToken);
+                await MigrateVersionOneToCurrentAsync(cancellationToken);
             }
             else if (applicationId == CurrentApplicationId &&
                      schemaVersion == PreSharedIdentitySchemaVersion)
             {
-                await MigrateVersionTwoToVersionFourAsync(cancellationToken);
+                await MigrateVersionTwoToCurrentAsync(cancellationToken);
             }
             else if (applicationId == CurrentApplicationId &&
                      schemaVersion == SharedIdentitySchemaVersion)
             {
-                await MigrateVersionThreeToVersionFourAsync(cancellationToken);
+                await MigrateVersionThreeToCurrentAsync(cancellationToken);
+            }
+            else if (applicationId == CurrentApplicationId &&
+                     schemaVersion == ProvenanceSchemaVersion)
+            {
+                await MigrateVersionFourToCurrentAsync(cancellationToken);
             }
             else if (applicationId == 0 &&
                      schemaVersion == 0 &&
@@ -121,7 +127,7 @@ public sealed class FurinaDatabase : IAsyncDisposable
         }
     }
 
-    private async Task MigrateVersionOneToVersionFourAsync(
+    private async Task MigrateVersionOneToCurrentAsync(
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -142,11 +148,12 @@ public sealed class FurinaDatabase : IAsyncDisposable
             CreateGachaRecordIndexes(connection);
             MigrateVersionTwoToVersionThree(connection, cancellationToken);
             MigrateVersionThreeToVersionFour(connection);
+            MigrateVersionFourToVersionFive(connection);
             SetCurrentSchemaVersion(connection);
         });
     }
 
-    private async Task MigrateVersionTwoToVersionFourAsync(
+    private async Task MigrateVersionTwoToCurrentAsync(
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -156,11 +163,12 @@ public sealed class FurinaDatabase : IAsyncDisposable
             cancellationToken.ThrowIfCancellationRequested();
             MigrateVersionTwoToVersionThree(connection, cancellationToken);
             MigrateVersionThreeToVersionFour(connection);
+            MigrateVersionFourToVersionFive(connection);
             SetCurrentSchemaVersion(connection);
         });
     }
 
-    private async Task MigrateVersionThreeToVersionFourAsync(
+    private async Task MigrateVersionThreeToCurrentAsync(
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -169,6 +177,20 @@ public sealed class FurinaDatabase : IAsyncDisposable
         {
             cancellationToken.ThrowIfCancellationRequested();
             MigrateVersionThreeToVersionFour(connection);
+            MigrateVersionFourToVersionFive(connection);
+            SetCurrentSchemaVersion(connection);
+        });
+    }
+
+    private async Task MigrateVersionFourToCurrentAsync(
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        await Connection.RunInTransactionAsync(connection =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            MigrateVersionFourToVersionFive(connection);
             SetCurrentSchemaVersion(connection);
         });
     }
@@ -280,6 +302,14 @@ public sealed class FurinaDatabase : IAsyncDisposable
             "ALTER TABLE GachaRecords ADD COLUMN AcquisitionBatchId TEXT;");
     }
 
+    private static void MigrateVersionFourToVersionFive(
+        SQLiteConnection connection)
+    {
+        connection.Execute(
+            "ALTER TABLE GachaRecords ADD COLUMN Version INTEGER NOT NULL DEFAULT 1;");
+        CreateHistoryTables(connection);
+    }
+
     private static void SetCurrentSchemaVersion(SQLiteConnection connection)
     {
         connection.Execute(
@@ -358,6 +388,139 @@ public sealed class FurinaDatabase : IAsyncDisposable
                 "ImportedAtUtcTicks",
                 "ImportedAtOffsetMinutes",
                 "AcquisitionBatchId",
+                "Version",
+            ],
+            cancellationToken);
+        await ValidateTableColumnsAsync(
+            "DataChangeSets",
+            [
+                "ChangeSetId",
+                "OperationId",
+                "OperationKind",
+                "StartedAtUtcTicks",
+                "StartedAtOffsetMinutes",
+                "CommittedAtUtcTicks",
+                "CommittedAtOffsetMinutes",
+                "Origin",
+                "Summary",
+                "AffectedRecordCount",
+                "UndoOfChangeSetId",
+            ],
+            cancellationToken);
+        await ValidateTableColumnsAsync(
+            "DataChangeSetArchives",
+            ["ChangeSetId", "ArchiveId"],
+            cancellationToken);
+        await ValidateTableColumnsAsync(
+            "EntityChanges",
+            [
+                "Id",
+                "ChangeSetId",
+                "EntityKind",
+                "EntityReference",
+                "ChangeKind",
+                "BeforeVersion",
+                "AfterVersion",
+            ],
+            cancellationToken);
+        await ValidateTableColumnsAsync(
+            "GachaRevisions",
+            [
+                "RevisionId",
+                "ChangeSetId",
+                "GameAccountId",
+                "ExternalRecordId",
+                "ChangeKind",
+                "BeforeVersion",
+                "AfterVersion",
+                "SnapshotFormatVersion",
+                "BeforeSnapshotJson",
+                "AfterSnapshotJson",
+                "CreatedAtUtcTicks",
+            ],
+            cancellationToken);
+        await ValidateTableColumnsAsync(
+            "OperationHistory",
+            [
+                "ChangeSetId",
+                "IsUndoEligible",
+                "IneligibilityReason",
+                "UndoneByChangeSetId",
+                "MaterialBytes",
+            ],
+            cancellationToken);
+        await ValidateTableColumnsAsync(
+            "UndoMaterials",
+            [
+                "Id",
+                "ChangeSetId",
+                "EntityKind",
+                "EntityReference",
+                "ChangeKind",
+                "ExpectedAfterVersion",
+                "SnapshotFormatVersion",
+                "BeforeSnapshotJson",
+                "AfterSnapshotJson",
+                "MaterialBytes",
+            ],
+            cancellationToken);
+        await ValidateTableColumnsAsync(
+            "ArchiveUndoSettings",
+            ["ArchiveId", "UndoLimit"],
+            cancellationToken);
+        await ValidateTableColumnsAsync(
+            "OperationCommitResults",
+            [
+                "OperationId",
+                "ChangeSetId",
+                "Status",
+                "AffectedRecordCount",
+                "CommittedAtUtcTicks",
+            ],
+            cancellationToken);
+        await ValidateTableColumnsAsync(
+            "LocalOnlyTombstones",
+            [
+                "TombstoneKey",
+                "TombstoneVersion",
+                "ArchiveId",
+                "IsActive",
+                "DeletedByChangeSetId",
+                "DeletedAtUtcTicks",
+                "ReintroducedByChangeSetId",
+            ],
+            cancellationToken);
+        await ValidateTableColumnsAsync(
+            "RoleIdentityAliases",
+            [
+                "SourceIdentityId",
+                "TargetIdentityId",
+                "CreatedByChangeSetId",
+            ],
+            cancellationToken);
+        await ValidateTableColumnsAsync(
+            "PortableImportReceipts",
+            [
+                "ReceiptId",
+                "ChangeSetId",
+                "PackageFingerprint",
+                "ReceivedAtUtcTicks",
+                "ReceivedAtOffsetMinutes",
+                "ReceiptBatchId",
+                "SourceArchiveId",
+                "TargetArchiveId",
+                "AccountCount",
+                "RecordCount",
+            ],
+            cancellationToken);
+        await ValidateTableColumnsAsync(
+            "PortableImportReceiptAccounts",
+            [
+                "ReceiptId",
+                "SourceAccountId",
+                "TargetAccountId",
+                "SourceRoleIdentityId",
+                "TargetRoleIdentityId",
             ],
             cancellationToken);
 
@@ -471,11 +634,14 @@ public sealed class FurinaDatabase : IAsyncDisposable
                     ImportedAtUtcTicks INTEGER,
                     ImportedAtOffsetMinutes INTEGER,
                     AcquisitionBatchId TEXT,
+                    Version INTEGER NOT NULL DEFAULT 1,
                     FOREIGN KEY (GameAccountId)
                         REFERENCES GameAccounts(Id)
                         ON DELETE CASCADE
                 );
                 """);
+
+            CreateHistoryTables(connection);
 
             connection.Execute(
                 """
@@ -492,6 +658,237 @@ public sealed class FurinaDatabase : IAsyncDisposable
             connection.Execute(
                 $"PRAGMA user_version = {CurrentSchemaVersion};");
         });
+    }
+
+    private static void CreateHistoryTables(SQLiteConnection connection)
+    {
+        connection.Execute(
+            """
+            CREATE TABLE DataChangeSets
+            (
+                ChangeSetId TEXT PRIMARY KEY NOT NULL,
+                OperationId TEXT NOT NULL UNIQUE,
+                OperationKind INTEGER NOT NULL,
+                StartedAtUtcTicks INTEGER NOT NULL,
+                StartedAtOffsetMinutes INTEGER NOT NULL,
+                CommittedAtUtcTicks INTEGER NOT NULL,
+                CommittedAtOffsetMinutes INTEGER NOT NULL,
+                Origin INTEGER NOT NULL,
+                Summary TEXT NOT NULL,
+                AffectedRecordCount INTEGER NOT NULL,
+                UndoOfChangeSetId TEXT,
+                FOREIGN KEY (UndoOfChangeSetId)
+                    REFERENCES DataChangeSets(ChangeSetId)
+            );
+            """);
+
+        connection.Execute(
+            """
+            CREATE TABLE DataChangeSetArchives
+            (
+                ChangeSetId TEXT NOT NULL,
+                ArchiveId TEXT NOT NULL,
+                PRIMARY KEY (ChangeSetId, ArchiveId),
+                FOREIGN KEY (ChangeSetId)
+                    REFERENCES DataChangeSets(ChangeSetId)
+                    ON DELETE CASCADE
+            );
+            """);
+
+        connection.Execute(
+            """
+            CREATE TABLE EntityChanges
+            (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ChangeSetId TEXT NOT NULL,
+                EntityKind TEXT NOT NULL,
+                EntityReference TEXT NOT NULL,
+                ChangeKind INTEGER NOT NULL,
+                BeforeVersion INTEGER,
+                AfterVersion INTEGER,
+                FOREIGN KEY (ChangeSetId)
+                    REFERENCES DataChangeSets(ChangeSetId)
+                    ON DELETE CASCADE
+            );
+            """);
+
+        connection.Execute(
+            """
+            CREATE TABLE GachaRevisions
+            (
+                RevisionId TEXT PRIMARY KEY NOT NULL,
+                ChangeSetId TEXT NOT NULL,
+                GameAccountId TEXT NOT NULL,
+                ExternalRecordId TEXT NOT NULL,
+                ChangeKind INTEGER NOT NULL,
+                BeforeVersion INTEGER,
+                AfterVersion INTEGER,
+                SnapshotFormatVersion INTEGER NOT NULL,
+                BeforeSnapshotJson TEXT,
+                AfterSnapshotJson TEXT,
+                CreatedAtUtcTicks INTEGER NOT NULL,
+                FOREIGN KEY (ChangeSetId)
+                    REFERENCES DataChangeSets(ChangeSetId)
+                    ON DELETE CASCADE
+            );
+            """);
+
+        connection.Execute(
+            """
+            CREATE TABLE OperationHistory
+            (
+                ChangeSetId TEXT PRIMARY KEY NOT NULL,
+                IsUndoEligible INTEGER NOT NULL,
+                IneligibilityReason INTEGER NOT NULL,
+                UndoneByChangeSetId TEXT,
+                MaterialBytes INTEGER NOT NULL,
+                FOREIGN KEY (ChangeSetId)
+                    REFERENCES DataChangeSets(ChangeSetId)
+                    ON DELETE CASCADE,
+                FOREIGN KEY (UndoneByChangeSetId)
+                    REFERENCES DataChangeSets(ChangeSetId)
+            );
+            """);
+
+        connection.Execute(
+            """
+            CREATE TABLE UndoMaterials
+            (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ChangeSetId TEXT NOT NULL,
+                EntityKind TEXT NOT NULL,
+                EntityReference TEXT NOT NULL,
+                ChangeKind INTEGER NOT NULL,
+                ExpectedAfterVersion INTEGER,
+                SnapshotFormatVersion INTEGER NOT NULL,
+                BeforeSnapshotJson TEXT,
+                AfterSnapshotJson TEXT,
+                MaterialBytes INTEGER NOT NULL,
+                FOREIGN KEY (ChangeSetId)
+                    REFERENCES DataChangeSets(ChangeSetId)
+                    ON DELETE CASCADE,
+                UNIQUE (ChangeSetId, EntityKind, EntityReference)
+            );
+            """);
+
+        connection.Execute(
+            """
+            CREATE TABLE ArchiveUndoSettings
+            (
+                ArchiveId TEXT PRIMARY KEY NOT NULL,
+                UndoLimit INTEGER NOT NULL DEFAULT 3,
+                FOREIGN KEY (ArchiveId)
+                    REFERENCES PlayerArchives(Id)
+                    ON DELETE CASCADE
+            );
+            """);
+
+        connection.Execute(
+            """
+            CREATE TABLE OperationCommitResults
+            (
+                OperationId TEXT PRIMARY KEY NOT NULL,
+                ChangeSetId TEXT UNIQUE,
+                Status INTEGER NOT NULL,
+                AffectedRecordCount INTEGER NOT NULL,
+                CommittedAtUtcTicks INTEGER NOT NULL,
+                FOREIGN KEY (ChangeSetId)
+                    REFERENCES DataChangeSets(ChangeSetId)
+            );
+            """);
+
+        connection.Execute(
+            """
+            CREATE TABLE LocalOnlyTombstones
+            (
+                TombstoneKey TEXT PRIMARY KEY NOT NULL,
+                TombstoneVersion INTEGER NOT NULL,
+                ArchiveId TEXT NOT NULL,
+                IsActive INTEGER NOT NULL,
+                DeletedByChangeSetId TEXT NOT NULL,
+                DeletedAtUtcTicks INTEGER NOT NULL,
+                ReintroducedByChangeSetId TEXT,
+                FOREIGN KEY (DeletedByChangeSetId)
+                    REFERENCES DataChangeSets(ChangeSetId),
+                FOREIGN KEY (ReintroducedByChangeSetId)
+                    REFERENCES DataChangeSets(ChangeSetId)
+            );
+            """);
+
+        connection.Execute(
+            """
+            CREATE TABLE RoleIdentityAliases
+            (
+                SourceIdentityId TEXT PRIMARY KEY NOT NULL,
+                TargetIdentityId TEXT NOT NULL,
+                CreatedByChangeSetId TEXT NOT NULL,
+                FOREIGN KEY (TargetIdentityId)
+                    REFERENCES GameRoleIdentities(Id),
+                FOREIGN KEY (CreatedByChangeSetId)
+                    REFERENCES DataChangeSets(ChangeSetId)
+            );
+            """);
+
+        connection.Execute(
+            """
+            CREATE TABLE PortableImportReceipts
+            (
+                ReceiptId TEXT PRIMARY KEY NOT NULL,
+                ChangeSetId TEXT NOT NULL UNIQUE,
+                PackageFingerprint TEXT NOT NULL,
+                ReceivedAtUtcTicks INTEGER NOT NULL,
+                ReceivedAtOffsetMinutes INTEGER NOT NULL,
+                ReceiptBatchId TEXT NOT NULL,
+                SourceArchiveId TEXT NOT NULL,
+                TargetArchiveId TEXT NOT NULL,
+                AccountCount INTEGER NOT NULL,
+                RecordCount INTEGER NOT NULL,
+                FOREIGN KEY (ChangeSetId)
+                    REFERENCES DataChangeSets(ChangeSetId)
+            );
+            """);
+
+        connection.Execute(
+            """
+            CREATE TABLE PortableImportReceiptAccounts
+            (
+                ReceiptId TEXT NOT NULL,
+                SourceAccountId TEXT NOT NULL,
+                TargetAccountId TEXT NOT NULL,
+                SourceRoleIdentityId TEXT NOT NULL,
+                TargetRoleIdentityId TEXT NOT NULL,
+                PRIMARY KEY (ReceiptId, SourceAccountId),
+                FOREIGN KEY (ReceiptId)
+                    REFERENCES PortableImportReceipts(ReceiptId)
+                    ON DELETE CASCADE
+            );
+            """);
+
+        connection.Execute(
+            """
+            CREATE INDEX IX_DataChangeSetArchives_Archive_ChangeSet
+            ON DataChangeSetArchives(ArchiveId, ChangeSetId);
+            """);
+        connection.Execute(
+            """
+            CREATE INDEX IX_EntityChanges_ChangeSet
+            ON EntityChanges(ChangeSetId);
+            """);
+        connection.Execute(
+            """
+            CREATE INDEX IX_GachaRevisions_Fact
+            ON GachaRevisions(GameAccountId, ExternalRecordId, CreatedAtUtcTicks);
+            """);
+        connection.Execute(
+            """
+            CREATE INDEX IX_OperationHistory_UndoEligible
+            ON OperationHistory(IsUndoEligible, ChangeSetId);
+            """);
+        connection.Execute(
+            """
+            CREATE INDEX IX_LocalOnlyTombstones_Archive_Active
+            ON LocalOnlyTombstones(ArchiveId, IsActive);
+            """);
     }
 
     private static void CreateGachaRecordIndexes(SQLiteConnection connection)

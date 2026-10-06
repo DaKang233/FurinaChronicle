@@ -302,6 +302,30 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
                         insertedCount += inserted;
                         if (inserted == 0)
                         {
+                            GachaRecordRow existing = connection
+                                .Query<GachaRecordRow>(
+                                    $"""
+                                    SELECT *
+                                    FROM {GachaRecordRow.TableName}
+                                    WHERE GameAccountId = ?
+                                        AND ExternalRecordId = ?;
+                                    """,
+                                    row.GameAccountId,
+                                    row.ExternalRecordId)
+                                .Single();
+                            GachaRecordRow merged = conflictPolicy ==
+                                GachaRecordConflictPolicy.ReplaceExisting
+                                ? MergeReplacing(existing, row)
+                                : MergePreserving(existing, row);
+                            GachaRecordChange change =
+                                GachaRecordChangeClassifier.Compare(
+                                    existing.ToDomain(),
+                                    merged.ToDomain());
+                            if (change.Kind == GachaRecordChangeKind.NoOp)
+                            {
+                                continue;
+                            }
+
                             if (conflictPolicy ==
                                 GachaRecordConflictPolicy.ReplaceExisting)
                             {
@@ -323,24 +347,25 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
                                         FetchedAtOffsetMinutes = ?,
                                         ImportedAtUtcTicks = ?,
                                         ImportedAtOffsetMinutes = ?,
-                                        AcquisitionBatchId = ?
+                                        AcquisitionBatchId = ?,
+                                        Version = Version + 1
                                     WHERE GameAccountId = ? AND ExternalRecordId = ?;
                                     """,
-                                    row.ItemName,
-                                    row.ItemId,
-                                    row.ItemType,
-                                    row.GachaType,
-                                    row.UigfGachaType,
-                                    row.RankType,
-                                    row.Count,
-                                    row.TimeUtcTicks,
-                                    row.TimeOffsetMinutes,
-                                    row.Origin,
-                                    row.FetchedAtUtcTicks,
-                                    row.FetchedAtOffsetMinutes,
-                                    row.ImportedAtUtcTicks,
-                                    row.ImportedAtOffsetMinutes,
-                                    row.AcquisitionBatchId,
+                                    merged.ItemName,
+                                    merged.ItemId,
+                                    merged.ItemType,
+                                    merged.GachaType,
+                                    merged.UigfGachaType,
+                                    merged.RankType,
+                                    merged.Count,
+                                    merged.TimeUtcTicks,
+                                    merged.TimeOffsetMinutes,
+                                    merged.Origin,
+                                    merged.FetchedAtUtcTicks,
+                                    merged.FetchedAtOffsetMinutes,
+                                    merged.ImportedAtUtcTicks,
+                                    merged.ImportedAtOffsetMinutes,
+                                    merged.AcquisitionBatchId,
                                     row.GameAccountId,
                                     row.ExternalRecordId);
                             }
@@ -350,40 +375,21 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
                                 $"""
                                 UPDATE {GachaRecordRow.TableName}
                                 SET
-                                    ItemName = CASE
-                                        WHEN ItemName IS NULL OR TRIM(ItemName) = ''
-                                        THEN ?
-                                        ELSE ItemName
-                                    END,
-                                    ItemId = CASE
-                                        WHEN ItemId IS NULL OR TRIM(ItemId) = ''
-                                        THEN ?
-                                        ELSE ItemId
-                                    END,
-                                    ItemType = CASE
-                                        WHEN ItemType IS NULL OR TRIM(ItemType) = ''
-                                        THEN ?
-                                        ELSE ItemType
-                                    END,
-                                    GachaType = CASE
-                                        WHEN GachaType IS NULL OR TRIM(GachaType) = ''
-                                        THEN ?
-                                        ELSE GachaType
-                                    END,
-                                    UigfGachaType = CASE
-                                        WHEN UigfGachaType IS NULL OR TRIM(UigfGachaType) = ''
-                                        THEN ?
-                                        ELSE UigfGachaType
-                                    END,
-                                    RankType = COALESCE(RankType, ?)
+                                    ItemName = ?,
+                                    ItemId = ?,
+                                    ItemType = ?,
+                                    GachaType = ?,
+                                    UigfGachaType = ?,
+                                    RankType = ?,
+                                    Version = Version + 1
                                 WHERE GameAccountId = ? AND ExternalRecordId = ?;
                                 """,
-                                row.ItemName,
-                                row.ItemId,
-                                row.ItemType,
-                                row.GachaType,
-                                row.UigfGachaType,
-                                row.RankType,
+                                merged.ItemName,
+                                merged.ItemId,
+                                merged.ItemType,
+                                merged.GachaType,
+                                merged.UigfGachaType,
+                                merged.RankType,
                                 row.GameAccountId,
                                 row.ExternalRecordId);
                             }
@@ -396,6 +402,71 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
                 DuplicateCount: rows.Length - insertedCount - updatedCount,
                 UpdatedCount: updatedCount);
         }
+
+        private static GachaRecordRow MergeReplacing(
+            GachaRecordRow current,
+            GachaRecordRow incoming)
+        {
+            return new GachaRecordRow
+            {
+                Id = current.Id,
+                GameAccountId = current.GameAccountId,
+                ExternalRecordId = current.ExternalRecordId,
+                ItemName = PreferNonBlank(incoming.ItemName, current.ItemName),
+                ItemId = PreferNonBlank(incoming.ItemId, current.ItemId),
+                ItemType = PreferNonBlank(incoming.ItemType, current.ItemType),
+                GachaType = PreferNonBlank(incoming.GachaType, current.GachaType),
+                UigfGachaType = PreferNonBlank(
+                    incoming.UigfGachaType,
+                    current.UigfGachaType),
+                RankType = incoming.RankType ?? current.RankType,
+                Count = incoming.Count,
+                TimeUtcTicks = incoming.TimeUtcTicks,
+                TimeOffsetMinutes = incoming.TimeOffsetMinutes,
+                Origin = incoming.Origin,
+                FetchedAtUtcTicks = incoming.FetchedAtUtcTicks,
+                FetchedAtOffsetMinutes = incoming.FetchedAtOffsetMinutes,
+                ImportedAtUtcTicks = incoming.ImportedAtUtcTicks,
+                ImportedAtOffsetMinutes = incoming.ImportedAtOffsetMinutes,
+                AcquisitionBatchId = incoming.AcquisitionBatchId,
+                Version = current.Version
+            };
+        }
+
+        private static GachaRecordRow MergePreserving(
+            GachaRecordRow current,
+            GachaRecordRow incoming)
+        {
+            return new GachaRecordRow
+            {
+                Id = current.Id,
+                GameAccountId = current.GameAccountId,
+                ExternalRecordId = current.ExternalRecordId,
+                ItemName = PreferNonBlank(current.ItemName, incoming.ItemName),
+                ItemId = PreferNonBlank(current.ItemId, incoming.ItemId),
+                ItemType = PreferNonBlank(current.ItemType, incoming.ItemType),
+                GachaType = PreferNonBlank(current.GachaType, incoming.GachaType),
+                UigfGachaType = PreferNonBlank(
+                    current.UigfGachaType,
+                    incoming.UigfGachaType),
+                RankType = current.RankType ?? incoming.RankType,
+                Count = current.Count,
+                TimeUtcTicks = current.TimeUtcTicks,
+                TimeOffsetMinutes = current.TimeOffsetMinutes,
+                Origin = current.Origin,
+                FetchedAtUtcTicks = current.FetchedAtUtcTicks,
+                FetchedAtOffsetMinutes = current.FetchedAtOffsetMinutes,
+                ImportedAtUtcTicks = current.ImportedAtUtcTicks,
+                ImportedAtOffsetMinutes = current.ImportedAtOffsetMinutes,
+                AcquisitionBatchId = current.AcquisitionBatchId,
+                Version = current.Version
+            };
+        }
+
+        private static string? PreferNonBlank(
+            string? preferred,
+            string? fallback) =>
+            string.IsNullOrWhiteSpace(preferred) ? fallback : preferred;
 
         private static (string Where, object[] Arguments) BuildWhereClause(
             GachaRecordQuery query)

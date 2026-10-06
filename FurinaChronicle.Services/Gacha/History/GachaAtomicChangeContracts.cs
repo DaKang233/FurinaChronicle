@@ -1,0 +1,134 @@
+// Copyright (c) 2026 DaKang233.
+// SPDX-License-Identifier: MIT
+
+using FurinaChronicle.Core.Gacha;
+using FurinaChronicle.Core.History;
+using FurinaChronicle.Core.Records;
+
+namespace FurinaChronicle.Services.Gacha.History;
+
+public sealed record GachaFactState(
+    GachaRecord Record,
+    FactVersion Version,
+    Guid ArchiveId);
+
+public sealed record GachaFactMutation(
+    GachaFactReference Reference,
+    GachaRecord? ProposedRecord,
+    FactVersion? ExpectedVersion = null)
+{
+    public bool IsDelete => ProposedRecord is null;
+}
+
+public sealed class GachaAtomicChangeRequest
+{
+    public GachaAtomicChangeRequest(
+        OperationId operationId,
+        DataChangeOperationKind operationKind,
+        DataOrigin origin,
+        string summary,
+        DateTimeOffset startedAt,
+        DateTimeOffset committedAt,
+        IEnumerable<GachaFactMutation> mutations,
+        bool captureUndo = true,
+        Guid? undoOfChangeSetId = null)
+    {
+        if (!Enum.IsDefined(operationKind))
+        {
+            throw new ArgumentOutOfRangeException(nameof(operationKind));
+        }
+        if (!Enum.IsDefined(origin))
+        {
+            throw new ArgumentOutOfRangeException(nameof(origin));
+        }
+        ArgumentException.ThrowIfNullOrWhiteSpace(summary);
+        if (committedAt < startedAt)
+        {
+            throw new ArgumentException(
+                "Commit time cannot be earlier than start time.",
+                nameof(committedAt));
+        }
+
+        GachaFactMutation[] normalized = mutations.ToArray();
+        if (normalized.Length == 0)
+        {
+            throw new ArgumentException(
+                "At least one Gacha mutation is required.",
+                nameof(mutations));
+        }
+        if (normalized.Select(mutation => mutation.Reference)
+            .Distinct()
+            .Count() != normalized.Length)
+        {
+            throw new ArgumentException(
+                "A request cannot mutate the same Gacha fact twice.",
+                nameof(mutations));
+        }
+        foreach (GachaFactMutation mutation in normalized)
+        {
+            if (mutation.ProposedRecord is not null &&
+                new GachaFactReference(
+                    mutation.ProposedRecord.GameAccountId,
+                    mutation.ProposedRecord.ExternalRecordId) !=
+                mutation.Reference)
+            {
+                throw new ArgumentException(
+                    "A proposed record must match its stable fact reference.",
+                    nameof(mutations));
+            }
+        }
+        if (operationKind == DataChangeOperationKind.Undo &&
+            undoOfChangeSetId is null)
+        {
+            throw new ArgumentException(
+                "Undo requests must identify the original change set.",
+                nameof(undoOfChangeSetId));
+        }
+
+        OperationId = operationId;
+        OperationKind = operationKind;
+        Origin = origin;
+        Summary = summary;
+        StartedAt = startedAt;
+        CommittedAt = committedAt;
+        Mutations = normalized;
+        CaptureUndo = captureUndo;
+        UndoOfChangeSetId = undoOfChangeSetId;
+    }
+
+    public OperationId OperationId { get; }
+
+    public DataChangeOperationKind OperationKind { get; }
+
+    public DataOrigin Origin { get; }
+
+    public string Summary { get; }
+
+    public DateTimeOffset StartedAt { get; }
+
+    public DateTimeOffset CommittedAt { get; }
+
+    public IReadOnlyList<GachaFactMutation> Mutations { get; }
+
+    public bool CaptureUndo { get; }
+
+    public Guid? UndoOfChangeSetId { get; }
+}
+
+public sealed record GachaAtomicChangeResult(
+    ChangeExecutionStatus Status,
+    Guid? ChangeSetId,
+    int AffectedRecordCount,
+    string? ConflictReason = null,
+    ChangeExecutionStatus? OriginalStatus = null);
+
+public interface IGachaAtomicChangeStore
+{
+    Task<GachaFactState?> GetCurrentAsync(
+        GachaFactReference reference,
+        CancellationToken cancellationToken = default);
+
+    Task<GachaAtomicChangeResult> CommitAsync(
+        GachaAtomicChangeRequest request,
+        CancellationToken cancellationToken = default);
+}

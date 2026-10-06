@@ -10,10 +10,10 @@ namespace FurinaChronicle.Tests.Infrastructure.Persistence.Sqlite;
 public sealed class FurinaDatabaseMigrationTests
 {
     private const int CurrentApplicationId = 0x46554348;
-    private const int CurrentSchemaVersion = 4;
+    private const int CurrentSchemaVersion = 5;
 
     [Fact]
-    public async Task InitializeAsync_NewDatabase_CreatesCurrentVersionFourSchema()
+    public async Task InitializeAsync_NewDatabase_CreatesCurrentVersionFiveSchema()
     {
         await using var fixture = MigrationFixture.Create();
 
@@ -40,6 +40,7 @@ public sealed class FurinaDatabaseMigrationTests
         Assert.Contains("ImportedAtUtcTicks", gachaColumns);
         Assert.Contains("ImportedAtOffsetMinutes", gachaColumns);
         Assert.Contains("AcquisitionBatchId", gachaColumns);
+        Assert.Contains("Version", gachaColumns);
 
         string[] indexes = connection.Query<NameRow>(
                 """
@@ -328,6 +329,67 @@ public sealed class FurinaDatabaseMigrationTests
     }
 
     [Fact]
+    public async Task InitializeAsync_VersionFour_AddsHistoryBaselineWithoutInventingHistory()
+    {
+        await using var fixture = MigrationFixture.Create();
+        Guid archiveId = Guid.NewGuid();
+        Guid accountId = Guid.NewGuid();
+        fixture.CreateVersionFourDatabase(archiveId, accountId);
+
+        await using (FurinaDatabase database = fixture.OpenDatabase())
+        {
+            await database.InitializeAsync();
+        }
+
+        using SQLiteConnection connection = fixture.OpenRawConnection();
+        AssertCurrentSchema(connection);
+        Assert.Equal(
+            1L,
+            connection.ExecuteScalar<long>(
+                "SELECT Version FROM GachaRecords WHERE ExternalRecordId = 'resolved-1';"));
+        Assert.Equal(
+            0,
+            connection.ExecuteScalar<int>(
+                "SELECT COUNT(*) FROM DataChangeSets;"));
+        Assert.Equal(
+            0,
+            connection.ExecuteScalar<int>(
+                "SELECT COUNT(*) FROM GachaRevisions;"));
+        Assert.Equal(
+            0,
+            connection.ExecuteScalar<int>(
+                "SELECT COUNT(*) FROM OperationHistory;"));
+    }
+
+    [Fact]
+    public async Task InitializeAsync_VersionFourLateFailure_RollsBackEntireMigration()
+    {
+        await using var fixture = MigrationFixture.Create();
+        fixture.CreateVersionFourDatabase(Guid.NewGuid(), Guid.NewGuid());
+        fixture.AddConflictingVersionFiveTable();
+
+        await using (FurinaDatabase database = fixture.OpenDatabase())
+        {
+            await Assert.ThrowsAsync<SQLiteException>(
+                () => database.InitializeAsync());
+        }
+
+        using SQLiteConnection connection = fixture.OpenRawConnection();
+        Assert.Equal(
+            4,
+            connection.ExecuteScalar<int>("PRAGMA user_version;"));
+        string[] columns = connection
+            .Query<NameRow>("PRAGMA table_info(GachaRecords);")
+            .Select(row => row.Name)
+            .ToArray();
+        Assert.DoesNotContain("Version", columns);
+        Assert.Equal(
+            1,
+            connection.ExecuteScalar<int>(
+                "SELECT COUNT(*) FROM DataChangeSets;"));
+    }
+
+    [Fact]
     public async Task InitializeAsync_VersionThreeLateMigrationFailure_RollsBackAddedColumns()
     {
         await using var fixture = MigrationFixture.Create();
@@ -520,10 +582,22 @@ public sealed class FurinaDatabaseMigrationTests
             .ToArray();
         Assert.Equal(
             [
+                "ArchiveUndoSettings",
+                "DataChangeSetArchives",
+                "DataChangeSets",
+                "EntityChanges",
                 "GachaRecords",
+                "GachaRevisions",
                 "GameAccounts",
                 "GameRoleIdentities",
+                "LocalOnlyTombstones",
+                "OperationCommitResults",
+                "OperationHistory",
                 "PlayerArchives",
+                "PortableImportReceiptAccounts",
+                "PortableImportReceipts",
+                "RoleIdentityAliases",
+                "UndoMaterials",
             ],
             tables.Order(StringComparer.Ordinal).ToArray());
 
@@ -559,7 +633,7 @@ public sealed class FurinaDatabaseMigrationTests
                 """
                 SELECT Origin, FetchedAtUtcTicks, FetchedAtOffsetMinutes,
                        ImportedAtUtcTicks, ImportedAtOffsetMinutes,
-                       AcquisitionBatchId
+                       AcquisitionBatchId, Version
                 FROM GachaRecords
                 WHERE ExternalRecordId = ?;
                 """,
@@ -570,6 +644,7 @@ public sealed class FurinaDatabaseMigrationTests
         Assert.Null(row.ImportedAtUtcTicks);
         Assert.Null(row.ImportedAtOffsetMinutes);
         Assert.Null(row.AcquisitionBatchId);
+        Assert.Equal(1, row.Version);
     }
 
     private sealed class NameRow
@@ -601,6 +676,8 @@ public sealed class FurinaDatabaseMigrationTests
         public int? ImportedAtOffsetMinutes { get; set; }
 
         public string? AcquisitionBatchId { get; set; }
+
+        public long Version { get; set; }
     }
 
     private sealed class ForeignKeyDefinitionRow
@@ -1006,6 +1083,50 @@ public sealed class FurinaDatabaseMigrationTests
             using SQLiteConnection connection = OpenRawConnection();
             connection.Execute(
                 "ALTER TABLE GachaRecords ADD COLUMN FetchedAtUtcTicks INTEGER;");
+        }
+
+        public void CreateVersionFourDatabase(
+            Guid archiveId,
+            Guid accountId)
+        {
+            Guid secondArchiveId = Guid.NewGuid();
+            Guid secondAccountId = Guid.NewGuid();
+            Guid unresolvedAccountId = Guid.NewGuid();
+            CreateVersionThreeDatabase(
+                archiveId,
+                secondArchiveId,
+                accountId,
+                secondAccountId,
+                unresolvedAccountId);
+
+            using SQLiteConnection connection = OpenRawConnection();
+            connection.Execute(
+                "ALTER TABLE GachaRecords ADD COLUMN Origin INTEGER NOT NULL DEFAULT 0;");
+            connection.Execute(
+                "ALTER TABLE GachaRecords ADD COLUMN FetchedAtUtcTicks INTEGER;");
+            connection.Execute(
+                "ALTER TABLE GachaRecords ADD COLUMN FetchedAtOffsetMinutes INTEGER;");
+            connection.Execute(
+                "ALTER TABLE GachaRecords ADD COLUMN ImportedAtUtcTicks INTEGER;");
+            connection.Execute(
+                "ALTER TABLE GachaRecords ADD COLUMN ImportedAtOffsetMinutes INTEGER;");
+            connection.Execute(
+                "ALTER TABLE GachaRecords ADD COLUMN AcquisitionBatchId TEXT;");
+            connection.Execute("PRAGMA user_version = 4;");
+        }
+
+        public void AddConflictingVersionFiveTable()
+        {
+            using SQLiteConnection connection = OpenRawConnection();
+            connection.Execute(
+                """
+                CREATE TABLE DataChangeSets
+                (
+                    ChangeSetId TEXT PRIMARY KEY NOT NULL
+                );
+                """);
+            connection.Execute(
+                "INSERT INTO DataChangeSets (ChangeSetId) VALUES ('preexisting');");
         }
 
         public void RemoveVersionOneIdentityColumn()

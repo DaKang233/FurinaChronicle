@@ -3,20 +3,24 @@
 
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Infrastructure.Persistence.Sqlite;
+using SQLite;
 
 namespace FurinaChronicle.Tests.Infrastructure.Persistence.Sqlite;
 
 internal sealed class SqliteRepositoryTestContext : IAsyncDisposable
 {
     private readonly string directory;
+    private readonly string databasePath;
 
     private SqliteRepositoryTestContext(string directory, FurinaDatabase database)
     {
         this.directory = directory;
+        databasePath = Path.Combine(directory, "test.db3");
         Database = database;
         Archives = new SqlitePlayerArchiveRepository(database);
         Accounts = new SqliteGameAccountRepository(database);
         Gacha = new SqliteGachaRecordRepository(database);
+        AtomicGacha = new SqliteGachaAtomicChangeStore(database);
     }
 
     public FurinaDatabase Database { get; }
@@ -26,6 +30,16 @@ internal sealed class SqliteRepositoryTestContext : IAsyncDisposable
     public SqliteGameAccountRepository Accounts { get; }
 
     public SqliteGachaRecordRepository Gacha { get; }
+
+    public SqliteGachaAtomicChangeStore AtomicGacha { get; }
+
+    public SQLiteConnection OpenRawConnection() =>
+        new(
+            databasePath,
+            SQLiteOpenFlags.ReadWrite |
+            SQLiteOpenFlags.Create |
+            SQLiteOpenFlags.FullMutex,
+            storeDateTimeAsTicks: true);
 
     public static SqliteRepositoryTestContext Create()
     {

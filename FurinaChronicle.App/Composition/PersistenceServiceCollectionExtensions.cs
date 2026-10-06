@@ -4,6 +4,7 @@
 using System.Diagnostics;
 using FurinaChronicle.Infrastructure.Persistence.Sqlite;
 using FurinaChronicle.Services.Abstractions;
+using FurinaChronicle.Services.Gacha.History;
 
 namespace FurinaChronicle.App.Composition;
 
@@ -20,6 +21,7 @@ internal static class PersistenceServiceCollectionExtensions
         services.AddSingleton(new SqliteDatabaseOptions(databasePath));
         services.AddSingleton<FurinaDatabase>();
         services.AddSingleton<IGachaRecordRepository, SqliteGachaRecordRepository>();
+        services.AddSingleton<IGachaAtomicChangeStore, SqliteGachaAtomicChangeStore>();
         services.AddSingleton<IPlayerArchiveRepository, SqlitePlayerArchiveRepository>();
         services.AddSingleton<IGameAccountRepository, SqliteGameAccountRepository>();
 

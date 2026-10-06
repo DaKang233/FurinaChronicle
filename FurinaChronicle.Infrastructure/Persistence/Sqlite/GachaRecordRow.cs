@@ -11,7 +11,7 @@ using System.Text;
 namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
 {
     [Table(TableName)]
-    internal sealed class GachaRecordRow
+    internal class GachaRecordRow
     {
         internal const string TableName = "GachaRecords";
 
@@ -54,6 +54,8 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
         public int? ImportedAtOffsetMinutes { get; set; }
 
         public string? AcquisitionBatchId { get; set; }
+
+        public long Version { get; set; } = 1;
 
         public static GachaRecordRow FromDomain(GachaRecord record)
         {
