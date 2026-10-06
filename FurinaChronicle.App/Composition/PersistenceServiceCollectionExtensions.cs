@@ -20,6 +20,9 @@ internal static class PersistenceServiceCollectionExtensions
 
         services.AddSingleton(new SqliteDatabaseOptions(databasePath));
         services.AddSingleton<FurinaDatabase>();
+        services.AddSingleton<
+            IHistoryStorageCapacityProvider,
+            DatabaseStorageCapacityProvider>();
         services.AddSingleton<IGachaRecordRepository, SqliteGachaRecordRepository>();
         services.AddSingleton<IGachaAtomicChangeStore, SqliteGachaAtomicChangeStore>();
         services.AddSingleton<IPlayerArchiveRepository, SqlitePlayerArchiveRepository>();

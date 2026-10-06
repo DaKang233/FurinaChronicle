@@ -3,6 +3,7 @@
 
 using System.Text;
 using System.Text.Json;
+using System.Security.Cryptography;
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.History;
 using FurinaChronicle.Core.Records;
@@ -11,11 +12,32 @@ using SQLite;
 
 namespace FurinaChronicle.Infrastructure.Persistence.Sqlite;
 
-public sealed class SqliteGachaAtomicChangeStore(FurinaDatabase database)
+public sealed class SqliteGachaAtomicChangeStore
     : IGachaAtomicChangeStore
 {
     internal const int SnapshotFormatVersion = 1;
     internal const string EntityKind = "gacha_record";
+    private const long FixedWriteReserveBytes = 8192;
+    private const long PerMutationWriteReserveBytes = 1024;
+
+    private readonly FurinaDatabase database;
+    private readonly IHistoryStorageCapacityProvider capacityProvider;
+
+    public SqliteGachaAtomicChangeStore(FurinaDatabase database)
+        : this(database, UnknownStorageCapacityProvider.Instance)
+    {
+    }
+
+    public SqliteGachaAtomicChangeStore(
+        FurinaDatabase database,
+        IHistoryStorageCapacityProvider capacityProvider)
+    {
+        this.database =
+            database ?? throw new ArgumentNullException(nameof(database));
+        this.capacityProvider =
+            capacityProvider ??
+            throw new ArgumentNullException(nameof(capacityProvider));
+    }
 
     public async Task<GachaFactState?> GetCurrentAsync(
         GachaFactReference reference,
@@ -130,16 +152,50 @@ public sealed class SqliteGachaAtomicChangeStore(FurinaDatabase database)
                 return;
             }
 
-            foreach (PreparedMutation mutation in prepared)
-            {
-                ApplyBusinessMutation(connection, mutation);
-            }
-
             PreparedMutation[] substantive = prepared
                 .Where(mutation =>
                     mutation.ChangeKind !=
                     GachaRecordChangeKind.AcquisitionMetadataOnly)
                 .ToArray();
+            if (substantive.Length > 0)
+            {
+                HistoryCleanupPlan? cleanupPlan = BuildCleanupPlan(
+                    connection,
+                    request,
+                    substantive);
+                if (cleanupPlan is not null)
+                {
+                    if (cleanupPlan.Candidates.Count == 0 ||
+                        cleanupPlan.AvailableBytes +
+                        cleanupPlan.ReclaimableBytes <
+                        cleanupPlan.RequiredBytes)
+                    {
+                        throw new IOException(
+                            "There is not enough storage for the atomic Gacha change, even after eligible undo material cleanup.");
+                    }
+                    if (request.CleanupConfirmationId !=
+                        cleanupPlan.ConfirmationId)
+                    {
+                        result = new GachaAtomicChangeResult(
+                            ChangeExecutionStatus.NeedsConfirmation,
+                            ChangeSetId: null,
+                            AffectedRecordCount: 0,
+                            CleanupPlan: cleanupPlan);
+                        return;
+                    }
+
+                    EvictChangeSets(
+                        connection,
+                        cleanupPlan.Candidates.Select(
+                            candidate => candidate.ChangeSetId));
+                }
+            }
+
+            foreach (PreparedMutation mutation in prepared)
+            {
+                ApplyBusinessMutation(connection, mutation);
+            }
+
             if (substantive.Length == 0)
             {
                 InsertCommitResult(
@@ -507,6 +563,114 @@ public sealed class SqliteGachaAtomicChangeStore(FurinaDatabase database)
             "The Gacha undo transaction did not produce a result.");
     }
 
+    public async Task<int> GetUndoLimitAsync(
+        Guid archiveId,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateArchiveId(archiveId);
+        await database.InitializeAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        await EnsureArchiveExistsAsync(archiveId);
+        return await database.Connection.ExecuteScalarAsync<int?>(
+                """
+                SELECT UndoLimit
+                FROM ArchiveUndoSettings
+                WHERE ArchiveId = ?;
+                """,
+                archiveId.ToString("D")) ??
+            UndoRetentionPolicy.DefaultLimit;
+    }
+
+    public async Task<UndoLimitChangeResult> SetUndoLimitAsync(
+        Guid archiveId,
+        int undoLimit,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateArchiveId(archiveId);
+        UndoRetentionPolicy.ValidateLimit(undoLimit);
+        await database.InitializeAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        UndoLimitChangeResult? result = null;
+        await database.Connection.RunInTransactionAsync(connection =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            EnsureArchiveExists(connection, archiveId);
+            int previous = ReadUndoLimit(connection, archiveId);
+            connection.Execute(
+                """
+                INSERT INTO ArchiveUndoSettings (ArchiveId, UndoLimit)
+                VALUES (?, ?)
+                ON CONFLICT(ArchiveId)
+                DO UPDATE SET UndoLimit = excluded.UndoLimit;
+                """,
+                archiveId.ToString("D"),
+                undoLimit);
+
+            Guid[] evictions = undoLimit == 0
+                ? []
+                : FindCapacityEvictions(
+                    connection,
+                    archiveId,
+                    undoLimit);
+            EvictChangeSets(connection, evictions);
+            result = new UndoLimitChangeResult(
+                previous,
+                undoLimit,
+                evictions);
+        });
+        return result!;
+    }
+
+    public async Task<IReadOnlyList<OperationHistoryItem>> GetHistoryAsync(
+        Guid archiveId,
+        int count,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateArchiveId(archiveId);
+        if (count <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(count),
+                "History count must be positive.");
+        }
+        await database.InitializeAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        await EnsureArchiveExistsAsync(archiveId);
+
+        List<OperationHistoryReadRow> rows =
+            await database.Connection.QueryAsync<OperationHistoryReadRow>(
+                """
+                SELECT d.ChangeSetId, d.OperationKind,
+                       d.CommittedAtUtcTicks, d.CommittedAtOffsetMinutes,
+                       d.Summary, d.AffectedRecordCount,
+                       h.IsUndoEligible, h.IneligibilityReason,
+                       h.UndoneByChangeSetId
+                FROM DataChangeSets d
+                INNER JOIN DataChangeSetArchives a
+                    ON a.ChangeSetId = d.ChangeSetId
+                INNER JOIN OperationHistory h
+                    ON h.ChangeSetId = d.ChangeSetId
+                WHERE a.ArchiveId = ?
+                ORDER BY d.rowid DESC
+                LIMIT ?;
+                """,
+                archiveId.ToString("D"),
+                count);
+        return rows.Select(row => new OperationHistoryItem(
+                ParseRequiredGuid(row.ChangeSetId, "change set"),
+                (DataChangeOperationKind)row.OperationKind,
+                ReadTimestamp(
+                    row.CommittedAtUtcTicks,
+                    row.CommittedAtOffsetMinutes),
+                row.Summary,
+                row.AffectedRecordCount,
+                row.IsUndoEligible,
+                (UndoIneligibilityReason)row.IneligibilityReason,
+                ParseOptionalGuid(row.UndoneByChangeSetId)))
+            .ToArray();
+    }
+
     private static PreparedMutation? PrepareMutation(
         GachaFactMutation mutation,
         GachaFactReadRow? current,
@@ -819,26 +983,47 @@ public sealed class SqliteGachaAtomicChangeStore(FurinaDatabase database)
                 continue;
             }
 
-            foreach (ChangeSetIdRow row in connection.Query<ChangeSetIdRow>(
-                """
-                SELECT d.ChangeSetId
-                FROM DataChangeSets d
-                INNER JOIN DataChangeSetArchives a
-                    ON a.ChangeSetId = d.ChangeSetId
-                INNER JOIN OperationHistory h
-                    ON h.ChangeSetId = d.ChangeSetId
-                WHERE a.ArchiveId = ? AND h.IsUndoEligible = 1
-                ORDER BY d.rowid DESC
-                LIMIT -1 OFFSET ?;
-                """,
-                archiveId.ToString("D"),
-                limit))
-            {
-                evictions.Add(row.ChangeSetId);
-            }
+            evictions.UnionWith(
+                FindCapacityEvictions(
+                    connection,
+                    archiveId,
+                    limit)
+                .Select(id => id.ToString("D")));
         }
 
-        foreach (string changeSetId in evictions)
+        EvictChangeSets(
+            connection,
+            evictions.Select(Guid.Parse));
+    }
+
+    private static Guid[] FindCapacityEvictions(
+        SQLiteConnection connection,
+        Guid archiveId,
+        int limit) =>
+        connection.Query<ChangeSetIdRow>(
+            """
+            SELECT d.ChangeSetId
+            FROM DataChangeSets d
+            INNER JOIN DataChangeSetArchives a
+                ON a.ChangeSetId = d.ChangeSetId
+            INNER JOIN OperationHistory h
+                ON h.ChangeSetId = d.ChangeSetId
+            WHERE a.ArchiveId = ? AND h.IsUndoEligible = 1
+            ORDER BY d.rowid DESC
+            LIMIT -1 OFFSET ?;
+            """,
+            archiveId.ToString("D"),
+            limit)
+        .Select(row => ParseRequiredGuid(
+            row.ChangeSetId,
+            "change set"))
+        .ToArray();
+
+    private static void EvictChangeSets(
+        SQLiteConnection connection,
+        IEnumerable<Guid> changeSetIds)
+    {
+        foreach (Guid changeSetId in changeSetIds.Distinct())
         {
             connection.Execute(
                 """
@@ -848,11 +1033,126 @@ public sealed class SqliteGachaAtomicChangeStore(FurinaDatabase database)
                 WHERE ChangeSetId = ?;
                 """,
                 (int)UndoIneligibilityReason.CapacityEvicted,
-                changeSetId);
+                changeSetId.ToString("D"));
             connection.Execute(
                 "DELETE FROM UndoMaterials WHERE ChangeSetId = ?;",
-                changeSetId);
+                changeSetId.ToString("D"));
         }
+    }
+
+    private HistoryCleanupPlan? BuildCleanupPlan(
+        SQLiteConnection connection,
+        GachaAtomicChangeRequest request,
+        IReadOnlyCollection<PreparedMutation> mutations)
+    {
+        HistoryStorageCapacity capacity = capacityProvider.GetCapacity();
+        if (capacity.AvailableBytes is not long availableBytes)
+        {
+            return null;
+        }
+
+        Guid[] archiveIds = mutations
+            .Select(mutation => mutation.ArchiveId)
+            .Distinct()
+            .ToArray();
+        bool captureUndo =
+            request.CaptureUndo &&
+            request.OperationKind is not DataChangeOperationKind.Undo and
+                not DataChangeOperationKind.IrreversibleDelete &&
+            UndoRetentionPolicy.ShouldCaptureNewMaterial(
+                archiveIds.Select(
+                    archiveId => ReadUndoLimit(
+                        connection,
+                        archiveId)));
+        long snapshotBytes = mutations.Sum(mutation =>
+        {
+            string? before = SerializeSnapshot(mutation.Before);
+            string? after = SerializeSnapshot(mutation.After);
+            return (before is null
+                    ? 0
+                    : Encoding.UTF8.GetByteCount(before)) +
+                (after is null
+                    ? 0
+                    : Encoding.UTF8.GetByteCount(after));
+        });
+        long requiredBytes = checked(
+            FixedWriteReserveBytes +
+            mutations.Count * PerMutationWriteReserveBytes +
+            snapshotBytes * (captureUndo ? 2 : 1));
+        if (availableBytes >= requiredBytes)
+        {
+            return null;
+        }
+
+        var candidates = new List<HistoryCleanupCandidate>();
+        long reclaimableBytes = 0;
+        foreach (CleanupCandidateRow row in
+                 connection.Query<CleanupCandidateRow>(
+                     """
+                     SELECT d.ChangeSetId, h.MaterialBytes
+                     FROM DataChangeSets d
+                     INNER JOIN OperationHistory h
+                         ON h.ChangeSetId = d.ChangeSetId
+                     WHERE h.IsUndoEligible = 1 AND h.MaterialBytes > 0
+                     ORDER BY d.rowid ASC;
+                     """))
+        {
+            Guid changeSetId = ParseRequiredGuid(
+                row.ChangeSetId,
+                "change set");
+            Guid[] candidateArchives =
+                connection.Query<ArchiveIdRow>(
+                        """
+                        SELECT ArchiveId
+                        FROM DataChangeSetArchives
+                        WHERE ChangeSetId = ?;
+                        """,
+                        row.ChangeSetId)
+                    .Select(candidate => ParseRequiredGuid(
+                        candidate.ArchiveId,
+                        "archive"))
+                    .ToArray();
+            if (!candidateArchives.Intersect(archiveIds).Any())
+            {
+                continue;
+            }
+
+            candidates.Add(new HistoryCleanupCandidate(
+                changeSetId,
+                candidateArchives,
+                row.MaterialBytes));
+            reclaimableBytes = checked(
+                reclaimableBytes + row.MaterialBytes);
+            if (availableBytes + reclaimableBytes >= requiredBytes)
+            {
+                break;
+            }
+        }
+
+        Guid confirmationId = CreateCleanupConfirmationId(
+            request.OperationId,
+            requiredBytes,
+            candidates.Select(candidate => candidate.ChangeSetId));
+        return new HistoryCleanupPlan(
+            confirmationId,
+            requiredBytes,
+            availableBytes,
+            reclaimableBytes,
+            candidates);
+    }
+
+    private static Guid CreateCleanupConfirmationId(
+        OperationId operationId,
+        long requiredBytes,
+        IEnumerable<Guid> changeSetIds)
+    {
+        string value =
+            $"{operationId}|{requiredBytes}|" +
+            string.Join(
+                ",",
+                changeSetIds.Select(id => id.ToString("D")));
+        byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(value));
+        return new Guid(hash.AsSpan(0, 16));
     }
 
     private static int ReadUndoLimit(
@@ -867,6 +1167,56 @@ public sealed class SqliteGachaAtomicChangeStore(FurinaDatabase database)
             """,
             archiveId.ToString("D"));
         return configured ?? UndoRetentionPolicy.DefaultLimit;
+    }
+
+    private async Task EnsureArchiveExistsAsync(Guid archiveId)
+    {
+        int count = await database.Connection.ExecuteScalarAsync<int>(
+            "SELECT COUNT(*) FROM PlayerArchives WHERE Id = ?;",
+            archiveId.ToString("D"));
+        if (count != 1)
+        {
+            throw new KeyNotFoundException(
+                $"Archive {archiveId:D} does not exist.");
+        }
+    }
+
+    private static void EnsureArchiveExists(
+        SQLiteConnection connection,
+        Guid archiveId)
+    {
+        int count = connection.ExecuteScalar<int>(
+            "SELECT COUNT(*) FROM PlayerArchives WHERE Id = ?;",
+            archiveId.ToString("D"));
+        if (count != 1)
+        {
+            throw new KeyNotFoundException(
+                $"Archive {archiveId:D} does not exist.");
+        }
+    }
+
+    private static void ValidateArchiveId(Guid archiveId)
+    {
+        if (archiveId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "Archive ID cannot be empty.",
+                nameof(archiveId));
+        }
+    }
+
+    private static DateTimeOffset ReadTimestamp(
+        long utcTicks,
+        int offsetMinutes)
+    {
+        if (offsetMinutes is < -840 or > 840)
+        {
+            throw new InvalidDataException(
+                "The stored timestamp offset is invalid.");
+        }
+
+        return new DateTimeOffset(utcTicks, TimeSpan.Zero)
+            .ToOffset(TimeSpan.FromMinutes(offsetMinutes));
     }
 
     private static GachaFactReadRow? ReadCurrent(
@@ -1083,5 +1433,43 @@ public sealed class SqliteGachaAtomicChangeStore(FurinaDatabase database)
         public string? AfterSnapshotJson { get; set; }
 
         public long MaterialBytes { get; set; }
+    }
+
+    private sealed class CleanupCandidateRow
+    {
+        public string ChangeSetId { get; set; } = string.Empty;
+
+        public long MaterialBytes { get; set; }
+    }
+
+    private sealed class OperationHistoryReadRow
+    {
+        public string ChangeSetId { get; set; } = string.Empty;
+
+        public int OperationKind { get; set; }
+
+        public long CommittedAtUtcTicks { get; set; }
+
+        public int CommittedAtOffsetMinutes { get; set; }
+
+        public string Summary { get; set; } = string.Empty;
+
+        public int AffectedRecordCount { get; set; }
+
+        public bool IsUndoEligible { get; set; }
+
+        public int IneligibilityReason { get; set; }
+
+        public string? UndoneByChangeSetId { get; set; }
+    }
+
+    private sealed class UnknownStorageCapacityProvider
+        : IHistoryStorageCapacityProvider
+    {
+        public static UnknownStorageCapacityProvider Instance { get; } =
+            new();
+
+        public HistoryStorageCapacity GetCapacity() =>
+            new(null);
     }
 }

@@ -4,6 +4,7 @@
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.History;
 using FurinaChronicle.Core.Records;
+using FurinaChronicle.Infrastructure.Persistence.Sqlite;
 using FurinaChronicle.Services.Gacha;
 using FurinaChronicle.Services.Gacha.History;
 using SQLite;
@@ -403,6 +404,209 @@ public sealed class SqliteGachaAtomicChangeStoreTests
                 undone.ChangeSetId!.Value.ToString("D")));
     }
 
+    [Fact]
+    public async Task UndoLimit_DefaultIsThree_ZeroRetainsOldMaterialAndStopsNewCapture()
+    {
+        await using SqliteRepositoryTestContext context =
+            await CreateContextAsync();
+        (Guid archiveId, Guid accountId) =
+            await AddArchiveAccountAsync(context, "History");
+        Assert.Equal(
+            UndoRetentionPolicy.DefaultLimit,
+            await context.AtomicGacha.GetUndoLimitAsync(archiveId));
+        await context.AtomicGacha.CommitAsync(CreateRequest(
+            DataChangeOperationKind.Import,
+            new GachaFactMutation(
+                new GachaFactReference(accountId, "1001"),
+                CreateRecord(accountId, "1001"))));
+
+        UndoLimitChangeResult changed =
+            await context.AtomicGacha.SetUndoLimitAsync(archiveId, 0);
+        await context.AtomicGacha.CommitAsync(CreateRequest(
+            DataChangeOperationKind.Import,
+            new GachaFactMutation(
+                new GachaFactReference(accountId, "1002"),
+                CreateRecord(accountId, "1002"))));
+
+        Assert.Equal(3, changed.PreviousLimit);
+        Assert.Equal(0, changed.CurrentLimit);
+        Assert.Empty(changed.EvictedChangeSetIds);
+        using SQLiteConnection raw = context.OpenRawConnection();
+        Assert.Equal(1, Count(raw, "UndoMaterials"));
+        OperationHistoryItem[] history =
+            (await context.AtomicGacha.GetHistoryAsync(archiveId, 10))
+            .ToArray();
+        Assert.Equal(2, history.Length);
+        Assert.False(history[0].IsUndoEligible);
+        Assert.Equal(
+            UndoIneligibilityReason.Disabled,
+            history[0].IneligibilityReason);
+        Assert.True(history[1].IsUndoEligible);
+    }
+
+    [Fact]
+    public async Task UndoLimit_LoweringImmediatelyEvictsOldestMaterialButKeepsRevisions()
+    {
+        await using SqliteRepositoryTestContext context =
+            await CreateContextAsync();
+        (Guid archiveId, Guid accountId) =
+            await AddArchiveAccountAsync(context, "History");
+        for (int index = 1; index <= 3; index++)
+        {
+            await context.AtomicGacha.CommitAsync(CreateRequest(
+                DataChangeOperationKind.Import,
+                new GachaFactMutation(
+                    new GachaFactReference(
+                        accountId,
+                        $"100{index}"),
+                    CreateRecord(accountId, $"100{index}"))));
+        }
+
+        UndoLimitChangeResult result =
+            await context.AtomicGacha.SetUndoLimitAsync(archiveId, 1);
+
+        Assert.Equal(2, result.EvictedChangeSetIds.Count);
+        using SQLiteConnection raw = context.OpenRawConnection();
+        Assert.Equal(1, Count(raw, "UndoMaterials"));
+        Assert.Equal(3, Count(raw, "GachaRevisions"));
+        Assert.Equal(
+            2,
+            raw.ExecuteScalar<int>(
+                """
+                SELECT COUNT(*)
+                FROM OperationHistory
+                WHERE IneligibilityReason = ?;
+                """,
+                (int)UndoIneligibilityReason.CapacityEvicted));
+    }
+
+    [Fact]
+    public async Task UndoLimit_AboveMaximumIsRejectedWithoutChangingConfiguration()
+    {
+        await using SqliteRepositoryTestContext context =
+            await CreateContextAsync();
+        (Guid archiveId, _) =
+            await AddArchiveAccountAsync(context, "History");
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            () => context.AtomicGacha.SetUndoLimitAsync(
+                archiveId,
+                UndoRetentionPolicy.MaximumLimit + 1));
+
+        Assert.Equal(
+            UndoRetentionPolicy.DefaultLimit,
+            await context.AtomicGacha.GetUndoLimitAsync(archiveId));
+    }
+
+    [Fact]
+    public async Task CommitAsync_LowCapacityRequiresConfirmationAndRejectingChangesNothing()
+    {
+        await using SqliteRepositoryTestContext context =
+            await CreateContextAsync();
+        (Guid archiveId, Guid accountId) =
+            await AddArchiveAccountAsync(context, "Capacity");
+        string largeName = new('A', 24_000);
+        await context.AtomicGacha.CommitAsync(CreateRequest(
+            DataChangeOperationKind.Import,
+            new GachaFactMutation(
+                new GachaFactReference(accountId, "large"),
+                CreateRecord(accountId, "large") with
+                {
+                    ItemName = largeName
+                })));
+        var constrained = new SqliteGachaAtomicChangeStore(
+            context.Database,
+            new FixedCapacityProvider(0));
+        GachaAtomicChangeRequest request = CreateRequest(
+            DataChangeOperationKind.Import,
+            new GachaFactMutation(
+                new GachaFactReference(accountId, "small"),
+                CreateRecord(accountId, "small")));
+
+        GachaAtomicChangeResult result =
+            await constrained.CommitAsync(request);
+
+        Assert.Equal(
+            ChangeExecutionStatus.NeedsConfirmation,
+            result.Status);
+        HistoryCleanupPlan plan = Assert.IsType<HistoryCleanupPlan>(
+            result.CleanupPlan);
+        Assert.NotEmpty(plan.Candidates);
+        Assert.Contains(
+            plan.Candidates,
+            candidate => candidate.ArchiveIds.Contains(archiveId));
+        using SQLiteConnection raw = context.OpenRawConnection();
+        Assert.Equal(1, Count(raw, "GachaRecords"));
+        Assert.Equal(1, Count(raw, "UndoMaterials"));
+        Assert.Equal(1, Count(raw, "DataChangeSets"));
+    }
+
+    [Fact]
+    public async Task CommitAsync_ConfirmedCleanupIsRevalidatedAndCommittedAtomically()
+    {
+        await using SqliteRepositoryTestContext context =
+            await CreateContextAsync();
+        (_, Guid accountId) =
+            await AddArchiveAccountAsync(context, "Capacity");
+        await context.AtomicGacha.CommitAsync(CreateRequest(
+            DataChangeOperationKind.Import,
+            new GachaFactMutation(
+                new GachaFactReference(accountId, "large"),
+                CreateRecord(accountId, "large") with
+                {
+                    ItemName = new string('A', 24_000)
+                })));
+        var constrained = new SqliteGachaAtomicChangeStore(
+            context.Database,
+            new FixedCapacityProvider(0));
+        OperationId operationId = OperationId.New();
+        DateTimeOffset time =
+            new(2026, 10, 6, 17, 0, 0, TimeSpan.FromHours(8));
+        GachaFactMutation mutation = new(
+            new GachaFactReference(accountId, "small"),
+            CreateRecord(accountId, "small"));
+        var initial = new GachaAtomicChangeRequest(
+            operationId,
+            DataChangeOperationKind.Import,
+            DataOrigin.FurinaImport,
+            "capacity test",
+            time,
+            time.AddSeconds(1),
+            [mutation]);
+        GachaAtomicChangeResult pending =
+            await constrained.CommitAsync(initial);
+        HistoryCleanupPlan plan = Assert.IsType<HistoryCleanupPlan>(
+            pending.CleanupPlan);
+        var confirmed = new GachaAtomicChangeRequest(
+            operationId,
+            DataChangeOperationKind.Import,
+            DataOrigin.FurinaImport,
+            "capacity test",
+            time,
+            time.AddSeconds(1),
+            [mutation],
+            cleanupConfirmationId: plan.ConfirmationId);
+
+        GachaAtomicChangeResult result =
+            await constrained.CommitAsync(confirmed);
+
+        Assert.Equal(ChangeExecutionStatus.Applied, result.Status);
+        Assert.NotNull(
+            await constrained.GetCurrentAsync(
+                new GachaFactReference(accountId, "small")));
+        using SQLiteConnection raw = context.OpenRawConnection();
+        Assert.Equal(2, Count(raw, "GachaRecords"));
+        Assert.Equal(
+            1,
+            raw.ExecuteScalar<int>(
+                """
+                SELECT COUNT(*)
+                FROM OperationHistory
+                WHERE IneligibilityReason = ?;
+                """,
+                (int)UndoIneligibilityReason.CapacityEvicted));
+    }
+
     private static async Task<SqliteRepositoryTestContext> CreateContextAsync()
     {
         SqliteRepositoryTestContext context =
@@ -492,5 +696,12 @@ public sealed class SqliteGachaAtomicChangeStoreTests
         public string BeforeSnapshotJson { get; set; } = string.Empty;
 
         public string AfterSnapshotJson { get; set; } = string.Empty;
+    }
+
+    private sealed class FixedCapacityProvider(long availableBytes)
+        : IHistoryStorageCapacityProvider
+    {
+        public HistoryStorageCapacity GetCapacity() =>
+            new(availableBytes);
     }
 }

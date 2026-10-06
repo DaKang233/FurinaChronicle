@@ -31,7 +31,8 @@ public sealed class GachaAtomicChangeRequest
         DateTimeOffset committedAt,
         IEnumerable<GachaFactMutation> mutations,
         bool captureUndo = true,
-        Guid? undoOfChangeSetId = null)
+        Guid? undoOfChangeSetId = null,
+        Guid? cleanupConfirmationId = null)
     {
         if (!Enum.IsDefined(operationKind))
         {
@@ -94,6 +95,7 @@ public sealed class GachaAtomicChangeRequest
         Mutations = normalized;
         CaptureUndo = captureUndo;
         UndoOfChangeSetId = undoOfChangeSetId;
+        CleanupConfirmationId = cleanupConfirmationId;
     }
 
     public OperationId OperationId { get; }
@@ -113,6 +115,8 @@ public sealed class GachaAtomicChangeRequest
     public bool CaptureUndo { get; }
 
     public Guid? UndoOfChangeSetId { get; }
+
+    public Guid? CleanupConfirmationId { get; }
 }
 
 public sealed record GachaAtomicChangeResult(
@@ -120,7 +124,45 @@ public sealed record GachaAtomicChangeResult(
     Guid? ChangeSetId,
     int AffectedRecordCount,
     string? ConflictReason = null,
-    ChangeExecutionStatus? OriginalStatus = null);
+    ChangeExecutionStatus? OriginalStatus = null,
+    HistoryCleanupPlan? CleanupPlan = null);
+
+public sealed record HistoryStorageCapacity(long? AvailableBytes)
+{
+    public bool IsKnown => AvailableBytes is not null;
+}
+
+public interface IHistoryStorageCapacityProvider
+{
+    HistoryStorageCapacity GetCapacity();
+}
+
+public sealed record HistoryCleanupCandidate(
+    Guid ChangeSetId,
+    IReadOnlyList<Guid> ArchiveIds,
+    long MaterialBytes);
+
+public sealed record HistoryCleanupPlan(
+    Guid ConfirmationId,
+    long RequiredBytes,
+    long AvailableBytes,
+    long ReclaimableBytes,
+    IReadOnlyList<HistoryCleanupCandidate> Candidates);
+
+public sealed record OperationHistoryItem(
+    Guid ChangeSetId,
+    DataChangeOperationKind OperationKind,
+    DateTimeOffset CommittedAt,
+    string Summary,
+    int AffectedRecordCount,
+    bool IsUndoEligible,
+    UndoIneligibilityReason IneligibilityReason,
+    Guid? UndoneByChangeSetId);
+
+public sealed record UndoLimitChangeResult(
+    int PreviousLimit,
+    int CurrentLimit,
+    IReadOnlyList<Guid> EvictedChangeSetIds);
 
 public sealed class GachaUndoRequest
 {
@@ -175,5 +217,19 @@ public interface IGachaAtomicChangeStore
 
     Task<GachaAtomicChangeResult> UndoLatestAsync(
         GachaUndoRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<int> GetUndoLimitAsync(
+        Guid archiveId,
+        CancellationToken cancellationToken = default);
+
+    Task<UndoLimitChangeResult> SetUndoLimitAsync(
+        Guid archiveId,
+        int undoLimit,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<OperationHistoryItem>> GetHistoryAsync(
+        Guid archiveId,
+        int count,
         CancellationToken cancellationToken = default);
 }
