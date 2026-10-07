@@ -12,8 +12,8 @@
   <PropertyGroup>
     <FurinaVersionMajor Condition="'$(FurinaVersionMajor)' == ''">0</FurinaVersionMajor>
     <FurinaVersionMinor Condition="'$(FurinaVersionMinor)' == ''">8</FurinaVersionMinor>
-    <FurinaVersionPatch Condition="'$(FurinaVersionPatch)' == ''">4</FurinaVersionPatch>
-    <FurinaPhaseLabel Condition="'$(FurinaPhaseLabel)' == ''">8B.3</FurinaPhaseLabel>
+    <FurinaVersionPatch Condition="'$(FurinaVersionPatch)' == ''">5</FurinaVersionPatch>
+    <FurinaPhaseLabel Condition="'$(FurinaPhaseLabel)' == ''">8B.4</FurinaPhaseLabel>
 
     <FurinaVersionPrefix>$(FurinaVersionMajor).$(FurinaVersionMinor).$(FurinaVersionPatch)</FurinaVersionPrefix>
     <FurinaRepositoryRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)'))</FurinaRepositoryRoot>

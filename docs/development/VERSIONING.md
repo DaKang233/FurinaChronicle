@@ -15,8 +15,8 @@ Major.Minor.Patch.Build
 项目规划标签独立保存：
 
 ```text
-Version    = 0.8.4.94
-PhaseLabel = 8B.3
+Version    = 0.8.5.94
+PhaseLabel = 8B.4
 Commit     = 75790ba
 ```
 
@@ -39,8 +39,8 @@ Commit     = 75790ba
 ```xml
 <FurinaVersionMajor>0</FurinaVersionMajor>
 <FurinaVersionMinor>8</FurinaVersionMinor>
-<FurinaVersionPatch>4</FurinaVersionPatch>
-<FurinaPhaseLabel>8B.3</FurinaPhaseLabel>
+<FurinaVersionPatch>5</FurinaVersionPatch>
+<FurinaPhaseLabel>8B.4</FurinaPhaseLabel>
 ```
 
 `build/FurinaVersion.targets` 只读取这些值，并解析 Git 或 CI 显式输入；不得回写 `Version.props`。
@@ -66,6 +66,7 @@ Phase 8 内的映射可以为：
 | 8B.1 | `0.8.2` |
 | 8B.2 | `0.8.3` |
 | 8B.3 | `0.8.4` |
+| 8B.4 | `0.8.5` |
 | 8B.7 | `0.8.8` |
 | 8C.0 | `0.8.9` |
 | 8C.1 | `0.8.10` |
