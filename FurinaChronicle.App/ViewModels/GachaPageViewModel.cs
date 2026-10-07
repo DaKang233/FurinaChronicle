@@ -26,8 +26,6 @@ public partial class GachaPageViewModel(
 	GetGameAccounts getGameAccounts,
 	AddGameAccount addGameAccount,
 	ArchiveSelectionService archiveSelectionService,
-	UpdateGameAccount updateGameAccount,
-	RenamePlayerArchive renamePlayerArchive,
 	DeleteGameAccount deleteGameAccount,
 	DeletePlayerArchive deletePlayerArchive,
 	RefreshGachaRecords refreshGachaRecords,
@@ -35,8 +33,6 @@ public partial class GachaPageViewModel(
 	TeyvatHelperUigfImportSource teyvatHelperUigfImportSource)
 	: ObservableObject
 {
-	private bool initialized;
-
 	public GachaAnalysisViewModel Analysis { get; } = analysis;
 
 	public ObservableCollection<PlayerArchive> Archives { get; } = [];
@@ -45,12 +41,8 @@ public partial class GachaPageViewModel(
 
 	public ObservableCollection<GachaRecordDisplayItem> GachaRecords { get; } = [];
 
-	public IReadOnlyList<GameServerRegion> ServerRegions { get; } = Enum.GetValues<GameServerRegion>().Where(region => region != GameServerRegion.Unknown).ToArray();
-
 	[ObservableProperty]
 	[NotifyCanExecuteChangedFor(nameof(ReloadArchivesCommand))]
-	[NotifyCanExecuteChangedFor(nameof(ReloadSelectedArchiveCommand))]
-	[NotifyCanExecuteChangedFor(nameof(CreateAccountCommand))]
 	[NotifyCanExecuteChangedFor(nameof(PreviousPageCommand))]
 	[NotifyCanExecuteChangedFor(nameof(NextPageCommand))]
 	[NotifyPropertyChangedFor(nameof(IsNotBusy))]
@@ -81,15 +73,6 @@ public partial class GachaPageViewModel(
 	public partial GameAccount? SelectedAccount { get; set; }
 
 	[ObservableProperty]
-	public partial string NewAccountUid { get; set; } = string.Empty;
-
-	[ObservableProperty]
-	public partial GameServerRegion SelectedServerRegion { get; set; } = GameServerRegion.Unknown;
-
-	[ObservableProperty]
-	public partial string? NewAccountDisplayName { get; set; }
-
-	[ObservableProperty]
 	public partial string? ErrorMessage { get; set; }
 
 	[ObservableProperty]
@@ -103,20 +86,6 @@ public partial class GachaPageViewModel(
 
 	[ObservableProperty]
 	public partial bool IsFullRefresh { get; set; }
-
-	[ObservableProperty]
-	[NotifyPropertyChangedFor(nameof(AccountSelectionPanelToggleText))]
-	public partial bool IsAccountSelectionPanelExpanded { get; set; } = true;
-
-	public string AccountSelectionPanelToggleText =>
-		IsAccountSelectionPanelExpanded ? "收起 ▲" : "展开 ▼";
-
-	[ObservableProperty]
-	[NotifyPropertyChangedFor(nameof(AccountOperationsPanelToggleText))]
-	public partial bool IsAccountOperationsPanelExpanded { get; set; } = true;
-
-	public string AccountOperationsPanelToggleText =>
-		IsAccountOperationsPanelExpanded ? "收起 ▲" : "展开 ▼";
 
 	[ObservableProperty]
 	public partial string StatusMessage { get; set; } = "请先选择档案。";
@@ -149,52 +118,32 @@ public partial class GachaPageViewModel(
 	public bool CanGoToNextPage =>
 		!IsBusy && SelectedAccount is not null && CurrentPage < TotalPages;
 
-	[RelayCommand]
-	private void ToggleAccountSelectionPanel() =>
-		IsAccountSelectionPanelExpanded = !IsAccountSelectionPanelExpanded;
-
-	[RelayCommand]
-	private void ToggleAccountOperationsPanel() =>
-		IsAccountOperationsPanelExpanded = !IsAccountOperationsPanelExpanded;
-
-
 	public async Task InitializeAsync()
 	{
-		if (initialized)
-		{
-			await RefreshPassportSelectionAsync();
-			return;
-		}
-
+		Guid? selectedArchiveId = SelectedArchive?.Id;
+		Guid? selectedAccountId = SelectedAccount?.Id;
 		await ExecuteBusyAsync(async () =>
 		{
-			PlayerArchive? currentArchive =
-				await archiveSelectionService.GetCurrentArchiveAsync();
-			await LoadArchivesCoreAsync(currentArchive?.Id);
+			if (selectedArchiveId is null)
+			{
+				PlayerArchive? currentArchive =
+					await archiveSelectionService.GetCurrentArchiveAsync();
+				selectedArchiveId = currentArchive?.Id;
+			}
+
+			await LoadArchivesCoreAsync(selectedArchiveId);
+			if (SelectedArchive is null && selectedArchiveId is not null)
+			{
+				PlayerArchive? repairedArchive =
+					await archiveSelectionService.GetCurrentArchiveAsync();
+				await LoadArchivesCoreAsync(repairedArchive?.Id);
+			}
+
 			if (SelectedArchive is not null)
 			{
-				await LoadSelectedArchiveCoreAsync();
+				await LoadSelectedArchiveCoreAsync(selectedAccountId);
 			}
 			await RefreshPassportSelectionCoreAsync();
-			initialized = true;
-		});
-	}
-
-	public async Task RefreshPassportSelectionAsync()
-	{
-		await ExecuteBusyAsync(RefreshPassportSelectionCoreAsync);
-	}
-
-	public async Task CreateArchiveAsync(string name)
-	{
-		await ExecuteBusyAsync(async () =>
-		{
-			PlayerArchive archive =
-				await createPlayerArchive.ExecuteAsync(name);
-
-			await LoadArchivesCoreAsync(archive.Id);
-			await LoadSelectedArchiveCoreAsync();
-			StatusMessage = $"已创建并选择档案:{archive.Name}。";
 		});
 	}
 
@@ -242,58 +191,13 @@ public partial class GachaPageViewModel(
 		await ExecuteBusyAsync(async () =>
 		{
 			Guid? selectedArchiveId = SelectedArchive?.Id;
+			Guid? selectedAccountId = SelectedAccount?.Id;
 			await LoadArchivesCoreAsync(selectedArchiveId);
 
 			if (SelectedArchive is not null)
 			{
-				await LoadSelectedArchiveCoreAsync();
+				await LoadSelectedArchiveCoreAsync(selectedAccountId);
 			}
-		});
-	}
-
-	[RelayCommand(CanExecute = nameof(CanRun))]
-	private async Task ReloadSelectedArchiveAsync()
-	{
-		await ExecuteBusyAsync(async () =>
-		{
-			if (SelectedArchive is null)
-			{
-				throw new InvalidOperationException("请先选择要重新加载的档案。");
-			}
-
-			await LoadSelectedArchiveCoreAsync();
-		});
-	}
-
-	[RelayCommand(CanExecute = nameof(CanRun))]
-	private async Task CreateAccountAsync()
-	{
-		await ExecuteBusyAsync(async () =>
-		{
-			if (SelectedArchive is null)
-			{
-				throw new InvalidOperationException("请先选择要添加账号的档案。");
-			}
-			string name;
-			if (NewAccountDisplayName is null) name = NewAccountUid;
-			else name = $"{NewAccountUid} ({NewAccountDisplayName})";
-
-			GameAccount account = await addGameAccount.ExecuteAsync(
-				SelectedArchive.Id,
-				NewAccountUid,
-				SelectedServerRegion,
-				name);
-
-			await RefreshAccountsCoreAsync();
-			SelectedAccount =
-				Accounts.First(candidate => candidate.Id == account.Id);
-			await archiveSelectionService.SelectAsync(account.Id);
-			await ReloadRecordsCoreAsync();
-
-			NewAccountUid = string.Empty;
-			SelectedServerRegion = GameServerRegion.Unknown;
-			NewAccountDisplayName = null;
-			StatusMessage = $"已创建账号 {account.Uid}。";
 		});
 	}
 
@@ -632,7 +536,7 @@ public partial class GachaPageViewModel(
 					source,
 					manualUrl,
 					gameInstallationPath,
-					SelectedServerRegion));
+					GameServerRegion.Unknown));
 		}
 
 		bool createdArchive = SelectedArchive is null;
@@ -698,107 +602,6 @@ public partial class GachaPageViewModel(
 			$"无效 {result.InvalidCount} 条，" +
 			$"忽略 {result.IgnoredCount} 条，" +
 			$"新建账号 {result.CreatedAccountCount} 个。";
-	}
-
-	public async Task EditSelectedAccountAsync(string displayName, string uid)
-	{
-		await ExecuteBusyAsync(async () =>
-		{
-			if (SelectedAccount is null) throw new InvalidOperationException("请先选择要编辑的账号。");
-			var previousUid = SelectedAccount.Uid;
-			var finalUid = uid == string.Empty ? previousUid : uid;
-			string finalName = $"{finalUid} ({displayName})";
-			if (string.IsNullOrEmpty(displayName)) finalName = finalUid;
-			GameServerRegion gameServerRegion = GameServerRegionResolver.Resolve(finalUid);
-			GameAccount updated = await updateGameAccount.ExecuteAsync(
-				SelectedAccount.Id,
-				finalUid,
-				gameServerRegion,
-				finalName);
-
-			await RefreshAccountsCoreAsync();
-
-			StatusMessage = $"账号“{previousUid}”已编辑。";
-		});
-	}
-
-	public async Task RenameSelectedArchiveAsync(string name)
-	{
-		await ExecuteBusyAsync(async () =>
-		{
-			if (SelectedArchive is null) throw new InvalidOperationException("请先选择要重命名的档案。");
-			PlayerArchive updated = await renamePlayerArchive.ExecuteAsync(
-				SelectedArchive.Id,
-				name);
-
-			await LoadArchivesCoreAsync(updated.Id);
-			StatusMessage = $"已将档案重命名为“{updated.Name}”。";
-		});
-	}
-
-	public async Task DeleteSelectedArchiveAsync()
-	{
-		await ExecuteBusyAsync(async () =>
-		{
-			if (SelectedArchive is null)
-			{
-				throw new InvalidOperationException("请先选择要删除的档案。");
-			}
-
-			Guid deletedArchiveId = SelectedArchive.Id;
-			string deletedArchiveName = SelectedArchive.Name;
-
-			await deletePlayerArchive.ExecuteAsync(deletedArchiveId);
-
-			SelectedArchive = null;
-			SelectedAccount = null;
-			Accounts.Clear();
-			GachaRecords.Clear();
-			ResetPagination();
-
-			await LoadArchivesCoreAsync();
-			SelectedArchive = Archives.FirstOrDefault();
-
-			if (SelectedArchive is not null)
-			{
-				await LoadSelectedArchiveCoreAsync();
-			}
-
-			StatusMessage =
-				$"已删除档案“{deletedArchiveName}”。";
-		});
-	}
-
-	public async Task DeleteSelectedAccountAsync()
-	{
-		await ExecuteBusyAsync(async () =>
-		{
-			if (SelectedAccount is null)
-			{
-				throw new InvalidOperationException("请先选择要删除的账号。");
-			}
-			Guid deletedAccountId = SelectedAccount.Id;
-			string deletedAccountUid = SelectedAccount.Uid;
-			await deleteGameAccount.ExecuteAsync(deletedAccountId);
-			SelectedAccount = null;
-			GachaRecords.Clear();
-			ResetPagination();
-			await RefreshAccountsCoreAsync();
-			SelectedAccount = Accounts.FirstOrDefault();
-
-			if (SelectedAccount is not null)
-			{
-				await archiveSelectionService.SelectAsync(SelectedAccount.Id);
-
-				await ReloadRecordsCoreAsync();
-			}
-			StatusMessage = $"已删除账号 {deletedAccountUid}。";
-		});
-	}
-
-	partial void OnNewAccountUidChanged(string value)
-	{
-		SelectedServerRegion = GameServerRegionResolver.Resolve(value);
 	}
 
 	private bool CanRun() => !IsBusy;
@@ -878,7 +681,8 @@ public partial class GachaPageViewModel(
 		}
 	}
 
-	private async Task LoadSelectedArchiveCoreAsync()
+	private async Task LoadSelectedArchiveCoreAsync(
+		Guid? preferredAccountId = null)
 	{
 		Accounts.Clear();
 		SelectedAccount = null;
@@ -893,6 +697,19 @@ public partial class GachaPageViewModel(
 		}
 
 		await RefreshAccountsCoreAsync();
+		SelectedAccount = preferredAccountId is null
+			? null
+			: Accounts.FirstOrDefault(
+				account => account.Id == preferredAccountId);
+
+		if (SelectedAccount is not null)
+		{
+			await ReloadRecordsCoreAsync();
+			StatusMessage =
+				$"已重新加载档案“{SelectedArchive.Name}”，" +
+				$"保留账号 {SelectedAccount.Uid}。";
+			return;
+		}
 
 		ArchiveSelection? selection =
 			await archiveSelectionService.GetForArchiveAsync(

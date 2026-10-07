@@ -32,134 +32,126 @@
                         </VerticalStackLayout>
                         <Button
                             Grid.Column="1"
-                            Command="{Binding ToggleAccountSelectionPanelCommand}"
-                            Text="{Binding AccountSelectionPanelToggleText}" />
+                            Command="{Binding ReloadArchivesCommand}"
+                            IsEnabled="{Binding IsNotBusy}"
+                            Text="重新加载" />
                     </Grid>
 
                     <Grid
                         ColumnDefinitions="*,*"
-                        RowDefinitions="Auto,Auto"
-                        ColumnSpacing="10"
-                        IsVisible="{Binding IsAccountSelectionPanelExpanded}"
-                        RowSpacing="8">
+                        ColumnSpacing="10">
                         <Picker
                             Title="选择档案"
+                            IsEnabled="{Binding IsNotBusy}"
                             ItemsSource="{Binding Archives}"
                             ItemDisplayBinding="{Binding Name}"
-                            SelectedItem="{Binding SelectedArchive, Mode=TwoWay}"
                             SelectedIndexChanged="OnArchiveSelectionChanged"
-                            IsEnabled="{Binding IsNotBusy}" />
+                            SelectedItem="{Binding SelectedArchive, Mode=TwoWay}" />
                         <Picker
                             Grid.Column="1"
                             Title="选择档案中的游戏账号"
+                            IsEnabled="{Binding IsNotBusy}"
                             ItemsSource="{Binding Accounts}"
                             ItemDisplayBinding="{Binding DisplayName}"
-                            SelectedItem="{Binding SelectedAccount, Mode=TwoWay}"
                             SelectedIndexChanged="OnAccountSelectionChanged"
-                            IsEnabled="{Binding IsNotBusy}" />
-
-                        <Grid Grid.Row="1" Grid.ColumnSpan="2" ColumnDefinitions="2*,*,2*" ColumnSpacing="8">
-                            <Entry Keyboard="Numeric" MaxLength="12" Placeholder="新游戏账号 UID" Text="{Binding NewAccountUid}" />
-                            <Picker Grid.Column="1" Title="服务器" ItemsSource="{Binding ServerRegions}" SelectedItem="{Binding SelectedServerRegion}" />
-                            <Grid Grid.Column="2" ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                                <Entry MaxLength="50" Placeholder="账号备注（可选）" Text="{Binding NewAccountDisplayName}" />
-                                <Button Grid.Column="1" Text="创建" Command="{Binding CreateAccountCommand}" />
-                            </Grid>
-                        </Grid>
+                            SelectedItem="{Binding SelectedAccount, Mode=TwoWay}" />
                     </Grid>
                 </VerticalStackLayout>
             </Border>
 
             <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,*" ColumnSpacing="20">
-            <Grid RowDefinitions="Auto,2">
-                <Button
-                    Padding="12,6"
-                    BackgroundColor="Transparent"
-                    Command="{Binding Analysis.ShowAccountScopeCommand}"
-                    IsEnabled="{Binding Analysis.IsNotBusy}"
-                    TextColor="{AppThemeBinding Light=#B69DF8, Dark=#512BD4}"
-                    Text="账号" />
-                <BoxView
-                    Grid.Row="1"
-                    BackgroundColor="{AppThemeBinding Light=#512BD4, Dark=#B69DF8}"
-                    HeightRequest="2"
-                    IsVisible="{Binding Analysis.IsAccountMode}" />
-            </Grid>
-            <Grid Grid.Column="1" RowDefinitions="Auto,2">
-                <Button
-                    Padding="12,6"
-                    BackgroundColor="Transparent"
-                    Command="{Binding Analysis.ShowArchiveScopeCommand}"
-                    IsEnabled="{Binding Analysis.IsNotBusy}"
-                    TextColor="{AppThemeBinding Light=#B69DF8, Dark=#512BD4}"
-                    Text="档案" />
-                <BoxView
-                    Grid.Row="1"
-                    BackgroundColor="{AppThemeBinding Light=#512BD4, Dark=#B69DF8}"
-                    HeightRequest="2"
-                    IsVisible="{Binding Analysis.IsArchiveMode}" />
-            </Grid>
+                <Grid RowDefinitions="Auto,2">
+                    <Button
+                        Padding="12,6"
+                        BackgroundColor="Transparent"
+                        Command="{Binding Analysis.ShowAccountScopeCommand}"
+                        IsEnabled="{Binding Analysis.IsNotBusy}"
+                        Text="账号"
+                        TextColor="{AppThemeBinding Light=#B69DF8, Dark=#512BD4}" />
+                    <BoxView
+                        Grid.Row="1"
+                        BackgroundColor="{AppThemeBinding Light=#512BD4, Dark=#B69DF8}"
+                        HeightRequest="2"
+                        IsVisible="{Binding Analysis.IsAccountMode}" />
+                </Grid>
+                <Grid Grid.Column="1" RowDefinitions="Auto,2">
+                    <Button
+                        Padding="12,6"
+                        BackgroundColor="Transparent"
+                        Command="{Binding Analysis.ShowArchiveScopeCommand}"
+                        IsEnabled="{Binding Analysis.IsNotBusy}"
+                        Text="档案"
+                        TextColor="{AppThemeBinding Light=#B69DF8, Dark=#512BD4}" />
+                    <BoxView
+                        Grid.Row="1"
+                        BackgroundColor="{AppThemeBinding Light=#512BD4, Dark=#B69DF8}"
+                        HeightRequest="2"
+                        IsVisible="{Binding Analysis.IsArchiveMode}" />
+                </Grid>
             </Grid>
 
             <Border Grid.Row="2" Padding="10">
                 <VerticalStackLayout Spacing="8">
-                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                        <Label
-                            FontAttributes="Bold"
-                            FontSize="16"
-                            Text="刷新与账号操作"
-                            VerticalTextAlignment="Center" />
-                        <Button
-                            Grid.Column="1"
-                            Command="{Binding ToggleAccountOperationsPanelCommand}"
-                            Text="{Binding AccountOperationsPanelToggleText}" />
-                    </Grid>
-
-                    <VerticalStackLayout
-                        IsVisible="{Binding IsAccountOperationsPanelExpanded}"
-                        Spacing="8">
-                        <ScrollView Orientation="Horizontal" HorizontalScrollBarVisibility="Default">
-                    <HorizontalStackLayout Spacing="8">
-                        <Button Text="SToken 刷新" Clicked="OnSTokenRefreshClicked" IsEnabled="{Binding IsNotBusy}" />
-                        <Button
-                            Text="网页缓存刷新（仅 Windows）"
-                            Clicked="OnWebCacheRefreshClicked"
-                            IsVisible="{OnPlatform WinUI=True, Android=False}"
-                            IsEnabled="{Binding IsNotBusy}" />
-                        <Button Text="输入 URL 刷新" Clicked="OnManualUrlRefreshClicked" IsEnabled="{Binding IsNotBusy}" />
-                        <HorizontalStackLayout Spacing="4" VerticalOptions="Center">
-                            <CheckBox IsChecked="{Binding IsFullRefresh}" IsEnabled="{Binding IsNotBusy}" />
-                            <Label Text="全量刷新" VerticalTextAlignment="Center" />
+                    <Label FontAttributes="Bold" FontSize="16" Text="抽卡数据操作" />
+                    <ScrollView HorizontalScrollBarVisibility="Default" Orientation="Horizontal">
+                        <HorizontalStackLayout Spacing="8">
+                            <Button
+                                Clicked="OnSTokenRefreshClicked"
+                                IsEnabled="{Binding IsNotBusy}"
+                                Text="SToken 刷新" />
+                            <Button
+                                Clicked="OnWebCacheRefreshClicked"
+                                IsEnabled="{Binding IsNotBusy}"
+                                IsVisible="{OnPlatform WinUI=True, Android=False}"
+                                Text="网页缓存刷新（仅 Windows）" />
+                            <Button
+                                Clicked="OnManualUrlRefreshClicked"
+                                IsEnabled="{Binding IsNotBusy}"
+                                Text="输入 URL 刷新" />
+                            <HorizontalStackLayout Spacing="4" VerticalOptions="Center">
+                                <CheckBox IsChecked="{Binding IsFullRefresh}" IsEnabled="{Binding IsNotBusy}" />
+                                <Label Text="全量刷新" VerticalTextAlignment="Center" />
+                            </HorizontalStackLayout>
+                            <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}" />
                         </HorizontalStackLayout>
-                        <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}" />
-                    </HorizontalStackLayout>
-                        </ScrollView>
+                    </ScrollView>
 
-                        <ScrollView Orientation="Horizontal" HorizontalScrollBarVisibility="Default">
-                    <HorizontalStackLayout Spacing="8">
-                        <Button Text="创建档案" Clicked="OnCreateArchiveClicked" IsEnabled="{Binding IsNotBusy}" />
-                        <Button Text="重命名档案" Clicked="OnRenameArchiveClicked" IsEnabled="{Binding IsNotBusy}" />
-                        <Button Text="删除档案" Clicked="OnDeleteArchiveClicked" IsEnabled="{Binding IsNotBusy}" />
-                        <Button Text="重新加载" Command="{Binding ReloadArchivesCommand}" IsEnabled="{Binding IsNotBusy}" />
-                        <Button Text="编辑游戏账号" Clicked="OnEditAccountClicked" IsEnabled="{Binding IsNotBusy}" />
-                        <Button Text="删除游戏账号" Clicked="OnDeleteAccountClicked" IsEnabled="{Binding IsNotBusy}" />
-                        <Button Text="导入 UIGF 到档案" Clicked="OnImportIntoArchiveClicked" IsEnabled="{Binding IsNotBusy}" />
-                        <Button Text="导入 UIGF 到账号" Clicked="OnImportIntoSelectedAccountClicked" IsEnabled="{Binding IsNotBusy}" />
-                        <Button
-                            Text="从提瓦特小助手导入"
-                            Clicked="OnTeyvatHelperImportClicked"
-                            IsEnabled="{Binding IsNotBusy}" />
-                        <Button Text="导出档案 UIGF" Clicked="OnExportArchiveUigfClicked" IsEnabled="{Binding IsNotBusy}" />
-                        <Button Text="导出账号 UIGF" Clicked="OnExportAccountUigfClicked" IsEnabled="{Binding IsNotBusy}" />
-                        <Button Text="导出档案表格" Clicked="OnExportArchiveTableClicked" IsEnabled="{Binding IsNotBusy}" />
-                        <Button Text="导出账号表格" Clicked="OnExportAccountTableClicked" IsEnabled="{Binding IsNotBusy}" />
-                        <Button
-                            Command="{Binding Analysis.ClearIconCacheCommand}"
-                            IsEnabled="{Binding Analysis.IsNotBusy}"
-                            Text="清除图标缓存" />
-                    </HorizontalStackLayout>
-                        </ScrollView>
-                    </VerticalStackLayout>
+                    <ScrollView HorizontalScrollBarVisibility="Default" Orientation="Horizontal">
+                        <HorizontalStackLayout Spacing="8">
+                            <Button
+                                Clicked="OnImportIntoArchiveClicked"
+                                IsEnabled="{Binding IsNotBusy}"
+                                Text="导入 UIGF 到档案" />
+                            <Button
+                                Clicked="OnImportIntoSelectedAccountClicked"
+                                IsEnabled="{Binding IsNotBusy}"
+                                Text="导入 UIGF 到账号" />
+                            <Button
+                                Clicked="OnTeyvatHelperImportClicked"
+                                IsEnabled="{Binding IsNotBusy}"
+                                Text="从提瓦特小助手导入" />
+                            <Button
+                                Clicked="OnExportArchiveUigfClicked"
+                                IsEnabled="{Binding IsNotBusy}"
+                                Text="导出档案 UIGF" />
+                            <Button
+                                Clicked="OnExportAccountUigfClicked"
+                                IsEnabled="{Binding IsNotBusy}"
+                                Text="导出账号 UIGF" />
+                            <Button
+                                Clicked="OnExportArchiveTableClicked"
+                                IsEnabled="{Binding IsNotBusy}"
+                                Text="导出档案表格" />
+                            <Button
+                                Clicked="OnExportAccountTableClicked"
+                                IsEnabled="{Binding IsNotBusy}"
+                                Text="导出账号表格" />
+                            <Button
+                                Command="{Binding Analysis.ClearIconCacheCommand}"
+                                IsEnabled="{Binding Analysis.IsNotBusy}"
+                                Text="清除图标缓存" />
+                        </HorizontalStackLayout>
+                    </ScrollView>
                 </VerticalStackLayout>
             </Border>
 
@@ -170,18 +162,18 @@
                 MinimumHeightRequest="360" />
 
             <Grid Grid.Row="4" ColumnDefinitions="*,Auto" ColumnSpacing="8">
-            <VerticalStackLayout Spacing="2">
-                <Label FontSize="11" Text="{Binding Analysis.Summary}" />
-                <Label FontSize="11" Text="{Binding RefreshSummary}" />
-                <Label FontSize="11" Text="{Binding ImportSummary}" />
-                <Label FontSize="11" Text="{Binding ExportSummary}" />
-                <Label FontSize="11" Text="{Binding ErrorMessage}" TextColor="Red" />
-                <Label FontSize="11" Text="{Binding Analysis.ErrorMessage}" TextColor="Red" />
-            </VerticalStackLayout>
-            <ActivityIndicator
-                Grid.Column="1"
-                IsRunning="{Binding Analysis.IsBusy}"
-                IsVisible="{Binding Analysis.IsBusy}" />
+                <VerticalStackLayout Spacing="2">
+                    <Label FontSize="11" Text="{Binding Analysis.Summary}" />
+                    <Label FontSize="11" Text="{Binding RefreshSummary}" />
+                    <Label FontSize="11" Text="{Binding ImportSummary}" />
+                    <Label FontSize="11" Text="{Binding ExportSummary}" />
+                    <Label FontSize="11" Text="{Binding ErrorMessage}" TextColor="Red" />
+                    <Label FontSize="11" Text="{Binding Analysis.ErrorMessage}" TextColor="Red" />
+                </VerticalStackLayout>
+                <ActivityIndicator
+                    Grid.Column="1"
+                    IsRunning="{Binding Analysis.IsBusy}"
+                    IsVisible="{Binding Analysis.IsBusy}" />
             </Grid>
         </Grid>
     </ScrollView>
