@@ -1,6 +1,6 @@
 # Gacha Portable 支持矩阵
 
-状态：8B.3 实现状态；格式未公开发布
+状态：8B.4 实现状态；格式未公开发布
 
 | 能力 | 版本/平台 | 当前状态 |
 |---|---|---|
@@ -14,12 +14,13 @@
 | 导入 Plan/Preview | Windows/Android 共用代码 | 已实现只读 AddOnly 规划，不修改数据库 |
 | 生产 AddOnly Apply | SQLite Schema 5 | 服务入口已实现；档案、身份、账号、别名、事实、收据和 ChangeSet 同事务 |
 | CSV/XLSX 可读导出 | Windows/Android 共用代码 | 包含所选范围、档案/身份、原始字段、来源和时间说明 |
-| Windows 平台构建 | `net10.0-windows10.0.19041.0 / win-x64` | 2026-10-06 Release 构建通过，0 警告、0 错误 |
-| Android 平台构建 | `net10.0-android` | 2026-10-06 Release 构建通过，SDK `E:\AndroidSDK` |
+| 产品文件导入／导出 UI | Windows/Android | 已实现 picker、私有暂存、预览／映射／Apply、复验后 saver；真实系统 provider 待验收 |
+| Windows 平台构建 | `net10.0-windows10.0.19041.0 / win-x64` | 2026-10-08 Release 构建通过，0 警告、0 错误；应用启动通过 |
+| Android 平台构建 | `net10.0-android` | 2026-10-08 Release 构建通过，SDK `E:\AndroidSDK`；ADB 当前无设备 |
 | Windows ↔ Android 文件选择器实机往返 | — | 尚未验收，格式保持“未发布” |
 | 真实数据库导入再导出 | 自动化 fixture | 数据库 A→数据库 B→再导出语义通过；尚无产品 UI/实机跨端验收 |
 
-当前 `IGachaPortablePackageReader` 为构造完整只读 Plan 而物化受资源上限保护的 Portable Model。SQLite 导出端和 ZIP 交付复验为分页/流式；8B.3 Apply 会分批执行已经验证的模型，但读取和计划仍会物化整个包，不能把当前实现宣称为 2,000,000 条记录的端到端有界内存执行器。受控暂存/流式读取和产品 UI 留给 8B.4。
+当前输入源已用有限 buffer 复制到私有、可 seek 暂存并计算容器 SHA-256；SQLite 导出端和 ZIP 交付复验为分页／流式。`IGachaPortablePackageReader`、Plan/conflict 与 Apply mutation 准备仍会物化整个包，不能宣称为 2,000,000 条记录的端到端有界内存执行器，也尚未取得 100k 双端实测。磁盘关联索引与分页 Plan/Apply 仍是 8B.4 的未关闭项；格式保持未发布。
 
 ## 结构化错误
 
