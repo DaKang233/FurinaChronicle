@@ -18,6 +18,7 @@ internal static class PresentationServiceCollectionExtensions
 
         services.AddTransient<GachaPageViewModel>();
         services.AddTransient<GachaAnalysisViewModel>();
+        services.AddSingleton<ArchivePageViewModel>();
         services.AddSingleton<UserPageViewModel>();
         services.AddSingleton<StartupPageViewModel>();
 
