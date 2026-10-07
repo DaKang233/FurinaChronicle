@@ -20,11 +20,38 @@ public sealed class ImportUigfGachaRecords(
     IGameAccountRepository accountRepository,
     ICommitGachaRecords commitGachaRecords)
 {
-    public async Task<GachaImportResult> ExecuteAsync(
+    public Task<GachaImportResult> ExecuteAsync(
         Stream source,
         Guid playerArchiveId,
         Guid? targetGameAccountId = null,
+        CancellationToken cancellationToken = default) =>
+        ExecuteCoreAsync(
+            source,
+            playerArchiveId,
+            targetGameAccountId,
+            archiveToCreate: null,
+            cancellationToken);
+
+    public Task<GachaImportResult> ExecuteAsync(
+        Stream source,
+        PlayerArchive archiveToCreate,
         CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(archiveToCreate);
+        return ExecuteCoreAsync(
+            source,
+            archiveToCreate.Id,
+            targetGameAccountId: null,
+            archiveToCreate,
+            cancellationToken);
+    }
+
+    private async Task<GachaImportResult> ExecuteCoreAsync(
+        Stream source,
+        Guid playerArchiveId,
+        Guid? targetGameAccountId,
+        PlayerArchive? archiveToCreate,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(source);
         if (playerArchiveId == Guid.Empty)
@@ -37,8 +64,21 @@ public sealed class ImportUigfGachaRecords(
             throw new ArgumentException("Target game account ID is required.", nameof(targetGameAccountId));
         }
 
-        _ = await archiveRepository.GetByIdAsync(playerArchiveId, cancellationToken)
-            ?? throw new KeyNotFoundException("The target player archive does not exist.");
+        PlayerArchive? existingArchive =
+            await archiveRepository.GetByIdAsync(
+                playerArchiveId,
+                cancellationToken);
+        if (existingArchive is null &&
+            archiveToCreate?.Id != playerArchiveId)
+        {
+            throw new KeyNotFoundException(
+                "The target player archive does not exist.");
+        }
+        if (existingArchive is not null && archiveToCreate is not null)
+        {
+            throw new InvalidOperationException(
+                "The proposed player archive already exists.");
+        }
 
         GameAccount? targetAccount = null;
         if (targetGameAccountId is Guid targetId)
@@ -75,6 +115,7 @@ public sealed class ImportUigfGachaRecords(
         }
 
         int createdAccountCount = 0;
+        var accountsToCreate = new List<GameAccount>();
         int ignoredCount = 0;
         int invalidCount = readResult.Errors.Count;
 
@@ -163,12 +204,13 @@ public sealed class ImportUigfGachaRecords(
 
                 if (existingAccount is null)
                 {
-                    account = await CreateAccountAsync(
+                    account = await PrepareAccountAsync(
                         playerArchiveId,
                         uid,
                         region,
                         naturalIdentity,
                         cancellationToken);
+                    accountsToCreate.Add(account);
                     createdAccountCount++;
                 }
                 else
@@ -220,7 +262,9 @@ public sealed class ImportUigfGachaRecords(
                     allRecords,
                     GachaRecordConflictPolicy.PreserveExisting,
                     SuppressTombstonesAndContinue: false,
-                    CaptureUndo: createdAccountCount == 0),
+                    CaptureUndo: createdAccountCount == 0,
+                    ArchiveToCreate: archiveToCreate,
+                    AccountsToCreate: accountsToCreate),
                 cancellationToken);
         if (saveResult.Status == ChangeExecutionStatus.Conflict)
         {
@@ -304,7 +348,7 @@ public sealed class ImportUigfGachaRecords(
             "No records for this account were saved.");
     }
 
-    private async Task<GameAccount> CreateAccountAsync(
+    private async Task<GameAccount> PrepareAccountAsync(
         Guid playerArchiveId,
         string uid,
         GameServerRegion region,
@@ -329,7 +373,6 @@ public sealed class ImportUigfGachaRecords(
             now,
             now,
             roleIdentity);
-        await accountRepository.AddAsync(account, cancellationToken);
         return account;
     }
 

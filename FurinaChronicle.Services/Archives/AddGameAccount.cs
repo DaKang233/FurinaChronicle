@@ -17,7 +17,37 @@ namespace FurinaChronicle.Services.Archives
             {
                 throw new ArgumentException("玩家档案 ID 不能为空",nameof(playerArchiveId));
             }
-            PlayerArchive? archive = await archiveRepository.GetByIdAsync(playerArchiveId, cancellationToken) ?? throw new KeyNotFoundException("指定的玩家档案不存在。");
+            PlayerArchive archive = await archiveRepository.GetByIdAsync(playerArchiveId, cancellationToken) ?? throw new KeyNotFoundException("指定的玩家档案不存在。");
+            GameAccount account = await PrepareAsync(
+                archive,
+                uid,
+                serverRegion,
+                displayName,
+                archiveIsProposed: false,
+                cancellationToken);
+            await accountRepository.AddAsync(account, cancellationToken);
+            return account;
+        }
+
+        public async Task<GameAccount> PrepareAsync(
+            PlayerArchive archive,
+            string uid,
+            GameServerRegion serverRegion,
+            string? displayName,
+            bool archiveIsProposed,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(archive);
+            PlayerArchive? persistedArchive = await archiveRepository.GetByIdAsync(
+                archive.Id,
+                cancellationToken);
+            if (archiveIsProposed ? persistedArchive is not null : persistedArchive is null)
+            {
+                throw new InvalidOperationException(
+                    archiveIsProposed
+                        ? "待创建的玩家档案已经存在。"
+                        : "指定的玩家档案不存在。");
+            }
             string normalizedUid = uid.Trim();
             if (string.IsNullOrEmpty(normalizedUid)) throw new ArgumentException("UID 不能为空", nameof(uid));
             if (!normalizedUid.All(char.IsAsciiDigit)) throw new ArgumentException("UID 只能包含数字", nameof(uid));
@@ -26,7 +56,7 @@ namespace FurinaChronicle.Services.Archives
                 GenshinGameRoleIdentity.Create(normalizedUid, serverRegion);
             GameAccount? existing =
                 await accountRepository.GetByArchiveIdAndNaturalIdentityAsync(
-                    playerArchiveId,
+                    archive.Id,
                     naturalIdentity,
                     cancellationToken);
             if (existing is not null) throw new InvalidOperationException("该档案下已存在相同游戏角色的账号");
@@ -47,7 +77,7 @@ namespace FurinaChronicle.Services.Archives
 
             var account = new GameAccount(
                 Guid.NewGuid(),
-                playerArchiveId,
+                archive.Id,
                 normalizedUid,
                 resolvedRegion,
                 normalizedDisplayName,
@@ -55,7 +85,6 @@ namespace FurinaChronicle.Services.Archives
                 now,
                 now,
                 roleIdentity);
-            await accountRepository.AddAsync(account, cancellationToken);
             return account;
         }
     }

@@ -13,13 +13,19 @@ namespace FurinaChronicle.Services.Archives
     {
         public async Task<PlayerArchive> ExecuteAsync(string name, CancellationToken cancellationToken = default)
         {
-            string normalizedName = name.Trim();
-            if (string.IsNullOrEmpty(normalizedName)) { throw new ArgumentException("档案名称不能为空",nameof(name)); }
-            if (normalizedName.Length > 50) { throw new ArgumentException("档案名称不能超过 50 个字符", nameof(name)); }
+            if (string.IsNullOrWhiteSpace(name)) { throw new ArgumentException("档案名称不能为空",nameof(name)); }
+            if (name.Length > 50) { throw new ArgumentException("档案名称不能超过 50 个字符", nameof(name)); }
+            IReadOnlyList<PlayerArchive> existing =
+                await repository.GetAllAsync(cancellationToken);
+            if (existing.Any(archive =>
+                    string.Equals(archive.Name, name, StringComparison.Ordinal)))
+            {
+                throw new InvalidOperationException("已存在完全同名的玩家档案。");
+            }
             
             DateTimeOffset now = DateTimeOffset.UtcNow;
 
-            var archive = new PlayerArchive(Guid.NewGuid(), normalizedName, now, now);
+            var archive = new PlayerArchive(Guid.NewGuid(), name, now, now);
             await repository.AddAsync(archive, cancellationToken);
             return archive;
         }

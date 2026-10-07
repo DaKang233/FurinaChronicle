@@ -4,6 +4,7 @@
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.History;
 using FurinaChronicle.Core.Records;
+using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Services.Gacha.History;
 
 namespace FurinaChronicle.Services.Gacha.Writing;
@@ -19,7 +20,9 @@ public sealed record CommitGachaRecordsRequest(
     GachaRecordConflictPolicy ConflictPolicy,
     bool SuppressTombstonesAndContinue,
     bool CaptureUndo = true,
-    Guid? CleanupConfirmationId = null);
+    Guid? CleanupConfirmationId = null,
+    PlayerArchive? ArchiveToCreate = null,
+    IReadOnlyCollection<GameAccount>? AccountsToCreate = null);
 
 public sealed record CommitGachaRecordsResult(
     ChangeExecutionStatus Status,
@@ -54,6 +57,10 @@ public sealed class CommitGachaRecords(IGachaAtomicChangeStore store)
         }
 
         var unique = new Dictionary<GachaFactReference, GachaRecord>();
+        IReadOnlyCollection<GameAccount> requestedAccounts =
+            request.AccountsToCreate ?? [];
+        var proposedAccounts = requestedAccounts.ToDictionary(
+            account => account.Id);
         int duplicates = 0;
         foreach (GachaRecord record in request.Records)
         {
@@ -87,9 +94,12 @@ public sealed class CommitGachaRecords(IGachaAtomicChangeStore store)
         foreach ((GachaFactReference reference, GachaRecord incoming) in unique)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            GachaFactState? current = await store.GetCurrentAsync(
-                reference,
-                cancellationToken);
+            GachaFactState? current = proposedAccounts.ContainsKey(
+                    reference.GameAccountId)
+                ? null
+                : await store.GetCurrentAsync(
+                    reference,
+                    cancellationToken);
             if (current is null)
             {
                 mutations.Add(new GachaFactMutation(reference, incoming));
@@ -145,7 +155,11 @@ public sealed class CommitGachaRecords(IGachaAtomicChangeStore store)
 
         IReadOnlyList<TombstoneReintroductionWarning> tombstones =
             await store.FindActiveTombstonesAsync(
-                insertionReferences,
+                insertionReferences
+                    .Where(reference =>
+                        !proposedAccounts.ContainsKey(
+                            reference.GameAccountId))
+                    .ToArray(),
                 cancellationToken);
         if (tombstones.Count > 0 &&
             !request.SuppressTombstonesAndContinue)
@@ -171,6 +185,13 @@ public sealed class CommitGachaRecords(IGachaAtomicChangeStore store)
 
         while (mutations.Count > 0)
         {
+            Guid[] referencedAccountIds = mutations
+                .Select(mutation => mutation.Reference.GameAccountId)
+                .Distinct()
+                .ToArray();
+            GameAccount[] accountsToCreate = requestedAccounts
+                .Where(account => referencedAccountIds.Contains(account.Id))
+                .ToArray();
             var atomicRequest = new GachaAtomicChangeRequest(
                 request.OperationId,
                 request.OperationKind,
@@ -179,8 +200,12 @@ public sealed class CommitGachaRecords(IGachaAtomicChangeStore store)
                 request.StartedAt,
                 request.CommittedAt,
                 mutations,
-                request.CaptureUndo,
-                cleanupConfirmationId: request.CleanupConfirmationId);
+                accountsToCreate.Length == 0 && request.CaptureUndo,
+                cleanupConfirmationId: request.CleanupConfirmationId,
+                archiveToCreate: accountsToCreate.Length == 0
+                    ? null
+                    : request.ArchiveToCreate,
+                accountsToCreate: accountsToCreate);
             GachaAtomicChangeResult result = await store.CommitAsync(
                 atomicRequest,
                 cancellationToken);

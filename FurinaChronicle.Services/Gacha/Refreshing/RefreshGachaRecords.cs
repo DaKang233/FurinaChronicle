@@ -136,7 +136,12 @@ public sealed class RefreshGachaRecords(
                     request.Mode == GachaRefreshMode.Full
                         ? GachaRecordConflictPolicy.ReplaceExisting
                         : GachaRecordConflictPolicy.PreserveExisting,
-                    SuppressTombstonesAndContinue: true),
+                    SuppressTombstonesAndContinue: true,
+                    CaptureUndo: request.AccountToCreate is null,
+                    ArchiveToCreate: request.ArchiveToCreate,
+                    AccountsToCreate: request.AccountToCreate is null
+                        ? null
+                        : [request.AccountToCreate]),
                 cancellationToken);
         if (saveResult.Status is ChangeExecutionStatus.Conflict or
             ChangeExecutionStatus.NeedsConfirmation)

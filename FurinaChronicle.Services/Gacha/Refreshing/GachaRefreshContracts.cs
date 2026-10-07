@@ -26,7 +26,9 @@ public sealed record GachaRefreshRequest(
     GachaRefreshMode Mode = GachaRefreshMode.Incremental,
     Guid? PassportAccountId = null,
     string? ManualUrl = null,
-    string? GameInstallationPath = null);
+    string? GameInstallationPath = null,
+    PlayerArchive? ArchiveToCreate = null,
+    GameAccount? AccountToCreate = null);
 
 public sealed record GachaRefreshDiscoveryRequest(
     GachaRefreshSource Source,

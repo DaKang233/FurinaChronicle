@@ -14,6 +14,134 @@ namespace FurinaChronicle.Tests.Infrastructure.Persistence.Sqlite;
 
 public sealed class SqliteGachaAtomicChangeStoreTests
 {
+    [Fact]
+    public async Task CommitAsync_ProposedParentsAndFactAreCreatedInOneTransaction()
+    {
+        await using SqliteRepositoryTestContext context =
+            await CreateContextAsync();
+        PlayerArchive archive =
+            SqliteRepositoryTestContext.CreateArchive("原子新档案");
+        GameAccount account =
+            SqliteRepositoryTestContext.CreateAccount(archive.Id);
+        GachaFactReference reference = new(account.Id, "parent-1");
+        DateTimeOffset time = new(2026, 10, 8, 8, 0, 0, TimeSpan.Zero);
+        var request = new GachaAtomicChangeRequest(
+            OperationId.New(),
+            DataChangeOperationKind.Import,
+            DataOrigin.StandardImport,
+            "import with parents",
+            time,
+            time,
+            [new GachaFactMutation(
+                reference,
+                CreateRecord(account.Id, reference.ExternalRecordId))],
+            captureUndo: false,
+            archiveToCreate: archive,
+            accountsToCreate: [account]);
+
+        GachaAtomicChangeResult result =
+            await context.AtomicGacha.CommitAsync(request);
+
+        Assert.Equal(ChangeExecutionStatus.Applied, result.Status);
+        Assert.Equal(archive, await context.Archives.GetByIdAsync(archive.Id));
+        Assert.Equal(account, await context.Accounts.GetByIdAsync(account.Id));
+        Assert.NotNull(await context.AtomicGacha.GetCurrentAsync(reference));
+        using SQLiteConnection raw = context.OpenRawConnection();
+        Assert.Equal(0, Count(raw, "UndoMaterials"));
+        Assert.Equal(
+            (int)UndoIneligibilityReason.Disabled,
+            raw.ExecuteScalar<int>(
+                "SELECT IneligibilityReason FROM OperationHistory LIMIT 1;"));
+        Assert.Empty(raw.Query<ForeignKeyViolation>("PRAGMA foreign_key_check;"));
+    }
+
+    [Fact]
+    public async Task CommitAsync_ParentConflictLeavesArchiveAccountAndFactAbsent()
+    {
+        await using SqliteRepositoryTestContext context =
+            await CreateContextAsync();
+        PlayerArchive archive =
+            SqliteRepositoryTestContext.CreateArchive("冲突档案");
+        await context.Archives.AddAsync(archive);
+        GameAccount existing =
+            SqliteRepositoryTestContext.CreateAccount(archive.Id);
+        await context.Accounts.AddAsync(existing);
+        GameAccount proposed = existing with { DisplayName = "冲突副本" };
+        GachaFactReference reference = new(existing.Id, "parent-conflict");
+        DateTimeOffset time = new(2026, 10, 8, 8, 0, 0, TimeSpan.Zero);
+
+        GachaAtomicChangeResult result = await context.AtomicGacha.CommitAsync(
+            new GachaAtomicChangeRequest(
+                OperationId.New(),
+                DataChangeOperationKind.Import,
+                DataOrigin.StandardImport,
+                "conflicting parent",
+                time,
+                time,
+                [new GachaFactMutation(
+                    reference,
+                    CreateRecord(existing.Id, reference.ExternalRecordId))],
+                captureUndo: false,
+                accountsToCreate: [proposed]));
+
+        Assert.Equal(ChangeExecutionStatus.Conflict, result.Status);
+        Assert.Null(await context.AtomicGacha.GetCurrentAsync(reference));
+        Assert.Equal(existing, await context.Accounts.GetByIdAsync(existing.Id));
+        using SQLiteConnection raw = context.OpenRawConnection();
+        Assert.Equal(0, Count(raw, "DataChangeSets"));
+        Assert.Equal(0, Count(raw, "OperationCommitResults"));
+    }
+
+    [Fact]
+    public async Task CommitAsync_SuppressedRecreatedAccountDoesNotLeaveEmptyParent()
+    {
+        await using SqliteRepositoryTestContext context =
+            await CreateContextAsync();
+        PlayerArchive archive =
+            SqliteRepositoryTestContext.CreateArchive("抑制档案");
+        GameAccount original =
+            SqliteRepositoryTestContext.CreateAccount(archive.Id);
+        await context.Archives.AddAsync(archive);
+        await context.Accounts.AddAsync(original);
+        GachaFactReference originalReference = new(original.Id, "deleted-1");
+        await context.AtomicGacha.CommitAsync(CreateRequest(
+            DataChangeOperationKind.Import,
+            new GachaFactMutation(
+                originalReference,
+                CreateRecord(original.Id, originalReference.ExternalRecordId))));
+        DateTimeOffset time = new(2026, 10, 8, 8, 0, 0, TimeSpan.Zero);
+        await context.AtomicGacha.PurgeAccountAsync(new GachaScopePurgeRequest(
+            OperationId.New(),
+            original.Id,
+            time,
+            time,
+            "purge original"));
+
+        GameAccount recreated = original with { Id = Guid.NewGuid() };
+        GachaFactReference recreatedReference =
+            new(recreated.Id, originalReference.ExternalRecordId);
+        GachaAtomicChangeResult result = await context.AtomicGacha.CommitAsync(
+            new GachaAtomicChangeRequest(
+                OperationId.New(),
+                DataChangeOperationKind.Import,
+                DataOrigin.StandardImport,
+                "suppressed recreated account",
+                time,
+                time,
+                [new GachaFactMutation(
+                    recreatedReference,
+                    CreateRecord(
+                        recreated.Id,
+                        recreatedReference.ExternalRecordId))],
+                captureUndo: false,
+                accountsToCreate: [recreated]));
+
+        Assert.Equal(ChangeExecutionStatus.Suppressed, result.Status);
+        Assert.Null(await context.Accounts.GetByIdAsync(recreated.Id));
+        Assert.Null(await context.AtomicGacha.GetCurrentAsync(recreatedReference));
+        Assert.Empty(await context.Accounts.GetByArchiveIdAsync(archive.Id));
+    }
+
     [Theory]
     [InlineData(DataChangeOperationKind.Undo)]
     [InlineData(DataChangeOperationKind.IrreversibleDelete)]

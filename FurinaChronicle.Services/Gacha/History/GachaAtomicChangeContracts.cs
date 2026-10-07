@@ -4,6 +4,7 @@
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.History;
 using FurinaChronicle.Core.Records;
+using FurinaChronicle.Core.Archives;
 
 namespace FurinaChronicle.Services.Gacha.History;
 
@@ -34,7 +35,9 @@ public sealed class GachaAtomicChangeRequest
         Guid? undoOfChangeSetId = null,
         Guid? cleanupConfirmationId = null,
         IEnumerable<TombstoneReintroductionConfirmation>?
-            reintroductionConfirmations = null)
+            reintroductionConfirmations = null,
+        PlayerArchive? archiveToCreate = null,
+        IEnumerable<GameAccount>? accountsToCreate = null)
     {
         if (!Enum.IsDefined(operationKind))
         {
@@ -80,6 +83,52 @@ public sealed class GachaAtomicChangeRequest
                     nameof(mutations));
             }
         }
+        GameAccount[] normalizedAccounts = accountsToCreate?.ToArray() ?? [];
+        if (normalizedAccounts.Select(account => account.Id).Distinct().Count() !=
+            normalizedAccounts.Length)
+        {
+            throw new ArgumentException(
+                "A request cannot create the same game account twice.",
+                nameof(accountsToCreate));
+        }
+        if (normalizedAccounts.Any(account =>
+                account.Id == Guid.Empty ||
+                account.PlayerArchiveId == Guid.Empty ||
+                account.RoleIdentity is null))
+        {
+            throw new ArgumentException(
+                "Every proposed Gacha account must have a resolved identity and non-empty IDs.",
+                nameof(accountsToCreate));
+        }
+        if (archiveToCreate is not null &&
+            (archiveToCreate.Id == Guid.Empty ||
+             string.IsNullOrEmpty(archiveToCreate.Name)))
+        {
+            throw new ArgumentException(
+                "A proposed archive must have a non-empty ID and exact name.",
+                nameof(archiveToCreate));
+        }
+        if (archiveToCreate is not null && normalizedAccounts.Length == 0)
+        {
+            throw new ArgumentException(
+                "A proposed archive requires at least one proposed game account.",
+                nameof(accountsToCreate));
+        }
+        if (archiveToCreate is not null &&
+            normalizedAccounts.Any(account =>
+                account.PlayerArchiveId != archiveToCreate.Id))
+        {
+            throw new ArgumentException(
+                "Every proposed account must belong to the proposed archive.",
+                nameof(accountsToCreate));
+        }
+        if ((archiveToCreate is not null || normalizedAccounts.Length > 0) &&
+            captureUndo)
+        {
+            throw new ArgumentException(
+                "Changes that create parent entities cannot be marked undoable in Phase 8B.4.",
+                nameof(captureUndo));
+        }
         if (operationKind == DataChangeOperationKind.Undo &&
             undoOfChangeSetId is null)
         {
@@ -107,6 +156,8 @@ public sealed class GachaAtomicChangeRequest
         CleanupConfirmationId = cleanupConfirmationId;
         ReintroductionConfirmations =
             reintroductionConfirmations?.ToArray() ?? [];
+        ArchiveToCreate = archiveToCreate;
+        AccountsToCreate = normalizedAccounts;
     }
 
     public OperationId OperationId { get; }
@@ -131,6 +182,10 @@ public sealed class GachaAtomicChangeRequest
 
     public IReadOnlyList<TombstoneReintroductionConfirmation>
         ReintroductionConfirmations { get; }
+
+    public PlayerArchive? ArchiveToCreate { get; }
+
+    public IReadOnlyList<GameAccount> AccountsToCreate { get; }
 }
 
 public sealed record GachaAtomicChangeResult(

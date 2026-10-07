@@ -258,6 +258,43 @@ public sealed class RefreshGachaRecordsTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_NewTargetCreatesArchiveAccountAndFactsAtomically()
+    {
+        await using var context = SqliteRepositoryTestContext.Create();
+        PlayerArchive archive =
+            SqliteRepositoryTestContext.CreateArchive("刷新新档案");
+        GameAccount account = SqliteRepositoryTestContext.CreateAccount(
+            archive.Id,
+            uid: GameAccount.Uid,
+            region: GameAccount.ServerRegion);
+        var client = new StubGachaLogClient();
+        client.Add("301", null, Page(Remote("atomic-parent-refresh")));
+        var service = new RefreshGachaRecords(
+            context.Gacha,
+            new CommitGachaRecords(context.AtomicGacha),
+            new StubPassportStore(),
+            new StubSTokenProvider(),
+            new StubWindowsProvider(false),
+            client,
+            new StubMetadataProvider());
+
+        GachaRefreshResult result = await service.ExecuteAsync(
+            new GachaRefreshRequest(
+                account,
+                GachaRefreshSource.ManualUrl,
+                ManualUrl: ValidUrl.AbsoluteUri,
+                ArchiveToCreate: archive,
+                AccountToCreate: account));
+
+        Assert.Equal(1, result.InsertedCount);
+        Assert.Equal(archive, await context.Archives.GetByIdAsync(archive.Id));
+        Assert.Equal(account, await context.Accounts.GetByIdAsync(account.Id));
+        Assert.Single(await context.Gacha.GetRecentAsync(account.Id, 10));
+        using SQLite.SQLiteConnection raw = context.OpenRawConnection();
+        Assert.Equal(0, raw.ExecuteScalar<int>("SELECT COUNT(*) FROM UndoMaterials;"));
+    }
+
+    [Fact]
     public async Task DiscoverIdentityAsync_UsesFirstNonEmptyPoolToFindUid()
     {
         var client = new StubGachaLogClient();

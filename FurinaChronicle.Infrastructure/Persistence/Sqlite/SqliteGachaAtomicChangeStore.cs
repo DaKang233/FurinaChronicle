@@ -135,6 +135,20 @@ public sealed class SqliteGachaAtomicChangeStore
                 return;
             }
 
+            if (!TryValidateProposedParents(
+                    connection,
+                    request,
+                    out Dictionary<Guid, GameAccount> proposedAccounts,
+                    out string? parentConflict))
+            {
+                result = new GachaAtomicChangeResult(
+                    ChangeExecutionStatus.Conflict,
+                    ChangeSetId: null,
+                    AffectedRecordCount: 0,
+                    parentConflict);
+                return;
+            }
+
             var prepared = new List<PreparedMutation>(
                 request.Mutations.Count);
             foreach (GachaFactMutation mutation in request.Mutations)
@@ -165,8 +179,11 @@ public sealed class SqliteGachaAtomicChangeStore
                     return;
                 }
 
+                proposedAccounts.TryGetValue(
+                    mutation.Reference.GameAccountId,
+                    out GameAccount? proposedAccount);
                 Guid archiveId = current is null
-                    ? ReadArchiveId(
+                    ? proposedAccount?.PlayerArchiveId ?? ReadArchiveId(
                         connection,
                         mutation.Reference.GameAccountId)
                     : ParseRequiredGuid(current.ArchiveId, "archive");
@@ -174,7 +191,8 @@ public sealed class SqliteGachaAtomicChangeStore
                     connection,
                     mutation,
                     current,
-                    archiveId);
+                    archiveId,
+                    proposedAccount?.GameRoleIdentityId);
                 if (item is not null)
                 {
                     prepared.Add(item);
@@ -195,7 +213,12 @@ public sealed class SqliteGachaAtomicChangeStore
                 ActiveTombstone? tombstone = ReadActiveTombstone(
                     connection,
                     mutation.ArchiveId,
-                    mutation.Reference);
+                    mutation.Reference,
+                    proposedAccounts.TryGetValue(
+                        mutation.Reference.GameAccountId,
+                        out GameAccount? proposedAccount)
+                        ? proposedAccount.GameRoleIdentityId
+                        : null);
                 if (tombstone is null)
                 {
                     continue;
@@ -285,6 +308,16 @@ public sealed class SqliteGachaAtomicChangeStore
 
             foreach (PreparedMutation mutation in prepared)
             {
+                if (proposedAccounts.TryGetValue(
+                        mutation.Reference.GameAccountId,
+                        out GameAccount? proposedAccount))
+                {
+                    InsertProposedParentsIfNeeded(
+                        connection,
+                        request.ArchiveToCreate,
+                        proposedAccount);
+                    proposedAccounts.Remove(proposedAccount.Id);
+                }
                 ApplyBusinessMutation(connection, mutation);
             }
 
@@ -2006,11 +2039,170 @@ public sealed class SqliteGachaAtomicChangeStore
             confirmedReintroductions);
     }
 
+    private static bool TryValidateProposedParents(
+        SQLiteConnection connection,
+        GachaAtomicChangeRequest request,
+        out Dictionary<Guid, GameAccount> proposedAccounts,
+        out string? conflict)
+    {
+        proposedAccounts = request.AccountsToCreate.ToDictionary(
+            account => account.Id);
+        conflict = null;
+        if (request.ArchiveToCreate is PlayerArchive archive)
+        {
+            if (connection.ExecuteScalar<int>(
+                    "SELECT COUNT(*) FROM PlayerArchives WHERE Id = ?;",
+                    archive.Id.ToString("D")) != 0)
+            {
+                conflict =
+                    $"The proposed archive {archive.Id:D} already exists.";
+                return false;
+            }
+            if (connection.ExecuteScalar<int>(
+                    "SELECT COUNT(*) FROM PlayerArchives WHERE Name = ?;",
+                    archive.Name) != 0)
+            {
+                conflict =
+                    $"An archive named '{archive.Name}' already exists.";
+                return false;
+            }
+        }
+
+        var proposedNaturalIdentities =
+            new HashSet<(Guid ArchiveId, GameRoleNaturalIdentity Identity)>();
+        foreach (GameAccount account in request.AccountsToCreate)
+        {
+            if (!request.Mutations.Any(mutation =>
+                    mutation.Reference.GameAccountId == account.Id))
+            {
+                conflict =
+                    $"Proposed game account {account.Id:D} has no Gacha mutation.";
+                return false;
+            }
+            if (connection.ExecuteScalar<int>(
+                    "SELECT COUNT(*) FROM GameAccounts WHERE Id = ?;",
+                    account.Id.ToString("D")) != 0)
+            {
+                conflict =
+                    $"The proposed game account {account.Id:D} already exists.";
+                return false;
+            }
+            bool archiveExists = request.ArchiveToCreate?.Id ==
+                    account.PlayerArchiveId ||
+                connection.ExecuteScalar<int>(
+                    "SELECT COUNT(*) FROM PlayerArchives WHERE Id = ?;",
+                    account.PlayerArchiveId.ToString("D")) != 0;
+            if (!archiveExists)
+            {
+                conflict =
+                    $"The target archive {account.PlayerArchiveId:D} no longer exists.";
+                return false;
+            }
+
+            GameRoleIdentity identity = account.RoleIdentity!;
+            if (!GenshinGameRoleIdentity.TryCreate(
+                    account.Uid,
+                    account.ServerRegion,
+                    out GameRoleNaturalIdentity? expectedIdentity) ||
+                expectedIdentity != identity.NaturalIdentity)
+            {
+                conflict =
+                    $"The proposed game account {account.Id:D} does not match its shared role identity.";
+                return false;
+            }
+            if (!proposedNaturalIdentities.Add(
+                    (account.PlayerArchiveId, identity.NaturalIdentity)))
+            {
+                conflict =
+                    "The request proposes duplicate game roles in one archive.";
+                return false;
+            }
+
+            GameRoleIdentityRow? identityById = connection
+                .Query<GameRoleIdentityRow>(
+                    "SELECT Id, GameBiz, Server, Uid FROM GameRoleIdentities WHERE Id = ?;",
+                    identity.Id.ToString())
+                .SingleOrDefault();
+            if (identityById is not null &&
+                identityById.ToDomain() != identity)
+            {
+                conflict =
+                    $"Shared role identity {identity.Id} now refers to different natural identity data.";
+                return false;
+            }
+            GameRoleIdentityRow? identityByNatural = connection
+                .Query<GameRoleIdentityRow>(
+                    """
+                    SELECT Id, GameBiz, Server, Uid
+                    FROM GameRoleIdentities
+                    WHERE GameBiz = ? AND Server = ? AND Uid = ?;
+                    """,
+                    identity.NaturalIdentity.GameBiz,
+                    identity.NaturalIdentity.Server,
+                    identity.NaturalIdentity.Uid)
+                .SingleOrDefault();
+            if (identityByNatural is not null &&
+                !string.Equals(
+                    identityByNatural.Id,
+                    identity.Id.ToString(),
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                conflict =
+                    "The natural identity now maps to another shared role identity.";
+                return false;
+            }
+            if (connection.ExecuteScalar<int>(
+                    """
+                    SELECT COUNT(*)
+                    FROM GameAccounts ga
+                    INNER JOIN GameRoleIdentities gri
+                        ON gri.Id = ga.GameRoleIdentityId
+                    WHERE ga.PlayerArchiveId = ?
+                        AND gri.GameBiz = ? AND gri.Server = ? AND gri.Uid = ?;
+                    """,
+                    account.PlayerArchiveId.ToString("D"),
+                    identity.NaturalIdentity.GameBiz,
+                    identity.NaturalIdentity.Server,
+                    identity.NaturalIdentity.Uid) != 0)
+            {
+                conflict =
+                    "The target archive already contains this game role.";
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static void InsertProposedParentsIfNeeded(
+        SQLiteConnection connection,
+        PlayerArchive? archiveToCreate,
+        GameAccount account)
+    {
+        if (archiveToCreate is not null &&
+            connection.ExecuteScalar<int>(
+                "SELECT COUNT(*) FROM PlayerArchives WHERE Id = ?;",
+                archiveToCreate.Id.ToString("D")) == 0)
+        {
+            connection.Insert(PlayerArchiveRow.FromDomain(archiveToCreate));
+        }
+
+        GameRoleIdentity identity = account.RoleIdentity!;
+        if (connection.ExecuteScalar<int>(
+                "SELECT COUNT(*) FROM GameRoleIdentities WHERE Id = ?;",
+                identity.Id.ToString()) == 0)
+        {
+            connection.Insert(GameRoleIdentityRow.FromDomain(identity));
+        }
+        connection.Insert(GameAccountRow.FromDomain(account));
+    }
+
     private static PreparedMutation? PrepareMutation(
         SQLiteConnection connection,
         GachaFactMutation mutation,
         GachaFactReadRow? current,
-        Guid archiveId)
+        Guid archiveId,
+        GameRoleIdentityId? knownIdentityId = null)
     {
         if (current is null)
         {
@@ -2021,7 +2213,11 @@ public sealed class SqliteGachaAtomicChangeStore
 
             GachaRecordRow after =
                 GachaRecordRow.FromDomain(mutation.ProposedRecord);
-            after.Version = NextFactVersion(connection, mutation.Reference);
+            after.Version = NextFactVersion(
+                connection,
+                mutation.Reference,
+                archiveId,
+                knownIdentityId);
             return new PreparedMutation(
                 archiveId,
                 Before: null,
@@ -2913,12 +3109,26 @@ public sealed class SqliteGachaAtomicChangeStore
     private static ActiveTombstone? ReadActiveTombstone(
         SQLiteConnection connection,
         Guid archiveId,
-        GachaFactReference reference)
+        GachaFactReference reference,
+        GameRoleIdentityId? knownIdentityId = null)
     {
-        TombstoneRow? row = GetTombstoneKeys(
+        IEnumerable<string> keys = knownIdentityId is not null
+            ?
+            [
+                CreateTombstoneKey(
+                    archiveId,
+                    knownIdentityId.Value,
+                    reference.ExternalRecordId),
+                CreateLocalAccountTombstoneKey(
+                    archiveId,
+                    reference.GameAccountId,
+                    reference.ExternalRecordId)
+            ]
+            : GetTombstoneKeys(
                 connection,
                 archiveId,
-                reference)
+                reference);
+        TombstoneRow? row = keys
             .Select(key => connection.Query<TombstoneRow>(
                     """
                     SELECT TombstoneKey, TombstoneVersion, ArchiveId, IsActive

@@ -11,7 +11,7 @@ namespace FurinaChronicle.Tests.Services.Archives;
 public sealed class PlayerArchiveUseCaseTests
 {
     [Fact]
-    public async Task Create_NormalizesNameAndPersistsArchive()
+    public async Task Create_PreservesExactNameAndPersistsArchive()
     {
         var repository = new InMemoryPlayerArchiveRepository();
         var service = new CreatePlayerArchive(repository);
@@ -20,7 +20,7 @@ public sealed class PlayerArchiveUseCaseTests
         PlayerArchive created = await service.ExecuteAsync("  我的档案  ");
 
         DateTimeOffset after = DateTimeOffset.UtcNow;
-        Assert.Equal("我的档案", created.Name);
+        Assert.Equal("  我的档案  ", created.Name);
         Assert.NotEqual(Guid.Empty, created.Id);
         Assert.InRange(created.CreatedAt, before, after);
         Assert.Equal(created.CreatedAt, created.UpdatedAt);
@@ -47,7 +47,7 @@ public sealed class PlayerArchiveUseCaseTests
     }
 
     [Fact]
-    public async Task Rename_NormalizesAndPersistsNewName()
+    public async Task Rename_PreservesExactNameAndPersistsNewName()
     {
         var repository = new InMemoryPlayerArchiveRepository();
         PlayerArchive archive = ArchiveTestData.Archive();
@@ -56,9 +56,39 @@ public sealed class PlayerArchiveUseCaseTests
 
         PlayerArchive renamed = await service.ExecuteAsync(archive.Id, "  新名称  ");
 
-        Assert.Equal("新名称", renamed.Name);
+        Assert.Equal("  新名称  ", renamed.Name);
         Assert.True(renamed.UpdatedAt >= archive.UpdatedAt);
         Assert.Equal(renamed, await repository.GetByIdAsync(archive.Id));
+    }
+
+    [Fact]
+    public async Task Create_ExactDuplicateName_IsRejectedButWhitespaceVariantIsDistinct()
+    {
+        var repository = new InMemoryPlayerArchiveRepository();
+        var service = new CreatePlayerArchive(repository);
+        await service.ExecuteAsync("档案");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.ExecuteAsync("档案"));
+        PlayerArchive variant = await service.ExecuteAsync(" 档案 ");
+
+        Assert.Equal(" 档案 ", variant.Name);
+    }
+
+    [Fact]
+    public async Task Rename_ExactDuplicateName_IsRejected()
+    {
+        var repository = new InMemoryPlayerArchiveRepository();
+        PlayerArchive first = ArchiveTestData.Archive("档案一");
+        PlayerArchive second = ArchiveTestData.Archive("档案二");
+        await repository.AddAsync(first);
+        await repository.AddAsync(second);
+        var service = new RenamePlayerArchive(repository);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.ExecuteAsync(second.Id, first.Name));
+
+        Assert.Equal(second, await repository.GetByIdAsync(second.Id));
     }
 
     [Fact]
