@@ -875,6 +875,307 @@ public sealed class SqliteGachaAtomicChangeStore
             "The irreversible Gacha deletion did not produce a result.");
     }
 
+    public Task<GachaAtomicChangeResult> PurgeAccountAsync(
+        GachaScopePurgeRequest request,
+        CancellationToken cancellationToken = default) =>
+        PurgeScopeAsync(request, purgeArchive: false, cancellationToken);
+
+    public Task<GachaAtomicChangeResult> PurgeArchiveAsync(
+        GachaScopePurgeRequest request,
+        CancellationToken cancellationToken = default) =>
+        PurgeScopeAsync(request, purgeArchive: true, cancellationToken);
+
+    private async Task<GachaAtomicChangeResult> PurgeScopeAsync(
+        GachaScopePurgeRequest request,
+        bool purgeArchive,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (request.ScopeId == Guid.Empty)
+        {
+            throw new ArgumentException("Purge scope ID cannot be empty.");
+        }
+        if (request.CommittedAt < request.StartedAt)
+        {
+            throw new ArgumentException(
+                "Commit time cannot be earlier than start time.");
+        }
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.Summary);
+        await database.InitializeAsync(cancellationToken);
+
+        GachaAtomicChangeResult? result = null;
+        await database.Connection.RunInTransactionAsync(connection =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            CommitResultRow? committed = ReadCommitResult(
+                connection,
+                request.OperationId);
+            if (committed is not null)
+            {
+                result = ToAlreadyCommittedResult(committed);
+                return;
+            }
+
+            Guid archiveId;
+            Guid[] accountIds;
+            if (purgeArchive)
+            {
+                string? archive = connection.ExecuteScalar<string?>(
+                    "SELECT Id FROM PlayerArchives WHERE Id = ?;",
+                    request.ScopeId.ToString("D"));
+                if (archive is null)
+                {
+                    throw new KeyNotFoundException(
+                        "The player archive to purge does not exist.");
+                }
+
+                archiveId = request.ScopeId;
+                accountIds = connection.Query<AccountIdRow>(
+                        "SELECT Id FROM GameAccounts WHERE PlayerArchiveId = ?;",
+                        archiveId.ToString("D"))
+                    .Select(row => ParseRequiredGuid(row.Id, "game account"))
+                    .ToArray();
+            }
+            else
+            {
+                AccountIdentityScopeRow? account = connection
+                    .Query<AccountIdentityScopeRow>(
+                        """
+                        SELECT Id, PlayerArchiveId, GameRoleIdentityId
+                        FROM GameAccounts
+                        WHERE Id = ?;
+                        """,
+                        request.ScopeId.ToString("D"))
+                    .SingleOrDefault();
+                if (account is null)
+                {
+                    throw new KeyNotFoundException(
+                        "The game account to purge does not exist.");
+                }
+
+                archiveId = ParseRequiredGuid(
+                    account.PlayerArchiveId,
+                    "archive");
+                accountIds = [request.ScopeId];
+            }
+
+            var facts = new List<PurgeFact>();
+            var affectedChangeSets = new HashSet<Guid>();
+            foreach (Guid accountId in accountIds)
+            {
+                AccountIdentityScopeRow scope = connection
+                    .Query<AccountIdentityScopeRow>(
+                        """
+                        SELECT Id, PlayerArchiveId, GameRoleIdentityId
+                        FROM GameAccounts
+                        WHERE Id = ?;
+                        """,
+                        accountId.ToString("D"))
+                    .Single();
+                var externalIds = new HashSet<string>(StringComparer.Ordinal);
+                foreach (ExternalRecordIdRow row in connection
+                    .Query<ExternalRecordIdRow>(
+                        """
+                        SELECT ExternalRecordId FROM GachaRecords
+                        WHERE GameAccountId = ?
+                        UNION
+                        SELECT ExternalRecordId FROM GachaRevisions
+                        WHERE GameAccountId = ?;
+                        """,
+                        accountId.ToString("D"),
+                        accountId.ToString("D")))
+                {
+                    externalIds.Add(row.ExternalRecordId);
+                }
+                string prefix = accountId.ToString("D") + "/";
+                foreach (EntityReferenceRow row in connection
+                    .Query<EntityReferenceRow>(
+                        """
+                        SELECT EntityReference FROM EntityChanges
+                        WHERE EntityKind = ? AND EntityReference LIKE ?;
+                        """,
+                        EntityKind,
+                        prefix + "%"))
+                {
+                    externalIds.Add(row.EntityReference[prefix.Length..]);
+                }
+
+                foreach (string externalId in externalIds)
+                {
+                    long versionHighWater = connection.ExecuteScalar<long>(
+                        """
+                        SELECT MAX(Value) FROM
+                        (
+                            SELECT COALESCE(MAX(Version), 0) AS Value
+                            FROM GachaRecords
+                            WHERE GameAccountId = ? AND ExternalRecordId = ?
+                            UNION ALL
+                            SELECT COALESCE(MAX(COALESCE(AfterVersion, BeforeVersion, 0)), 0)
+                            FROM GachaRevisions
+                            WHERE GameAccountId = ? AND ExternalRecordId = ?
+                            UNION ALL
+                            SELECT COALESCE(MAX(COALESCE(AfterVersion, BeforeVersion, 0)), 0)
+                            FROM EntityChanges
+                            WHERE EntityKind = ? AND EntityReference = ?
+                        );
+                        """,
+                        accountId.ToString("D"),
+                        externalId,
+                        accountId.ToString("D"),
+                        externalId,
+                        EntityKind,
+                        new GachaFactReference(
+                            accountId,
+                            externalId).ToString());
+                    facts.Add(new PurgeFact(
+                        accountId,
+                        externalId,
+                        CreateScopeTombstoneKey(
+                            archiveId,
+                            accountId,
+                            scope.GameRoleIdentityId,
+                            externalId),
+                        Math.Max(1, versionHighWater)));
+                }
+
+                foreach (ChangeSetIdRow row in connection
+                    .Query<ChangeSetIdRow>(
+                        """
+                        SELECT DISTINCT ChangeSetId FROM GachaRevisions
+                        WHERE GameAccountId = ?
+                        UNION
+                        SELECT DISTINCT ChangeSetId FROM EntityChanges
+                        WHERE EntityKind = ? AND EntityReference LIKE ?
+                        UNION
+                        SELECT DISTINCT ChangeSetId FROM UndoMaterials
+                        WHERE EntityKind = ? AND EntityReference LIKE ?;
+                        """,
+                        accountId.ToString("D"),
+                        EntityKind,
+                        prefix + "%",
+                        EntityKind,
+                        prefix + "%"))
+                {
+                    affectedChangeSets.Add(ParseRequiredGuid(
+                        row.ChangeSetId,
+                        "change set"));
+                }
+            }
+
+            foreach (Guid affectedChangeSetId in affectedChangeSets)
+            {
+                connection.Execute(
+                    "DELETE FROM UndoMaterials WHERE ChangeSetId = ?;",
+                    affectedChangeSetId.ToString("D"));
+                connection.Execute(
+                    """
+                    UPDATE OperationHistory
+                    SET IsUndoEligible = 0, IneligibilityReason = ?,
+                        MaterialBytes = 0
+                    WHERE ChangeSetId = ?;
+                    """,
+                    (int)UndoIneligibilityReason.IrreversibleDeletion,
+                    affectedChangeSetId.ToString("D"));
+            }
+
+            foreach (Guid accountId in accountIds)
+            {
+                string prefix = accountId.ToString("D") + "/";
+                connection.Execute(
+                    "DELETE FROM GachaRevisions WHERE GameAccountId = ?;",
+                    accountId.ToString("D"));
+                connection.Execute(
+                    "DELETE FROM EntityChanges WHERE EntityKind = ? AND EntityReference LIKE ?;",
+                    EntityKind,
+                    prefix + "%");
+                connection.Execute(
+                    """
+                    DELETE FROM PortableImportReceiptAccounts
+                    WHERE TargetAccountId = ?;
+                    """,
+                    accountId.ToString("D"));
+                connection.Execute(
+                    "DELETE FROM GachaRecords WHERE GameAccountId = ?;",
+                    accountId.ToString("D"));
+            }
+
+            Guid changeSetId = Guid.NewGuid();
+            InsertScopePurgeChangeSet(
+                connection,
+                request,
+                changeSetId,
+                archiveId,
+                facts.Count);
+            foreach (PurgeFact fact in facts)
+            {
+                connection.Execute(
+                    """
+                    INSERT INTO LocalOnlyTombstones
+                        (TombstoneKey, TombstoneVersion, ArchiveId, IsActive,
+                         DeletedByChangeSetId, DeletedAtUtcTicks,
+                         ReintroducedByChangeSetId)
+                    VALUES (?, ?, ?, 1, ?, ?, NULL)
+                    ON CONFLICT(TombstoneKey)
+                    DO UPDATE SET
+                        TombstoneVersion = MAX(
+                            TombstoneVersion + 1,
+                            excluded.TombstoneVersion),
+                        IsActive = 1,
+                        DeletedByChangeSetId = excluded.DeletedByChangeSetId,
+                        DeletedAtUtcTicks = excluded.DeletedAtUtcTicks,
+                        ReintroducedByChangeSetId = NULL;
+                    """,
+                    fact.TombstoneKey,
+                    fact.VersionHighWater,
+                    archiveId.ToString("D"),
+                    changeSetId.ToString("D"),
+                    request.CommittedAt.UtcDateTime.Ticks);
+            }
+
+            connection.Execute(
+                """
+                INSERT INTO OperationHistory
+                    (ChangeSetId, IsUndoEligible, IneligibilityReason,
+                     UndoneByChangeSetId, MaterialBytes)
+                VALUES (?, 0, ?, NULL, 0);
+                """,
+                changeSetId.ToString("D"),
+                (int)UndoIneligibilityReason.IrreversibleDeletion);
+            if (purgeArchive)
+            {
+                connection.Execute(
+                    "DELETE FROM PlayerArchives WHERE Id = ?;",
+                    archiveId.ToString("D"));
+            }
+            else
+            {
+                connection.Execute(
+                    "DELETE FROM GameAccounts WHERE Id = ?;",
+                    request.ScopeId.ToString("D"));
+            }
+
+            connection.Execute(
+                """
+                INSERT INTO OperationCommitResults
+                    (OperationId, ChangeSetId, Status,
+                     AffectedRecordCount, CommittedAtUtcTicks)
+                VALUES (?, ?, ?, ?, ?);
+                """,
+                request.OperationId.ToString(),
+                changeSetId.ToString("D"),
+                (int)ChangeExecutionStatus.Applied,
+                facts.Count,
+                request.CommittedAt.UtcDateTime.Ticks);
+            result = new GachaAtomicChangeResult(
+                ChangeExecutionStatus.Applied,
+                changeSetId,
+                facts.Count);
+        });
+
+        return result ?? throw new InvalidOperationException(
+            "The Gacha scope purge did not produce a result.");
+    }
+
     public async Task<GachaPortableApplyResult> ApplyAsync(
         GachaPortableApplyRequest request,
         CancellationToken cancellationToken = default)
@@ -1549,7 +1850,11 @@ public sealed class SqliteGachaAtomicChangeStore
                     continue;
                 }
 
-                proposed.Version = NextFactVersion(connection, reference);
+                proposed.Version = NextFactVersion(
+                    connection,
+                    reference,
+                    archiveId,
+                    targetIdentityId);
                 string tombstoneKey = CreateTombstoneKey(
                     archiveId,
                     targetIdentityId,
@@ -1714,9 +2019,11 @@ public sealed class SqliteGachaAtomicChangeStore
 
     private static long NextFactVersion(
         SQLiteConnection connection,
-        GachaFactReference reference)
+        GachaFactReference reference,
+        Guid? knownArchiveId = null,
+        GameRoleIdentityId? knownIdentityId = null)
     {
-        long previous = connection.ExecuteScalar<long>(
+        long entityVersion = connection.ExecuteScalar<long>(
             """
             SELECT COALESCE(MAX(COALESCE(AfterVersion, BeforeVersion, 0)), 0)
             FROM EntityChanges
@@ -1724,7 +2031,35 @@ public sealed class SqliteGachaAtomicChangeStore
             """,
             EntityKind,
             reference.ToString());
-        return checked(previous + 1);
+        Guid archiveId = knownArchiveId ??
+            ReadArchiveId(connection, reference.GameAccountId);
+        IEnumerable<string> tombstoneKeys = knownIdentityId is not null
+            ?
+            [
+                CreateTombstoneKey(
+                    archiveId,
+                    knownIdentityId.Value,
+                    reference.ExternalRecordId),
+                CreateLocalAccountTombstoneKey(
+                    archiveId,
+                    reference.GameAccountId,
+                    reference.ExternalRecordId)
+            ]
+            : GetTombstoneKeys(
+                connection,
+                archiveId,
+                reference);
+        long tombstoneVersion = tombstoneKeys
+            .Select(key => connection.ExecuteScalar<long>(
+                """
+                SELECT COALESCE(MAX(TombstoneVersion), 0)
+                FROM LocalOnlyTombstones
+                WHERE TombstoneKey = ?;
+                """,
+                key))
+            .DefaultIfEmpty(0)
+            .Max();
+        return checked(Math.Max(entityVersion, tombstoneVersion) + 1);
     }
 
     private static bool GachaFactContentEquals(
@@ -1836,6 +2171,41 @@ public sealed class SqliteGachaAtomicChangeStore
             checked((int)request.CommittedAt.Offset.TotalMinutes),
             (int)DataOrigin.UserEntered,
             request.Summary);
+        connection.Execute(
+            """
+            INSERT INTO DataChangeSetArchives (ChangeSetId, ArchiveId)
+            VALUES (?, ?);
+            """,
+            changeSetId.ToString("D"),
+            archiveId.ToString("D"));
+    }
+
+    private static void InsertScopePurgeChangeSet(
+        SQLiteConnection connection,
+        GachaScopePurgeRequest request,
+        Guid changeSetId,
+        Guid archiveId,
+        int affectedRecordCount)
+    {
+        connection.Execute(
+            """
+            INSERT INTO DataChangeSets
+                (ChangeSetId, OperationId, OperationKind,
+                 StartedAtUtcTicks, StartedAtOffsetMinutes,
+                 CommittedAtUtcTicks, CommittedAtOffsetMinutes,
+                 Origin, Summary, AffectedRecordCount, UndoOfChangeSetId)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL);
+            """,
+            changeSetId.ToString("D"),
+            request.OperationId.ToString(),
+            (int)DataChangeOperationKind.IrreversibleDelete,
+            request.StartedAt.UtcDateTime.Ticks,
+            checked((int)request.StartedAt.Offset.TotalMinutes),
+            request.CommittedAt.UtcDateTime.Ticks,
+            checked((int)request.CommittedAt.Offset.TotalMinutes),
+            (int)DataOrigin.UserEntered,
+            request.Summary,
+            affectedRecordCount);
         connection.Execute(
             """
             INSERT INTO DataChangeSetArchives (ChangeSetId, ArchiveId)
@@ -2473,22 +2843,21 @@ public sealed class SqliteGachaAtomicChangeStore
         Guid archiveId,
         GachaFactReference reference)
     {
-        string? key = TryCreateTombstoneKey(
-            connection,
-            archiveId,
-            reference);
-        if (key is null)
-        {
-            return null;
-        }
-        TombstoneRow? row = connection.Query<TombstoneRow>(
-                """
-                SELECT TombstoneKey, TombstoneVersion, ArchiveId, IsActive
-                FROM LocalOnlyTombstones
-                WHERE TombstoneKey = ? AND IsActive = 1;
-                """,
-                key)
-            .SingleOrDefault();
+        TombstoneRow? row = GetTombstoneKeys(
+                connection,
+                archiveId,
+                reference)
+            .Select(key => connection.Query<TombstoneRow>(
+                    """
+                    SELECT TombstoneKey, TombstoneVersion, ArchiveId, IsActive
+                    FROM LocalOnlyTombstones
+                    WHERE TombstoneKey = ? AND IsActive = 1;
+                    """,
+                    key)
+                .SingleOrDefault())
+            .Where(candidate => candidate is not null)
+            .OrderByDescending(candidate => candidate!.TombstoneVersion)
+            .FirstOrDefault();
         return row is null
             ? null
             : new ActiveTombstone(
@@ -2505,8 +2874,10 @@ public sealed class SqliteGachaAtomicChangeStore
                 connection,
                 archiveId,
                 reference) ??
-            throw new InvalidOperationException(
-                "Irreversible Gacha deletion requires a resolved role identity.");
+            CreateLocalAccountTombstoneKey(
+                archiveId,
+                reference.GameAccountId,
+                reference.ExternalRecordId);
     }
 
     private static string CreateTombstoneKey(
@@ -2558,6 +2929,60 @@ public sealed class SqliteGachaAtomicChangeStore
                     scope.GameRoleIdentityId,
                     "role identity")),
             reference.ExternalRecordId);
+    }
+
+    private static IEnumerable<string> GetTombstoneKeys(
+        SQLiteConnection connection,
+        Guid archiveId,
+        GachaFactReference reference)
+    {
+        string localKey = CreateLocalAccountTombstoneKey(
+            archiveId,
+            reference.GameAccountId,
+            reference.ExternalRecordId);
+        string? resolvedKey = TryCreateTombstoneKey(
+            connection,
+            archiveId,
+            reference);
+        if (resolvedKey is not null)
+        {
+            yield return resolvedKey;
+        }
+        yield return localKey;
+    }
+
+    private static string CreateScopeTombstoneKey(
+        Guid archiveId,
+        Guid accountId,
+        string? roleIdentityId,
+        string externalRecordId)
+    {
+        if (Guid.TryParseExact(roleIdentityId, "D", out Guid parsedIdentity) &&
+            parsedIdentity != Guid.Empty)
+        {
+            return CreateTombstoneKey(
+                archiveId,
+                new GameRoleIdentityId(parsedIdentity),
+                externalRecordId);
+        }
+
+        return CreateLocalAccountTombstoneKey(
+            archiveId,
+            accountId,
+            externalRecordId);
+    }
+
+    private static string CreateLocalAccountTombstoneKey(
+        Guid archiveId,
+        Guid accountId,
+        string externalRecordId)
+    {
+        string canonical =
+            $"gacha|{archiveId:D}|local-account|{accountId:D}|" +
+            externalRecordId;
+        return Convert.ToHexString(
+                SHA256.HashData(Encoding.UTF8.GetBytes(canonical)))
+            .ToLowerInvariant();
     }
 
     private static string? SerializeSnapshot(GachaRecordRow? row) =>
@@ -2794,10 +3219,33 @@ public sealed class SqliteGachaAtomicChangeStore
 
     private sealed class AccountIdentityScopeRow
     {
+        public string Id { get; set; } = string.Empty;
+
         public string PlayerArchiveId { get; set; } = string.Empty;
 
         public string? GameRoleIdentityId { get; set; }
     }
+
+    private sealed class AccountIdRow
+    {
+        public string Id { get; set; } = string.Empty;
+    }
+
+    private sealed class ExternalRecordIdRow
+    {
+        public string ExternalRecordId { get; set; } = string.Empty;
+    }
+
+    private sealed class EntityReferenceRow
+    {
+        public string EntityReference { get; set; } = string.Empty;
+    }
+
+    private sealed record PurgeFact(
+        Guid GameAccountId,
+        string ExternalRecordId,
+        string TombstoneKey,
+        long VersionHighWater);
 
     private sealed record PortablePreparation(
         Guid ArchiveId,

@@ -1,6 +1,7 @@
 // Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
+using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.History;
 using FurinaChronicle.Core.Records;
@@ -969,6 +970,215 @@ public sealed class SqliteGachaAtomicChangeStoreTests
         Assert.NotNull(await context.AtomicGacha.GetCurrentAsync(second));
     }
 
+    [Fact]
+    public async Task PurgeAccountAsync_RemovesOnlyLocalScopeAndInvalidatesSharedUndo()
+    {
+        await using SqliteRepositoryTestContext context =
+            await CreateContextAsync();
+        (Guid firstArchiveId, Guid firstAccountId) =
+            await AddArchiveAccountAsync(context, "First");
+        (_, Guid secondAccountId) =
+            await AddArchiveAccountAsync(context, "Second");
+        GachaFactReference first = new(firstAccountId, "1001");
+        GachaFactReference second = new(secondAccountId, "2001");
+        GachaAtomicChangeResult imported =
+            await context.AtomicGacha.CommitAsync(CreateRequest(
+                DataChangeOperationKind.Import,
+                new GachaFactMutation(
+                    first,
+                    CreateRecord(firstAccountId, "1001")),
+                new GachaFactMutation(
+                    second,
+                    CreateRecord(secondAccountId, "2001"))));
+        GachaScopePurgeRequest request = CreateScopePurgeRequest(
+            firstAccountId,
+            "purge account");
+
+        GachaAtomicChangeResult purged =
+            await context.AtomicGacha.PurgeAccountAsync(request);
+        GachaAtomicChangeResult repeated =
+            await context.AtomicGacha.PurgeAccountAsync(request);
+
+        Assert.Equal(ChangeExecutionStatus.Applied, purged.Status);
+        Assert.Equal(ChangeExecutionStatus.AlreadyCommitted, repeated.Status);
+        Assert.Null(await context.Accounts.GetByIdAsync(firstAccountId));
+        Assert.NotNull(await context.AtomicGacha.GetCurrentAsync(second));
+        using SQLiteConnection raw = context.OpenRawConnection();
+        Assert.Equal(
+            0,
+            raw.ExecuteScalar<int>(
+                "SELECT COUNT(*) FROM GachaRevisions WHERE GameAccountId = ?;",
+                firstAccountId.ToString("D")));
+        Assert.Equal(
+            1,
+            raw.ExecuteScalar<int>(
+                "SELECT COUNT(*) FROM GachaRevisions WHERE GameAccountId = ?;",
+                secondAccountId.ToString("D")));
+        Assert.Equal(
+            (int)UndoIneligibilityReason.IrreversibleDeletion,
+            raw.ExecuteScalar<int>(
+                "SELECT IneligibilityReason FROM OperationHistory WHERE ChangeSetId = ?;",
+                imported.ChangeSetId!.Value.ToString("D")));
+        Assert.Equal(
+            0,
+            raw.ExecuteScalar<int>(
+                "SELECT COUNT(*) FROM UndoMaterials WHERE ChangeSetId = ?;",
+                imported.ChangeSetId.Value.ToString("D")));
+        Assert.Equal(1, Count(raw, "LocalOnlyTombstones"));
+        Assert.Empty(raw.Query<ForeignKeyViolation>("PRAGMA foreign_key_check;"));
+
+        GameAccount recreated = SqliteRepositoryTestContext.CreateAccount(
+            firstArchiveId,
+            id: firstAccountId);
+        await context.Accounts.AddAsync(recreated);
+        TombstoneReintroductionWarning warning = Assert.Single(
+            await context.AtomicGacha.FindActiveTombstonesAsync([first]));
+        GachaAtomicChangeResult suppressed =
+            await context.AtomicGacha.CommitAsync(CreateRequest(
+                DataChangeOperationKind.Refresh,
+                new GachaFactMutation(
+                    first,
+                    CreateRecord(firstAccountId, "1001"))));
+        Assert.Equal(ChangeExecutionStatus.Suppressed, suppressed.Status);
+
+        DateTimeOffset time =
+            new(2026, 10, 7, 12, 0, 0, TimeSpan.FromHours(8));
+        GachaAtomicChangeResult reintroduced =
+            await context.AtomicGacha.CommitAsync(
+                new GachaAtomicChangeRequest(
+                    OperationId.New(),
+                    DataChangeOperationKind.Import,
+                    DataOrigin.UserEntered,
+                    "explicit reintroduction",
+                    time,
+                    time,
+                    [new GachaFactMutation(
+                        first,
+                        CreateRecord(firstAccountId, "1001"))],
+                    reintroductionConfirmations:
+                    [new TombstoneReintroductionConfirmation(
+                        warning.TombstoneKey,
+                        warning.TombstoneVersion,
+                        first)]));
+        Assert.Equal(ChangeExecutionStatus.Applied, reintroduced.Status);
+        GachaFactState state = Assert.IsType<GachaFactState>(
+            await context.AtomicGacha.GetCurrentAsync(first));
+        Assert.True(state.Version.Value > warning.TombstoneVersion);
+    }
+
+    [Fact]
+    public async Task PurgeUnresolvedAccountAsync_LocalMarkerSurvivesIdentityCompletion()
+    {
+        await using SqliteRepositoryTestContext context =
+            await CreateContextAsync();
+        PlayerArchive archive =
+            SqliteRepositoryTestContext.CreateArchive("Unresolved");
+        Guid accountId = Guid.NewGuid();
+        GameAccount unresolved = SqliteRepositoryTestContext.CreateAccount(
+            archive.Id,
+            uid: "legacy-account",
+            region: GameServerRegion.Unknown,
+            id: accountId,
+            isPlaceholder: true);
+        await context.Archives.AddAsync(archive);
+        await context.Accounts.AddAsync(unresolved);
+        GachaFactReference reference = new(accountId, "1001");
+        await context.AtomicGacha.CommitAsync(CreateRequest(
+            DataChangeOperationKind.Import,
+            new GachaFactMutation(
+                reference,
+                CreateRecord(accountId, "1001"))));
+
+        await context.AtomicGacha.PurgeAccountAsync(
+            CreateScopePurgeRequest(accountId, "purge unresolved"));
+        GameAccount resolved = SqliteRepositoryTestContext.CreateAccount(
+            archive.Id,
+            uid: "800000001",
+            region: GameServerRegion.Asia,
+            id: accountId);
+        await context.Accounts.AddAsync(resolved);
+
+        TombstoneReintroductionWarning warning = Assert.Single(
+            await context.AtomicGacha.FindActiveTombstonesAsync([reference]));
+        GachaAtomicChangeResult suppressed =
+            await context.AtomicGacha.CommitAsync(CreateRequest(
+                DataChangeOperationKind.Refresh,
+                new GachaFactMutation(
+                    reference,
+                    CreateRecord(accountId, "1001"))));
+        Assert.False(string.IsNullOrWhiteSpace(warning.TombstoneKey));
+        Assert.Equal(ChangeExecutionStatus.Suppressed, suppressed.Status);
+    }
+
+    [Fact]
+    public async Task PurgeArchiveAsync_RemovesTargetArchiveWithoutTouchingOtherArchive()
+    {
+        await using SqliteRepositoryTestContext context =
+            await CreateContextAsync();
+        (Guid firstArchiveId, Guid firstAccountId) =
+            await AddArchiveAccountAsync(context, "First");
+        (Guid secondArchiveId, Guid secondAccountId) =
+            await AddArchiveAccountAsync(context, "Second");
+        await context.AtomicGacha.CommitAsync(CreateRequest(
+            DataChangeOperationKind.Import,
+            new GachaFactMutation(
+                new GachaFactReference(firstAccountId, "1001"),
+                CreateRecord(firstAccountId, "1001")),
+            new GachaFactMutation(
+                new GachaFactReference(secondAccountId, "2001"),
+                CreateRecord(secondAccountId, "2001"))));
+
+        await context.AtomicGacha.PurgeArchiveAsync(
+            CreateScopePurgeRequest(firstArchiveId, "purge archive"));
+
+        Assert.Null(await context.Archives.GetByIdAsync(firstArchiveId));
+        Assert.NotNull(await context.Archives.GetByIdAsync(secondArchiveId));
+        Assert.NotNull(await context.Accounts.GetByIdAsync(secondAccountId));
+        Assert.NotNull(await context.AtomicGacha.GetCurrentAsync(
+            new GachaFactReference(secondAccountId, "2001")));
+        using SQLiteConnection raw = context.OpenRawConnection();
+        Assert.Empty(raw.Query<ForeignKeyViolation>("PRAGMA foreign_key_check;"));
+    }
+
+    [Fact]
+    public async Task PurgeAccountAsync_DeleteFailureRollsBackFactsHistoryAndMarker()
+    {
+        await using SqliteRepositoryTestContext context =
+            await CreateContextAsync();
+        Guid accountId = await AddAccountAsync(context);
+        GachaFactReference reference = new(accountId, "1001");
+        await context.AtomicGacha.CommitAsync(CreateRequest(
+            DataChangeOperationKind.Import,
+            new GachaFactMutation(
+                reference,
+                CreateRecord(accountId, "1001"))));
+        using (SQLiteConnection raw = context.OpenRawConnection())
+        {
+            raw.Execute(
+                """
+                CREATE TRIGGER FailAccountPurge
+                BEFORE DELETE ON GameAccounts
+                BEGIN
+                    SELECT RAISE(ABORT, 'injected purge failure');
+                END;
+                """);
+        }
+
+        await Assert.ThrowsAnyAsync<Exception>(() =>
+            context.AtomicGacha.PurgeAccountAsync(
+                CreateScopePurgeRequest(accountId, "failing purge")));
+
+        Assert.NotNull(await context.Accounts.GetByIdAsync(accountId));
+        Assert.NotNull(await context.AtomicGacha.GetCurrentAsync(reference));
+        using SQLiteConnection inspection = context.OpenRawConnection();
+        Assert.Equal(1, Count(inspection, "GachaRevisions"));
+        Assert.Equal(1, Count(inspection, "UndoMaterials"));
+        Assert.Equal(0, Count(inspection, "LocalOnlyTombstones"));
+        Assert.Equal(1, Count(inspection, "OperationCommitResults"));
+        Assert.Empty(inspection.Query<ForeignKeyViolation>(
+            "PRAGMA foreign_key_check;"));
+    }
+
     private static async Task<SqliteRepositoryTestContext> CreateContextAsync()
     {
         SqliteRepositoryTestContext context =
@@ -1065,6 +1275,20 @@ public sealed class SqliteGachaAtomicChangeStoreTests
             time.AddSeconds(1));
     }
 
+    private static GachaScopePurgeRequest CreateScopePurgeRequest(
+        Guid scopeId,
+        string summary)
+    {
+        DateTimeOffset time =
+            new(2026, 10, 7, 10, 0, 0, TimeSpan.FromHours(8));
+        return new GachaScopePurgeRequest(
+            OperationId.New(),
+            scopeId,
+            time,
+            time.AddSeconds(1),
+            summary);
+    }
+
     private static int Count(SQLiteConnection connection, string table) =>
         connection.ExecuteScalar<int>($"SELECT COUNT(*) FROM {table};");
 
@@ -1091,5 +1315,16 @@ public sealed class SqliteGachaAtomicChangeStoreTests
         public string ArchiveId { get; set; } = string.Empty;
 
         public bool IsActive { get; set; }
+    }
+
+    private sealed class ForeignKeyViolation
+    {
+        public string Table { get; set; } = string.Empty;
+
+        public long RowId { get; set; }
+
+        public string Parent { get; set; } = string.Empty;
+
+        public int FkId { get; set; }
     }
 }

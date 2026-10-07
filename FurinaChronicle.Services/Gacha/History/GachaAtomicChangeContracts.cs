@@ -192,6 +192,13 @@ public sealed class GachaIrreversibleDeleteRequest
     public string Summary { get; }
 }
 
+public sealed record GachaScopePurgeRequest(
+    OperationId OperationId,
+    Guid ScopeId,
+    DateTimeOffset StartedAt,
+    DateTimeOffset CommittedAt,
+    string Summary);
+
 public sealed record HistoryStorageCapacity(long? AvailableBytes)
 {
     public bool IsKnown => AvailableBytes is not null;
@@ -291,6 +298,14 @@ public interface IGachaAtomicChangeStore
 
     Task<GachaAtomicChangeResult> IrreversiblyDeleteAsync(
         GachaIrreversibleDeleteRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<GachaAtomicChangeResult> PurgeAccountAsync(
+        GachaScopePurgeRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<GachaAtomicChangeResult> PurgeArchiveAsync(
+        GachaScopePurgeRequest request,
         CancellationToken cancellationToken = default);
 
     Task<int> GetUndoLimitAsync(
