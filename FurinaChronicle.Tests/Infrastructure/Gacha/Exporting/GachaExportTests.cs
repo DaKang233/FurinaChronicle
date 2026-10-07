@@ -15,6 +15,7 @@ using FurinaChronicle.Infrastructure.Persistence;
 using FurinaChronicle.Services.Gacha.Exporting;
 using FurinaChronicle.Services.Gacha.Abstractions;
 using FurinaChronicle.Services.Gacha.Importing;
+using FurinaChronicle.Tests.Services.Gacha;
 using FurinaChronicle.Tests.TestDoubles;
 
 namespace FurinaChronicle.Tests.Infrastructure.Gacha.Exporting;
@@ -172,7 +173,7 @@ public sealed class GachaExportTests
             new EmptyGachaItemMetadataProvider(),
             archives,
             accounts,
-            records);
+            new RepositoryGachaCommitter(records));
         GachaImportResult imported = await importService.ExecuteAsync(
             stream,
             archive.Id);

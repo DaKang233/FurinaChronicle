@@ -4,17 +4,20 @@
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.Gacha.Metadata;
+using FurinaChronicle.Core.History;
 using FurinaChronicle.Core.Passport;
 using FurinaChronicle.Core.Records;
 using FurinaChronicle.Services.Abstractions;
 using FurinaChronicle.Services.Gacha.Abstractions;
 using FurinaChronicle.Services.Passport;
 using FurinaChronicle.Services.Gacha;
+using FurinaChronicle.Services.Gacha.Writing;
 
 namespace FurinaChronicle.Services.Gacha.Refreshing;
 
 public sealed class RefreshGachaRecords(
     IGachaRecordRepository recordRepository,
+    ICommitGachaRecords commitGachaRecords,
     IPassportAccountStore passportAccountStore,
     ISTokenGachaUrlProvider sTokenUrlProvider,
     IWindowsGachaCacheUrlProvider windowsCacheUrlProvider,
@@ -35,6 +38,7 @@ public sealed class RefreshGachaRecords(
             throw new ArgumentException("Game account ID is required.", nameof(request));
         }
 
+        DateTimeOffset startedAt = DateTimeOffset.UtcNow;
         Uri sourceUrl = await ResolveSourceUrlAsync(request, cancellationToken);
         AcquisitionBatchId batchId = AcquisitionBatchId.New();
         HashSet<string> localIds = request.Mode == GachaRefreshMode.Incremental
@@ -117,19 +121,38 @@ public sealed class RefreshGachaRecords(
             }
         }
 
-        GachaSaveResult saveResult = await recordRepository.SaveBatchAsync(
-            collected,
-            cancellationToken,
-            request.Mode == GachaRefreshMode.Full
-                ? GachaRecordConflictPolicy.ReplaceExisting
-                : GachaRecordConflictPolicy.PreserveExisting);
+        CommitGachaRecordsResult saveResult =
+            await commitGachaRecords.ExecuteAsync(
+                new CommitGachaRecordsRequest(
+                    OperationId.New(),
+                    DataChangeOperationKind.Refresh,
+                    DataOrigin.OfficialApi,
+                    request.Mode == GachaRefreshMode.Full
+                        ? "Full Gacha refresh"
+                        : "Incremental Gacha refresh",
+                    startedAt,
+                    DateTimeOffset.UtcNow,
+                    collected,
+                    request.Mode == GachaRefreshMode.Full
+                        ? GachaRecordConflictPolicy.ReplaceExisting
+                        : GachaRecordConflictPolicy.PreserveExisting,
+                    SuppressTombstonesAndContinue: true),
+                cancellationToken);
+        if (saveResult.Status is ChangeExecutionStatus.Conflict or
+            ChangeExecutionStatus.NeedsConfirmation)
+        {
+            throw new InvalidOperationException(
+                saveResult.ConflictReason ??
+                "The Gacha refresh could not be committed safely.");
+        }
         return new GachaRefreshResult(
             collected.Count,
             saveResult.InsertedCount,
             saveResult.UpdatedCount,
             saveResult.DuplicateCount,
             pageCount,
-            boundaryCount);
+            boundaryCount,
+            saveResult.SuppressedCount);
     }
 
     public async Task<GachaRefreshIdentity> DiscoverIdentityAsync(

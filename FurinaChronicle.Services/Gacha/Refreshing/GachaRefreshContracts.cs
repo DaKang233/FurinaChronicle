@@ -44,7 +44,8 @@ public sealed record GachaRefreshResult(
     int UpdatedCount,
     int DuplicateCount,
     int PageCount,
-    int ReachedLocalBoundaryCount);
+    int ReachedLocalBoundaryCount,
+    int SuppressedCount = 0);
 
 public sealed record GachaRemoteRecord(
     string Uid,

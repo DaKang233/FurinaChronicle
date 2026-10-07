@@ -4,10 +4,12 @@
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.Gacha.Metadata;
+using FurinaChronicle.Core.History;
 using FurinaChronicle.Core.Records;
 using FurinaChronicle.Services.Abstractions;
 using FurinaChronicle.Services.Gacha.Abstractions;
 using FurinaChronicle.Services.Gacha;
+using FurinaChronicle.Services.Gacha.Writing;
 
 namespace FurinaChronicle.Services.Gacha.Importing;
 
@@ -16,7 +18,7 @@ public sealed class ImportUigfGachaRecords(
     IGachaItemMetadataProvider metadataProvider,
     IPlayerArchiveRepository archiveRepository,
     IGameAccountRepository accountRepository,
-    IGachaRecordRepository recordRepository)
+    ICommitGachaRecords commitGachaRecords)
 {
     public async Task<GachaImportResult> ExecuteAsync(
         Stream source,
@@ -203,28 +205,46 @@ public sealed class ImportUigfGachaRecords(
             }
         }
 
-        int importedCount = 0;
-        int duplicateCount = 0;
-
-        foreach (List<GachaRecord> records in recordsByAccount.Values)
+        GachaRecord[] allRecords = recordsByAccount.Values
+            .SelectMany(records => records)
+            .ToArray();
+        CommitGachaRecordsResult saveResult =
+            await commitGachaRecords.ExecuteAsync(
+                new CommitGachaRecordsRequest(
+                    OperationId.New(),
+                    DataChangeOperationKind.Import,
+                    DataOrigin.StandardImport,
+                    "Import UIGF Gacha records",
+                    importedAt,
+                    DateTimeOffset.UtcNow,
+                    allRecords,
+                    GachaRecordConflictPolicy.PreserveExisting,
+                    SuppressTombstonesAndContinue: false,
+                    CaptureUndo: createdAccountCount == 0),
+                cancellationToken);
+        if (saveResult.Status == ChangeExecutionStatus.Conflict)
         {
-            GachaRecord[] distinctRecords = records
-                .DistinctBy(record => (record.GameAccountId, record.ExternalRecordId))
-                .ToArray();
-
-            duplicateCount += records.Count - distinctRecords.Length;
-            GachaSaveResult saveResult = await recordRepository.SaveBatchAsync(
-                distinctRecords,
-                cancellationToken,
-                GachaRecordConflictPolicy.PreserveExisting);
-            importedCount += saveResult.InsertedCount;
-            duplicateCount += saveResult.DuplicateCount;
+            throw new GachaImportFormatException(
+                saveResult.ConflictReason ??
+                "The UIGF file conflicts with existing Gacha facts.");
+        }
+        if (saveResult.Status == ChangeExecutionStatus.Suppressed)
+        {
+            throw new GachaImportFormatException(
+                $"The UIGF file contains {saveResult.SuppressedCount} record(s) " +
+                "that were irreversibly deleted on this device. Explicit " +
+                "reintroduction confirmation is required.");
+        }
+        if (saveResult.Status == ChangeExecutionStatus.NeedsConfirmation)
+        {
+            throw new IOException(
+                "The UIGF import requires history cleanup confirmation before it can continue.");
         }
 
         return new GachaImportResult(
             readResult.TotalRecordCount,
-            importedCount,
-            duplicateCount,
+            saveResult.InsertedCount,
+            saveResult.DuplicateCount,
             invalidCount,
             ignoredCount,
             createdAccountCount);

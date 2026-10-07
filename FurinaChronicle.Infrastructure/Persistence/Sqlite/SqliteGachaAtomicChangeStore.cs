@@ -68,6 +68,40 @@ public sealed class SqliteGachaAtomicChangeStore
                 ParseRequiredGuid(row.ArchiveId, "archive"));
     }
 
+    public async Task<IReadOnlyList<TombstoneReintroductionWarning>>
+        FindActiveTombstonesAsync(
+            IReadOnlyCollection<GachaFactReference> references,
+            CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(references);
+        await database.InitializeAsync(cancellationToken);
+        var warnings = new List<TombstoneReintroductionWarning>();
+        await database.Connection.RunInTransactionAsync(connection =>
+        {
+            foreach (GachaFactReference reference in references.Distinct())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                Guid archiveId = ReadArchiveId(
+                    connection,
+                    reference.GameAccountId);
+                ActiveTombstone? tombstone = ReadActiveTombstone(
+                    connection,
+                    archiveId,
+                    reference);
+                if (tombstone is not null)
+                {
+                    warnings.Add(new TombstoneReintroductionWarning(
+                        tombstone.TombstoneKey,
+                        tombstone.TombstoneVersion,
+                        reference,
+                        archiveId));
+                }
+            }
+        });
+
+        return warnings;
+    }
+
     public async Task<GachaAtomicChangeResult> CommitAsync(
         GachaAtomicChangeRequest request,
         CancellationToken cancellationToken = default)

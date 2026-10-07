@@ -9,6 +9,9 @@ using FurinaChronicle.Infrastructure.Importing.Json;
 using FurinaChronicle.Infrastructure.Persistence;
 using FurinaChronicle.Infrastructure.Persistence.Sqlite;
 using FurinaChronicle.Services.Gacha.Importing;
+using FurinaChronicle.Services.Gacha;
+using FurinaChronicle.Services.Gacha.Writing;
+using FurinaChronicle.Tests.Services.Gacha;
 using FurinaChronicle.Tests.TestDoubles;
 using Xunit;
 
@@ -30,7 +33,10 @@ public sealed class ImportGachaRecordsTests
         var accountRepository = new InMemoryGameAccountRepository();
         await accountRepository.AddAsync(Account);
         var reader = new JsonGachaRecordReader();
-        var service = new ImportGachaRecords(reader, repository, accountRepository);
+        var service = new ImportGachaRecords(
+            reader,
+            new RepositoryGachaCommitter(repository),
+            accountRepository);
 
         // Act：第一次导入
         await using MemoryStream firstStream = CreateStream(SampleJson);
@@ -122,7 +128,11 @@ public sealed class ImportGachaRecordsTests
             var archiveRepository = new SqlitePlayerArchiveRepository(database);
             var accountRepository = new SqliteGameAccountRepository(database);
             var reader = new JsonGachaRecordReader();
-            var service = new ImportGachaRecords(reader, gachaRepository, accountRepository);
+            var service = new ImportGachaRecords(
+                reader,
+                new CommitGachaRecords(
+                    new SqliteGachaAtomicChangeStore(database)),
+                accountRepository);
             await archiveRepository.AddAsync(Archive);
             await accountRepository.AddAsync(Account);
             await using MemoryStream firstStream = CreateStream(SampleJson);
@@ -152,7 +162,7 @@ public sealed class ImportGachaRecordsTests
             new InMemoryGachaRecordRepository(Array.Empty<GachaRecord>());
         var service = new ImportGachaRecords(
             new JsonGachaRecordReader(),
-            gachaRepository,
+            new RepositoryGachaCommitter(gachaRepository),
             new InMemoryGameAccountRepository());
         await using var invalidJson = new MemoryStream([0xFF]);
 

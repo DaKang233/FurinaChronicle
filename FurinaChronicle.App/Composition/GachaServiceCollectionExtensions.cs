@@ -21,6 +21,7 @@ using FurinaChronicle.Services.Gacha.Exporting;
 using FurinaChronicle.Services.Gacha.Importing;
 using FurinaChronicle.Services.Gacha.Portable;
 using FurinaChronicle.Services.Gacha.Refreshing;
+using FurinaChronicle.Services.Gacha.Writing;
 
 namespace FurinaChronicle.App.Composition;
 
@@ -43,6 +44,7 @@ internal static class GachaServiceCollectionExtensions
         services.AddTransient<GetGachaRecordPage>();
         services.AddTransient<GetRecentGachaRecords>();
         services.AddTransient<BuildGachaAnalytics>();
+        services.AddTransient<ICommitGachaRecords, CommitGachaRecords>();
     }
 
     private static void AddImportAndExport(IServiceCollection services)

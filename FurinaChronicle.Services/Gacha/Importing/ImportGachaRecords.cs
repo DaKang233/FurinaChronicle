@@ -4,13 +4,16 @@
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Services.Abstractions;
+using FurinaChronicle.Core.History;
+using FurinaChronicle.Core.Records;
+using FurinaChronicle.Services.Gacha.Writing;
 using System;
 using System.Collections.Generic;
 using System.Text;
 
 namespace FurinaChronicle.Services.Gacha.Importing
 {
-    public sealed class ImportGachaRecords(IGachaRecordReader reader, IGachaRecordRepository gachaRepository, IGameAccountRepository accountRepository)
+    public sealed class ImportGachaRecords(IGachaRecordReader reader, ICommitGachaRecords commitGachaRecords, IGameAccountRepository accountRepository)
     {
         public async Task<GachaRecordImportResult> ExecuteAsync(Stream source, Guid gameAccountId, CancellationToken cancellationToken = default)
         {
@@ -27,10 +30,28 @@ namespace FurinaChronicle.Services.Gacha.Importing
             GachaRecord[] distinctRecords = readResult.Records.DistinctBy(record => (record.GameAccountId, record.ExternalRecordId)).ToArray();
 
             int duplicatesInsideSource = readResult.Records.Count - distinctRecords.Length;
-            GachaSaveResult saveResult = await gachaRepository.SaveBatchAsync(
-                distinctRecords,
-                cancellationToken,
-                GachaRecordConflictPolicy.PreserveExisting);
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+            CommitGachaRecordsResult saveResult =
+                await commitGachaRecords.ExecuteAsync(
+                    new CommitGachaRecordsRequest(
+                        OperationId.New(),
+                        DataChangeOperationKind.Import,
+                        DataOrigin.StandardImport,
+                        "Import compatible Gacha JSON",
+                        now,
+                        now,
+                        distinctRecords,
+                        GachaRecordConflictPolicy.PreserveExisting,
+                        SuppressTombstonesAndContinue: false),
+                    cancellationToken);
+            if (saveResult.Status is ChangeExecutionStatus.Conflict or
+                ChangeExecutionStatus.Suppressed or
+                ChangeExecutionStatus.NeedsConfirmation)
+            {
+                throw new GachaRecordImportFormatException(
+                    saveResult.ConflictReason ??
+                    "The compatible JSON import could not be committed safely.");
+            }
             return new GachaRecordImportResult(
                 TotalCount: readResult.Records.Count + readResult.Errors.Count,
                 ImportedCount: saveResult.InsertedCount,

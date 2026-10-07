@@ -276,6 +276,11 @@ public interface IGachaAtomicChangeStore
         GachaFactReference reference,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<TombstoneReintroductionWarning>>
+        FindActiveTombstonesAsync(
+            IReadOnlyCollection<GachaFactReference> references,
+            CancellationToken cancellationToken = default);
+
     Task<GachaAtomicChangeResult> CommitAsync(
         GachaAtomicChangeRequest request,
         CancellationToken cancellationToken = default);

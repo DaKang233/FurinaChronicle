@@ -4,12 +4,15 @@
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.Gacha.Metadata;
+using FurinaChronicle.Core.History;
 using FurinaChronicle.Core.Passport;
 using FurinaChronicle.Core.Records;
 using FurinaChronicle.Infrastructure.Persistence;
 using FurinaChronicle.Services.Abstractions;
 using FurinaChronicle.Services.Gacha.Abstractions;
+using FurinaChronicle.Services.Gacha;
 using FurinaChronicle.Services.Gacha.Refreshing;
+using FurinaChronicle.Services.Gacha.Writing;
 using FurinaChronicle.Services.Passport;
 using FurinaChronicle.Tests.Infrastructure.Persistence.Sqlite;
 
@@ -135,6 +138,7 @@ public sealed class RefreshGachaRecordsTests
         var sTokenProvider = new StubSTokenProvider();
         var service = new RefreshGachaRecords(
             repository,
+            new RepositoryCommitter(repository),
             passportStore,
             sTokenProvider,
             new StubWindowsProvider(false),
@@ -153,8 +157,10 @@ public sealed class RefreshGachaRecordsTests
     [Fact]
     public async Task ExecuteAsync_WindowsCacheOnUnsupportedPlatform_ThrowsClearError()
     {
+        var repository = new InMemoryGachaRecordRepository([]);
         var service = new RefreshGachaRecords(
-            new InMemoryGachaRecordRepository([]),
+            repository,
+            new RepositoryCommitter(repository),
             new StubPassportStore(),
             new StubSTokenProvider(),
             new StubWindowsProvider(false),
@@ -278,6 +284,7 @@ public sealed class RefreshGachaRecordsTests
     {
         return new RefreshGachaRecords(
             repository,
+            new RepositoryCommitter(repository),
             new StubPassportStore(),
             new StubSTokenProvider(),
             new StubWindowsProvider(false),
@@ -351,6 +358,29 @@ public sealed class RefreshGachaRecordsTests
             return Task.FromResult(
                 pages.GetValueOrDefault((gachaType, endId)) ??
                 new GachaRemotePage([], null));
+        }
+    }
+
+    private sealed class RepositoryCommitter(
+        IGachaRecordRepository repository)
+        : ICommitGachaRecords
+    {
+        public async Task<CommitGachaRecordsResult> ExecuteAsync(
+            CommitGachaRecordsRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            GachaSaveResult saved = await repository.SaveBatchAsync(
+                request.Records,
+                cancellationToken,
+                request.ConflictPolicy);
+            return new CommitGachaRecordsResult(
+                ChangeExecutionStatus.Applied,
+                ChangeSetId: null,
+                saved.InsertedCount,
+                saved.UpdatedCount,
+                saved.DuplicateCount,
+                ConflictCount: 0,
+                SuppressedCount: 0);
         }
     }
 

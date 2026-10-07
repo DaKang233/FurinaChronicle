@@ -11,6 +11,8 @@ using FurinaChronicle.Infrastructure.Persistence;
 using FurinaChronicle.Tests.Infrastructure.Persistence.Sqlite;
 using FurinaChronicle.Services.Gacha.Abstractions;
 using FurinaChronicle.Services.Gacha.Importing;
+using FurinaChronicle.Services.Gacha.Writing;
+using FurinaChronicle.Tests.Services.Gacha;
 using FurinaChronicle.Tests.Infrastructure.Gacha.Uigf.V4_2;
 using FurinaChronicle.Tests.TestDoubles;
 
@@ -82,7 +84,7 @@ public sealed class ImportUigfGachaRecordsTests
             new TestMetadataProvider(),
             context.Archives,
             context.Accounts,
-            context.Gacha);
+            new CommitGachaRecords(context.AtomicGacha));
 
         GachaImportResult result = await ExecuteAsync(
             service,
@@ -293,7 +295,7 @@ public sealed class ImportUigfGachaRecordsTests
             new TestMetadataProvider(),
             archives,
             accounts,
-            records);
+            new RepositoryGachaCommitter(records));
     }
 
     private static async Task<GachaImportResult> ExecuteAsync(
