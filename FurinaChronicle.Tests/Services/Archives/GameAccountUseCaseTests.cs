@@ -3,6 +3,7 @@
 
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Services.Archives;
+using FurinaChronicle.Tests.Infrastructure.Persistence.Sqlite;
 using FurinaChronicle.Tests.TestDoubles;
 
 namespace FurinaChronicle.Tests.Services.Archives;
@@ -273,19 +274,29 @@ public sealed class GameAccountUseCaseTests
     [Fact]
     public async Task Delete_ExistingAccount_RemovesIt()
     {
-        var accounts = new InMemoryGameAccountRepository();
-        GameAccount account = ArchiveTestData.Account(Guid.NewGuid());
-        await accounts.AddAsync(account);
+        await using SqliteRepositoryTestContext context =
+            SqliteRepositoryTestContext.Create();
+        await context.Database.InitializeAsync();
+        PlayerArchive archive =
+            SqliteRepositoryTestContext.CreateArchive();
+        GameAccount account =
+            SqliteRepositoryTestContext.CreateAccount(archive.Id);
+        await context.Archives.AddAsync(archive);
+        await context.Accounts.AddAsync(account);
 
-        await new DeleteGameAccount(accounts).ExecuteAsync(account.Id);
+        await new DeleteGameAccount(context.AtomicGacha)
+            .ExecuteAsync(account.Id);
 
-        Assert.Null(await accounts.GetByIdAsync(account.Id));
+        Assert.Null(await context.Accounts.GetByIdAsync(account.Id));
     }
 
     [Fact]
     public async Task Delete_UnknownAccount_ThrowsKeyNotFoundException()
     {
-        var service = new DeleteGameAccount(new InMemoryGameAccountRepository());
+        await using SqliteRepositoryTestContext context =
+            SqliteRepositoryTestContext.Create();
+        await context.Database.InitializeAsync();
+        var service = new DeleteGameAccount(context.AtomicGacha);
 
         await Assert.ThrowsAsync<KeyNotFoundException>(
             () => service.ExecuteAsync(Guid.NewGuid()));

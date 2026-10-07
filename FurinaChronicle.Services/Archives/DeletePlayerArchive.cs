@@ -4,12 +4,12 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using FurinaChronicle.Core.Archives;
-using FurinaChronicle.Services.Abstractions;
+using FurinaChronicle.Core.History;
+using FurinaChronicle.Services.Gacha.History;
 
 namespace FurinaChronicle.Services.Archives;
 
-public sealed class DeletePlayerArchive(IPlayerArchiveRepository repository)
+public sealed class DeletePlayerArchive(IGachaAtomicChangeStore atomicChangeStore)
 {
     public async Task ExecuteAsync(Guid playerArchiveId, CancellationToken cancellationToken = default)
     {
@@ -18,7 +18,14 @@ public sealed class DeletePlayerArchive(IPlayerArchiveRepository repository)
             throw new ArgumentException("玩家档案 ID 不能为空。", nameof(playerArchiveId));
         }
 
-        PlayerArchive? archive = await repository.GetByIdAsync(playerArchiveId, cancellationToken) ?? throw new KeyNotFoundException("要删除的玩家档案不存在。");
-        await repository.DeleteAsync(playerArchiveId, cancellationToken);
+        DateTimeOffset now = DateTimeOffset.Now;
+        await atomicChangeStore.PurgeArchiveAsync(
+            new GachaScopePurgeRequest(
+                OperationId.New(),
+                playerArchiveId,
+                now,
+                now,
+                "永久删除档案及其本地数据"),
+            cancellationToken);
     }
 }

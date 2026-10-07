@@ -3,6 +3,7 @@
 
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Services.Archives;
+using FurinaChronicle.Tests.Infrastructure.Persistence.Sqlite;
 using FurinaChronicle.Tests.TestDoubles;
 
 namespace FurinaChronicle.Tests.Services.Archives;
@@ -72,20 +73,26 @@ public sealed class PlayerArchiveUseCaseTests
     [Fact]
     public async Task Delete_ExistingArchive_RemovesIt()
     {
-        var repository = new InMemoryPlayerArchiveRepository();
-        PlayerArchive archive = ArchiveTestData.Archive();
-        await repository.AddAsync(archive);
-        var service = new DeletePlayerArchive(repository);
+        await using SqliteRepositoryTestContext context =
+            SqliteRepositoryTestContext.Create();
+        await context.Database.InitializeAsync();
+        PlayerArchive archive =
+            SqliteRepositoryTestContext.CreateArchive();
+        await context.Archives.AddAsync(archive);
+        var service = new DeletePlayerArchive(context.AtomicGacha);
 
         await service.ExecuteAsync(archive.Id);
 
-        Assert.Null(await repository.GetByIdAsync(archive.Id));
+        Assert.Null(await context.Archives.GetByIdAsync(archive.Id));
     }
 
     [Fact]
     public async Task Delete_UnknownArchive_ThrowsKeyNotFoundException()
     {
-        var service = new DeletePlayerArchive(new InMemoryPlayerArchiveRepository());
+        await using SqliteRepositoryTestContext context =
+            SqliteRepositoryTestContext.Create();
+        await context.Database.InitializeAsync();
+        var service = new DeletePlayerArchive(context.AtomicGacha);
 
         await Assert.ThrowsAsync<KeyNotFoundException>(
             () => service.ExecuteAsync(Guid.NewGuid()));

@@ -94,7 +94,7 @@ public partial class ArchivePage : ContentPage
 
         bool confirmed = await DisplayAlertAsync(
             "删除档案",
-            "确定要永久删除所选档案吗？档案内的全部账号和业务数据也会被删除。",
+            "确定要永久删除所选档案吗？档案内的全部账号和本地业务数据将被清除且无法撤销；已经导出的文件、其他设备和云端备份不受影响。",
             "删除",
             "取消");
         if (confirmed)
@@ -163,7 +163,7 @@ public partial class ArchivePage : ContentPage
 
         bool confirmed = await DisplayAlertAsync(
             "删除游戏账号",
-            "确定要永久删除所选游戏账号吗？该账号的全部业务数据也会被删除。",
+            "确定要永久删除所选游戏账号吗？该账号在当前档案中的本地业务数据将被清除且无法撤销；已经导出的文件、其他档案、其他设备和云端备份不受影响。",
             "删除",
             "取消");
         if (confirmed)
