@@ -59,7 +59,7 @@ Tombstone／Portable Apply 基础。Q1～Q7 的首版产品选择由
 |---|---|---|
 | P0 基线、矩阵、契约 | Completed | 本文和 ADR 0014；421／421 基线 |
 | P1 原子前置条件 | Completed | expected-absent、版本 ABA、after-content、专用操作拒绝、Portable 容量确认；427／427 |
-| P2 受控大文件暂存 | Pending | 有界暂存、增量指纹、分页 Plan／冲突、整包事务 Apply |
+| P2 受控大文件暂存 | Partial | 已完成有限缓冲私有暂存、容器上限、可重开 lease 与兼容增量指纹；磁盘关联索引／分页 Plan 尚未完成 |
 | P3 接管生产获取 | Pending | UIGF、刷新、小助手、兼容 JSON |
 | P4 删除闭环 | Pending | 记录、账号、档案 purge 与 Tombstone |
 | P5 纠正／历史／Undo UI | Pending | 最小产品入口，不做通用历史浏览器 |

@@ -23,6 +23,23 @@ public interface IGachaPortablePackageReader
         CancellationToken cancellationToken = default);
 }
 
+public interface IGachaPortableInputStager
+{
+    Task<IGachaPortableStagedInput> StageAsync(
+        Stream source,
+        CancellationToken cancellationToken = default);
+}
+
+public interface IGachaPortableStagedInput : IAsyncDisposable
+{
+    long Length { get; }
+
+    string Sha256 { get; }
+
+    ValueTask<Stream> OpenReadAsync(
+        CancellationToken cancellationToken = default);
+}
+
 public interface IGachaPortableExportSnapshot : IAsyncDisposable
 {
     DateTimeOffset GeneratedAt { get; }
@@ -60,6 +77,7 @@ public sealed record GachaPortableLimits
     public const int DefaultMaximumRecordCount = 2_000_000;
     public const long DefaultMaximumEntryBytes = 256L * 1024 * 1024;
     public const long DefaultMaximumUncompressedBytes = 512L * 1024 * 1024;
+    public const long DefaultMaximumContainerBytes = 512L * 1024 * 1024;
     public const int DefaultMaximumNdjsonLineBytes = 64 * 1024;
     public const int DefaultMaximumJsonDepth = 32;
 
@@ -77,6 +95,9 @@ public sealed record GachaPortableLimits
 
     public long MaximumUncompressedBytes { get; init; } =
         DefaultMaximumUncompressedBytes;
+
+    public long MaximumContainerBytes { get; init; } =
+        DefaultMaximumContainerBytes;
 
     public int MaximumNdjsonLineBytes { get; init; } =
         DefaultMaximumNdjsonLineBytes;

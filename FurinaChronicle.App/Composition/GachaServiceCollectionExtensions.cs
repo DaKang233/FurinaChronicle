@@ -96,7 +96,14 @@ internal static class GachaServiceCollectionExtensions
 
     private static void AddPortable(IServiceCollection services)
     {
-        services.AddSingleton(new GachaPortableLimits());
+        var limits = new GachaPortableLimits();
+        services.AddSingleton(limits);
+        services.AddSingleton<IGachaPortableInputStager>(
+            _ => new FileGachaPortableInputStager(
+                Path.Combine(
+                    FileSystem.CacheDirectory,
+                    "gacha-portable-staging"),
+                limits));
         services.AddSingleton<
             IGachaPortablePackageWriter,
             GachaPortablePackageWriter>();
