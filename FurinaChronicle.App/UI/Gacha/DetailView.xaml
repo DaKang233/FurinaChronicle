@@ -11,7 +11,7 @@
     xmlns:viewModels="clr-namespace:FurinaChronicle.App.ViewModels"
     x:DataType="viewModels:GachaAnalysisViewModel">
 
-    <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="8">
+    <Grid RowDefinitions="Auto,Auto,Auto,*,Auto,220" RowSpacing="8">
         <Label FontAttributes="Bold" FontSize="20" Text="明细表格" />
         <ScrollView Grid.Row="1" Orientation="Horizontal">
             <HorizontalStackLayout Spacing="8">
@@ -44,7 +44,16 @@
             </HorizontalStackLayout>
         </ScrollView>
 
-        <ScrollView Grid.Row="2" HorizontalScrollBarVisibility="Always" Orientation="Horizontal">
+        <ScrollView Grid.Row="2" Orientation="Horizontal">
+            <HorizontalStackLayout Spacing="8">
+                <Label Text="选择一条记录后：" VerticalTextAlignment="Center" />
+                <Button Clicked="OnCorrectRecordClicked" IsEnabled="{Binding IsNotBusy}" Text="纠正" />
+                <Button Clicked="OnDeleteRecordClicked" IsEnabled="{Binding IsNotBusy}" Text="普通删除（可撤销）" />
+                <Button Clicked="OnPurgeRecordClicked" IsEnabled="{Binding IsNotBusy}" Text="永久删除" />
+            </HorizontalStackLayout>
+        </ScrollView>
+
+        <ScrollView Grid.Row="3" HorizontalScrollBarVisibility="Always" Orientation="Horizontal">
             <Grid RowDefinitions="Auto,*" WidthRequest="820">
                 <Grid
                     Padding="10,8"
@@ -61,6 +70,8 @@
                 <CollectionView
                     Grid.Row="1"
                     ItemsSource="{Binding DetailRecords}"
+                    SelectedItem="{Binding SelectedDetailRecord, Mode=TwoWay}"
+                    SelectionMode="Single"
                     VerticalScrollBarVisibility="Always">
                     <CollectionView.EmptyView>
                         <Label Padding="16" HorizontalTextAlignment="Center" Text="没有符合筛选条件的记录。" />
@@ -81,10 +92,65 @@
             </Grid>
         </ScrollView>
 
-        <Grid Grid.Row="3" ColumnDefinitions="Auto,*,Auto">
+        <Grid Grid.Row="4" ColumnDefinitions="Auto,*,Auto">
             <Button Command="{Binding PreviousDetailPageCommand}" IsEnabled="{Binding CanGoToPreviousDetailPage}" Text="上一页" />
             <Label Grid.Column="1" HorizontalTextAlignment="Center" Text="{Binding DetailPageSummary}" VerticalTextAlignment="Center" />
             <Button Grid.Column="2" Command="{Binding NextDetailPageCommand}" IsEnabled="{Binding CanGoToNextDetailPage}" Text="下一页" />
         </Grid>
+
+        <Border Grid.Row="5" Padding="8">
+            <Grid RowDefinitions="Auto,Auto,*" RowSpacing="6">
+                <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8">
+                    <VerticalStackLayout Spacing="1">
+                        <Label FontAttributes="Bold" Text="修改历史与撤销" />
+                        <Label FontSize="11" Text="{Binding HistoryStatus}" />
+                    </VerticalStackLayout>
+                    <Entry
+                        Grid.Column="1"
+                        Keyboard="Numeric"
+                        MaximumWidthRequest="80"
+                        Text="{Binding UndoLimit}"
+                        WidthRequest="70" />
+                    <Button Grid.Column="2" Clicked="OnSetUndoLimitClicked" IsEnabled="{Binding IsNotBusy}" Text="保存保留次数" />
+                    <Button Grid.Column="3" Clicked="OnUndoLatestClicked" IsEnabled="{Binding IsNotBusy}" Text="撤销最新可撤销操作" />
+                </Grid>
+                <Label Grid.Row="1" FontSize="10" Text="保留次数范围 0～1000；0 表示关闭未来操作的撤销材料，不删除修订历史。" />
+                <Grid Grid.Row="2" ColumnDefinitions="*,*" ColumnSpacing="8">
+                    <CollectionView
+                        ItemsSource="{Binding OperationHistory}"
+                        SelectedItem="{Binding SelectedOperation, Mode=TwoWay}"
+                        SelectionMode="Single">
+                        <CollectionView.ItemTemplate>
+                            <DataTemplate x:DataType="viewModels:GachaOperationHistoryDisplayItem">
+                                <Grid Padding="6" ColumnDefinitions="90,150,*,70,90" ColumnSpacing="5">
+                                    <Label FontAttributes="Bold" Text="{Binding Operation}" />
+                                    <Label Grid.Column="1" FontSize="10" Text="{Binding CommittedAt}" />
+                                    <Label Grid.Column="2" FontSize="10" LineBreakMode="TailTruncation" Text="{Binding Summary}" />
+                                    <Label Grid.Column="3" FontSize="10" Text="{Binding Affected}" />
+                                    <Label Grid.Column="4" FontSize="10" Text="{Binding UndoState}" />
+                                </Grid>
+                            </DataTemplate>
+                        </CollectionView.ItemTemplate>
+                    </CollectionView>
+                    <Grid Grid.Column="1" RowDefinitions="Auto,*">
+                        <Button Clicked="OnLoadRevisionsClicked" IsEnabled="{Binding IsNotBusy}" Text="查看所选操作修订" />
+                        <CollectionView Grid.Row="1" ItemsSource="{Binding SelectedOperationRevisions}">
+                            <CollectionView.ItemTemplate>
+                                <DataTemplate x:DataType="viewModels:GachaRevisionDisplayItem">
+                                    <VerticalStackLayout Padding="6" Spacing="1">
+                                        <HorizontalStackLayout Spacing="4">
+                                            <Label FontAttributes="Bold" Text="{Binding Change}" />
+                                            <Label FontSize="10" Text="{Binding Record, StringFormat='记录 {0}'}" VerticalTextAlignment="Center" />
+                                        </HorizontalStackLayout>
+                                        <Label FontSize="10" Text="{Binding Before, StringFormat='之前：{0}'}" />
+                                        <Label FontSize="10" Text="{Binding After, StringFormat='之后：{0}'}" />
+                                    </VerticalStackLayout>
+                                </DataTemplate>
+                            </CollectionView.ItemTemplate>
+                        </CollectionView>
+                    </Grid>
+                </Grid>
+            </Grid>
+        </Border>
     </Grid>
 </ContentView>

@@ -229,7 +229,19 @@ public sealed record OperationHistoryItem(
     int AffectedRecordCount,
     bool IsUndoEligible,
     UndoIneligibilityReason IneligibilityReason,
-    Guid? UndoneByChangeSetId);
+    Guid? UndoneByChangeSetId,
+    IReadOnlyList<Guid> ArchiveIds);
+
+public sealed record GachaRevisionItem(
+    Guid RevisionId,
+    Guid ChangeSetId,
+    GachaFactReference Reference,
+    EntityChangeKind ChangeKind,
+    FactVersion? BeforeVersion,
+    FactVersion? AfterVersion,
+    GachaRecord? Before,
+    GachaRecord? After,
+    DateTimeOffset CreatedAt);
 
 public sealed record UndoLimitChangeResult(
     int PreviousLimit,
@@ -320,5 +332,9 @@ public interface IGachaAtomicChangeStore
     Task<IReadOnlyList<OperationHistoryItem>> GetHistoryAsync(
         Guid archiveId,
         int count,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<GachaRevisionItem>> GetRevisionsAsync(
+        Guid changeSetId,
         CancellationToken cancellationToken = default);
 }

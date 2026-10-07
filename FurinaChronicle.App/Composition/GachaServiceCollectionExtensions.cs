@@ -19,6 +19,7 @@ using FurinaChronicle.Services.Gacha.Abstractions;
 using FurinaChronicle.Services.Gacha.Analytics;
 using FurinaChronicle.Services.Gacha.Exporting;
 using FurinaChronicle.Services.Gacha.Importing;
+using FurinaChronicle.Services.Gacha.History;
 using FurinaChronicle.Services.Gacha.Portable;
 using FurinaChronicle.Services.Gacha.Refreshing;
 using FurinaChronicle.Services.Gacha.Writing;
@@ -51,6 +52,7 @@ internal static class GachaServiceCollectionExtensions
     {
         services.AddSingleton<IGachaRecordReader, JsonGachaRecordReader>();
         services.AddTransient<ImportGachaRecords>();
+        services.AddTransient<ManageGachaHistory>();
         services.AddSingleton<UigfV42GachaReader>();
         services.AddSingleton<IGachaImportReader, UigfCompatibleGachaReader>();
         services.AddTransient<ImportUigfGachaRecords>();

@@ -6,6 +6,8 @@ using CommunityToolkit.Mvvm.Input;
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.Gacha.Metadata;
+using FurinaChronicle.Core.History;
+using FurinaChronicle.Services.Gacha.History;
 using FurinaChronicle.Services.Gacha.Analytics;
 using System.Collections.ObjectModel;
 
@@ -31,6 +33,9 @@ public sealed record RankFilterOption(
     string Name);
 
 public sealed record GachaRecordAnalysisDisplayItem(
+    Guid GameAccountId,
+    string ExternalRecordId,
+    GachaRecord Record,
     string Account,
     string Name,
     string Rank,
@@ -47,12 +52,101 @@ public sealed record GachaRecordAnalysisDisplayItem(
             ? value.DisplayName ?? value.Uid
             : record.GameAccountId.ToString("D");
         return new(
+            record.GameAccountId,
+            record.ExternalRecordId,
+            record,
             account,
             item.Name,
             item.Rank,
             item.Time,
             item.Pool,
             item.ItemType);
+    }
+}
+
+public sealed record GachaOperationHistoryDisplayItem(
+    OperationHistoryItem Item,
+    string Operation,
+    string CommittedAt,
+    string Summary,
+    string Affected,
+    string UndoState,
+    string ArchiveScope)
+{
+    public bool IsUndoEligible => Item.IsUndoEligible;
+
+    public static GachaOperationHistoryDisplayItem FromDomain(
+        OperationHistoryItem item) =>
+        new(
+            item,
+            item.OperationKind switch
+            {
+                DataChangeOperationKind.Import => "导入",
+                DataChangeOperationKind.Refresh => "刷新",
+                DataChangeOperationKind.Correction => "人工纠正",
+                DataChangeOperationKind.Delete => "普通删除",
+                DataChangeOperationKind.Undo => "撤销",
+                DataChangeOperationKind.IrreversibleDelete => "永久删除",
+                _ => item.OperationKind.ToString()
+            },
+            item.CommittedAt.ToString("yyyy-MM-dd HH:mm:ss zzz"),
+            item.Summary,
+            $"{item.AffectedRecordCount} 条",
+            item.IsUndoEligible
+                ? "可撤销"
+                : GetUndoReason(item.IneligibilityReason),
+            item.ArchiveIds.Count <= 1
+                ? "当前档案"
+                : $"跨 {item.ArchiveIds.Count} 个档案");
+
+    private static string GetUndoReason(UndoIneligibilityReason reason) =>
+        reason switch
+        {
+            UndoIneligibilityReason.Disabled => "撤销已关闭",
+            UndoIneligibilityReason.CapacityEvicted => "撤销材料已清理",
+            UndoIneligibilityReason.AlreadyUndone => "已撤销",
+            UndoIneligibilityReason.Conflict => "当前状态已变化",
+            UndoIneligibilityReason.IrreversibleDeletion => "永久操作",
+            UndoIneligibilityReason.MissingMaterial => "撤销材料缺失",
+            UndoIneligibilityReason.InverseOperation => "撤销操作不可再撤销",
+            _ => "不可撤销"
+        };
+}
+
+public sealed record GachaRevisionDisplayItem(
+    GachaRevisionItem Item,
+    string Record,
+    string Change,
+    string Before,
+    string After,
+    string CreatedAt)
+{
+    public static GachaRevisionDisplayItem FromDomain(
+        GachaRevisionItem item) =>
+        new(
+            item,
+            item.Reference.ExternalRecordId,
+            item.ChangeKind switch
+            {
+                EntityChangeKind.Insert => "新增",
+                EntityChangeKind.Update => "修改",
+                EntityChangeKind.Delete => "删除",
+                _ => item.ChangeKind.ToString()
+            },
+            Format(item.Before, item.BeforeVersion),
+            Format(item.After, item.AfterVersion),
+            item.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss 'UTC'"));
+
+    private static string Format(GachaRecord? record, FactVersion? version)
+    {
+        if (record is null)
+        {
+            return "无";
+        }
+        return $"v{version?.Value}: {record.ItemName ?? record.ItemId ?? "未知物品"}" +
+            $" / {record.RankType?.ToString() ?? "?"} 星" +
+            $" / {record.Time:yyyy-MM-dd HH:mm:ss zzz}" +
+            $" / 来源 {record.Provenance.Origin}";
     }
 }
 

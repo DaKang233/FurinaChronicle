@@ -1577,7 +1577,17 @@ public sealed class SqliteGachaAtomicChangeStore
                 """,
                 archiveId.ToString("D"),
                 count);
-        return rows.Select(row => new OperationHistoryItem(
+        var result = new List<OperationHistoryItem>(rows.Count);
+        foreach (OperationHistoryReadRow row in rows)
+        {
+            List<ArchiveIdRow> archiveRows =
+                await database.Connection.QueryAsync<ArchiveIdRow>(
+                    """
+                    SELECT ArchiveId FROM DataChangeSetArchives
+                    WHERE ChangeSetId = ? ORDER BY ArchiveId;
+                    """,
+                    row.ChangeSetId);
+            result.Add(new OperationHistoryItem(
                 ParseRequiredGuid(row.ChangeSetId, "change set"),
                 (DataChangeOperationKind)row.OperationKind,
                 ReadTimestamp(
@@ -1587,7 +1597,57 @@ public sealed class SqliteGachaAtomicChangeStore
                 row.AffectedRecordCount,
                 row.IsUndoEligible,
                 (UndoIneligibilityReason)row.IneligibilityReason,
-                ParseOptionalGuid(row.UndoneByChangeSetId)))
+                ParseOptionalGuid(row.UndoneByChangeSetId),
+                archiveRows.Select(item => ParseRequiredGuid(
+                    item.ArchiveId,
+                    "archive"))
+                .ToArray()));
+        }
+        return result;
+    }
+
+    public async Task<IReadOnlyList<GachaRevisionItem>> GetRevisionsAsync(
+        Guid changeSetId,
+        CancellationToken cancellationToken = default)
+    {
+        if (changeSetId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "Change set ID cannot be empty.",
+                nameof(changeSetId));
+        }
+        await database.InitializeAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        List<GachaRevisionReadRow> rows =
+            await database.Connection.QueryAsync<GachaRevisionReadRow>(
+                """
+                SELECT RevisionId, ChangeSetId, GameAccountId,
+                       ExternalRecordId, ChangeKind, BeforeVersion,
+                       AfterVersion, BeforeSnapshotJson, AfterSnapshotJson,
+                       CreatedAtUtcTicks
+                FROM GachaRevisions
+                WHERE ChangeSetId = ?
+                ORDER BY rowid;
+                """,
+                changeSetId.ToString("D"));
+        return rows.Select(row => new GachaRevisionItem(
+                ParseRequiredGuid(row.RevisionId, "revision"),
+                ParseRequiredGuid(row.ChangeSetId, "change set"),
+                new GachaFactReference(
+                    ParseRequiredGuid(row.GameAccountId, "game account"),
+                    row.ExternalRecordId),
+                (EntityChangeKind)row.ChangeKind,
+                row.BeforeVersion is long before
+                    ? new FactVersion(before)
+                    : null,
+                row.AfterVersion is long after
+                    ? new FactVersion(after)
+                    : null,
+                DeserializeSnapshot(row.BeforeSnapshotJson)?.ToDomain(),
+                DeserializeSnapshot(row.AfterSnapshotJson)?.ToDomain(),
+                new DateTimeOffset(
+                    row.CreatedAtUtcTicks,
+                    TimeSpan.Zero)))
             .ToArray();
     }
 
@@ -3200,6 +3260,29 @@ public sealed class SqliteGachaAtomicChangeStore
         public int IneligibilityReason { get; set; }
 
         public string? UndoneByChangeSetId { get; set; }
+    }
+
+    private sealed class GachaRevisionReadRow
+    {
+        public string RevisionId { get; set; } = string.Empty;
+
+        public string ChangeSetId { get; set; } = string.Empty;
+
+        public string GameAccountId { get; set; } = string.Empty;
+
+        public string ExternalRecordId { get; set; } = string.Empty;
+
+        public int ChangeKind { get; set; }
+
+        public long? BeforeVersion { get; set; }
+
+        public long? AfterVersion { get; set; }
+
+        public string? BeforeSnapshotJson { get; set; }
+
+        public string? AfterSnapshotJson { get; set; }
+
+        public long CreatedAtUtcTicks { get; set; }
     }
 
     private sealed class TombstoneRow

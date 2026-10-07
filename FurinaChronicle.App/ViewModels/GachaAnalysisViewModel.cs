@@ -6,9 +6,11 @@ using CommunityToolkit.Mvvm.Input;
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.Gacha.Metadata;
+using FurinaChronicle.Core.History;
 using FurinaChronicle.Services.Gacha.Abstractions;
 using FurinaChronicle.Services.Gacha;
 using FurinaChronicle.Services.Gacha.Analytics;
+using FurinaChronicle.Services.Gacha.History;
 using System.Collections.ObjectModel;
 
 namespace FurinaChronicle.App.ViewModels;
@@ -28,7 +30,9 @@ public partial class GachaAnalysisViewModel(
     IGachaItemIconCache iconCache,
     IGachaEventCatalog eventCatalog,
     IGachaBannerImageCache bannerImageCache,
-    PreloadGachaBannerImages preloadGachaBannerImages)
+    PreloadGachaBannerImages preloadGachaBannerImages,
+    IGachaAtomicChangeStore atomicChangeStore,
+    ManageGachaHistory manageGachaHistory)
     : ObservableObject
 {
     private const int ArchiveOverviewInitialFiveStarItemCount = 12;
@@ -46,6 +50,8 @@ public partial class GachaAnalysisViewModel(
     [ObservableProperty]
     public partial IReadOnlyList<GachaPoolStatisticsDisplayItem> PoolCards { get; set; } = [];
     public ObservableCollection<GachaRecordAnalysisDisplayItem> DetailRecords { get; } = [];
+    public ObservableCollection<GachaOperationHistoryDisplayItem> OperationHistory { get; } = [];
+    public ObservableCollection<GachaRevisionDisplayItem> SelectedOperationRevisions { get; } = [];
     public ObservableCollection<GachaHistoryDisplayItem> HistoryItems { get; } = [];
     public ObservableCollection<GachaHistoryVersionOption> HistoryVersions { get; } = [];
     public ObservableCollection<GachaCalendarDisplayItem> CalendarItems { get; } = [];
@@ -109,6 +115,18 @@ public partial class GachaAnalysisViewModel(
 
     [ObservableProperty]
     public partial string? ErrorMessage { get; set; }
+
+    [ObservableProperty]
+    public partial GachaRecordAnalysisDisplayItem? SelectedDetailRecord { get; set; }
+
+    [ObservableProperty]
+    public partial GachaOperationHistoryDisplayItem? SelectedOperation { get; set; }
+
+    [ObservableProperty]
+    public partial int UndoLimit { get; set; } = 3;
+
+    [ObservableProperty]
+    public partial string HistoryStatus { get; set; } = "尚未加载修改历史。";
 
     [ObservableProperty]
     public partial string Summary { get; set; } = "暂无抽卡记录。";
@@ -595,6 +613,157 @@ public partial class GachaAnalysisViewModel(
         Summary = page.TotalCount == 0
             ? "当前筛选没有匹配的抽卡记录。"
             : $"当前筛选共 {page.TotalCount} 条抽卡记录。";
+        await LoadOperationHistoryCoreAsync();
+    }
+
+    public async Task LoadSelectedOperationRevisionsAsync()
+    {
+        SelectedOperationRevisions.Clear();
+        if (SelectedOperation is null)
+        {
+            HistoryStatus = "请先选择一项操作。";
+            return;
+        }
+
+        IReadOnlyList<GachaRevisionItem> revisions =
+            await atomicChangeStore.GetRevisionsAsync(
+                SelectedOperation.Item.ChangeSetId);
+        foreach (GachaRevisionItem revision in revisions)
+        {
+            SelectedOperationRevisions.Add(
+                GachaRevisionDisplayItem.FromDomain(revision));
+        }
+        HistoryStatus = revisions.Count == 0
+            ? "此操作没有保留可显示的 Gacha 修订内容。"
+            : $"已加载 {revisions.Count} 条修订。";
+    }
+
+    public GachaOperationHistoryDisplayItem? GetLatestUndoCandidate() =>
+        OperationHistory.FirstOrDefault(item => item.IsUndoEligible);
+
+    public async Task<GachaAtomicChangeResult> CorrectSelectedRecordAsync(
+        OperationId operationId,
+        string? itemName,
+        string? itemId,
+        int? rankType,
+        DateTimeOffset occurredAt,
+        Guid? cleanupConfirmationId = null)
+    {
+        GachaRecordAnalysisDisplayItem selected =
+            SelectedDetailRecord ?? throw new InvalidOperationException(
+                "请先选择一条抽卡记录。");
+        GachaFactReference reference = new(
+            selected.GameAccountId,
+            selected.ExternalRecordId);
+        GachaAtomicChangeResult result =
+            await manageGachaHistory.CorrectAsync(
+            operationId,
+            reference,
+            new GachaCorrectionInput(
+                itemName,
+                itemId,
+                rankType,
+                occurredAt),
+            cleanupConfirmationId);
+        await RefreshAfterAppliedAsync(result);
+        return result;
+    }
+
+    public async Task<GachaAtomicChangeResult> DeleteSelectedRecordAsync(
+        OperationId operationId,
+        Guid? cleanupConfirmationId = null)
+    {
+        GachaRecordAnalysisDisplayItem selected =
+            SelectedDetailRecord ?? throw new InvalidOperationException(
+                "请先选择一条抽卡记录。");
+        GachaFactReference reference = new(
+            selected.GameAccountId,
+            selected.ExternalRecordId);
+        GachaAtomicChangeResult result =
+            await manageGachaHistory.DeleteAsync(
+                operationId,
+                reference,
+                cleanupConfirmationId);
+        await RefreshAfterAppliedAsync(result);
+        return result;
+    }
+
+    public async Task<GachaAtomicChangeResult>
+        IrreversiblyDeleteSelectedRecordAsync(OperationId operationId)
+    {
+        GachaRecordAnalysisDisplayItem selected =
+            SelectedDetailRecord ?? throw new InvalidOperationException(
+                "请先选择一条抽卡记录。");
+        GachaFactReference reference = new(
+            selected.GameAccountId,
+            selected.ExternalRecordId);
+        GachaAtomicChangeResult result =
+            await manageGachaHistory.IrreversiblyDeleteAsync(
+                operationId,
+                reference);
+        await RefreshAfterAppliedAsync(result);
+        return result;
+    }
+
+    public async Task<GachaAtomicChangeResult> UndoLatestAsync(
+        OperationId operationId)
+    {
+        Guid archiveId = archive?.Id ?? throw new InvalidOperationException(
+            "请先选择档案。");
+        GachaAtomicChangeResult result =
+            await manageGachaHistory.UndoLatestAsync(
+                operationId,
+                archiveId);
+        await RefreshAfterAppliedAsync(result);
+        return result;
+    }
+
+    public async Task SetUndoLimitAsync(int limit)
+    {
+        Guid archiveId = archive?.Id ?? throw new InvalidOperationException(
+            "请先选择档案。");
+        UndoLimitChangeResult result =
+            await atomicChangeStore.SetUndoLimitAsync(archiveId, limit);
+        UndoLimit = result.CurrentLimit;
+        HistoryStatus = result.EvictedChangeSetIds.Count == 0
+            ? $"撤销保留次数已设为 {result.CurrentLimit}。"
+            : $"撤销保留次数已设为 {result.CurrentLimit}，" +
+                $"并清理了 {result.EvictedChangeSetIds.Count} 份较早撤销材料。";
+        await LoadOperationHistoryCoreAsync();
+    }
+
+    private async Task RefreshAfterAppliedAsync(
+        GachaAtomicChangeResult result)
+    {
+        if (result.Status is ChangeExecutionStatus.Applied or
+            ChangeExecutionStatus.AlreadyCommitted)
+        {
+            SelectedDetailRecord = null;
+            await RefreshAsync();
+        }
+    }
+
+    private async Task LoadOperationHistoryCoreAsync()
+    {
+        OperationHistory.Clear();
+        SelectedOperationRevisions.Clear();
+        SelectedOperation = null;
+        if (archive is null)
+        {
+            HistoryStatus = "请先选择档案。";
+            return;
+        }
+        UndoLimit = await atomicChangeStore.GetUndoLimitAsync(archive.Id);
+        IReadOnlyList<OperationHistoryItem> history =
+            await atomicChangeStore.GetHistoryAsync(archive.Id, 30);
+        foreach (OperationHistoryItem item in history)
+        {
+            OperationHistory.Add(
+                GachaOperationHistoryDisplayItem.FromDomain(item));
+        }
+        HistoryStatus = history.Count == 0
+            ? "当前档案尚无可显示的修改操作。"
+            : $"显示最近 {history.Count} 项操作；撤销仅作用于最新可撤销项。";
     }
 
     private GachaRecordQuery BuildDetailQuery(IReadOnlyList<Guid> ids)
@@ -1103,6 +1272,10 @@ public partial class GachaAnalysisViewModel(
     {
         PoolCards = [];
         DetailRecords.Clear();
+        SelectedDetailRecord = null;
+        OperationHistory.Clear();
+        SelectedOperation = null;
+        SelectedOperationRevisions.Clear();
         HistoryItems.Clear();
         HistoryVersions.Clear();
         SelectedHistoryVersion = null;

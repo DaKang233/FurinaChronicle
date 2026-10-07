@@ -168,6 +168,21 @@ public sealed class SqliteGachaAtomicChangeStoreTests
                 result.ChangeSetId!.Value.ToString("D")));
         Assert.Contains("Furina", revision.BeforeSnapshotJson);
         Assert.Contains("Corrected", revision.AfterSnapshotJson);
+        GachaRevisionItem projected = Assert.Single(
+            await context.AtomicGacha.GetRevisionsAsync(
+                result.ChangeSetId.Value));
+        Assert.Equal(reference, projected.Reference);
+        Assert.Equal(EntityChangeKind.Update, projected.ChangeKind);
+        Assert.Equal("Furina", projected.Before!.ItemName);
+        Assert.Equal("Corrected", projected.After!.ItemName);
+        Assert.Equal(1, projected.BeforeVersion!.Value.Value);
+        Assert.Equal(2, projected.AfterVersion!.Value.Value);
+
+        Guid archiveId = (await context.Accounts.GetByIdAsync(accountId))!
+            .PlayerArchiveId;
+        OperationHistoryItem history = Assert.Single(
+            (await context.AtomicGacha.GetHistoryAsync(archiveId, 1)));
+        Assert.Contains(archiveId, history.ArchiveIds);
     }
 
     [Fact]
