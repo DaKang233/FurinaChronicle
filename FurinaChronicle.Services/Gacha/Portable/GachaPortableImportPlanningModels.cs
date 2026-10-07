@@ -120,7 +120,9 @@ public sealed record GachaPortableApplyResult(
     int SkippedRecordCount,
     string? ConflictReason = null,
     TombstoneReintroductionWarning? ReintroductionWarning = null,
-    HistoryCleanupPlan? CleanupPlan = null);
+    HistoryCleanupPlan? CleanupPlan = null,
+    IReadOnlyList<TombstoneReintroductionWarning>?
+        ReintroductionWarnings = null);
 
 public interface IGachaPortableImportApplier
 {

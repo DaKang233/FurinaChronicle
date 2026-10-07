@@ -1220,12 +1220,13 @@ public sealed class SqliteGachaAtomicChangeStore
                 result = new GachaPortableApplyResult(
                     ChangeExecutionStatus.Suppressed,
                     ChangeSetId: null,
-                    TargetArchiveId: exception.Warning.ArchiveId,
+                    TargetArchiveId: exception.Warnings[0].ArchiveId,
                     Accounts: [],
                     InsertedRecordCount: 0,
                     SkippedRecordCount: 0,
                     exception.Message,
-                    exception.Warning);
+                    exception.Warnings[0],
+                    ReintroductionWarnings: exception.Warnings);
                 return;
             }
             catch (PortableApplyConflictException exception)
@@ -1755,6 +1756,8 @@ public sealed class SqliteGachaAtomicChangeStore
             request.Package.Accounts.Count);
         var mutations = new List<PreparedMutation>();
         var confirmedReintroductions = new List<ActiveTombstone>();
+        var unconfirmedReintroductions =
+            new List<TombstoneReintroductionWarning>();
         IReadOnlyList<TombstoneReintroductionConfirmation> confirmations =
             request.ReintroductionConfirmations ?? [];
 
@@ -1938,17 +1941,20 @@ public sealed class SqliteGachaAtomicChangeStore
                         confirmation.Reference == reference);
                     if (!confirmed)
                     {
-                        throw new PortableApplySuppressedException(
+                        unconfirmedReintroductions.Add(
                             new TombstoneReintroductionWarning(
                                 tombstoneKey,
                                 tombstone.TombstoneVersion,
                                 reference,
                                 archiveId));
                     }
-                    confirmedReintroductions.Add(
+                    else
+                    {
+                        confirmedReintroductions.Add(
                         new ActiveTombstone(
                             tombstoneKey,
                             tombstone.TombstoneVersion));
+                    }
                 }
 
                 mutations.Add(new PreparedMutation(
@@ -1982,6 +1988,12 @@ public sealed class SqliteGachaAtomicChangeStore
         {
             throw new PortableApplyConflictException(
                 "The Portable preview no longer matches the current target.");
+        }
+
+        if (unconfirmedReintroductions.Count > 0)
+        {
+            throw new PortableApplySuppressedException(
+                unconfirmedReintroductions);
         }
 
         return new PortablePreparation(
@@ -3421,12 +3433,16 @@ public sealed class SqliteGachaAtomicChangeStore
         : Exception(message);
 
     private sealed class PortableApplySuppressedException(
-        TombstoneReintroductionWarning warning)
+        IReadOnlyList<TombstoneReintroductionWarning> warnings)
         : Exception(
-            "The Portable import would reintroduce a locally deleted Gacha fact.")
+            $"The Portable import would reintroduce {warnings.Count} locally deleted Gacha fact(s).")
     {
-        public TombstoneReintroductionWarning Warning { get; } =
-            warning;
+        public IReadOnlyList<TombstoneReintroductionWarning> Warnings { get; } =
+            warnings.Count > 0
+                ? warnings
+                : throw new ArgumentException(
+                    "At least one warning is required.",
+                    nameof(warnings));
     }
 
     private sealed class UnknownStorageCapacityProvider

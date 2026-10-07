@@ -9,6 +9,7 @@ using FurinaChronicle.Services.Archives;
 using FurinaChronicle.Services.Gacha.Exporting;
 using FurinaChronicle.Services.Gacha.Importing;
 using FurinaChronicle.Services.Gacha.Refreshing;
+using FurinaChronicle.Services.Gacha.Portable;
 using FurinaChronicle.Services.Passport;
 using FurinaChronicle.Services.Gacha;
 using System.Collections.ObjectModel;
@@ -30,7 +31,12 @@ public partial class GachaPageViewModel(
 	DeletePlayerArchive deletePlayerArchive,
 	RefreshGachaRecords refreshGachaRecords,
 	IPassportSelectionStore passportSelectionStore,
-	TeyvatHelperUigfImportSource teyvatHelperUigfImportSource)
+	TeyvatHelperUigfImportSource teyvatHelperUigfImportSource,
+	IGachaPortableInputStager portableInputStager,
+	IGachaPortablePackageReader portablePackageReader,
+	PlanGachaPortableImport planPortableImport,
+	IGachaPortableImportApplier portableImportApplier,
+	IGachaPortableExportFileService portableExportFileService)
 	: ObservableObject
 {
 	public GachaAnalysisViewModel Analysis { get; } = analysis;
@@ -82,7 +88,146 @@ public partial class GachaPageViewModel(
 	public partial string? ExportSummary { get; set; }
 
 	[ObservableProperty]
+	public partial string? PortableSummary { get; set; }
+
+	[ObservableProperty]
 	public partial string? RefreshSummary { get; set; }
+
+	public async Task<GachaPortableImportSession> PreparePortableImportAsync(
+		Stream source,
+		Guid? targetArchiveId,
+		bool createNewArchive,
+		CancellationToken cancellationToken = default)
+	{
+		ArgumentNullException.ThrowIfNull(source);
+		IGachaPortableStagedInput staged =
+			await portableInputStager.StageAsync(source, cancellationToken);
+		try
+		{
+			await using Stream stagedStream =
+				await staged.OpenReadAsync(cancellationToken);
+			GachaPortableReadResult read =
+				await portablePackageReader.ReadAsync(
+					stagedStream,
+					cancellationToken);
+			GachaPortableImportPlan plan =
+				await planPortableImport.ExecuteAsync(
+					new GachaPortableImportPlanRequest(
+						read.Package,
+						targetArchiveId,
+						createNewArchive),
+					cancellationToken);
+			PortableSummary = FormatPortablePlan(plan, staged.Length);
+			return new GachaPortableImportSession(
+				staged,
+				read.Package,
+				plan,
+				DateTimeOffset.Now);
+		}
+		catch
+		{
+			await staged.DisposeAsync();
+			throw;
+		}
+	}
+
+	public async Task ReplanPortableImportAsync(
+		GachaPortableImportSession session,
+		Guid? targetArchiveId,
+		bool createNewArchive,
+		CancellationToken cancellationToken = default)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		session.Plan = await planPortableImport.ExecuteAsync(
+			new GachaPortableImportPlanRequest(
+				session.Package,
+				targetArchiveId,
+				createNewArchive),
+			cancellationToken);
+		PortableSummary = FormatPortablePlan(
+			session.Plan,
+			session.SourceLength);
+	}
+
+	public Task<GachaPortableApplyResult> ApplyPortableImportAsync(
+		GachaPortableImportSession session,
+		IReadOnlyList<
+			FurinaChronicle.Services.Gacha.History.TombstoneReintroductionConfirmation>?
+			reintroductionConfirmations = null,
+		Guid? cleanupConfirmationId = null,
+		CancellationToken cancellationToken = default)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		return portableImportApplier.ApplyAsync(
+			new GachaPortableApplyRequest(
+				session.Package,
+				session.Plan,
+				session.OperationId,
+				session.ReceivedAt,
+				session.ReceiptBatchId,
+				reintroductionConfirmations,
+				cleanupConfirmationId),
+			cancellationToken);
+	}
+
+	public async Task<GachaPortableExportArtifact>
+		CreatePortableArchiveExportAsync(
+			CancellationToken cancellationToken = default)
+	{
+		PlayerArchive selectedArchive = SelectedArchive ??
+			throw new InvalidOperationException("请先选择要导出的档案。");
+		if (Accounts.Count == 0)
+		{
+			throw new InvalidOperationException("所选档案没有可导出的游戏账号。");
+		}
+		string directory = Path.Combine(
+			FileSystem.CacheDirectory,
+			"gacha-portable-export");
+		Directory.CreateDirectory(directory);
+		string path = Path.Combine(
+			directory,
+			$"furina-gacha-{DateTimeOffset.Now:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.zip");
+		try
+		{
+			GachaPortableWriteResult result =
+				await portableExportFileService.ExportAsync(
+					path,
+					selectedArchive.Id,
+					Accounts.Select(account => account.Id).ToArray(),
+					cancellationToken);
+			PortableSummary =
+				$"Portable 导出已生成：{result.AccountCount} 个账号、" +
+				$"{result.RecordCount} 条记录；等待选择保存位置。";
+			return new GachaPortableExportArtifact(path, result);
+		}
+		catch
+		{
+			if (File.Exists(path))
+			{
+				File.Delete(path);
+			}
+			throw;
+		}
+	}
+
+	private static string FormatPortablePlan(
+		GachaPortableImportPlan plan,
+		long sourceLength)
+	{
+		string target = plan.Archive.Kind switch
+		{
+			GachaPortableArchivePlanKind.MapExisting =>
+				$"映射到“{plan.Archive.ProposedName}”",
+			GachaPortableArchivePlanKind.CreateNew =>
+				$"新建“{plan.Archive.ProposedName}”",
+			_ => "需要手动选择目标档案"
+		};
+		return $"Portable 预览（{sourceLength} 字节）：{target}；" +
+			$"新建账号 {plan.Preview.AccountCreateCount}，" +
+			$"复用账号 {plan.Preview.AccountReuseCount}，" +
+			$"新增 {plan.Preview.AddCount}，保留 {plan.Preview.SkipCount}，" +
+			$"冲突 {plan.Preview.ConflictCount}，别名 {plan.Preview.AliasCount}。";
+	}
 
 	[ObservableProperty]
 	public partial bool IsFullRefresh { get; set; }

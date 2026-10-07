@@ -390,6 +390,96 @@ public sealed class SqliteGachaPortableApplyTests
         Assert.Equal(2, Count(raw, "DataChangeSets"));
     }
 
+    [Fact]
+    public async Task ApplyAsync_ReportsAllTombstonesAndRequiresExactConfirmations()
+    {
+        await using SqliteRepositoryTestContext context =
+            await CreateContextAsync();
+        PlayerArchive archive =
+            SqliteRepositoryTestContext.CreateArchive("Markers");
+        GameRoleNaturalIdentity natural =
+            GenshinGameRoleIdentity.Create(
+                "100000001",
+                GameServerRegion.ChinaOfficial);
+        var identity = new GameRoleIdentity(
+            GameRoleIdentityId.FromNaturalIdentity(natural),
+            natural);
+        GameAccount account = SqliteRepositoryTestContext.CreateAccount(
+            archive.Id,
+            natural.Uid,
+            GameServerRegion.ChinaOfficial,
+            roleIdentity: identity);
+        await context.Archives.AddAsync(archive);
+        await context.Accounts.AddAsync(account);
+        foreach (string externalId in new[] { "record-1", "record-2" })
+        {
+            GachaFactReference reference = new(account.Id, externalId);
+            await context.AtomicGacha.CommitAsync(
+                new GachaAtomicChangeRequest(
+                    OperationId.New(),
+                    DataChangeOperationKind.Import,
+                    DataOrigin.OfficialApi,
+                    "seed",
+                    ReceivedAt,
+                    ReceivedAt,
+                    [new GachaFactMutation(
+                        reference,
+                        CreateRecord(account.Id, externalId, "Furina"))]));
+            GachaFactState state = Assert.IsType<GachaFactState>(
+                await context.AtomicGacha.GetCurrentAsync(reference));
+            await context.AtomicGacha.IrreversiblyDeleteAsync(
+                new GachaIrreversibleDeleteRequest(
+                    OperationId.New(),
+                    reference,
+                    state.Version,
+                    ReceivedAt,
+                    ReceivedAt));
+        }
+        Guid sourceAccountId = Guid.NewGuid();
+        GachaPortablePackage package = new(
+            ReceivedAt,
+            new GachaPortableArchive(Guid.NewGuid(), archive.Name),
+            [new GachaPortableAccount(
+                sourceAccountId,
+                identity,
+                "Source",
+                [
+                    CreateRecord(sourceAccountId, "record-1", "Furina"),
+                    CreateRecord(sourceAccountId, "record-2", "Furina")
+                ])]);
+        GachaPortableImportPlan plan = await PlanAsync(context, package);
+        var request = new GachaPortableApplyRequest(
+            package,
+            plan,
+            OperationId.New(),
+            ReceivedAt,
+            Guid.NewGuid());
+
+        GachaPortableApplyResult suppressed =
+            await context.AtomicGacha.ApplyAsync(request);
+
+        Assert.Equal(ChangeExecutionStatus.Suppressed, suppressed.Status);
+        TombstoneReintroductionWarning[] warnings =
+            Assert.IsAssignableFrom<IReadOnlyList<TombstoneReintroductionWarning>>(
+                suppressed.ReintroductionWarnings)
+            .ToArray();
+        Assert.Equal(2, warnings.Length);
+        Assert.Empty(await context.Gacha.GetRecentAsync(account.Id, 10));
+
+        GachaPortableApplyResult applied =
+            await context.AtomicGacha.ApplyAsync(request with
+            {
+                ReintroductionConfirmations = warnings.Select(warning =>
+                    new TombstoneReintroductionConfirmation(
+                        warning.TombstoneKey,
+                        warning.TombstoneVersion,
+                        warning.Reference)).ToArray()
+            });
+        Assert.Equal(ChangeExecutionStatus.Applied, applied.Status);
+        Assert.Equal(2, applied.InsertedRecordCount);
+        Assert.Equal(2, (await context.Gacha.GetRecentAsync(account.Id, 10)).Count);
+    }
+
     private static async Task<SqliteRepositoryTestContext> CreateContextAsync()
     {
         SqliteRepositoryTestContext context =

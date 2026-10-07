@@ -147,6 +147,14 @@
                                 IsEnabled="{Binding IsNotBusy}"
                                 Text="导出账号表格" />
                             <Button
+                                Clicked="OnImportPortableClicked"
+                                IsEnabled="{Binding IsNotBusy}"
+                                Text="导入 Furina Portable" />
+                            <Button
+                                Clicked="OnExportPortableClicked"
+                                IsEnabled="{Binding IsNotBusy}"
+                                Text="导出档案 Portable" />
+                            <Button
                                 Command="{Binding Analysis.ClearIconCacheCommand}"
                                 IsEnabled="{Binding Analysis.IsNotBusy}"
                                 Text="清除图标缓存" />
@@ -167,6 +175,7 @@
                     <Label FontSize="11" Text="{Binding RefreshSummary}" />
                     <Label FontSize="11" Text="{Binding ImportSummary}" />
                     <Label FontSize="11" Text="{Binding ExportSummary}" />
+                    <Label FontSize="11" Text="{Binding PortableSummary}" />
                     <Label FontSize="11" Text="{Binding ErrorMessage}" TextColor="Red" />
                     <Label FontSize="11" Text="{Binding Analysis.ErrorMessage}" TextColor="Red" />
                 </VerticalStackLayout>
