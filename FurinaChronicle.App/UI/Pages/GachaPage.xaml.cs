@@ -8,9 +8,9 @@ using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Services.Gacha.Refreshing;
 using System.ComponentModel;
 
-namespace FurinaChronicle.App;
+namespace FurinaChronicle.App.UI.Pages;
 
-public partial class MainPage : ContentPage
+public partial class GachaPage : ContentPage
 {
     private const double MinimumAnalysisViewportHeight = 360;
     private const double MaximumAnalysisViewportHeight = 900;
@@ -18,11 +18,11 @@ public partial class MainPage : ContentPage
 
     private bool? loadedArchiveScope;
 
-    private MainPageViewModel ViewModel =>
-        (MainPageViewModel)BindingContext;
+    private GachaPageViewModel ViewModel =>
+        (GachaPageViewModel)BindingContext;
 
-    public MainPage(
-        MainPageViewModel viewModel,
+    public GachaPage(
+        GachaPageViewModel viewModel,
         UserPageViewModel userPageViewModel)
     {
         InitializeComponent();

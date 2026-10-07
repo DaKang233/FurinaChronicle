@@ -3,6 +3,7 @@
 
 using FurinaChronicle.App.Diagnostics;
 using FurinaChronicle.App.Startup;
+using FurinaChronicle.App.UI.Pages;
 using FurinaChronicle.App.ViewModels;
 
 namespace FurinaChronicle.App.Composition;
@@ -15,14 +16,15 @@ internal static class PresentationServiceCollectionExtensions
         services.AddSingleton(_ =>
             ApplicationVersionInfo.FromAssembly(typeof(MauiProgram).Assembly));
 
-        services.AddTransient<MainPageViewModel>();
+        services.AddTransient<GachaPageViewModel>();
         services.AddTransient<GachaAnalysisViewModel>();
         services.AddSingleton<UserPageViewModel>();
         services.AddSingleton<StartupPageViewModel>();
 
-        services.AddTransient<MainPage>();
+        services.AddTransient<GachaPage>();
         services.AddSingleton<HomePage>();
         services.AddSingleton<UserPage>();
+        services.AddSingleton<ArchivePage>();
         services.AddTransient<MainlandLoginMethodPage>();
         services.AddTransient<HoYoLabPasswordLoginPage>();
         services.AddTransient<QrLoginPage>();

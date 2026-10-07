@@ -5,12 +5,12 @@
 -->
 
 <ContentPage
-    x:Class="FurinaChronicle.App.MainPage"
+    x:Class="FurinaChronicle.App.UI.Pages.GachaPage"
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
     xmlns:viewModels="clr-namespace:FurinaChronicle.App.ViewModels"
     xmlns:controls="clr-namespace:FurinaChronicle.App.UI.Controls"
-    x:DataType="viewModels:MainPageViewModel"
+    x:DataType="viewModels:GachaPageViewModel"
     Title="抽卡记录">
 
     <Shell.TitleView>

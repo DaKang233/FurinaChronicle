@@ -15,7 +15,7 @@ using System.Collections.ObjectModel;
 
 namespace FurinaChronicle.App.ViewModels;
 
-public partial class MainPageViewModel(
+public partial class GachaPageViewModel(
 	GetGachaRecordPage getGachaRecordPage,
 	GachaAnalysisViewModel analysis,
 	ImportUigfGachaRecords importUigfGachaRecords,

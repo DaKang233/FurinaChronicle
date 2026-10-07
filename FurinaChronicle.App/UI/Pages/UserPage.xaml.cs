@@ -4,7 +4,7 @@
 using FurinaChronicle.App.ViewModels;
 using FurinaChronicle.Services.Passport;
 
-namespace FurinaChronicle.App;
+namespace FurinaChronicle.App.UI.Pages;
 
 public partial class UserPage : ContentPage
 {

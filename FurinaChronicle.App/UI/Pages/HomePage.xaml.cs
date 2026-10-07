@@ -3,7 +3,7 @@
 
 using FurinaChronicle.App.ViewModels;
 
-namespace FurinaChronicle.App;
+namespace FurinaChronicle.App.UI.Pages;
 
 public partial class HomePage : ContentPage
 {

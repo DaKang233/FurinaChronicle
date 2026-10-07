@@ -71,7 +71,16 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <MauiXaml Update="UI\StartupPage.xaml">
+	  <Compile Update="UI\Pages\GachaPage.xaml.cs">
+	    <DependentUpon>GachaPage.xaml</DependentUpon>
+	  </Compile>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <MauiXaml Update="UI\Pages\ArchivePage.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </MauiXaml>
+	  <MauiXaml Update="UI\Pages\StartupPage.xaml">
 	    <Generator>MSBuild:Compile</Generator>
 	  </MauiXaml>
 	</ItemGroup>
