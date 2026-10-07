@@ -14,6 +14,5 @@ namespace FurinaChronicle.Services.Abstractions
         Task<PlayerArchive?> GetByIdAsync(Guid archiveId, CancellationToken cancellationToken = default);
         Task AddAsync(PlayerArchive archive, CancellationToken cancellationToken = default);
         Task UpdateAsync(PlayerArchive archive, CancellationToken cancellationToken = default);
-        Task DeleteAsync(Guid archiveId, CancellationToken cancellationToken= default);
     }
 }

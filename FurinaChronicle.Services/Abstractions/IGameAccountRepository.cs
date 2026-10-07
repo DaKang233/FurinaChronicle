@@ -26,6 +26,5 @@ namespace FurinaChronicle.Services.Abstractions
             CancellationToken cancellationToken = default);
         Task AddAsync(GameAccount account,  CancellationToken cancellationToken = default);
         Task UpdateAsync(GameAccount account, CancellationToken cancellationToken = default);
-        Task DeleteAsync(Guid gameAccountId,  CancellationToken cancellationToken = default);
     }
 }

@@ -27,8 +27,6 @@ public partial class GachaPageViewModel(
 	GetGameAccounts getGameAccounts,
 	AddGameAccount addGameAccount,
 	ArchiveSelectionService archiveSelectionService,
-	DeleteGameAccount deleteGameAccount,
-	DeletePlayerArchive deletePlayerArchive,
 	RefreshGachaRecords refreshGachaRecords,
 	IPassportSelectionStore passportSelectionStore,
 	TeyvatHelperUigfImportSource teyvatHelperUigfImportSource,
@@ -397,22 +395,10 @@ public partial class GachaPageViewModel(
 	{
 		bool createdArchiveForImport = SelectedArchive is null;
 		PlayerArchive archive = await EnsureImportArchiveAsync();
-		GachaImportResult result;
-		try
-		{
-			result = await importUigfGachaRecords.ExecuteAsync(
+		GachaImportResult result =
+			await importUigfGachaRecords.ExecuteAsync(
 				source,
 				archive.Id);
-		}
-		catch
-		{
-			if (createdArchiveForImport)
-			{
-				await RemoveImportArchiveAsync(archive.Id);
-			}
-
-			throw;
-		}
 
 		ImportSummary = FormatImportSummary(
 			fileName,
@@ -420,9 +406,8 @@ public partial class GachaPageViewModel(
 
 		if (createdArchiveForImport && result.ImportedCount == 0)
 		{
-			await RemoveImportArchiveAsync(archive.Id);
 			StatusMessage =
-				"UIGF 文件没有可导入的有效记录，未创建档案。";
+				"UIGF 文件没有可导入的有效记录；自动创建的空档案已保留，可在档案与账号管理页永久删除。";
 			return;
 		}
 
@@ -591,10 +576,7 @@ public partial class GachaPageViewModel(
 
 			bool createdArchive = false;
 			Guid? createdAccountId = null;
-			bool refreshRecordsCommitted = false;
-			try
-			{
-				GameAccount targetAccount = SelectedAccount ??
+			GameAccount targetAccount = SelectedAccount ??
 					await EnsureRefreshAccountAsync(
 						source,
 						passportSelection,
@@ -623,8 +605,6 @@ public partial class GachaPageViewModel(
 						passportAccountId,
 						manualUrl,
 						gameInstallationPath));
-				refreshRecordsCommitted = true;
-
 				await ReloadRecordsCoreAsync(pageNumber: 1);
 				RefreshSummary =
 					$"刷新完成：获取 {result.FetchedCount} 条，" +
@@ -638,18 +618,6 @@ public partial class GachaPageViewModel(
 				{
 					StatusMessage += $" 已自动创建并选择账号 {targetAccount.Uid}。";
 				}
-			}
-			catch
-			{
-				if (!refreshRecordsCommitted)
-				{
-					await RollBackAutomaticRefreshTargetAsync(
-						createdArchive,
-						createdAccountId);
-				}
-
-				throw;
-			}
 		});
 	}
 
@@ -707,36 +675,6 @@ public partial class GachaPageViewModel(
 		return SelectedAccount;
 	}
 
-	private async Task RollBackAutomaticRefreshTargetAsync(
-		bool createdArchive,
-		Guid? createdAccountId)
-	{
-		try
-		{
-			if (createdArchive && SelectedArchive is not null)
-			{
-				await RemoveImportArchiveAsync(SelectedArchive.Id);
-				return;
-			}
-
-			if (createdAccountId is Guid accountId)
-			{
-				await deleteGameAccount.ExecuteAsync(accountId);
-				SelectedAccount = null;
-				await RefreshAccountsCoreAsync();
-				SelectedAccount = Accounts.FirstOrDefault();
-				if (SelectedAccount is not null)
-				{
-					await archiveSelectionService.SelectAsync(SelectedAccount.Id);
-				}
-			}
-		}
-		catch
-		{
-			// Preserve the original refresh error; cleanup can be retried by the user.
-		}
-	}
-
 	private static string FormatImportSummary(
 		string fileName,
 		GachaImportResult result)
@@ -770,22 +708,6 @@ public partial class GachaPageViewModel(
 		PlayerArchive archive = await createPlayerArchive.ExecuteAsync(GetNextUnnamedArchiveName());
 		await LoadArchivesCoreAsync(archive.Id);
 		return archive;
-	}
-
-	private async Task RemoveImportArchiveAsync(Guid archiveId)
-	{
-		await deletePlayerArchive.ExecuteAsync(archiveId);
-
-		if (SelectedArchive?.Id == archiveId)
-		{
-			SelectedArchive = null;
-		}
-
-		SelectedAccount = null;
-		Accounts.Clear();
-		GachaRecords.Clear();
-		ResetPagination();
-		await LoadArchivesCoreAsync();
 	}
 
 	private string GetNextUnnamedArchiveName()

@@ -2,14 +2,14 @@
 // SPDX-License-Identifier: MIT
 
 using FurinaChronicle.Core.History;
-using FurinaChronicle.Services.Abstractions;
+using FurinaChronicle.Infrastructure.Persistence;
 using FurinaChronicle.Services.Gacha;
 using FurinaChronicle.Services.Gacha.Writing;
 
 namespace FurinaChronicle.Tests.Services.Gacha;
 
 internal sealed class RepositoryGachaCommitter(
-    IGachaRecordRepository repository)
+    InMemoryGachaRecordRepository repository)
     : ICommitGachaRecords
 {
     public async Task<CommitGachaRecordsResult> ExecuteAsync(

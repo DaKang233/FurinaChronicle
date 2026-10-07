@@ -234,7 +234,14 @@ public sealed class RefreshGachaRecordsTests
         await context.Accounts.AddAsync(account);
         var client = new StubGachaLogClient();
         client.Add("301", null, Page(Remote("sqlite-provenance")));
-        RefreshGachaRecords service = CreateService(context.Gacha, client);
+        var service = new RefreshGachaRecords(
+            context.Gacha,
+            new CommitGachaRecords(context.AtomicGacha),
+            new StubPassportStore(),
+            new StubSTokenProvider(),
+            new StubWindowsProvider(false),
+            client,
+            new StubMetadataProvider());
 
         await service.ExecuteAsync(new GachaRefreshRequest(
             account,
@@ -279,7 +286,7 @@ public sealed class RefreshGachaRecordsTests
     }
 
     private static RefreshGachaRecords CreateService(
-        IGachaRecordRepository repository,
+        InMemoryGachaRecordRepository repository,
         StubGachaLogClient client)
     {
         return new RefreshGachaRecords(
@@ -362,7 +369,7 @@ public sealed class RefreshGachaRecordsTests
     }
 
     private sealed class RepositoryCommitter(
-        IGachaRecordRepository repository)
+        InMemoryGachaRecordRepository repository)
         : ICommitGachaRecords
     {
         public async Task<CommitGachaRecordsResult> ExecuteAsync(

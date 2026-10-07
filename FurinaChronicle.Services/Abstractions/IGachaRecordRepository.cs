@@ -36,10 +36,5 @@ namespace FurinaChronicle.Services.Abstractions
             IReadOnlyCollection<string> externalRecordIds,
             CancellationToken cancellationToken = default);
 
-        Task<GachaSaveResult> SaveBatchAsync(
-            IReadOnlyCollection<GachaRecord> records,
-            CancellationToken cancellationToken = default,
-            GachaRecordConflictPolicy conflictPolicy =
-                GachaRecordConflictPolicy.PreserveExisting);
     }
 }
