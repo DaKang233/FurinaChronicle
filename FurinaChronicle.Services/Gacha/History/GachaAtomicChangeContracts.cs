@@ -87,6 +87,13 @@ public sealed class GachaAtomicChangeRequest
                 "Undo requests must identify the original change set.",
                 nameof(undoOfChangeSetId));
         }
+        if (operationKind is DataChangeOperationKind.Undo or
+            DataChangeOperationKind.IrreversibleDelete)
+        {
+            throw new ArgumentException(
+                "Undo and irreversible deletion must use their dedicated commands.",
+                nameof(operationKind));
+        }
 
         OperationId = operationId;
         OperationKind = operationKind;

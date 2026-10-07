@@ -58,7 +58,7 @@ Tombstone／Portable Apply 基础。Q1～Q7 的首版产品选择由
 | 工作包 | 状态 | 说明 |
 |---|---|---|
 | P0 基线、矩阵、契约 | Completed | 本文和 ADR 0014；421／421 基线 |
-| P1 原子前置条件 | Pending | expected-absent、版本 ABA、after-content、专用操作拒绝、容量 |
+| P1 原子前置条件 | Completed | expected-absent、版本 ABA、after-content、专用操作拒绝、Portable 容量确认；427／427 |
 | P2 受控大文件暂存 | Pending | 有界暂存、增量指纹、分页 Plan／冲突、整包事务 Apply |
 | P3 接管生产获取 | Pending | UIGF、刷新、小助手、兼容 JSON |
 | P4 删除闭环 | Pending | 记录、账号、档案 purge 与 Tombstone |
@@ -72,4 +72,3 @@ Tombstone／Portable Apply 基础。Q1～Q7 的首版产品选择由
 每个工作包完成后记录实际提交、自动化和平台证据。Build、CI、fixture、模拟器和
 真机证据分别标注；未实际执行的项目写 `Not run` 或 `Blocked`。完整 P8 未满足前，
 不得将整个 8B.4 标为 Completed。
-

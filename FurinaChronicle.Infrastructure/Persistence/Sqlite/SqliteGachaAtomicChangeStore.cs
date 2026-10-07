@@ -109,14 +109,25 @@ public sealed class SqliteGachaAtomicChangeStore
                 GachaFactReadRow? current = ReadCurrent(
                     connection,
                     mutation.Reference);
-                if (mutation.ExpectedVersion is FactVersion expected &&
-                    (current is null || current.Version != expected.Value))
+                if (mutation.ExpectedVersion is FactVersion expected)
+                {
+                    if (current is null || current.Version != expected.Value)
+                    {
+                        result = new GachaAtomicChangeResult(
+                            ChangeExecutionStatus.Conflict,
+                            ChangeSetId: null,
+                            AffectedRecordCount: 0,
+                            $"Gacha fact {mutation.Reference} no longer has expected version {expected.Value}.");
+                        return;
+                    }
+                }
+                else if (current is not null)
                 {
                     result = new GachaAtomicChangeResult(
                         ChangeExecutionStatus.Conflict,
                         ChangeSetId: null,
                         AffectedRecordCount: 0,
-                        $"Gacha fact {mutation.Reference} no longer has expected version {expected.Value}.");
+                        $"Gacha fact {mutation.Reference} already exists; an expected version is required to change it.");
                     return;
                 }
 
@@ -126,6 +137,7 @@ public sealed class SqliteGachaAtomicChangeStore
                         mutation.Reference.GameAccountId)
                     : ParseRequiredGuid(current.ArchiveId, "archive");
                 PreparedMutation? item = PrepareMutation(
+                    connection,
                     mutation,
                     current,
                     archiveId);
@@ -206,7 +218,8 @@ public sealed class SqliteGachaAtomicChangeStore
             {
                 HistoryCleanupPlan? cleanupPlan = BuildCleanupPlan(
                     connection,
-                    request,
+                    request.OperationId,
+                    request.CaptureUndo,
                     substantive);
                 if (cleanupPlan is not null)
                 {
@@ -498,6 +511,18 @@ public sealed class SqliteGachaAtomicChangeStore
                             $"Gacha fact {reference} changed after the original operation.");
                         return;
                     }
+                    if (originalAfter is null ||
+                        !GachaFactContentEquals(
+                            current.ToGachaRow(),
+                            originalAfter))
+                    {
+                        result = new GachaAtomicChangeResult(
+                            ChangeExecutionStatus.Conflict,
+                            ChangeSetId: null,
+                            AffectedRecordCount: 0,
+                            $"Gacha fact {reference} no longer matches the original after-state.");
+                        return;
+                    }
                 }
                 else if (originalKind == EntityChangeKind.Delete &&
                          current is not null)
@@ -559,7 +584,9 @@ public sealed class SqliteGachaAtomicChangeStore
                             throw new InvalidDataException(
                                 "Delete undo material has no before snapshot.");
                         reinserted.Id = 0;
-                        reinserted.Version = checked(reinserted.Version + 1);
+                        reinserted.Version = NextFactVersion(
+                            connection,
+                            reference);
                         inverse.Add(new PreparedMutation(
                             archiveId,
                             Before: null,
@@ -571,6 +598,25 @@ public sealed class SqliteGachaAtomicChangeStore
                         throw new InvalidDataException(
                             "Undo material has an invalid change kind.");
                 }
+            }
+
+            List<TombstoneRow> reintroducedTombstones = connection
+                .Query<TombstoneRow>(
+                    """
+                    SELECT TombstoneKey, TombstoneVersion, ArchiveId, IsActive,
+                           ReintroducedByChangeSetId
+                    FROM LocalOnlyTombstones
+                    WHERE ReintroducedByChangeSetId = ?;
+                    """,
+                    originalChangeSetId);
+            if (reintroducedTombstones.Any(tombstone => tombstone.IsActive))
+            {
+                result = new GachaAtomicChangeResult(
+                    ChangeExecutionStatus.Conflict,
+                    ChangeSetId: null,
+                    AffectedRecordCount: 0,
+                    "A reintroduction Tombstone changed before Undo.");
+                return;
             }
 
             foreach (PreparedMutation mutation in inverse)
@@ -618,6 +664,24 @@ public sealed class SqliteGachaAtomicChangeStore
             connection.Execute(
                 "DELETE FROM UndoMaterials WHERE ChangeSetId = ?;",
                 originalChangeSetId);
+            foreach (TombstoneRow tombstone in reintroducedTombstones)
+            {
+                int updated = connection.Execute(
+                    """
+                    UPDATE LocalOnlyTombstones
+                    SET IsActive = 1, ReintroducedByChangeSetId = NULL
+                    WHERE TombstoneKey = ? AND TombstoneVersion = ?
+                        AND IsActive = 0 AND ReintroducedByChangeSetId = ?;
+                    """,
+                    tombstone.TombstoneKey,
+                    tombstone.TombstoneVersion,
+                    originalChangeSetId);
+                if (updated != 1)
+                {
+                    throw new InvalidOperationException(
+                        "The reintroduction Tombstone changed during Undo.");
+                }
+            }
             InsertUndoCommitResult(
                 connection,
                 request,
@@ -863,6 +927,49 @@ public sealed class SqliteGachaAtomicChangeStore
                 return;
             }
 
+            bool infrastructureChanged =
+                preparation.CreateArchive ||
+                preparation.IdentitiesToInsert.Count > 0 ||
+                preparation.Accounts.Any(account => account.CreateAccount) ||
+                preparation.AliasesToInsert.Count > 0;
+            if (preparation.Mutations.Count > 0)
+            {
+                HistoryCleanupPlan? cleanupPlan = BuildCleanupPlan(
+                    connection,
+                    request.OperationId,
+                    captureUndoRequested: !infrastructureChanged,
+                    preparation.Mutations);
+                if (cleanupPlan is not null)
+                {
+                    if (cleanupPlan.Candidates.Count == 0 ||
+                        cleanupPlan.AvailableBytes +
+                        cleanupPlan.ReclaimableBytes <
+                        cleanupPlan.RequiredBytes)
+                    {
+                        throw new IOException(
+                            "There is not enough storage for the Portable Gacha apply, even after eligible undo material cleanup.");
+                    }
+                    if (request.CleanupConfirmationId !=
+                        cleanupPlan.ConfirmationId)
+                    {
+                        result = new GachaPortableApplyResult(
+                            ChangeExecutionStatus.NeedsConfirmation,
+                            ChangeSetId: null,
+                            preparation.ArchiveId,
+                            Accounts: [],
+                            InsertedRecordCount: 0,
+                            SkippedRecordCount: 0,
+                            CleanupPlan: cleanupPlan);
+                        return;
+                    }
+
+                    EvictChangeSets(
+                        connection,
+                        cleanupPlan.Candidates.Select(
+                            candidate => candidate.ChangeSetId));
+                }
+            }
+
             if (preparation.CreateArchive)
             {
                 connection.Execute(
@@ -930,11 +1037,6 @@ public sealed class SqliteGachaAtomicChangeStore
                     changeSetId.ToString("D"));
             }
 
-            bool infrastructureChanged =
-                preparation.CreateArchive ||
-                preparation.IdentitiesToInsert.Count > 0 ||
-                preparation.Accounts.Any(account => account.CreateAccount) ||
-                preparation.AliasesToInsert.Count > 0;
             bool undoEligible =
                 !infrastructureChanged &&
                 preparation.Mutations.Count > 0 &&
@@ -1413,7 +1515,7 @@ public sealed class SqliteGachaAtomicChangeStore
                     continue;
                 }
 
-                proposed.Version = 1;
+                proposed.Version = NextFactVersion(connection, reference);
                 string tombstoneKey = CreateTombstoneKey(
                     archiveId,
                     targetIdentityId,
@@ -1494,6 +1596,7 @@ public sealed class SqliteGachaAtomicChangeStore
     }
 
     private static PreparedMutation? PrepareMutation(
+        SQLiteConnection connection,
         GachaFactMutation mutation,
         GachaFactReadRow? current,
         Guid archiveId)
@@ -1507,7 +1610,7 @@ public sealed class SqliteGachaAtomicChangeStore
 
             GachaRecordRow after =
                 GachaRecordRow.FromDomain(mutation.ProposedRecord);
-            after.Version = 1;
+            after.Version = NextFactVersion(connection, mutation.Reference);
             return new PreparedMutation(
                 archiveId,
                 Before: null,
@@ -1574,6 +1677,26 @@ public sealed class SqliteGachaAtomicChangeStore
                 throw new ArgumentOutOfRangeException();
         }
     }
+
+    private static long NextFactVersion(
+        SQLiteConnection connection,
+        GachaFactReference reference)
+    {
+        long previous = connection.ExecuteScalar<long>(
+            """
+            SELECT COALESCE(MAX(COALESCE(AfterVersion, BeforeVersion, 0)), 0)
+            FROM EntityChanges
+            WHERE EntityKind = ? AND EntityReference = ?;
+            """,
+            EntityKind,
+            reference.ToString());
+        return checked(previous + 1);
+    }
+
+    private static bool GachaFactContentEquals(
+        GachaRecordRow current,
+        GachaRecordRow expected) =>
+        current.ToDomain() == expected.ToDomain();
 
     private static void InsertChangeSet(
         SQLiteConnection connection,
@@ -2053,7 +2176,8 @@ public sealed class SqliteGachaAtomicChangeStore
 
     private HistoryCleanupPlan? BuildCleanupPlan(
         SQLiteConnection connection,
-        GachaAtomicChangeRequest request,
+        OperationId operationId,
+        bool captureUndoRequested,
         IReadOnlyCollection<PreparedMutation> mutations)
     {
         HistoryStorageCapacity capacity = capacityProvider.GetCapacity();
@@ -2067,9 +2191,7 @@ public sealed class SqliteGachaAtomicChangeStore
             .Distinct()
             .ToArray();
         bool captureUndo =
-            request.CaptureUndo &&
-            request.OperationKind is not DataChangeOperationKind.Undo and
-                not DataChangeOperationKind.IrreversibleDelete &&
+            captureUndoRequested &&
             UndoRetentionPolicy.ShouldCaptureNewMaterial(
                 archiveIds.Select(
                     archiveId => ReadUndoLimit(
@@ -2141,7 +2263,7 @@ public sealed class SqliteGachaAtomicChangeStore
         }
 
         Guid confirmationId = CreateCleanupConfirmationId(
-            request.OperationId,
+            operationId,
             requiredBytes,
             candidates.Select(candidate => candidate.ChangeSetId));
         return new HistoryCleanupPlan(

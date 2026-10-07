@@ -101,7 +101,8 @@ public sealed record GachaPortableApplyRequest(
     DateTimeOffset ReceivedAt,
     Guid ReceiptBatchId,
     IReadOnlyList<TombstoneReintroductionConfirmation>?
-        ReintroductionConfirmations = null);
+        ReintroductionConfirmations = null,
+    Guid? CleanupConfirmationId = null);
 
 public sealed record GachaPortableAccountApplyResult(
     Guid SourceAccountReference,
@@ -118,7 +119,8 @@ public sealed record GachaPortableApplyResult(
     int InsertedRecordCount,
     int SkippedRecordCount,
     string? ConflictReason = null,
-    TombstoneReintroductionWarning? ReintroductionWarning = null);
+    TombstoneReintroductionWarning? ReintroductionWarning = null,
+    HistoryCleanupPlan? CleanupPlan = null);
 
 public interface IGachaPortableImportApplier
 {
