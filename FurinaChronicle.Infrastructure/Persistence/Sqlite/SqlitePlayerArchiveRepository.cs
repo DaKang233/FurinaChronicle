@@ -70,29 +70,6 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
 			});
 		}
 
-		public async Task DeleteAsync(Guid archiveId, CancellationToken cancellationToken = default)
-		{
-			if (archiveId == Guid.Empty)
-			{
-				throw new ArgumentException("存档 ID 不能为空。", nameof(archiveId));
-			}
-			await database.InitializeAsync(cancellationToken);
-			cancellationToken.ThrowIfCancellationRequested();
-			await database.Connection.RunInTransactionAsync((connection) =>
-			{
-				cancellationToken.ThrowIfCancellationRequested();
-				int affected = connection.Execute($"""
-					DELETE FROM {PlayerArchiveRow.TableName}
-					WHERE Id = ?
-					""", archiveId.ToString("D"));
-				if (affected == 0)
-				{
-					throw new KeyNotFoundException("要删除的玩家档案不存在。");
-				}
-				else Console.WriteLine($"Deleted {affected} rows from PlayerArchiveRow.");
-			});
-		}
-
 		public async Task<IReadOnlyList<PlayerArchive>> GetAllAsync(CancellationToken cancellationToken = default)
 		{
 			await database.InitializeAsync(cancellationToken);

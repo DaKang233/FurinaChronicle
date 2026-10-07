@@ -41,7 +41,12 @@ public sealed class SqliteRelationalIntegrityTests
                 CreateGacha(retainedAccount.Id, "gacha-2")
             ]);
 
-        await context.Accounts.DeleteAsync(deletedAccount.Id);
+        using (SQLiteConnection raw = context.OpenRawConnection())
+        {
+            raw.Execute(
+                "DELETE FROM GameAccounts WHERE Id = ?;",
+                deletedAccount.Id.ToString("D"));
+        }
 
         Assert.Empty(await context.Gacha.GetRecentAsync(deletedAccount.Id, 20));
         Assert.Single(await context.Gacha.GetRecentAsync(retainedAccount.Id, 20));
@@ -57,7 +62,12 @@ public sealed class SqliteRelationalIntegrityTests
         await context.Accounts.AddAsync(account);
         await context.Gacha.SaveBatchAsync([CreateGacha(account.Id, "gacha-1")]);
 
-        await context.Archives.DeleteAsync(archive.Id);
+        using (SQLiteConnection raw = context.OpenRawConnection())
+        {
+            raw.Execute(
+                "DELETE FROM PlayerArchives WHERE Id = ?;",
+                archive.Id.ToString("D"));
+        }
 
         Assert.Empty(await context.Accounts.GetByArchiveIdAsync(archive.Id));
         Assert.Empty(await context.Gacha.GetRecentAsync(account.Id, 20));

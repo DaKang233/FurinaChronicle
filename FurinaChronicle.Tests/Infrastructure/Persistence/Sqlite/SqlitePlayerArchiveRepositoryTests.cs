@@ -75,27 +75,6 @@ public sealed class SqlitePlayerArchiveRepositoryTests
     }
 
     [Fact]
-    public async Task DeleteAsync_ExistingArchive_RemovesIt()
-    {
-        await using var context = SqliteRepositoryTestContext.Create();
-        PlayerArchive archive = SqliteRepositoryTestContext.CreateArchive();
-        await context.Archives.AddAsync(archive);
-
-        await context.Archives.DeleteAsync(archive.Id);
-
-        Assert.Null(await context.Archives.GetByIdAsync(archive.Id));
-    }
-
-    [Fact]
-    public async Task DeleteAsync_UnknownArchive_ThrowsKeyNotFoundException()
-    {
-        await using var context = SqliteRepositoryTestContext.Create();
-
-        await Assert.ThrowsAsync<KeyNotFoundException>(
-            () => context.Archives.DeleteAsync(Guid.NewGuid()));
-    }
-
-    [Fact]
     public async Task AddAsync_DuplicateId_ThrowsSqliteException()
     {
         await using var context = SqliteRepositoryTestContext.Create();

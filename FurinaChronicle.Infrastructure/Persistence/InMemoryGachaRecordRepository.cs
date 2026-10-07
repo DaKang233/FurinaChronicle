@@ -160,7 +160,7 @@ namespace FurinaChronicle.Infrastructure.Persistence
             }
         }
 
-        public async Task<GachaSaveResult> SaveBatchAsync(
+        internal async Task<GachaSaveResult> SaveBatchAsync(
             IReadOnlyCollection<GachaRecord> newRecords,
             CancellationToken cancellationToken = default,
             GachaRecordConflictPolicy conflictPolicy =

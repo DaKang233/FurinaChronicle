@@ -189,19 +189,6 @@ public sealed class SqliteGameAccountRepositoryTests
     }
 
     [Fact]
-    public async Task DeleteAsync_ExistingAccount_RemovesIt()
-    {
-        await using var context = SqliteRepositoryTestContext.Create();
-        PlayerArchive archive = await AddArchiveAsync(context);
-        GameAccount account = SqliteRepositoryTestContext.CreateAccount(archive.Id);
-        await context.Accounts.AddAsync(account);
-
-        await context.Accounts.DeleteAsync(account.Id);
-
-        Assert.Null(await context.Accounts.GetByIdAsync(account.Id));
-    }
-
-    [Fact]
     public async Task AddAsync_SameArchiveAndUidTwice_ThrowsSqliteException()
     {
         await using var context = SqliteRepositoryTestContext.Create();

@@ -178,35 +178,6 @@ public sealed class SqliteGameAccountRepository(FurinaDatabase database)
         });
     }
 
-    public async Task DeleteAsync(
-        Guid gameAccountId,
-        CancellationToken cancellationToken = default)
-    {
-        if (gameAccountId == Guid.Empty)
-        {
-            throw new ArgumentException(
-                "游戏账号 ID 不能为空。",
-                nameof(gameAccountId));
-        }
-
-        await database.InitializeAsync(cancellationToken);
-        cancellationToken.ThrowIfCancellationRequested();
-        await database.Connection.RunInTransactionAsync(connection =>
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            int affected = connection.Execute(
-                """
-                DELETE FROM GameAccounts
-                WHERE Id = ?;
-                """,
-                gameAccountId.ToString("D"));
-            if (affected == 0)
-            {
-                throw new KeyNotFoundException("要删除的游戏账号不存在。");
-            }
-        });
-    }
-
     public async Task AddAsync(
         GameAccount gameAccount,
         CancellationToken cancellationToken = default)

@@ -268,7 +268,7 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
             return result;
         }
 
-        public async Task<GachaSaveResult> SaveBatchAsync(
+        internal async Task<GachaSaveResult> SaveBatchAsync(
             IReadOnlyCollection<GachaRecord> records,
             CancellationToken cancellationToken = default,
             GachaRecordConflictPolicy conflictPolicy =
