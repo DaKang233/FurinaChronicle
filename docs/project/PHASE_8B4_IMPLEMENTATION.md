@@ -65,7 +65,7 @@ Tombstone／Portable Apply 基础。Q1～Q7 的首版产品选择由
 | P5 纠正／历史／Undo UI | Completed (code/automation) | `UserEntered` 纠正、修订查看、普通／永久删除、最新 eligible Undo、0～1000 设置；页面人工走查未完成 |
 | P6 Portable 文件产品流 | Completed (code/automation) | picker、暂存、预览／映射、冲突／marker 确认、Apply、私有文件复验后保存；双端系统 provider 尚未实机验收 |
 | P7 关闭旧旁路 | Completed | production `SaveBatchAsync`、父实体 repository Delete 调用者为 0；架构反例测试保护边界 |
-| P8 双端真实验收 | Partial | 版本校验、445 项测试、双平台 Release build、Windows 与 Android 真机启动通过；两端 picker 操作和跨端往返仍待人工确认 |
+| P8 双端真实验收 | Partial | 版本校验、445 项测试、双平台 Release build、Windows 与 Android 真机启动通过；Android Documents picker 打开／取消恢复通过，Windows picker 和跨端往返仍待人工确认 |
 
 ## 本地提交记录
 
@@ -116,7 +116,7 @@ Tombstone／Portable Apply 基础。Q1～Q7 的首版产品选择由
 - `dotnet test ... --configuration Release --no-restore`：445／445 通过（移除 3 个不再属于仓库契约的 legacy Delete 测试后；父实体 purge/cascade 仍由专用测试覆盖）。
 - `build/Verify-Versioning.ps1`：通过；人工版本源为 `0.8.5`／`8B.4`。
 - Windows Release build：`net10.0-windows10.0.19041.0`，0 警告、0 错误；Windows 11 Pro `10.0.26200` 上进程启动并保持响应。系统 picker／saver 与真实文件往返：**Not run / awaiting manual interaction**。
-- Android Release build：`net10.0-android`，SDK `E:\AndroidSDK`，0 警告、0 错误；APK SHA-256 为 `760507144A41A4B7255FB47CD6D279C00A61390AA582FADDD8F439712EF05327`。已通过 ADB 在 vivo V2353A（Android 14／SDK 34，约 7.24 GiB RAM）流式安装，设备报告 `versionCode=112`、`versionName=0.8.5`；主 Activity 启动并保持前台，进程错误通道未见 AndroidRuntime／Mono／.NET 异常。Documents provider 选择、后台／返回／重建：**Not run / awaiting manual interaction**。
+- Android Release build：`net10.0-android`，SDK `E:\AndroidSDK`，0 警告、0 错误；最终产品代码 APK SHA-256 为 `34A21E39DEBEA3EC5AB9A1C8CF590F365BF022221D478E2A2DFD206CBB4D952B`。已通过 ADB 在 vivo V2353A（Android 14／SDK 34，约 7.24 GiB RAM）保留数据覆盖安装，设备报告 `versionCode=113`、`versionName=0.8.5`；主 Activity 启动并保持前台。Android Documents picker 已实际打开，并通过系统返回取消后安全恢复到 FurinaChronicle 主界面；进程错误通道未见 AndroidRuntime／Mono／.NET 未处理异常。后台杀进程后的会话重建和真实文件 Apply：**Not run**。
 - Windows → Android → Windows 和反向真实 Portable 文件逐字段往返、100k 文件、提交前后进程终止、空间不足：**Not run**。
 - 未执行 `adb uninstall`、`pm clear` 或任何会清除现有手机数据的操作。
 
@@ -128,7 +128,7 @@ Tombstone／Portable Apply 基础。Q1～Q7 的首版产品选择由
 | 2 | Pass (automation/code) | 所有已实现来源有 SQLite fixture；自动父实体与事实同事务 |
 | 3～7 | Pass (automation/code) | 变化分类、版本、Undo、purge、Portable 产品流均有反例；实际 UI／provider 证据另列 |
 | 8 | **Fail / Partial** | Plan、conflict、mutation 仍整体物化；无 100k 双端测量 |
-| 9 | **Partial** | Windows 与 Android 真机均已启动；两端系统文件服务尚未人工确认，双向传递未运行 |
+| 9 | **Partial** | Windows 与 Android 真机均已启动；Android Documents picker 打开／取消恢复通过，Windows picker 和双向传递未运行 |
 | 10 | Pass (automation) | 既有导入导出、统计、真实抽数和独立查询回归纳入 445 项测试；人工回归未完整执行 |
 | 11 | Partial | 迁移/fail-safe fixture、版本校验和双平台 build 通过；双平台 publish／真实旧库与设备验收未在本轮完整执行 |
 | 12 | Pass | Q1～Q7 已进入 ADR 0014；本表区分代码、自动化和设备证据 |
