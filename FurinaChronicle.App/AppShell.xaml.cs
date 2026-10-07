@@ -84,7 +84,7 @@ public partial class AppShell : Shell
             var tabs = new TabBar { Route = "main" };
             tabs.Items.Add(CreateContent("主页", "home", homePage));
             tabs.Items.Add(CreateContent("抽卡记录", "gacha", gachaPage));
-            tabs.Items.Add(CreateContent("账号与档案管理", "archive", archivePage));
+            tabs.Items.Add(CreateContent("档案", "archive", archivePage));
             tabs.Items.Add(CreateContent("用户", "user", userPage));
             Items.Add(tabs);
             return;
@@ -95,7 +95,7 @@ public partial class AppShell : Shell
         FlyoutHeader = passportFlyoutHeader;
         Items.Add(CreateFlyoutItem("主页", "home", homePage));
         Items.Add(CreateFlyoutItem("抽卡记录", "gacha", gachaPage));
-        Items.Add(CreateFlyoutItem("账号与档案管理", "archive", archivePage));
+        Items.Add(CreateFlyoutItem("档案与账号管理", "archive", archivePage));
         Items.Add(CreateFlyoutItem("用户", "user", userPage));
     }
 

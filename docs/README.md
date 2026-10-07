@@ -29,6 +29,7 @@
 - [备份与恢复](architecture/BACKUP_AND_RESTORE.md)
 - [服务端扩展](architecture/SERVER_EXTENSIBILITY.md)
 - [Chronicle 时间线](architecture/CHRONICLE_TIMELINE.md)
+- [页面选择状态与跨页刷新](architecture/PRESENTATION_SELECTION_STATE.md)
 
 ## 决策与开发
 
