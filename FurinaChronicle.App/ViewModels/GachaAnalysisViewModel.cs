@@ -144,6 +144,33 @@ public partial class GachaAnalysisViewModel(
     public partial GachaHistoryVersionOption? SelectedHistoryVersion { get; set; }
 
     [ObservableProperty]
+    public partial GachaHistoryDisplayItem? SelectedHistoryItem { get; set; }
+
+    public bool HasNewerHistoryVersion =>
+        GetSelectedHistoryVersionIndex() > 0;
+
+    public bool HasOlderHistoryVersion
+    {
+        get
+        {
+            int index = GetSelectedHistoryVersionIndex();
+            return index >= 0 && index < HistoryVersions.Count - 1;
+        }
+    }
+
+    public string HistoryVersionSummary
+    {
+        get
+        {
+            int index = GetSelectedHistoryVersionIndex();
+            return index < 0 || SelectedHistoryVersion is null
+                ? "尚无版本"
+                : $"{SelectedHistoryVersion.DisplayName} · " +
+                    $"{index + 1} / {HistoryVersions.Count}";
+        }
+    }
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsHistoryTextMode))]
     public partial bool IsHistoryIconMode { get; set; } = true;
 
@@ -928,6 +955,39 @@ public partial class GachaAnalysisViewModel(
         await PopulateSelectedHistoryVersionAsync(version);
     }
 
+    [RelayCommand]
+    private Task ShowNewerHistoryVersionAsync() =>
+        MoveHistoryVersionAsync(-1);
+
+    [RelayCommand]
+    private Task ShowOlderHistoryVersionAsync() =>
+        MoveHistoryVersionAsync(1);
+
+    private async Task MoveHistoryVersionAsync(int offset)
+    {
+        int index = GetSelectedHistoryVersionIndex();
+        int target = index + offset;
+        if (index < 0 || target < 0 || target >= HistoryVersions.Count)
+        {
+            return;
+        }
+
+        await SelectHistoryVersionAsync(HistoryVersions[target]);
+    }
+
+    private int GetSelectedHistoryVersionIndex() =>
+        SelectedHistoryVersion is null
+            ? -1
+            : HistoryVersions.IndexOf(SelectedHistoryVersion);
+
+    partial void OnSelectedHistoryVersionChanged(
+        GachaHistoryVersionOption? value)
+    {
+        OnPropertyChanged(nameof(HasNewerHistoryVersion));
+        OnPropertyChanged(nameof(HasOlderHistoryVersion));
+        OnPropertyChanged(nameof(HistoryVersionSummary));
+    }
+
     private Task ReloadSelectedHistoryVersionAsync() =>
         PopulateSelectedHistoryVersionAsync(SelectedHistoryVersion);
 
@@ -938,9 +998,11 @@ public partial class GachaAnalysisViewModel(
         if (version is null)
         {
             HistoryItems.Clear();
+            SelectedHistoryItem = null;
             return;
         }
 
+        string? selectedKey = SelectedHistoryItem?.Key;
         GachaHistoryDisplayItem[] displayItems = await Task.WhenAll(
             version.EventPeriods.Select(ToHistoryDisplayItemAsync));
         if (revision != historySelectionRevision ||
@@ -954,6 +1016,12 @@ public partial class GachaAnalysisViewModel(
         {
             HistoryItems.Add(item);
         }
+        SelectedHistoryItem = displayItems.FirstOrDefault(
+                item => item.Key == selectedKey)
+            ?? displayItems.FirstOrDefault();
+        OnPropertyChanged(nameof(HasNewerHistoryVersion));
+        OnPropertyChanged(nameof(HasOlderHistoryVersion));
+        OnPropertyChanged(nameof(HistoryVersionSummary));
     }
 
     private async Task<GachaHistoryDisplayItem> ToHistoryDisplayItemAsync(
@@ -982,6 +1050,10 @@ public partial class GachaAnalysisViewModel(
             _ => $"来源：{FormatEventSource(eventPeriod)} · 当前范围无抽卡记录"
         };
         return new GachaHistoryDisplayItem(
+            eventPeriod.Id,
+            FormatHistoryVersionLabel(
+                eventPeriod.Version,
+                eventPeriod.PhaseOrder),
             string.Join(" / ", eventPeriod.Banners.Select(banner => banner.Name)),
             $"版本 {eventPeriod.Version} · 第 {eventPeriod.PhaseOrder} 期 · " +
                 $"{eventPeriod.StartsAt:yyyy-MM-dd HH:mm} 至 " +
@@ -1279,6 +1351,7 @@ public partial class GachaAnalysisViewModel(
         HistoryItems.Clear();
         HistoryVersions.Clear();
         SelectedHistoryVersion = null;
+        SelectedHistoryItem = null;
         historyPeriodsByEventId =
             new Dictionary<string, GachaHistoryPeriod>(StringComparer.Ordinal);
         Interlocked.Increment(ref historySelectionRevision);

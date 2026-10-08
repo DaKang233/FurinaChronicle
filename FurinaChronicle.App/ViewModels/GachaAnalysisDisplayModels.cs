@@ -325,6 +325,8 @@ public sealed record GachaHistoryVersionOption(
     IReadOnlyList<GachaEventPeriod> EventPeriods);
 
 public sealed record GachaHistoryDisplayItem(
+    string Key,
+    string Version,
     string Title,
     string Period,
     string Pool,
@@ -333,7 +335,29 @@ public sealed record GachaHistoryDisplayItem(
     string ItemsText,
     IReadOnlyList<GachaHistoryItemDisplayItem> ItemIcons,
     string MetadataNote,
-    IReadOnlyList<GachaHistoryBannerDisplayItem> Banners);
+    IReadOnlyList<GachaHistoryBannerDisplayItem> Banners)
+{
+    public ImageSource? PreviewBannerImage => Banners
+        .FirstOrDefault(banner => banner.HasBannerImage)
+        ?.BannerImage;
+
+    public bool HasPreviewBannerImage => PreviewBannerImage is not null;
+
+    public IReadOnlyList<GachaHistoryItemDisplayItem> FiveStarItems =>
+        ItemIcons.Where(item => item.RankType == 5).ToArray();
+
+    public IReadOnlyList<GachaHistoryItemDisplayItem> FourStarItems =>
+        ItemIcons.Where(item => item.RankType == 4).ToArray();
+
+    public IReadOnlyList<GachaHistoryItemDisplayItem> ThreeStarItems =>
+        ItemIcons.Where(item => item.RankType == 3).ToArray();
+
+    public bool HasFiveStarItems => FiveStarItems.Count > 0;
+
+    public bool HasFourStarItems => FourStarItems.Count > 0;
+
+    public bool HasThreeStarItems => ThreeStarItems.Count > 0;
+}
 
 public sealed record GachaCalendarDisplayItem(
     string Date,
