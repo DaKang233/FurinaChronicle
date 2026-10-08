@@ -64,6 +64,16 @@
                         MaxLines="1"
                         Text="{Binding Period}"
                         TextColor="Gray" />
+                    <Button
+                        Grid.RowSpan="3"
+                        BackgroundColor="Transparent"
+                        BorderColor="Transparent"
+                        BorderWidth="0"
+                        Clicked="OnMobileHistoryItemClicked"
+                        CommandParameter="{Binding .}"
+                        IsVisible="{OnPlatform Android=True, Default=False}"
+                        Padding="0"
+                        Text="" />
                 </Grid>
             </Border>
         </DataTemplate>
@@ -165,12 +175,10 @@
                         TextColor="Gray" />
                 </VerticalStackLayout>
                 <CollectionView
-                    x:Name="MobileHistoryCollection"
                     Grid.Row="1"
                     ItemTemplate="{StaticResource HistoryPoolItemTemplate}"
                     ItemsSource="{Binding HistoryItems}"
-                    SelectionChanged="OnMobileHistorySelectionChanged"
-                    SelectionMode="Single">
+                    SelectionMode="None">
                     <CollectionView.EmptyView>
                         <Label Padding="12" Text="当前版本没有可显示的限定卡池。" />
                     </CollectionView.EmptyView>
