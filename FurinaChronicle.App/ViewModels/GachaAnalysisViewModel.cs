@@ -28,6 +28,7 @@ public partial class GachaAnalysisViewModel(
     BuildGachaAnalytics buildGachaAnalytics,
     GetGachaRecordPage getGachaRecordPage,
     IGachaItemIconCache iconCache,
+    IGachaItemMetadataProvider itemMetadataProvider,
     IGachaEventCatalog eventCatalog,
     IGachaBannerImageCache bannerImageCache,
     PreloadGachaBannerImages preloadGachaBannerImages,
@@ -910,20 +911,15 @@ public partial class GachaAnalysisViewModel(
                 IsLimitedHistoryPool(period.PoolGroup) &&
                 period.StartsAt <= now &&
                 SupportsAnyHistoryRegion(period, scopeRegions))
-            .GroupBy(period => new
-            {
-                period.Version,
-                period.PhaseOrder
-            })
+            .GroupBy(period => period.Version, StringComparer.Ordinal)
             .Select(group => new GachaHistoryVersionOption(
-                $"{group.Key.Version}:{group.Key.PhaseOrder}",
-                FormatHistoryVersionLabel(
-                    group.Key.Version,
-                    group.Key.PhaseOrder),
+                group.Key,
+                FormatHistoryVersionLabel(group.Key),
                 group.Max(period => period.StartsAt),
                 group
-                    .OrderBy(period => GetHistoryPoolOrder(period.PoolGroup))
-                    .ThenBy(period => period.StartsAt)
+                    .OrderByDescending(period => period.StartsAt)
+                    .ThenBy(period => GetHistoryPoolOrder(period.PoolGroup))
+                    .ThenBy(period => period.Banners[0].GachaType)
                     .ToArray()))
             .OrderByDescending(option => option.StartsAt)
             .ToArray();
@@ -1033,6 +1029,9 @@ public partial class GachaAnalysisViewModel(
         GachaHistoryBannerDisplayItem[] banners = await Task.WhenAll(
             eventPeriod.Banners.Select(ToHistoryBannerDisplayItemAsync));
         IReadOnlyList<GachaHistoryItem> items = history?.Items ?? [];
+        GachaHistoryItemDisplayItem[] featuredItems = await BuildFeaturedItemsAsync(
+            eventPeriod.Banners.Single(),
+            items);
         GachaHistoryItemDisplayItem[] itemIcons = await Task.WhenAll(
             items.Select(async item => new GachaHistoryItemDisplayItem(
                 item.ItemName,
@@ -1051,11 +1050,9 @@ public partial class GachaAnalysisViewModel(
         };
         return new GachaHistoryDisplayItem(
             eventPeriod.Id,
-            FormatHistoryVersionLabel(
-                eventPeriod.Version,
-                eventPeriod.PhaseOrder),
-            string.Join(" / ", eventPeriod.Banners.Select(banner => banner.Name)),
-            $"版本 {eventPeriod.Version} · 第 {eventPeriod.PhaseOrder} 期 · " +
+            FormatHistoryVersionLabel(eventPeriod.Version),
+            eventPeriod.Banners.Single().Name,
+            $"版本 {eventPeriod.Version} · " +
                 $"{eventPeriod.StartsAt:yyyy-MM-dd HH:mm} 至 " +
                 $"{eventPeriod.EndsAt:yyyy-MM-dd HH:mm}",
             GachaPoolGroupResolver.GetDisplayName(eventPeriod.PoolGroup),
@@ -1065,8 +1062,71 @@ public partial class GachaAnalysisViewModel(
                 : FormatAccounts(history.GameAccountIds),
             FormatHistoryItems(items),
             itemIcons,
+            featuredItems,
             metadataNote,
             banners);
+    }
+
+    private async Task<GachaHistoryItemDisplayItem[]> BuildFeaturedItemsAsync(
+        GachaEventBanner banner,
+        IReadOnlyList<GachaHistoryItem> obtainedItems)
+    {
+        IReadOnlyList<GachaEventFeaturedItem> sourceItems =
+            banner.FeaturedItems.Count > 0
+                ? banner.FeaturedItems
+                : banner.UpFiveStarItemIds
+                    .Select(id => new GachaEventFeaturedItem(
+                        id,
+                        string.Empty,
+                        5,
+                        null))
+                    .Concat(banner.UpFourStarItemIds.Select(id =>
+                        new GachaEventFeaturedItem(
+                            id,
+                            string.Empty,
+                            4,
+                            null)))
+                    .ToArray();
+        return await Task.WhenAll(sourceItems.Select(async source =>
+        {
+            GachaItemMetadata? metadata = null;
+            if (!string.IsNullOrWhiteSpace(source.ItemId))
+            {
+                metadata = await itemMetadataProvider.FindByIdAsync(
+                    GachaGame.GenshinImpact,
+                    source.ItemId);
+            }
+            else if (!string.IsNullOrWhiteSpace(source.Name))
+            {
+                metadata = await itemMetadataProvider.FindByNameAsync(
+                    GachaGame.GenshinImpact,
+                    source.Name);
+            }
+
+            string? itemId = source.ItemId ?? metadata?.ItemId;
+            string itemName = !string.IsNullOrWhiteSpace(source.Name)
+                ? source.Name
+                : metadata?.Name ?? itemId ?? "未知物品";
+            int count = obtainedItems
+                .Where(item =>
+                    (!string.IsNullOrWhiteSpace(itemId) &&
+                        string.Equals(
+                            item.ItemId,
+                            itemId,
+                            StringComparison.Ordinal)) ||
+                    string.Equals(
+                        item.ItemName,
+                        itemName,
+                        StringComparison.Ordinal))
+                .Sum(item => item.Count);
+            return new GachaHistoryItemDisplayItem(
+                itemName,
+                CreateFileImageSource(await GetCachedIconPathAsync(
+                    itemId,
+                    source.ImageUrl ?? metadata?.IconUrl)),
+                $"× {count}",
+                source.RankType);
+        }));
     }
 
     private async Task<GachaHistoryBannerDisplayItem>
@@ -1095,14 +1155,8 @@ public partial class GachaAnalysisViewModel(
         regions.Contains(GameServerRegion.Unknown) ||
         regions.Any(period.ServerRegions.Contains);
 
-    private static string FormatHistoryVersionLabel(
-        string version,
-        int phaseOrder) => phaseOrder switch
-        {
-            1 => $"v{version}上",
-            2 => $"v{version}下",
-            _ => $"v{version} 第 {phaseOrder} 期"
-        };
+    private static string FormatHistoryVersionLabel(string version) =>
+        $"v{version}";
 
     private static int GetHistoryPoolOrder(GachaPoolGroup pool) => pool switch
     {

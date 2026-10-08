@@ -316,7 +316,15 @@ public sealed record GachaHistoryItemDisplayItem(
     string ItemName,
     ImageSource? IconUrl,
     string Count,
-    int? RankType);
+    int? RankType)
+{
+    public Color RarityBackground => RankType switch
+    {
+        5 => Color.FromArgb("#B67A4B"),
+        4 => Color.FromArgb("#7560A8"),
+        _ => Color.FromArgb("#4F6478")
+    };
+}
 
 public sealed record GachaHistoryVersionOption(
     string Key,
@@ -334,6 +342,7 @@ public sealed record GachaHistoryDisplayItem(
     string Accounts,
     string ItemsText,
     IReadOnlyList<GachaHistoryItemDisplayItem> ItemIcons,
+    IReadOnlyList<GachaHistoryItemDisplayItem> FeaturedItems,
     string MetadataNote,
     IReadOnlyList<GachaHistoryBannerDisplayItem> Banners)
 {
