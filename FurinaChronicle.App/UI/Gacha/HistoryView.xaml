@@ -44,25 +44,16 @@
                         Wrap="Wrap">
                         <BindableLayout.ItemTemplate>
                             <DataTemplate x:DataType="viewModels:GachaHistoryItemDisplayItem">
-                                <Grid
+                                <gacha:GachaItemIconView
+                                    CardWidth="64"
+                                    CountText="{Binding Count}"
+                                    DetailText=""
+                                    IconSize="44"
+                                    IconSource="{Binding IconUrl}"
+                                    ItemName="{Binding ItemName}"
                                     Margin="0,0,5,0"
-                                    HeightRequest="44"
-                                    WidthRequest="44">
-                                    <Border
-                                        BackgroundColor="{Binding RarityBackground}"
-                                        StrokeShape="RoundRectangle 6">
-                                        <Image Aspect="AspectFill" Source="{Binding IconUrl}" />
-                                    </Border>
-                                    <Label
-                                        BackgroundColor="#B3000000"
-                                        FontAttributes="Bold"
-                                        FontSize="10"
-                                        HorizontalOptions="End"
-                                        Padding="5,1"
-                                        Text="{Binding Count}"
-                                        TextColor="White"
-                                        VerticalOptions="Start" />
-                                </Grid>
+                                    RankType="{Binding RankType}"
+                                    ShowDetailText="False" />
                             </DataTemplate>
                         </BindableLayout.ItemTemplate>
                     </FlexLayout>

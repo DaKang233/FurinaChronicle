@@ -106,18 +106,14 @@
                                         Wrap="Wrap">
                                         <BindableLayout.ItemTemplate>
                                             <DataTemplate x:DataType="viewModels:FiveStarGachaDisplayItem">
-                                                <VerticalStackLayout Margin="3" WidthRequest="72" Spacing="2">
-                                                    <Label
-                                                        FontSize="9"
-                                                        HorizontalTextAlignment="Center"
-                                                        LineBreakMode="TailTruncation"
-                                                        Text="{Binding ItemName}"
-                                                        VerticalOptions="Start" />
-                                                    <Border HeightRequest="56" Padding="2" WidthRequest="56">
-                                                        <Image Aspect="AspectFit" Source="{Binding IconUrl}" />
-                                                    </Border>
-                                                    <Label FontAttributes="Bold" FontSize="11" HorizontalTextAlignment="Center" Text="{Binding Pulls}" />
-                                                </VerticalStackLayout>
+                                                <ui:GachaItemIconView
+                                                    CardWidth="76"
+                                                    DetailText="{Binding Pulls}"
+                                                    IconSize="56"
+                                                    IconSource="{Binding IconUrl}"
+                                                    ItemName="{Binding ItemName}"
+                                                    Margin="3"
+                                                    RankType="{Binding RankType}" />
                                             </DataTemplate>
                                         </BindableLayout.ItemTemplate>
                                     </FlexLayout>

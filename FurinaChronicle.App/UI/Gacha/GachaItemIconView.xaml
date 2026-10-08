@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  Copyright (c) 2026 DaKang233.
+  SPDX-License-Identifier: MIT
+-->
+
+<ContentView
+    x:Class="FurinaChronicle.App.UI.Gacha.GachaItemIconView"
+    x:Name="Root"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml">
+
+    <VerticalStackLayout
+        Spacing="3"
+        WidthRequest="{Binding CardWidth, Source={x:Reference Root}}">
+        <Grid
+            HeightRequest="{Binding IconSize, Source={x:Reference Root}}"
+            HorizontalOptions="Center"
+            WidthRequest="{Binding IconSize, Source={x:Reference Root}}">
+            <Image
+                Aspect="AspectFill"
+                Source="{Binding RarityBackgroundSource, Source={x:Reference Root}}" />
+            <Grid Padding="2">
+                <Image
+                    Aspect="AspectFit"
+                    Source="{Binding IconSource, Source={x:Reference Root}}" />
+            </Grid>
+            <Border
+                BackgroundColor="#B3000000"
+                HorizontalOptions="End"
+                IsVisible="{Binding HasCount, Source={x:Reference Root}}"
+                Padding="5,1"
+                StrokeThickness="0"
+                StrokeShape="RoundRectangle 6"
+                VerticalOptions="Start">
+                <Label
+                    FontAttributes="Bold"
+                    FontSize="10"
+                    Text="{Binding CountText, Source={x:Reference Root}}"
+                    TextColor="White" />
+            </Border>
+        </Grid>
+        <Label
+            FontAttributes="Bold"
+            FontSize="10"
+            HorizontalTextAlignment="Center"
+            IsVisible="{Binding HasItemName, Source={x:Reference Root}}"
+            LineBreakMode="TailTruncation"
+            MaxLines="1"
+            Text="{Binding ItemName, Source={x:Reference Root}}" />
+        <Label
+            FontSize="10"
+            HorizontalTextAlignment="Center"
+            IsVisible="{Binding HasDetailText, Source={x:Reference Root}}"
+            LineBreakMode="TailTruncation"
+            MaxLines="1"
+            Text="{Binding DetailText, Source={x:Reference Root}}" />
+    </VerticalStackLayout>
+</ContentView>

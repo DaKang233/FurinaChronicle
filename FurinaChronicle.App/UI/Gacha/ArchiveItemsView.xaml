@@ -8,6 +8,7 @@
     x:Class="FurinaChronicle.App.UI.Gacha.ArchiveItemsView"
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:gacha="clr-namespace:FurinaChronicle.App.UI.Gacha"
     xmlns:viewModels="clr-namespace:FurinaChronicle.App.ViewModels"
     x:DataType="viewModels:GachaAnalysisViewModel">
 
@@ -36,24 +37,15 @@
                             Wrap="Wrap">
                             <BindableLayout.ItemTemplate>
                                 <DataTemplate x:DataType="viewModels:GachaItemStatisticsDisplayItem">
-                                    <Border Margin="4" Padding="8" WidthRequest="132">
-                                        <Grid RowDefinitions="90,Auto,Auto">
-                                            <Grid>
-                                                <Image Aspect="AspectFit" Source="{Binding IconUrl}" />
-                                                <Label
-                                                    Margin="0,3,3,0"
-                                                    BackgroundColor="#CC333333"
-                                                    FontAttributes="Bold"
-                                                    HorizontalOptions="End"
-                                                    Padding="5,2"
-                                                    Text="{Binding Count}"
-                                                    TextColor="White"
-                                                    VerticalOptions="Start" />
-                                            </Grid>
-                                            <Label Grid.Row="1" FontAttributes="Bold" HorizontalTextAlignment="Center" LineBreakMode="TailTruncation" Text="{Binding ItemName}" />
-                                            <Label Grid.Row="2" FontSize="11" HorizontalTextAlignment="Center" Text="{Binding Rank}" />
-                                        </Grid>
-                                    </Border>
+                                    <gacha:GachaItemIconView
+                                        CardWidth="116"
+                                        CountText="{Binding Count}"
+                                        DetailText="{Binding Rank}"
+                                        IconSize="90"
+                                        IconSource="{Binding IconUrl}"
+                                        ItemName="{Binding ItemName}"
+                                        Margin="4"
+                                        RankType="{Binding RankType}" />
                                 </DataTemplate>
                             </BindableLayout.ItemTemplate>
                         </FlexLayout>

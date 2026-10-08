@@ -77,22 +77,15 @@
                                         Wrap="Wrap">
                                         <BindableLayout.ItemTemplate>
                                             <DataTemplate x:DataType="viewModels:GachaPoolItemCountDisplayItem">
-                                                <VerticalStackLayout Margin="3" WidthRequest="72" Spacing="2">
-                                                    <Border HeightRequest="56" Padding="2" WidthRequest="56">
-                                                        <Grid>
-                                                            <Image Aspect="AspectFit" Source="{Binding IconUrl}" />
-                                                            <Label
-                                                                BackgroundColor="#CC333333"
-                                                                FontAttributes="Bold"
-                                                                HorizontalOptions="End"
-                                                                Padding="4,1"
-                                                                Text="{Binding Count}"
-                                                                TextColor="White"
-                                                                VerticalOptions="Start" />
-                                                        </Grid>
-                                                    </Border>
-                                                    <Label FontSize="10" HorizontalTextAlignment="Center" LineBreakMode="TailTruncation" Text="{Binding ItemName}" />
-                                                </VerticalStackLayout>
+                                                <ui:GachaItemIconView
+                                                    CardWidth="76"
+                                                    CountText="{Binding Count}"
+                                                    IconSize="56"
+                                                    IconSource="{Binding IconUrl}"
+                                                    ItemName="{Binding ItemName}"
+                                                    Margin="3"
+                                                    RankType="{Binding RankType}"
+                                                    ShowDetailText="False" />
                                             </DataTemplate>
                                         </BindableLayout.ItemTemplate>
                                     </FlexLayout>

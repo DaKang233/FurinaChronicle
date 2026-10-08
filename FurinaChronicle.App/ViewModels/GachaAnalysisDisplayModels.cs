@@ -155,7 +155,10 @@ public sealed record FiveStarGachaDisplayItem(
     ImageSource? IconUrl,
     string Pulls,
     string Time,
-    string Account);
+    string Account)
+{
+    public int RankType => 5;
+}
 
 public sealed record GachaPoolItemCountDisplayItem(
     string ItemName,
@@ -316,15 +319,7 @@ public sealed record GachaHistoryItemDisplayItem(
     string ItemName,
     ImageSource? IconUrl,
     string Count,
-    int? RankType)
-{
-    public Color RarityBackground => RankType switch
-    {
-        5 => Color.FromArgb("#B67A4B"),
-        4 => Color.FromArgb("#7560A8"),
-        _ => Color.FromArgb("#4F6478")
-    };
-}
+    int? RankType);
 
 public sealed record GachaHistoryVersionOption(
     string Key,

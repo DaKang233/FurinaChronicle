@@ -9,6 +9,7 @@
     x:Name="DetailRoot"
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:gacha="clr-namespace:FurinaChronicle.App.UI.Gacha"
     xmlns:viewModels="clr-namespace:FurinaChronicle.App.ViewModels"
     x:DataType="viewModels:GachaHistoryDisplayItem">
 
@@ -16,28 +17,15 @@
         <DataTemplate
             x:Key="ObtainedItemTemplate"
             x:DataType="viewModels:GachaHistoryItemDisplayItem">
-            <Border Margin="4" Padding="5" WidthRequest="76">
-                <VerticalStackLayout Spacing="3">
-                    <Grid HeightRequest="64">
-                        <Image Aspect="AspectFit" Source="{Binding IconUrl}" />
-                        <Label
-                            Margin="0,2,2,0"
-                            BackgroundColor="#CC333333"
-                            FontAttributes="Bold"
-                            HorizontalOptions="End"
-                            Padding="4,1"
-                            Text="{Binding Count}"
-                            TextColor="White"
-                            VerticalOptions="Start" />
-                    </Grid>
-                    <Label
-                        FontSize="10"
-                        HorizontalTextAlignment="Center"
-                        LineBreakMode="TailTruncation"
-                        MaxLines="1"
-                        Text="{Binding ItemName}" />
-                </VerticalStackLayout>
-            </Border>
+            <gacha:GachaItemIconView
+                CardWidth="82"
+                CountText="{Binding Count}"
+                IconSize="64"
+                IconSource="{Binding IconUrl}"
+                ItemName="{Binding ItemName}"
+                Margin="4"
+                RankType="{Binding RankType}"
+                ShowDetailText="False" />
         </DataTemplate>
     </ContentView.Resources>
 
