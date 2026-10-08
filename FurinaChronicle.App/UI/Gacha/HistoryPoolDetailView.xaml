@@ -47,7 +47,9 @@
                 <Border
                     Grid.Column="1"
                     Padding="10,4"
-                    StrokeShape="RoundRectangle 12">
+                    StrokeShape="RoundRectangle 12"
+                    HorizontalOptions="Center"
+                    VerticalOptions="Center">
                     <Label FontAttributes="Bold" Text="{Binding Total}" />
                 </Border>
             </Grid>

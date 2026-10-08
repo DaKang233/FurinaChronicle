@@ -1,20 +1,11 @@
 FurinaChronicle includes data derived from Snap.Metadata.
-It also includes the Genshin Impact item-quality background image resources
-UI_QUALITY_ORANGE.png, UI_QUALITY_PURPLE.png, and UI_QUALITY_BLUE.png from
-Snap.Hutao.Remastered.
-
-Snap.Hutao.Remastered
-Copyright (c) 2022-2025 DGP Studio
-Copyright (c) 2026 Snap.HutaoRemasteringProject
-Licensed under the MIT License.
-Source: https://github.com/SnapHutaoRemasteringProject/Snap.Hutao.Remastered
 
 Snap.Metadata
 Copyright (c) 2022 DGP Studio
 Licensed under the MIT License.
 Source: https://github.com/SnapHutaoRemasteringProject/Snap.Metadata
 
-The complete MIT License text applicable to these components is reproduced below:
+The complete MIT License text for Snap.Metadata is reproduced below:
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

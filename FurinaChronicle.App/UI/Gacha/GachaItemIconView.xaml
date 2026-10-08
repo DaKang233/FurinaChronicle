@@ -13,33 +13,39 @@
     <VerticalStackLayout
         Spacing="3"
         WidthRequest="{Binding CardWidth, Source={x:Reference Root}}">
-        <Grid
+        <Border
             HeightRequest="{Binding IconSize, Source={x:Reference Root}}"
             HorizontalOptions="Center"
+            Padding="0"
+            Stroke="{AppThemeBinding Light=#806B7280, Dark=#80D1D5DB}"
+            StrokeShape="RoundRectangle 8"
+            StrokeThickness="1"
             WidthRequest="{Binding IconSize, Source={x:Reference Root}}">
-            <Image
-                Aspect="AspectFill"
-                Source="{Binding RarityBackgroundSource, Source={x:Reference Root}}" />
-            <Grid Padding="2">
+            <Grid>
                 <Image
-                    Aspect="AspectFit"
-                    Source="{Binding IconSource, Source={x:Reference Root}}" />
+                    Aspect="AspectFill"
+                    Source="{Binding RarityBackgroundSource, Source={x:Reference Root}}" />
+                <Grid Padding="0">
+                    <Image
+                        Aspect="AspectFit"
+                        Source="{Binding IconSource, Source={x:Reference Root}}" />
+                </Grid>
+                <Border
+                    BackgroundColor="#B3000000"
+                    HorizontalOptions="End"
+                    IsVisible="{Binding HasCount, Source={x:Reference Root}}"
+                    Padding="5,1"
+                    StrokeThickness="0"
+                    StrokeShape="RoundRectangle 6"
+                    VerticalOptions="Start">
+                    <Label
+                        FontAttributes="Bold"
+                        FontSize="10"
+                        Text="{Binding CountText, Source={x:Reference Root}}"
+                        TextColor="White" />
+                </Border>
             </Grid>
-            <Border
-                BackgroundColor="#B3000000"
-                HorizontalOptions="End"
-                IsVisible="{Binding HasCount, Source={x:Reference Root}}"
-                Padding="5,1"
-                StrokeThickness="0"
-                StrokeShape="RoundRectangle 6"
-                VerticalOptions="Start">
-                <Label
-                    FontAttributes="Bold"
-                    FontSize="10"
-                    Text="{Binding CountText, Source={x:Reference Root}}"
-                    TextColor="White" />
-            </Border>
-        </Grid>
+        </Border>
         <Label
             FontAttributes="Bold"
             FontSize="10"
