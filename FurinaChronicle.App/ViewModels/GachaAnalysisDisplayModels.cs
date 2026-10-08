@@ -357,6 +357,9 @@ public sealed record GachaHistoryDisplayItem(
     public bool HasFourStarItems => FourStarItems.Count > 0;
 
     public bool HasThreeStarItems => ThreeStarItems.Count > 0;
+
+    public bool HasObtainedItems =>
+        HasFiveStarItems || HasFourStarItems || HasThreeStarItems;
 }
 
 public sealed record GachaCalendarDisplayItem(
