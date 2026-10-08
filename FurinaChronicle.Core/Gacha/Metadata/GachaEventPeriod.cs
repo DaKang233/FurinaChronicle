@@ -38,4 +38,13 @@ public sealed record GachaEventBanner(
     string? ImageUrl,
     string? BackupImageUrl,
     IReadOnlyList<string> UpFiveStarItemIds,
-    IReadOnlyList<string> UpFourStarItemIds);
+    IReadOnlyList<string> UpFourStarItemIds)
+{
+    public IReadOnlyList<GachaEventFeaturedItem> FeaturedItems { get; init; } = [];
+}
+
+public sealed record GachaEventFeaturedItem(
+    string? ItemId,
+    string Name,
+    int RankType,
+    string? ImageUrl);

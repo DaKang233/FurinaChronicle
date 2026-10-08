@@ -417,6 +417,100 @@ public sealed class BuildGachaAnalyticsTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_HistorySeparatesConcurrentCharacterPoolsUsingEvidence()
+    {
+        Guid accountId = Guid.NewGuid();
+        DateTimeOffset startsAt =
+            new(2026, 1, 1, 6, 0, 0, TimeSpan.FromHours(8));
+        GachaEventPeriod first = EventPeriod(
+            "pool-a",
+            "banner-a",
+            301,
+            "avatar-a");
+        GachaEventPeriod second = EventPeriod(
+            "pool-b",
+            "banner-b",
+            400,
+            "avatar-b");
+        GachaRecord[] records =
+        [
+            Record(
+                accountId,
+                "1",
+                "五星乙",
+                "avatar-b",
+                5,
+                startsAt.AddDays(1),
+                "301"),
+            Record(
+                accountId,
+                "2",
+                "三星武器",
+                "weapon-3",
+                3,
+                startsAt.AddDays(2),
+                "301"),
+            Record(
+                accountId,
+                "3",
+                "五星甲",
+                "avatar-a",
+                5,
+                startsAt.AddDays(3),
+                "400")
+        ];
+        var service = new BuildGachaAnalytics(
+            new InMemoryGachaRecordRepository(records),
+            new StubMetadataProvider(),
+            new StubEventCatalog([first, second]));
+
+        GachaAnalyticsReport report = await service.ExecuteAsync(
+            new GachaRecordQuery([accountId]),
+            GachaAnalyticsComponents.History,
+            new Dictionary<Guid, GameServerRegion>
+            {
+                [accountId] = GameServerRegion.ChinaOfficial
+            });
+
+        Assert.Equal(2, report.History.Count);
+        GachaHistoryPeriod firstHistory = Assert.Single(
+            report.History,
+            history => history.EventPeriod?.Id == "pool-a");
+        GachaHistoryPeriod secondHistory = Assert.Single(
+            report.History,
+            history => history.EventPeriod?.Id == "pool-b");
+        Assert.Equal(1, firstHistory.TotalPulls);
+        Assert.Equal(2, secondHistory.TotalPulls);
+
+        GachaEventPeriod EventPeriod(
+            string id,
+            string bannerId,
+            int gachaType,
+            string featuredItemId) => new(
+                id,
+                GachaGame.GenshinImpact,
+                "6.0",
+                1,
+                GachaPoolGroup.CharacterEvent,
+                startsAt,
+                startsAt.AddDays(20),
+                new HashSet<GameServerRegion>
+                {
+                    GameServerRegion.ChinaOfficial
+                },
+                [new GachaEventBanner(
+                    bannerId,
+                    bannerId,
+                    gachaType,
+                    null,
+                    null,
+                    [featuredItemId],
+                    [])],
+                "Test",
+                "revision");
+    }
+
+    [Fact]
     public async Task ExecuteAsync_HistoryDoesNotApplyChinaEventsToGlobalAccount()
     {
         Guid accountId = Guid.NewGuid();

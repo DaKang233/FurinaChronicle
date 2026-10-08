@@ -77,7 +77,7 @@ internal static class GachaServiceCollectionExtensions
         services.AddSingleton<GachaMetadataDatabase>();
         services.AddSingleton<IGachaMetadataRemoteSource>(
             _ => new GenshinCalculatorMetadataSource());
-        services.AddSingleton<IGachaEventCatalog, EmbeddedGachaEventCatalog>();
+        services.AddSingleton<EmbeddedGachaEventCatalog>();
         services.AddSingleton<
             IGachaLocalizationSource,
             EmbeddedGachaLocalizationSource>();
@@ -86,6 +86,13 @@ internal static class GachaServiceCollectionExtensions
             provider => provider.GetRequiredService<SqliteGachaItemMetadataProvider>());
         services.AddSingleton<IGachaMetadataRefreshService>(
             provider => provider.GetRequiredService<SqliteGachaItemMetadataProvider>());
+        services.AddSingleton(
+            new YsHelperGachaEventCatalogOptions(
+                Path.Combine(
+                    FileSystem.AppDataDirectory,
+                    "metadata",
+                    "yshelper-gacha-events.zh-Hans.json")));
+        services.AddSingleton<IGachaEventCatalog, YsHelperGachaEventCatalog>();
 
         services.AddSingleton(
             new GachaItemIconCacheOptions(

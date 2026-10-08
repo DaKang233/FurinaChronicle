@@ -60,7 +60,7 @@ public sealed class EmbeddedGachaEventCatalog : IGachaEventCatalog
         }
 
         ValidateHeader(dataset);
-        var result = new List<GachaEventPeriod>(dataset.Periods.Count);
+        var result = new List<GachaEventPeriod>(dataset.SourceRecordCount);
         var periodIds = new HashSet<string>(StringComparer.Ordinal);
         var bannerIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (EmbeddedPeriod sourcePeriod in dataset.Periods)
@@ -117,30 +117,33 @@ public sealed class EmbeddedGachaEventCatalog : IGachaEventCatalog
                     $"Gacha event period {sourcePeriod.Id} has no banners.");
             }
 
-            result.Add(new GachaEventPeriod(
-                sourcePeriod.Id,
-                GachaGame.GenshinImpact,
-                sourcePeriod.Version.Trim(),
-                sourcePeriod.PhaseOrder,
-                poolGroup,
-                startsAt,
-                endsAt,
-                new HashSet<GameServerRegion>
-                {
-                    GameServerRegion.ChinaOfficial,
-                    GameServerRegion.ChinaBilibili
-                },
-                banners,
-                dataset.Source.Name.Trim(),
-                dataset.Source.Revision.Trim()));
+            foreach (GachaEventBanner banner in banners)
+            {
+                result.Add(new GachaEventPeriod(
+                    banner.Id,
+                    GachaGame.GenshinImpact,
+                    sourcePeriod.Version.Trim(),
+                    sourcePeriod.PhaseOrder,
+                    poolGroup,
+                    startsAt,
+                    endsAt,
+                    new HashSet<GameServerRegion>
+                    {
+                        GameServerRegion.ChinaOfficial,
+                        GameServerRegion.ChinaBilibili
+                    },
+                    [banner],
+                    dataset.Source.Name.Trim(),
+                    dataset.Source.Revision.Trim()));
+            }
         }
 
-        if (dataset.PeriodCount != result.Count)
+        if (dataset.PeriodCount != dataset.Periods.Count)
         {
             throw new InvalidDataException(
                 "The embedded gacha event period count does not match its manifest.");
         }
-        if (dataset.SourceRecordCount != result.Sum(item => item.Banners.Count))
+        if (dataset.SourceRecordCount != result.Count)
         {
             throw new InvalidDataException(
                 "The embedded gacha banner count does not match its manifest.");

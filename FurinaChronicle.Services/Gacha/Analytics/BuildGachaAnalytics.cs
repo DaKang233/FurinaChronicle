@@ -360,11 +360,14 @@ public sealed class BuildGachaAnalytics
         IReadOnlyList<GachaEventPeriod> eventPeriods,
         IReadOnlyDictionary<Guid, GameServerRegion>? accountRegions)
     {
+        IReadOnlyDictionary<string, int> resolvedGachaTypes =
+            ResolveHistoryGachaTypes(records, eventPeriods);
         GachaHistoryRecordMatch[] matches = records
             .Select(record => MatchEventPeriod(
                 record,
                 eventPeriods,
-                accountRegions))
+                accountRegions,
+                resolvedGachaTypes))
             .ToArray();
 
         IEnumerable<GachaHistoryPeriod> matched = matches
@@ -451,20 +454,29 @@ public sealed class BuildGachaAnalytics
     private static GachaHistoryRecordMatch MatchEventPeriod(
         GachaRecord record,
         IReadOnlyList<GachaEventPeriod> eventPeriods,
-        IReadOnlyDictionary<Guid, GameServerRegion>? accountRegions)
+        IReadOnlyDictionary<Guid, GameServerRegion>? accountRegions,
+        IReadOnlyDictionary<string, int> resolvedGachaTypes)
     {
         GameServerRegion region = accountRegions is not null &&
             accountRegions.TryGetValue(record.GameAccountId, out GameServerRegion value)
                 ? value
                 : GameServerRegion.Unknown;
         GachaPoolGroup poolGroup = GachaPoolGroupResolver.Resolve(record);
-        GachaEventPeriod? eventPeriod = eventPeriods
+        GachaEventPeriod[] candidates = eventPeriods
             .Where(period =>
                 period.PoolGroup == poolGroup &&
                 period.Contains(record.Time) &&
                 period.Supports(region))
             .OrderBy(period => period.StartsAt)
-            .FirstOrDefault();
+            .ThenBy(period => period.Id, StringComparer.Ordinal)
+            .ToArray();
+        GachaEventPeriod? eventPeriod = candidates.FirstOrDefault(period =>
+                resolvedGachaTypes.TryGetValue(period.Id, out int gachaType) &&
+                string.Equals(
+                    GetHistoryGachaType(record),
+                    gachaType.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    StringComparison.Ordinal))
+            ?? candidates.FirstOrDefault();
 
         return new GachaHistoryRecordMatch(
             record,
@@ -475,6 +487,87 @@ public sealed class BuildGachaAnalytics
                     ? GachaEventMatchQuality.RegionUnverified
                     : GachaEventMatchQuality.Verified);
     }
+
+    private static IReadOnlyDictionary<string, int> ResolveHistoryGachaTypes(
+        IReadOnlyList<GachaRecord> records,
+        IReadOnlyList<GachaEventPeriod> eventPeriods)
+    {
+        var result = eventPeriods
+            .Where(period => period.Banners.Count == 1)
+            .ToDictionary(
+                period => period.Id,
+                period => period.Banners[0].GachaType,
+                StringComparer.Ordinal);
+
+        foreach (IGrouping<(DateTimeOffset Start, DateTimeOffset End),
+                     GachaEventPeriod> window in eventPeriods
+            .Where(period =>
+                period.PoolGroup == GachaPoolGroup.CharacterEvent &&
+                period.Banners.Count == 1)
+            .GroupBy(period => (period.StartsAt, period.EndsAt)))
+        {
+            GachaEventPeriod[] pair = window
+                .OrderBy(period => result[period.Id])
+                .Take(2)
+                .ToArray();
+            if (pair.Length != 2)
+            {
+                continue;
+            }
+
+            int firstType = result[pair[0].Id];
+            int secondType = result[pair[1].Id];
+            int directEvidence = CountHistoryPoolEvidence(
+                    records,
+                    pair[0],
+                    firstType) +
+                CountHistoryPoolEvidence(records, pair[1], secondType);
+            int swappedEvidence = CountHistoryPoolEvidence(
+                    records,
+                    pair[0],
+                    secondType) +
+                CountHistoryPoolEvidence(records, pair[1], firstType);
+            if (swappedEvidence > directEvidence)
+            {
+                result[pair[0].Id] = secondType;
+                result[pair[1].Id] = firstType;
+            }
+        }
+
+        return result;
+    }
+
+    private static int CountHistoryPoolEvidence(
+        IReadOnlyList<GachaRecord> records,
+        GachaEventPeriod period,
+        int gachaType)
+    {
+        GachaEventBanner banner = period.Banners[0];
+        HashSet<string> itemIds = banner.UpFiveStarItemIds
+            .Concat(banner.UpFourStarItemIds)
+            .ToHashSet(StringComparer.Ordinal);
+        HashSet<string> itemNames = banner.FeaturedItems
+            .Select(item => item.Name)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .ToHashSet(StringComparer.Ordinal);
+        string type = gachaType.ToString(
+            System.Globalization.CultureInfo.InvariantCulture);
+        return records.Count(record =>
+            string.Equals(
+                GetHistoryGachaType(record),
+                type,
+                StringComparison.Ordinal) &&
+            period.Contains(record.Time) &&
+            ((!string.IsNullOrWhiteSpace(record.ItemId) &&
+                    itemIds.Contains(record.ItemId)) ||
+                (!string.IsNullOrWhiteSpace(record.ItemName) &&
+                    itemNames.Contains(record.ItemName))));
+    }
+
+    private static string? GetHistoryGachaType(GachaRecord record) =>
+        string.IsNullOrWhiteSpace(record.GachaType)
+            ? record.UigfGachaType
+            : record.GachaType;
 
     private static bool IsLimitedFiveStar(
         GachaRecord record,

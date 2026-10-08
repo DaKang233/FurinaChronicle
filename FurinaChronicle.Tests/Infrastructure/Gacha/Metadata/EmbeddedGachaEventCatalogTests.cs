@@ -17,8 +17,8 @@ public sealed class EmbeddedGachaEventCatalogTests
         IReadOnlyList<GachaEventPeriod> periods =
             await catalog.GetAllAsync(GachaGame.GenshinImpact);
 
-        Assert.Equal(218, periods.Count);
-        Assert.Equal(298, periods.Sum(period => period.Banners.Count));
+        Assert.Equal(298, periods.Count);
+        Assert.All(periods, period => Assert.Single(period.Banners));
         Assert.Equal(
             new DateTimeOffset(2020, 9, 28, 6, 0, 0, TimeSpan.FromHours(8)),
             periods.Min(period => period.StartsAt));
@@ -38,22 +38,25 @@ public sealed class EmbeddedGachaEventCatalogTests
     }
 
     [Fact]
-    public async Task GetAllAsync_CombinesConcurrentCharacterBanners()
+    public async Task GetAllAsync_ReturnsConcurrentCharacterBannersAsIndependentPools()
     {
         var catalog = new EmbeddedGachaEventCatalog();
         IReadOnlyList<GachaEventPeriod> periods =
             await catalog.GetAllAsync(GachaGame.GenshinImpact);
 
-        GachaEventPeriod period = Assert.Single(periods, period =>
+        GachaEventPeriod[] matching = periods.Where(period =>
             period.Version == "7.1" &&
-            period.PoolGroup == GachaPoolGroup.CharacterEvent);
+            period.PoolGroup == GachaPoolGroup.CharacterEvent)
+            .ToArray();
 
-        Assert.Equal(2, period.Banners.Count);
-        Assert.Equal([301, 400], period.Banners.Select(banner => banner.GachaType));
+        Assert.Equal(2, matching.Length);
+        Assert.Equal(
+            [301, 400],
+            matching.Select(period => period.Banners[0].GachaType));
         Assert.Equal(
             ["煦风欢舞时", "涌浪叙歌"],
-            period.Banners.Select(banner => banner.Name));
-        Assert.True(period.Contains(
+            matching.Select(period => period.Banners[0].Name));
+        Assert.All(matching, period => Assert.True(period.Contains(
             new DateTimeOffset(
                 2026,
                 10,
@@ -61,8 +64,8 @@ public sealed class EmbeddedGachaEventCatalogTests
                 17,
                 59,
                 59,
-                TimeSpan.FromHours(8))));
-        Assert.False(period.Contains(
+                TimeSpan.FromHours(8)))));
+        Assert.All(matching, period => Assert.False(period.Contains(
             new DateTimeOffset(
                 2026,
                 10,
@@ -70,7 +73,7 @@ public sealed class EmbeddedGachaEventCatalogTests
                 18,
                 0,
                 0,
-                TimeSpan.FromHours(8))));
+                TimeSpan.FromHours(8)))));
     }
 
     [Fact]
