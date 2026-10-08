@@ -21,9 +21,10 @@ public sealed class DatabaseStorageCapacityProvider(
             }
 
             var drive = new DriveInfo(root);
-            return drive.IsReady
-                ? new HistoryStorageCapacity(drive.AvailableFreeSpace)
-                : new HistoryStorageCapacity(null);
+            long? availableBytes = drive.IsReady && drive.AvailableFreeSpace > 0
+                ? drive.AvailableFreeSpace
+                : null;
+            return new HistoryStorageCapacity(availableBytes);
         }
         catch (Exception exception) when (
             exception is IOException or

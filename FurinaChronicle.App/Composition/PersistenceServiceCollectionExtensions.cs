@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics;
+using FurinaChronicle.App.Persistence;
 using FurinaChronicle.Infrastructure.Persistence.Sqlite;
 using FurinaChronicle.Services.Abstractions;
 using FurinaChronicle.Services.Gacha.History;
@@ -23,7 +24,7 @@ internal static class PersistenceServiceCollectionExtensions
         services.AddSingleton<FurinaDatabase>();
         services.AddSingleton<
             IHistoryStorageCapacityProvider,
-            DatabaseStorageCapacityProvider>();
+            PlatformDatabaseStorageCapacityProvider>();
         services.AddSingleton<IGachaRecordRepository, SqliteGachaRecordRepository>();
         services.AddSingleton<SqliteGachaAtomicChangeStore>();
         services.AddSingleton<IGachaAtomicChangeStore>(
