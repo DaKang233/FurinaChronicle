@@ -22,21 +22,22 @@ public partial class HistoryView : ContentView
         ShowMobileList();
     }
 
-    private void OnHistoryPoolTapped(object? sender, TappedEventArgs e)
+    private void OnMobileHistorySelectionChanged(
+        object? sender,
+        SelectionChangedEventArgs e)
     {
-        if (sender is not TapGestureRecognizer gesture ||
-            gesture.CommandParameter is not GachaHistoryDisplayItem item ||
+        if (e.CurrentSelection.FirstOrDefault() is not
+                GachaHistoryDisplayItem item ||
             BindingContext is not GachaAnalysisViewModel viewModel)
         {
             return;
         }
 
         viewModel.SelectedHistoryItem = item;
-        if (!OperatingSystem.IsAndroid())
+        if (sender is CollectionView collectionView)
         {
-            return;
+            collectionView.SelectedItem = null;
         }
-
         MobileListLayout.IsVisible = false;
         MobileDetailLayout.IsVisible = true;
     }
@@ -53,5 +54,6 @@ public partial class HistoryView : ContentView
 
         MobileListLayout.IsVisible = true;
         MobileDetailLayout.IsVisible = false;
+        MobileHistoryCollection.SelectedItem = null;
     }
 }

@@ -18,11 +18,6 @@
             x:Key="HistoryPoolItemTemplate"
             x:DataType="viewModels:GachaHistoryDisplayItem">
             <Border Margin="0,0,0,8" Padding="10,8" MinimumHeightRequest="112">
-                <Border.GestureRecognizers>
-                    <TapGestureRecognizer
-                        CommandParameter="{Binding .}"
-                        Tapped="OnHistoryPoolTapped" />
-                </Border.GestureRecognizers>
                 <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="5">
                     <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="7">
                         <Label
@@ -179,10 +174,12 @@
                         TextColor="Gray" />
                 </VerticalStackLayout>
                 <CollectionView
+                    x:Name="MobileHistoryCollection"
                     Grid.Row="1"
                     ItemTemplate="{StaticResource HistoryPoolItemTemplate}"
                     ItemsSource="{Binding HistoryItems}"
-                    SelectionMode="None">
+                    SelectionChanged="OnMobileHistorySelectionChanged"
+                    SelectionMode="Single">
                     <CollectionView.EmptyView>
                         <Label Padding="12" Text="当前版本没有可显示的限定卡池。" />
                     </CollectionView.EmptyView>
