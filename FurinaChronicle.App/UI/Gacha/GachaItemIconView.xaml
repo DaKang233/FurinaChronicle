@@ -25,6 +25,9 @@
                 <Image
                     Aspect="AspectFill"
                     Source="{Binding RarityBackgroundSource, Source={x:Reference Root}}" />
+                <Image
+                    Aspect="AspectFill"
+                    Source="ui_imgsign_itemicon.png" />
                 <Grid Padding="0">
                     <Image
                         Aspect="AspectFit"
