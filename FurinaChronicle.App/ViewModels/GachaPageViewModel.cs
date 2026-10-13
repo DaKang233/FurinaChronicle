@@ -5,7 +5,10 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using FurinaChronicle.App.Exporting;
 using FurinaChronicle.Core.Archives;
+using FurinaChronicle.Core.Gacha;
+using FurinaChronicle.Core.Gacha.Metadata;
 using FurinaChronicle.Services.Archives;
+using FurinaChronicle.Services.Gacha.Abstractions;
 using FurinaChronicle.Services.Gacha.Exporting;
 using FurinaChronicle.Services.Gacha.Importing;
 using FurinaChronicle.Services.Gacha.Refreshing;
@@ -33,9 +36,14 @@ public partial class GachaPageViewModel(
 	IGachaPortablePackageReader portablePackageReader,
 	PlanGachaPortableImport planPortableImport,
 	IGachaPortableImportApplier portableImportApplier,
-	IGachaPortableExportFileService portableExportFileService)
+	IGachaPortableExportFileService portableExportFileService,
+	IGachaItemMetadataProvider refreshMetadataProvider,
+	IGachaItemIconCache refreshIconCache)
 	: ObservableObject
 {
+	private readonly Dictionary<string, GachaRefreshItemDisplayItem>
+		refreshItemsByKey = new(StringComparer.Ordinal);
+
 	public GachaAnalysisViewModel Analysis { get; } = analysis;
 
 	public ObservableCollection<PlayerArchive> Archives { get; } = [];
@@ -43,6 +51,8 @@ public partial class GachaPageViewModel(
 	public ObservableCollection<GameAccount> Accounts { get; } = [];
 
 	public ObservableCollection<GachaRecordDisplayItem> GachaRecords { get; } = [];
+
+	public ObservableCollection<GachaRefreshItemDisplayItem> RefreshItems { get; } = [];
 
 	[ObservableProperty]
 	[NotifyCanExecuteChangedFor(nameof(ReloadArchivesCommand))]
@@ -54,6 +64,18 @@ public partial class GachaPageViewModel(
 	[NotifyPropertyChangedFor(nameof(CanGoToNextPage))]
 	public partial bool IsBusy { get; set; }
 	public bool IsNotBusy => !IsBusy;
+
+	[ObservableProperty]
+	public partial bool IsRefreshRunning { get; set; }
+
+	[ObservableProperty]
+	public partial string RefreshProgressTitle { get; set; } = "正在准备抽卡记录刷新";
+
+	[ObservableProperty]
+	public partial string RefreshCurrentPool { get; set; } = "正在准备";
+
+	[ObservableProperty]
+	public partial string RefreshProgressDetail { get; set; } = "正在验证刷新条件…";
 
 	[ObservableProperty]
 	public partial string? SelectedPassportRoleUid { get; set; }
@@ -562,31 +584,39 @@ public partial class GachaPageViewModel(
 		string? manualUrl = null,
 		string? gameInstallationPath = null)
 	{
-		await ExecuteBusyAsync(async () =>
+		if (IsBusy)
 		{
-			Guid? passportAccountId = null;
-			PassportSelection? passportSelection = null;
-			if (source == GachaRefreshSource.SToken)
-			{
-				passportSelection =
-					await passportSelectionStore.LoadAsync();
-				if (passportSelection is null ||
-					string.IsNullOrWhiteSpace(passportSelection.GameUid))
-				{
-					throw new InvalidOperationException(
-						"请先在用户页选择米哈游通行证账号和原神角色。");
-				}
-				passportAccountId = passportSelection.PassportAccountId;
-			}
+			return;
+		}
 
-			RefreshTargetPlan targetPlan = SelectedAccount is not null
-				? new RefreshTargetPlan(SelectedAccount, null, null)
-				: await PrepareRefreshTargetAsync(
-						source,
-						passportSelection,
-						manualUrl,
-						gameInstallationPath);
-			GameAccount targetAccount = targetPlan.Account;
+		BeginRefreshProgress(source);
+		try
+		{
+			await ExecuteBusyAsync(async () =>
+			{
+				Guid? passportAccountId = null;
+				PassportSelection? passportSelection = null;
+				if (source == GachaRefreshSource.SToken)
+				{
+					passportSelection =
+						await passportSelectionStore.LoadAsync();
+					if (passportSelection is null ||
+						string.IsNullOrWhiteSpace(passportSelection.GameUid))
+					{
+						throw new InvalidOperationException(
+							"请先在用户页选择米哈游通行证账号和原神角色。");
+					}
+					passportAccountId = passportSelection.PassportAccountId;
+				}
+
+				RefreshTargetPlan targetPlan = SelectedAccount is not null
+					? new RefreshTargetPlan(SelectedAccount, null, null)
+					: await PrepareRefreshTargetAsync(
+							source,
+							passportSelection,
+							manualUrl,
+							gameInstallationPath);
+				GameAccount targetAccount = targetPlan.Account;
 
 				if (passportSelection is not null &&
 					!string.Equals(
@@ -598,6 +628,8 @@ public partial class GachaPageViewModel(
 						$"用户页当前角色 UID {passportSelection.GameUid} 与抽卡页账号 UID {targetAccount.Uid} 不一致。");
 				}
 
+				var progress = new Progress<GachaRefreshProgress>(
+					ApplyRefreshProgress);
 				GachaRefreshResult result = await refreshGachaRecords.ExecuteAsync(
 					new GachaRefreshRequest(
 						targetAccount,
@@ -609,7 +641,8 @@ public partial class GachaPageViewModel(
 						manualUrl,
 						gameInstallationPath,
 						targetPlan.ArchiveToCreate,
-						targetPlan.AccountToCreate));
+						targetPlan.AccountToCreate),
+					progress);
 				bool parentsCreated =
 					targetPlan.AccountToCreate is not null &&
 					result.InsertedCount > 0;
@@ -648,8 +681,113 @@ public partial class GachaPageViewModel(
 					StatusMessage +=
 						$" 已明确抑制 {result.SuppressedCount} 条本地永久删除记录，未静默恢复。";
 				}
-		});
+			});
+		}
+		finally
+		{
+			RefreshProgressDetail = ErrorMessage is null
+				? $"刷新完成，共获取 {RefreshItems.Sum(item => item.Count)} 个物品。"
+				: $"刷新失败：{ErrorMessage}";
+			IsRefreshRunning = false;
+		}
 	}
+
+	private void BeginRefreshProgress(GachaRefreshSource source)
+	{
+		refreshItemsByKey.Clear();
+		RefreshItems.Clear();
+		RefreshProgressTitle = source switch
+		{
+			GachaRefreshSource.SToken => "正在通过 SToken 获取抽卡记录",
+			GachaRefreshSource.WindowsWebCache => "正在通过网页缓存获取抽卡记录",
+			GachaRefreshSource.ManualUrl => "正在通过 URL 获取抽卡记录",
+			_ => "正在获取抽卡记录"
+		};
+		RefreshCurrentPool = "正在准备";
+		RefreshProgressDetail = "正在验证账号、档案和刷新来源…";
+		IsRefreshRunning = true;
+	}
+
+	private void ApplyRefreshProgress(GachaRefreshProgress progress)
+	{
+		RefreshCurrentPool = $"正在获取{FormatGachaPool(progress.GachaType)}";
+		RefreshProgressDetail = progress.Stage ==
+			GachaRefreshProgressStage.RequestingPage
+				? $"正在请求第 {progress.Page} 页 · 已获取 {progress.FetchedCount} 条"
+				: $"已完成第 {progress.Page} 页 · 已获取 {progress.FetchedCount} 条";
+		foreach (GachaRemoteRecord record in progress.Records)
+		{
+			AddRefreshItem(record);
+		}
+	}
+
+	private void AddRefreshItem(GachaRemoteRecord record)
+	{
+		string itemName = string.IsNullOrWhiteSpace(record.ItemName)
+			? "未知物品"
+			: record.ItemName.Trim();
+		string key = !string.IsNullOrWhiteSpace(record.ItemId)
+			? $"id:{record.ItemId.Trim()}"
+			: $"name:{itemName}:{record.RankType?.ToString() ?? "?"}";
+		int count = Math.Max(1, record.Count);
+		if (refreshItemsByKey.TryGetValue(
+			key,
+			out GachaRefreshItemDisplayItem? existing))
+		{
+			existing.Count += count;
+			return;
+		}
+
+		var item = new GachaRefreshItemDisplayItem(
+			key,
+			itemName,
+			record.RankType,
+			count);
+		refreshItemsByKey.Add(key, item);
+		RefreshItems.Add(item);
+		_ = LoadRefreshItemIconAsync(item, record.ItemId);
+	}
+
+	private async Task LoadRefreshItemIconAsync(
+		GachaRefreshItemDisplayItem item,
+		string? itemId)
+	{
+		if (string.IsNullOrWhiteSpace(itemId))
+		{
+			return;
+		}
+
+		try
+		{
+			GachaItemMetadata? metadata =
+				await refreshMetadataProvider.FindByIdAsync(
+					GachaGame.GenshinImpact,
+					itemId);
+			string? path = await refreshIconCache.GetOrRefreshAsync(
+				GachaGame.GenshinImpact,
+				itemId,
+				metadata?.IconUrl);
+			if (!string.IsNullOrWhiteSpace(path))
+			{
+				MainThread.BeginInvokeOnMainThread(() =>
+					item.IconSource = ImageSource.FromFile(path));
+			}
+		}
+		catch (Exception)
+		{
+			// Icon loading is best-effort and must not fail the refresh.
+		}
+	}
+
+	private static string FormatGachaPool(string gachaType) => gachaType switch
+	{
+		"301" or "400" => "角色活动祈愿",
+		"302" => "武器活动祈愿",
+		"500" => "集录祈愿",
+		"100" => "新手祈愿",
+		"200" => "常驻祈愿",
+		_ => $"卡池 {gachaType}"
+	};
 
 	private async Task<RefreshTargetPlan> PrepareRefreshTargetAsync(
 		GachaRefreshSource source,

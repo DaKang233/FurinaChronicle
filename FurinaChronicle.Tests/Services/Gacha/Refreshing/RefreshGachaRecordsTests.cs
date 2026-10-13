@@ -130,6 +130,38 @@ public sealed class RefreshGachaRecordsTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_ProgressReportsPoolAndNewPageRecords()
+    {
+        var repository = new InMemoryGachaRecordRepository([]);
+        var client = new StubGachaLogClient();
+        client.Add("301", null, Page(Remote("103"), Remote("102")));
+        var service = CreateService(repository, client);
+        var reported = new List<GachaRefreshProgress>();
+        var progress = new CaptureProgress<GachaRefreshProgress>(reported.Add);
+
+        await service.ExecuteAsync(
+            new GachaRefreshRequest(
+                GameAccount,
+                GachaRefreshSource.ManualUrl,
+                ManualUrl: ValidUrl.AbsoluteUri),
+            progress);
+
+        GachaRefreshProgress requesting = Assert.Single(reported, item =>
+            item.GachaType == "301" &&
+            item.Page == 1 &&
+            item.Stage == GachaRefreshProgressStage.RequestingPage);
+        Assert.Empty(requesting.Records);
+        GachaRefreshProgress received = Assert.Single(reported, item =>
+            item.GachaType == "301" &&
+            item.Page == 1 &&
+            item.Stage == GachaRefreshProgressStage.PageReceived);
+        Assert.Equal(2, received.FetchedCount);
+        Assert.Equal(
+            ["103", "102"],
+            received.Records.Select(record => record.ExternalRecordId));
+    }
+
+    [Fact]
     public async Task ExecuteAsync_STokenSource_LoadsPassportAccountAndUsesProvider()
     {
         var repository = new InMemoryGachaRecordRepository([]);
@@ -403,6 +435,11 @@ public sealed class RefreshGachaRecordsTests
                 pages.GetValueOrDefault((gachaType, endId)) ??
                 new GachaRemotePage([], null));
         }
+    }
+
+    private sealed class CaptureProgress<T>(Action<T> report) : IProgress<T>
+    {
+        public void Report(T value) => report(value);
     }
 
     private sealed class RepositoryCommitter(

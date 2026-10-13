@@ -85,7 +85,15 @@ public sealed record GachaRemotePage(
     IReadOnlyList<GachaRemoteRecord> Records,
     string? NextEndId);
 
+public enum GachaRefreshProgressStage
+{
+    RequestingPage = 0,
+    PageReceived = 1
+}
+
 public sealed record GachaRefreshProgress(
     string GachaType,
     int Page,
-    int FetchedCount);
+    int FetchedCount,
+    GachaRefreshProgressStage Stage,
+    IReadOnlyList<GachaRemoteRecord> Records);

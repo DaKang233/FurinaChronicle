@@ -58,6 +58,12 @@ public sealed class RefreshGachaRecords(
             while (true)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                progress?.Report(new GachaRefreshProgress(
+                    gachaType,
+                    page,
+                    collected.Count,
+                    GachaRefreshProgressStage.RequestingPage,
+                    []));
                 GachaRemotePage remotePage = await gachaLogClient.GetPageAsync(
                     sourceUrl,
                     gachaType,
@@ -71,6 +77,7 @@ public sealed class RefreshGachaRecords(
                 pageCount++;
 
                 bool reachedBoundary = false;
+                var pageRecords = new List<GachaRemoteRecord>();
                 foreach (GachaRemoteRecord remote in remotePage.Records)
                 {
                     if (!string.IsNullOrWhiteSpace(remote.Uid) &&
@@ -98,6 +105,7 @@ public sealed class RefreshGachaRecords(
                                 remote,
                                 metadataByName,
                                 cancellationToken);
+                        pageRecords.Add(completed);
                         collected.Add(completed.ToDomain(
                             request.GameAccount.Id,
                             pageProvenance));
@@ -107,7 +115,9 @@ public sealed class RefreshGachaRecords(
                 progress?.Report(new GachaRefreshProgress(
                     gachaType,
                     page,
-                    collected.Count));
+                    collected.Count,
+                    GachaRefreshProgressStage.PageReceived,
+                    pageRecords));
 
                 if (reachedBoundary || remotePage.Records.Count == 0 ||
                     string.IsNullOrWhiteSpace(remotePage.NextEndId) ||

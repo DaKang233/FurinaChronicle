@@ -8,8 +8,9 @@
     x:Class="FurinaChronicle.App.UI.Pages.GachaPage"
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-    xmlns:viewModels="clr-namespace:FurinaChronicle.App.ViewModels"
     xmlns:controls="clr-namespace:FurinaChronicle.App.UI.Controls"
+    xmlns:gacha="clr-namespace:FurinaChronicle.App.UI.Gacha"
+    xmlns:viewModels="clr-namespace:FurinaChronicle.App.ViewModels"
     x:DataType="viewModels:GachaPageViewModel"
     Title="抽卡记录">
 
@@ -18,10 +19,11 @@
             IsVisible="{OnPlatform Android=True, WinUI=False}" />
     </Shell.TitleView>
 
-    <ScrollView
-        HorizontalScrollBarVisibility="Never"
-        Orientation="Vertical"
-        VerticalScrollBarVisibility="Always">
+    <Grid>
+        <ScrollView
+            HorizontalScrollBarVisibility="Never"
+            Orientation="Vertical"
+            VerticalScrollBarVisibility="Always">
         <Grid Padding="16" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="10">
             <Border Padding="14">
                 <VerticalStackLayout Spacing="8">
@@ -185,5 +187,27 @@
                     IsVisible="{Binding Analysis.IsBusy}" />
             </Grid>
         </Grid>
-    </ScrollView>
+        </ScrollView>
+
+        <Grid
+            x:Name="RefreshProgressOverlay"
+            BackgroundColor="#99000000"
+            IsVisible="False"
+            ZIndex="1000">
+            <Border
+                BackgroundColor="{AppThemeBinding Light=#FFFFFFFF, Dark=#FF202020}"
+                HeightRequest="560"
+                HorizontalOptions="Center"
+                Margin="24"
+                MaximumHeightRequest="680"
+                MaximumWidthRequest="760"
+                Padding="20"
+                Stroke="{AppThemeBinding Light=#406B7280, Dark=#40D1D5DB}"
+                StrokeShape="RoundRectangle 12"
+                VerticalOptions="Center"
+                WidthRequest="680">
+                <gacha:GachaRefreshProgressView />
+            </Border>
+        </Grid>
+    </Grid>
 </ContentPage>

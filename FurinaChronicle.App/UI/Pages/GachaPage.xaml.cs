@@ -133,7 +133,8 @@ public partial class GachaPage : ContentPage
 
     private async void OnSTokenRefreshClicked(object? sender, EventArgs e)
     {
-        await ViewModel.RefreshGachaAsync(GachaRefreshSource.SToken);
+        await RunRefreshWithProgressAsync(() =>
+            ViewModel.RefreshGachaAsync(GachaRefreshSource.SToken));
     }
 
     private async void OnWebCacheRefreshClicked(object? sender, EventArgs e)
@@ -146,9 +147,10 @@ public partial class GachaPage : ContentPage
             placeholder: @"C:\Games\Genshin Impact game");
         if (!string.IsNullOrWhiteSpace(path))
         {
-            await ViewModel.RefreshGachaAsync(
-                GachaRefreshSource.WindowsWebCache,
-                gameInstallationPath: path);
+            await RunRefreshWithProgressAsync(() =>
+                ViewModel.RefreshGachaAsync(
+                    GachaRefreshSource.WindowsWebCache,
+                    gameInstallationPath: path));
         }
     }
 
@@ -162,9 +164,56 @@ public partial class GachaPage : ContentPage
             placeholder: "https://...");
         if (!string.IsNullOrWhiteSpace(url))
         {
-            await ViewModel.RefreshGachaAsync(
-                GachaRefreshSource.ManualUrl,
-                manualUrl: url);
+            await RunRefreshWithProgressAsync(() =>
+                ViewModel.RefreshGachaAsync(
+                    GachaRefreshSource.ManualUrl,
+                    manualUrl: url));
+        }
+    }
+
+    private async Task RunRefreshWithProgressAsync(Func<Task> refresh)
+    {
+        if (ViewModel.IsBusy)
+        {
+            return;
+        }
+
+        if (OperatingSystem.IsAndroid())
+        {
+            var progressPage = new GachaRefreshProgressPage(ViewModel);
+            await Navigation.PushModalAsync(progressPage, animated: true);
+            try
+            {
+                await refresh();
+            }
+            finally
+            {
+                if (Navigation.ModalStack.Contains(progressPage))
+                {
+                    await Navigation.PopModalAsync(animated: true);
+                }
+            }
+            return;
+        }
+
+        Shell? shell = Shell.Current;
+        FlyoutBehavior? previousBehavior = shell?.FlyoutBehavior;
+        try
+        {
+            RefreshProgressOverlay.IsVisible = true;
+            if (shell is not null)
+            {
+                shell.FlyoutBehavior = FlyoutBehavior.Disabled;
+            }
+            await refresh();
+        }
+        finally
+        {
+            RefreshProgressOverlay.IsVisible = false;
+            if (shell is not null && previousBehavior is FlyoutBehavior behavior)
+            {
+                shell.FlyoutBehavior = behavior;
+            }
         }
     }
 
