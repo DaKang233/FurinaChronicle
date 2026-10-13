@@ -43,9 +43,8 @@
                             <BindableLayout.ItemTemplate>
                                 <DataTemplate x:DataType="viewModels:GachaItemStatisticsDisplayItem">
                                     <gacha:GachaItemIconView
-                                        CardWidth="116"
+                                        CardWidth="90"
                                         CountText="{Binding Count}"
-                                        DetailText="{Binding Rank}"
                                         IconSize="90"
                                         IconSource="{Binding IconUrl}"
                                         ItemName="{Binding ItemName}"

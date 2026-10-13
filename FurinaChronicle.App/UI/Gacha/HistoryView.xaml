@@ -87,6 +87,9 @@
                 HorizontalScrollBarVisibility="Default"
                 Orientation="Horizontal">
                 <HorizontalStackLayout Spacing="8">
+                    <ActivityIndicator
+                        IsRunning="{Binding IsBannerCacheBusy}"
+                        IsVisible="{Binding IsBannerCacheBusy}" />
                     <Button
                         Command="{Binding PreloadGachaBannerImagesCommand}"
                         IsEnabled="{Binding CanManageBannerCache}"
@@ -95,12 +98,8 @@
                         Command="{Binding ClearGachaBannerImagesCommand}"
                         IsEnabled="{Binding CanManageBannerCache}"
                         Text="清除卡池图片缓存" />
-                    <Label Text="文本" VerticalTextAlignment="Center" />
-                    <Switch IsToggled="{Binding IsHistoryIconMode}" />
-                    <Label Text="图标" VerticalTextAlignment="Center" />
-                    <ActivityIndicator
-                        IsRunning="{Binding IsBannerCacheBusy}"
-                        IsVisible="{Binding IsBannerCacheBusy}" />
+                    <Label Text="图标模式" VerticalTextAlignment="Center" />
+                    <CheckBox IsChecked="{Binding IsHistoryIconMode}" />
                 </HorizontalStackLayout>
             </ScrollView>
         </Grid>

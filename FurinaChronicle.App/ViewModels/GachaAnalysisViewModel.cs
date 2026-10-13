@@ -1217,11 +1217,26 @@ public partial class GachaAnalysisViewModel(
         {
             GachaItemStatisticsDisplayItem[] groupItems = group.ToArray();
             rows.Add(new GachaItemGridDisplayRow(
-                group.Key is int rank ? $"{rank} 星" : "未知星级",
+                group.Key is int rank ? $"{GetChineseNumber(rank)}星" : "未知星级",
                 []));
             rows.Add(new GachaItemGridDisplayRow(null, groupItems));
         }
         ItemGridRows = rows;
+    }
+
+    private static string GetChineseNumber(int number)
+    {
+        switch (number)
+        {
+            case 5:
+                return "五";
+            case 4:
+                return "四";
+            case 3:
+                return "三";
+            default:
+                return "";
+        }
     }
 
     private static string FormatHistoryItems(IReadOnlyList<GachaHistoryItem> items)
