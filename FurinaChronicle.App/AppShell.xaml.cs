@@ -12,6 +12,7 @@ public partial class AppShell : Shell
     private const string StartupRoute = "startup";
     private readonly HomePage homePage;
     private readonly GachaPage gachaPage;
+    private readonly ArchiveHistoryPage archiveHistoryPage;
     private readonly UserPage userPage;
     private readonly UserPageViewModel userPageViewModel;
     private readonly ArchivePage archivePage;
@@ -22,6 +23,7 @@ public partial class AppShell : Shell
         StartupPage startupPage,
         HomePage homePage,
         GachaPage gachaPage,
+        ArchiveHistoryPage archiveHistoryPage,
         ArchivePage archivePage,
         UserPage userPage,
         UserPageViewModel userPageViewModel)
@@ -29,6 +31,7 @@ public partial class AppShell : Shell
         InitializeComponent();
         this.homePage = homePage;
         this.gachaPage = gachaPage;
+        this.archiveHistoryPage = archiveHistoryPage;
         this.archivePage = archivePage;
         this.userPage = userPage;
         this.userPageViewModel = userPageViewModel;
@@ -84,6 +87,7 @@ public partial class AppShell : Shell
             var tabs = new TabBar { Route = "main" };
             tabs.Items.Add(CreateContent("主页", "home", homePage));
             tabs.Items.Add(CreateContent("抽卡记录", "gacha", gachaPage));
+            tabs.Items.Add(CreateContent("修改历史", "archive-history", archiveHistoryPage));
             tabs.Items.Add(CreateContent("档案", "archive", archivePage));
             tabs.Items.Add(CreateContent("用户", "user", userPage));
             Items.Add(tabs);
@@ -95,6 +99,7 @@ public partial class AppShell : Shell
         FlyoutHeader = passportFlyoutHeader;
         Items.Add(CreateFlyoutItem("主页", "home", homePage));
         Items.Add(CreateFlyoutItem("抽卡记录", "gacha", gachaPage));
+        Items.Add(CreateFlyoutItem("档案修改历史", "archive-history", archiveHistoryPage));
         Items.Add(CreateFlyoutItem("档案与账号管理", "archive", archivePage));
         Items.Add(CreateFlyoutItem("用户", "user", userPage));
     }

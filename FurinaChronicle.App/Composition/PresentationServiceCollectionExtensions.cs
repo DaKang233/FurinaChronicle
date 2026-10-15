@@ -18,11 +18,13 @@ internal static class PresentationServiceCollectionExtensions
 
         services.AddTransient<GachaPageViewModel>();
         services.AddTransient<GachaAnalysisViewModel>();
+        services.AddTransient<ArchiveHistoryPageViewModel>();
         services.AddSingleton<ArchivePageViewModel>();
         services.AddSingleton<UserPageViewModel>();
         services.AddSingleton<StartupPageViewModel>();
 
         services.AddTransient<GachaPage>();
+        services.AddTransient<ArchiveHistoryPage>();
         services.AddSingleton<HomePage>();
         services.AddSingleton<UserPage>();
         services.AddSingleton<ArchivePage>();
