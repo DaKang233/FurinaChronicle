@@ -86,7 +86,9 @@ Tombstone／Portable Apply 基础。Q1～Q7 的首版产品选择由
 ## Q1～Q7 实际实现
 
 1. 刷新先识别活动 Tombstone；命中项从本次 mutation 集合移除，其余记录仍在一个原子操作提交。结果和页面均显示抑制数。
-2. UIGF `PreserveExisting` 只补空；有效补空生成 Revision。不同非空事实整次 Conflict，不提供通用覆盖按钮。
+2. UIGF 默认 `PreserveExisting` 只补空；有效补空生成 Revision。不同非空事实整次
+   Conflict。ADR 0015 后，用户显式开启统一全量导入模式时可改用覆盖策略；默认行为
+   不变。
 3. 新档案／账号操作设置为不可撤销；确认文案提前说明。父实体与事实现在同事务创建，不拆分伪造 Undo。
 4. 人工纠正固定账号和 External ID，当前事实来源写为 `UserEntered`；before Revision 保留原来源，不补造 FetchedAt／ImportedAt。
 5. Resolved 删除 marker 使用档案＋共享角色身份＋External ID；同档案重建账号仍命中，新档案不命中。

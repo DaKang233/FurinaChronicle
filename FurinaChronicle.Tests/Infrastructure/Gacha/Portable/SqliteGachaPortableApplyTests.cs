@@ -391,6 +391,163 @@ public sealed class SqliteGachaPortableApplyTests
     }
 
     [Fact]
+    public async Task ApplyAsync_FullMode_ReplacesPreviewedFactKeepsAbsentFactAndCanUndo()
+    {
+        await using SqliteRepositoryTestContext context =
+            await CreateContextAsync();
+        PlayerArchive archive =
+            SqliteRepositoryTestContext.CreateArchive("Full Portable");
+        GameRoleNaturalIdentity natural =
+            GenshinGameRoleIdentity.Create(
+                "100000001",
+                GameServerRegion.ChinaOfficial);
+        var identity = new GameRoleIdentity(
+            GameRoleIdentityId.FromNaturalIdentity(natural),
+            natural);
+        GameAccount account = SqliteRepositoryTestContext.CreateAccount(
+            archive.Id,
+            natural.Uid,
+            GameServerRegion.ChinaOfficial,
+            roleIdentity: identity);
+        await context.Archives.AddAsync(archive);
+        await context.Accounts.AddAsync(account);
+        GachaRecord original = CreateRecord(
+            account.Id,
+            "record-1",
+            "Original");
+        GachaRecord absentFromSource = CreateRecord(
+            account.Id,
+            "record-2",
+            "Keep me");
+        await context.Gacha.SaveBatchAsync([original, absentFromSource]);
+        Guid sourceAccountId = Guid.NewGuid();
+        GachaPortablePackage package = new(
+            ReceivedAt,
+            new GachaPortableArchive(Guid.NewGuid(), archive.Name),
+            [new GachaPortableAccount(
+                sourceAccountId,
+                identity,
+                "Source",
+                [original with
+                {
+                    GameAccountId = sourceAccountId,
+                    ItemName = "Corrected"
+                }])]);
+        GachaPortableImportPlan plan = await PlanAsync(
+            context,
+            package,
+            GachaPortableApplyMode.ReplaceExisting);
+
+        GachaPortableApplyResult applied =
+            await context.AtomicGacha.ApplyAsync(
+                new GachaPortableApplyRequest(
+                    package,
+                    plan,
+                    OperationId.New(),
+                    ReceivedAt,
+                    Guid.NewGuid()));
+
+        Assert.Equal(ChangeExecutionStatus.Applied, applied.Status);
+        Assert.Equal(0, applied.InsertedRecordCount);
+        Assert.Equal(1, applied.UpdatedRecordCount);
+        IReadOnlyList<GachaRecord> after =
+            await context.Gacha.GetRecentAsync(account.Id, 10);
+        Assert.Equal(2, after.Count);
+        Assert.Equal(
+            "Corrected",
+            Assert.Single(
+                after,
+                record => record.ExternalRecordId == "record-1").ItemName);
+        Assert.Contains(after, record =>
+            record.ExternalRecordId == "record-2");
+        using (SQLiteConnection raw = context.OpenRawConnection())
+        {
+            Assert.Equal(1, Count(raw, "GachaRevisions"));
+        }
+
+        GachaAtomicChangeResult undone =
+            await context.AtomicGacha.UndoLatestAsync(
+                new GachaUndoRequest(
+                    OperationId.New(),
+                    archive.Id,
+                    ReceivedAt.AddMinutes(1),
+                    ReceivedAt.AddMinutes(1).AddSeconds(1)));
+
+        Assert.Equal(ChangeExecutionStatus.Applied, undone.Status);
+        Assert.Equal(
+            "Original",
+            Assert.Single(
+                await context.Gacha.GetRecentAsync(account.Id, 10),
+                record => record.ExternalRecordId == "record-1").ItemName);
+    }
+
+    [Fact]
+    public async Task ApplyAsync_FullMode_TargetChangedAfterPlanReturnsConflict()
+    {
+        await using SqliteRepositoryTestContext context =
+            await CreateContextAsync();
+        PlayerArchive archive =
+            SqliteRepositoryTestContext.CreateArchive("Stale Full Portable");
+        GameRoleNaturalIdentity natural =
+            GenshinGameRoleIdentity.Create(
+                "100000001",
+                GameServerRegion.ChinaOfficial);
+        var identity = new GameRoleIdentity(
+            GameRoleIdentityId.FromNaturalIdentity(natural),
+            natural);
+        GameAccount account = SqliteRepositoryTestContext.CreateAccount(
+            archive.Id,
+            natural.Uid,
+            GameServerRegion.ChinaOfficial,
+            roleIdentity: identity);
+        await context.Archives.AddAsync(archive);
+        await context.Accounts.AddAsync(account);
+        GachaRecord original = CreateRecord(
+            account.Id,
+            "record-1",
+            "Original");
+        await context.Gacha.SaveBatchAsync([original]);
+        Guid sourceAccountId = Guid.NewGuid();
+        GachaPortablePackage package = new(
+            ReceivedAt,
+            new GachaPortableArchive(Guid.NewGuid(), archive.Name),
+            [new GachaPortableAccount(
+                sourceAccountId,
+                identity,
+                "Source",
+                [original with
+                {
+                    GameAccountId = sourceAccountId,
+                    ItemName = "Corrected"
+                }])]);
+        GachaPortableImportPlan plan = await PlanAsync(
+            context,
+            package,
+            GachaPortableApplyMode.ReplaceExisting);
+        await context.Gacha.SaveBatchAsync(
+            [original with { ItemName = "Changed after plan" }],
+            conflictPolicy: GachaRecordConflictPolicy.ReplaceExisting);
+
+        GachaPortableApplyResult result =
+            await context.AtomicGacha.ApplyAsync(
+                new GachaPortableApplyRequest(
+                    package,
+                    plan,
+                    OperationId.New(),
+                    ReceivedAt,
+                    Guid.NewGuid()));
+
+        Assert.Equal(ChangeExecutionStatus.Conflict, result.Status);
+        Assert.Equal(
+            "Changed after plan",
+            Assert.Single(
+                await context.Gacha.GetRecentAsync(account.Id, 10)).ItemName);
+        using SQLiteConnection raw = context.OpenRawConnection();
+        Assert.Equal(0, Count(raw, "DataChangeSets"));
+        Assert.Equal(0, Count(raw, "PortableImportReceipts"));
+    }
+
+    [Fact]
     public async Task ApplyAsync_ReportsAllTombstonesAndRequiresExactConfirmations()
     {
         await using SqliteRepositoryTestContext context =
@@ -490,13 +647,16 @@ public sealed class SqliteGachaPortableApplyTests
 
     private static Task<GachaPortableImportPlan> PlanAsync(
         SqliteRepositoryTestContext context,
-        GachaPortablePackage package) =>
+        GachaPortablePackage package,
+        GachaPortableApplyMode mode = GachaPortableApplyMode.AddOnly) =>
         new PlanGachaPortableImport(
             context.Archives,
             context.Accounts,
             context.Gacha,
             new FixedTimeProvider())
-        .ExecuteAsync(new GachaPortableImportPlanRequest(package));
+        .ExecuteAsync(new GachaPortableImportPlanRequest(
+            package,
+            Mode: mode));
 
     private static GachaPortablePackage CreatePackage(
         string archiveName,

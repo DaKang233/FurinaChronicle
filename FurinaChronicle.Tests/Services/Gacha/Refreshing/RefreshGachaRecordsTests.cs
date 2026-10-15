@@ -105,7 +105,7 @@ public sealed class RefreshGachaRecordsTests
         GachaRefreshResult result = await service.ExecuteAsync(new GachaRefreshRequest(
             GameAccount,
             GachaRefreshSource.ManualUrl,
-            GachaRefreshMode.Full,
+            GachaImportMode.Full,
             ManualUrl: ValidUrl.AbsoluteUri));
 
         Assert.Equal(3, result.FetchedCount);

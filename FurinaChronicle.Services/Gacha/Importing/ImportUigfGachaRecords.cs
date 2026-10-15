@@ -25,16 +25,41 @@ public sealed class ImportUigfGachaRecords(
         Guid playerArchiveId,
         Guid? targetGameAccountId = null,
         CancellationToken cancellationToken = default) =>
+        ExecuteAsync(
+            source,
+            playerArchiveId,
+            targetGameAccountId,
+            GachaImportMode.Incremental,
+            cancellationToken);
+
+    public Task<GachaImportResult> ExecuteAsync(
+        Stream source,
+        Guid playerArchiveId,
+        Guid? targetGameAccountId,
+        GachaImportMode mode,
+        CancellationToken cancellationToken = default) =>
         ExecuteCoreAsync(
             source,
             playerArchiveId,
             targetGameAccountId,
             archiveToCreate: null,
+            mode,
             cancellationToken);
 
     public Task<GachaImportResult> ExecuteAsync(
         Stream source,
         PlayerArchive archiveToCreate,
+        CancellationToken cancellationToken = default)
+        => ExecuteAsync(
+            source,
+            archiveToCreate,
+            GachaImportMode.Incremental,
+            cancellationToken);
+
+    public Task<GachaImportResult> ExecuteAsync(
+        Stream source,
+        PlayerArchive archiveToCreate,
+        GachaImportMode mode,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(archiveToCreate);
@@ -43,6 +68,7 @@ public sealed class ImportUigfGachaRecords(
             archiveToCreate.Id,
             targetGameAccountId: null,
             archiveToCreate,
+            mode,
             cancellationToken);
     }
 
@@ -51,6 +77,7 @@ public sealed class ImportUigfGachaRecords(
         Guid playerArchiveId,
         Guid? targetGameAccountId,
         PlayerArchive? archiveToCreate,
+        GachaImportMode mode,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(source);
@@ -256,11 +283,15 @@ public sealed class ImportUigfGachaRecords(
                     OperationId.New(),
                     DataChangeOperationKind.Import,
                     DataOrigin.StandardImport,
-                    "Import UIGF Gacha records",
+                    mode == GachaImportMode.Full
+                        ? "Full import UIGF Gacha records"
+                        : "Import UIGF Gacha records",
                     importedAt,
                     DateTimeOffset.UtcNow,
                     allRecords,
-                    GachaRecordConflictPolicy.PreserveExisting,
+                    mode == GachaImportMode.Full
+                        ? GachaRecordConflictPolicy.ReplaceExisting
+                        : GachaRecordConflictPolicy.PreserveExisting,
                     SuppressTombstonesAndContinue: false,
                     CaptureUndo: createdAccountCount == 0,
                     ArchiveToCreate: archiveToCreate,
@@ -291,7 +322,8 @@ public sealed class ImportUigfGachaRecords(
             saveResult.DuplicateCount,
             invalidCount,
             ignoredCount,
-            createdAccountCount);
+            createdAccountCount,
+            saveResult.UpdatedCount);
     }
 
     private async Task<List<PreparedGachaRecord>?> PrepareAccountRecordsAsync(

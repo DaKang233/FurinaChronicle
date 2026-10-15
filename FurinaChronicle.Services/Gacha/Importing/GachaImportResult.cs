@@ -9,4 +9,5 @@ public sealed record GachaImportResult(
     int DuplicateCount,
     int InvalidCount,
     int IgnoredCount,
-    int CreatedAccountCount);
+    int CreatedAccountCount,
+    int UpdatedCount = 0);

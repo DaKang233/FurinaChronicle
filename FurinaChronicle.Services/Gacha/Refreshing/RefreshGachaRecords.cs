@@ -41,7 +41,7 @@ public sealed class RefreshGachaRecords(
         DateTimeOffset startedAt = DateTimeOffset.UtcNow;
         Uri sourceUrl = await ResolveSourceUrlAsync(request, cancellationToken);
         AcquisitionBatchId batchId = AcquisitionBatchId.New();
-        HashSet<string> localIds = request.Mode == GachaRefreshMode.Incremental
+        HashSet<string> localIds = request.Mode == GachaImportMode.Incremental
             ? await LoadExistingIdsAsync(request.GameAccount.Id, cancellationToken)
             : new HashSet<string>(StringComparer.Ordinal);
         var collected = new List<GachaRecord>();
@@ -90,7 +90,7 @@ public sealed class RefreshGachaRecords(
                             $"Gacha response UID {remote.Uid} does not match target UID {request.GameAccount.Uid}.");
                     }
 
-                    if (request.Mode == GachaRefreshMode.Incremental &&
+                    if (request.Mode == GachaImportMode.Incremental &&
                         localIds.Contains(remote.ExternalRecordId))
                     {
                         reachedBoundary = true;
@@ -137,13 +137,13 @@ public sealed class RefreshGachaRecords(
                     OperationId.New(),
                     DataChangeOperationKind.Refresh,
                     DataOrigin.OfficialApi,
-                    request.Mode == GachaRefreshMode.Full
+                    request.Mode == GachaImportMode.Full
                         ? "Full Gacha refresh"
                         : "Incremental Gacha refresh",
                     startedAt,
                     DateTimeOffset.UtcNow,
                     collected,
-                    request.Mode == GachaRefreshMode.Full
+                    request.Mode == GachaImportMode.Full
                         ? GachaRecordConflictPolicy.ReplaceExisting
                         : GachaRecordConflictPolicy.PreserveExisting,
                     SuppressTombstonesAndContinue: true,

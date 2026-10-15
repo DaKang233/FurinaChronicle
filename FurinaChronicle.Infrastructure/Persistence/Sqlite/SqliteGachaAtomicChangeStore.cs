@@ -1256,6 +1256,7 @@ public sealed class SqliteGachaAtomicChangeStore
                     TargetArchiveId: exception.Warnings[0].ArchiveId,
                     Accounts: [],
                     InsertedRecordCount: 0,
+                    UpdatedRecordCount: 0,
                     SkippedRecordCount: 0,
                     exception.Message,
                     exception.Warnings[0],
@@ -1270,6 +1271,7 @@ public sealed class SqliteGachaAtomicChangeStore
                     TargetArchiveId: null,
                     Accounts: [],
                     InsertedRecordCount: 0,
+                    UpdatedRecordCount: 0,
                     SkippedRecordCount: 0,
                     exception.Message);
                 return;
@@ -1291,6 +1293,7 @@ public sealed class SqliteGachaAtomicChangeStore
                     preparation.Accounts.Select(
                         account => account.ToResult()).ToArray(),
                     InsertedRecordCount: 0,
+                    UpdatedRecordCount: 0,
                     preparation.Accounts.Sum(
                         account => account.SkippedRecordCount));
                 return;
@@ -1327,6 +1330,7 @@ public sealed class SqliteGachaAtomicChangeStore
                             preparation.ArchiveId,
                             Accounts: [],
                             InsertedRecordCount: 0,
+                            UpdatedRecordCount: 0,
                             SkippedRecordCount: 0,
                             CleanupPlan: cleanupPlan);
                         return;
@@ -1508,7 +1512,10 @@ public sealed class SqliteGachaAtomicChangeStore
                 preparation.ArchiveId,
                 preparation.Accounts.Select(
                     account => account.ToResult()).ToArray(),
-                preparation.Mutations.Count,
+                preparation.Accounts.Sum(
+                    account => account.InsertedRecordCount),
+                preparation.Accounts.Sum(
+                    account => account.UpdatedRecordCount),
                 preparation.Accounts.Sum(
                     account => account.SkippedRecordCount));
         });
@@ -1921,7 +1928,12 @@ public sealed class SqliteGachaAtomicChangeStore
             }
 
             int inserted = 0;
+            int updated = 0;
             int skipped = 0;
+            Dictionary<string, GachaPortableRecordReplacement> replacements =
+                plan.Replacements.ToDictionary(
+                    replacement => replacement.ExternalRecordId,
+                    StringComparer.Ordinal);
             foreach (GachaRecord sourceRecord in source.Records)
             {
                 var reference = new GachaFactReference(
@@ -1935,14 +1947,46 @@ public sealed class SqliteGachaAtomicChangeStore
                     ReadCurrent(connection, reference);
                 if (current is not null)
                 {
-                    if (!PortableFactsEqual(
-                            current.ToGachaRow().ToDomain(),
-                            targetRecord))
+                    GachaRecord currentRecord =
+                        current.ToGachaRow().ToDomain();
+                    if (PortableFactsEqual(currentRecord, targetRecord))
+                    {
+                        skipped++;
+                        continue;
+                    }
+
+                    if (request.Plan.Mode !=
+                            GachaPortableApplyMode.ReplaceExisting ||
+                        !replacements.TryGetValue(
+                            sourceRecord.ExternalRecordId,
+                            out GachaPortableRecordReplacement? replacement) ||
+                        !PortableFactsEqual(
+                            currentRecord,
+                            replacement.ExpectedTarget))
                     {
                         throw new PortableApplyConflictException(
                             $"Gacha fact {reference} changed after planning.");
                     }
-                    skipped++;
+
+                    GachaRecordRow before = current.ToGachaRow();
+                    proposed.Id = before.Id;
+                    proposed.Version = checked(before.Version + 1);
+                    GachaRecordChange change =
+                        GachaRecordChangeClassifier.Compare(
+                            before.ToDomain(),
+                            proposed.ToDomain());
+                    if (change.Kind == GachaRecordChangeKind.NoOp)
+                    {
+                        throw new PortableApplyConflictException(
+                            $"Gacha fact {reference} no longer matches the replacement preview.");
+                    }
+                    mutations.Add(new PreparedMutation(
+                        archiveId,
+                        before,
+                        proposed,
+                        change.Kind,
+                        EntityChangeKind.Update));
+                    updated++;
                     continue;
                 }
 
@@ -2000,6 +2044,7 @@ public sealed class SqliteGachaAtomicChangeStore
             }
 
             if (inserted != plan.AddCount ||
+                updated != plan.ReplaceCount ||
                 skipped != plan.SkipCount ||
                 plan.ConflictCount != 0)
             {
@@ -2012,10 +2057,17 @@ public sealed class SqliteGachaAtomicChangeStore
                 targetIdentityId,
                 createAccount,
                 inserted,
+                updated,
                 skipped));
         }
 
-        if (mutations.Count != request.Plan.Preview.AddCount ||
+        if (accounts.Sum(account => account.InsertedRecordCount) !=
+                request.Plan.Preview.AddCount ||
+            accounts.Sum(account => account.UpdatedRecordCount) !=
+                request.Plan.Preview.ReplaceCount ||
+            mutations.Count !=
+                request.Plan.Preview.AddCount +
+                request.Plan.Preview.ReplaceCount ||
             accounts.Sum(account => account.SkippedRecordCount) !=
                 request.Plan.Preview.SkipCount)
         {
@@ -2700,6 +2752,7 @@ public sealed class SqliteGachaAtomicChangeStore
                 TargetArchiveId: null,
                 Accounts: [],
                 InsertedRecordCount: 0,
+                UpdatedRecordCount: 0,
                 SkippedRecordCount: 0);
         }
 
@@ -2719,7 +2772,8 @@ public sealed class SqliteGachaAtomicChangeStore
                 ParseOptionalGuid(committed.ChangeSetId),
                 TargetArchiveId: null,
                 Accounts: [],
-                committed.AffectedRecordCount,
+                InsertedRecordCount: 0,
+                UpdatedRecordCount: 0,
                 SkippedRecordCount: 0);
         }
 
@@ -2744,6 +2798,7 @@ public sealed class SqliteGachaAtomicChangeStore
                             row.TargetRoleIdentityId,
                             "target role identity")),
                     InsertedRecordCount: 0,
+                    UpdatedRecordCount: 0,
                     SkippedRecordCount: 0))
                 .ToArray();
         return new GachaPortableApplyResult(
@@ -2751,7 +2806,8 @@ public sealed class SqliteGachaAtomicChangeStore
             ParseRequiredGuid(committed.ChangeSetId, "change set"),
             ParseRequiredGuid(receipt.TargetArchiveId, "target archive"),
             accounts,
-            receipt.RecordCount,
+            InsertedRecordCount: 0,
+            UpdatedRecordCount: 0,
             SkippedRecordCount: 0);
     }
 
@@ -3569,6 +3625,7 @@ public sealed class SqliteGachaAtomicChangeStore
         GameRoleIdentityId TargetIdentityId,
         bool CreateAccount,
         int InsertedRecordCount,
+        int UpdatedRecordCount,
         int SkippedRecordCount)
     {
         public GachaPortableAccountApplyResult ToResult() =>
@@ -3577,6 +3634,7 @@ public sealed class SqliteGachaAtomicChangeStore
                 TargetAccountId,
                 TargetIdentityId,
                 InsertedRecordCount,
+                UpdatedRecordCount,
                 SkippedRecordCount);
     }
 

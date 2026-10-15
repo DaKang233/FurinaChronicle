@@ -15,7 +15,21 @@ namespace FurinaChronicle.Services.Gacha.Importing
 {
     public sealed class ImportGachaRecords(IGachaRecordReader reader, ICommitGachaRecords commitGachaRecords, IGameAccountRepository accountRepository)
     {
-        public async Task<GachaRecordImportResult> ExecuteAsync(Stream source, Guid gameAccountId, CancellationToken cancellationToken = default)
+        public Task<GachaRecordImportResult> ExecuteAsync(
+            Stream source,
+            Guid gameAccountId,
+            CancellationToken cancellationToken = default) =>
+            ExecuteAsync(
+                source,
+                gameAccountId,
+                GachaImportMode.Incremental,
+                cancellationToken);
+
+        public async Task<GachaRecordImportResult> ExecuteAsync(
+            Stream source,
+            Guid gameAccountId,
+            GachaImportMode mode,
+            CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(source);
 
@@ -37,11 +51,15 @@ namespace FurinaChronicle.Services.Gacha.Importing
                         OperationId.New(),
                         DataChangeOperationKind.Import,
                         DataOrigin.StandardImport,
-                        "Import compatible Gacha JSON",
+                        mode == GachaImportMode.Full
+                            ? "Full import compatible Gacha JSON"
+                            : "Import compatible Gacha JSON",
                         now,
                         now,
                         distinctRecords,
-                        GachaRecordConflictPolicy.PreserveExisting,
+                        mode == GachaImportMode.Full
+                            ? GachaRecordConflictPolicy.ReplaceExisting
+                            : GachaRecordConflictPolicy.PreserveExisting,
                         SuppressTombstonesAndContinue: false),
                     cancellationToken);
             if (saveResult.Status is ChangeExecutionStatus.Conflict or
@@ -56,7 +74,8 @@ namespace FurinaChronicle.Services.Gacha.Importing
                 TotalCount: readResult.Records.Count + readResult.Errors.Count,
                 ImportedCount: saveResult.InsertedCount,
                 DuplicateCount: duplicatesInsideSource + saveResult.DuplicateCount,
-                InvalidCount: readResult.Errors.Count);
+                InvalidCount: readResult.Errors.Count,
+                UpdatedCount: saveResult.UpdatedCount);
         }
     }
 }

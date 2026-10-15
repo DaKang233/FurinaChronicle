@@ -7,5 +7,10 @@ using System.Text;
 
 namespace FurinaChronicle.Services.Gacha.Importing
 {
-    public sealed record GachaRecordImportResult(int TotalCount, int ImportedCount, int DuplicateCount, int InvalidCount);
+    public sealed record GachaRecordImportResult(
+        int TotalCount,
+        int ImportedCount,
+        int DuplicateCount,
+        int InvalidCount,
+        int UpdatedCount = 0);
 }

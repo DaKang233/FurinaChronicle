@@ -134,7 +134,10 @@ public partial class GachaPageViewModel(
 					new GachaPortableImportPlanRequest(
 						read.Package,
 						targetArchiveId,
-						createNewArchive),
+						createNewArchive,
+						Mode: IsFullImportMode
+							? GachaPortableApplyMode.ReplaceExisting
+							: GachaPortableApplyMode.AddOnly),
 					cancellationToken);
 			PortableSummary = FormatPortablePlan(plan, staged.Length);
 			return new GachaPortableImportSession(
@@ -161,7 +164,10 @@ public partial class GachaPageViewModel(
 			new GachaPortableImportPlanRequest(
 				session.Package,
 				targetArchiveId,
-				createNewArchive),
+				createNewArchive,
+				Mode: IsFullImportMode
+					? GachaPortableApplyMode.ReplaceExisting
+					: GachaPortableApplyMode.AddOnly),
 			cancellationToken);
 		PortableSummary = FormatPortablePlan(
 			session.Plan,
@@ -241,15 +247,19 @@ public partial class GachaPageViewModel(
 				$"新建“{plan.Archive.ProposedName}”",
 			_ => "需要手动选择目标档案"
 		};
-		return $"Portable 预览（{sourceLength} 字节）：{target}；" +
+		string mode = plan.Mode == GachaPortableApplyMode.ReplaceExisting
+			? "全量覆盖"
+			: "仅补充";
+		return $"Portable 预览（{sourceLength} 字节，{mode}）：{target}；" +
 			$"新建账号 {plan.Preview.AccountCreateCount}，" +
 			$"复用账号 {plan.Preview.AccountReuseCount}，" +
-			$"新增 {plan.Preview.AddCount}，保留 {plan.Preview.SkipCount}，" +
+			$"新增 {plan.Preview.AddCount}，覆盖 {plan.Preview.ReplaceCount}，" +
+			$"保留 {plan.Preview.SkipCount}，" +
 			$"冲突 {plan.Preview.ConflictCount}，别名 {plan.Preview.AliasCount}。";
 	}
 
 	[ObservableProperty]
-	public partial bool IsFullRefresh { get; set; }
+	public partial bool IsFullImportMode { get; set; }
 
 	[ObservableProperty]
 	public partial string StatusMessage { get; set; } = "请先选择档案。";
@@ -418,10 +428,15 @@ public partial class GachaPageViewModel(
 		PlayerArchive archive = SelectedArchive ?? PrepareUnnamedArchive();
 		GachaImportResult result =
 			createdArchiveForImport
-				? await importUigfGachaRecords.ExecuteAsync(source, archive)
+				? await importUigfGachaRecords.ExecuteAsync(
+					source,
+					archive,
+					CurrentImportMode)
 				: await importUigfGachaRecords.ExecuteAsync(
 					source,
-					archive.Id);
+					archive.Id,
+					targetGameAccountId: null,
+					mode: CurrentImportMode);
 
 		ImportSummary = FormatImportSummary(
 			fileName,
@@ -474,7 +489,8 @@ public partial class GachaPageViewModel(
 				await importUigfGachaRecords.ExecuteAsync(
 					source,
 					archiveId,
-					accountId);
+					accountId,
+					CurrentImportMode);
 
 			await ReloadRecordsCoreAsync(pageNumber: 1);
 			ImportSummary = FormatImportSummary(
@@ -634,9 +650,7 @@ public partial class GachaPageViewModel(
 					new GachaRefreshRequest(
 						targetAccount,
 						source,
-						IsFullRefresh
-							? GachaRefreshMode.Full
-							: GachaRefreshMode.Incremental,
+						CurrentImportMode,
 						passportAccountId,
 						manualUrl,
 						gameInstallationPath,
@@ -849,6 +863,7 @@ public partial class GachaPageViewModel(
 	{
 		return $"{fileName}：共读取 {result.TotalCount} 条，" +
 			$"导入 {result.ImportedCount} 条，" +
+			$"覆盖校正 {result.UpdatedCount} 条，" +
 			$"重复 {result.DuplicateCount} 条，" +
 			$"无效 {result.InvalidCount} 条，" +
 			$"忽略 {result.IgnoredCount} 条，" +
@@ -876,6 +891,11 @@ public partial class GachaPageViewModel(
 
 		return $"未命名档案{suffix}";
 	}
+
+	private GachaImportMode CurrentImportMode =>
+		IsFullImportMode
+			? GachaImportMode.Full
+			: GachaImportMode.Incremental;
 
 	private PlayerArchive PrepareUnnamedArchive()
 	{

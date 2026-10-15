@@ -4,6 +4,9 @@
 
 日期：2026-10-08
 
+补充：ADR 0015 已为用户显式开启的统一全量导入模式授权 UIGF 和 Portable 覆盖；
+本文所述 PreserveExisting／AddOnly 继续作为默认模式语义。
+
 ## 背景
 
 ADR 0013 已建立 Gacha 的原子 ChangeSet、Revision、有限撤销、
@@ -24,10 +27,10 @@ Gacha 原子写入基础。本文只决定当前 Gacha 产品行为，不建立�
   或小助手自动模式均不构成重引入授权。
 - 全量刷新只纠正本次官方响应明确返回的事实；来源未返回的旧事实不删除，也不据此
   宣称终身历史完整。
-- UIGF 保留 `PreserveExisting` 的补空兼容。补空导致实际保存状态变化时必须生成
+- 默认模式下，UIGF 保留 `PreserveExisting` 的补空兼容。补空导致实际保存状态变化时必须生成
   Revision；相同稳定引用上的不同非空事实默认报告冲突且不覆盖。本阶段不新增通用
   “确认后覆盖导入”入口。
-- Portable v1 继续严格 AddOnly；不同事实阻止整包，不能暗转 Upsert。
+- 默认模式下，Portable v1 继续严格 AddOnly；不同事实阻止整包，不能暗转 Upsert。
 - 导入若创建新档案、账号或身份别名，整个操作不承诺可撤销；已有账号上的纯事实
   新增可以按 ADR 0013 捕获 Undo。确认前必须如实提示，不拆成伪操作制造可撤销假象。
 
@@ -71,4 +74,3 @@ Gacha 原子写入基础。本文只决定当前 Gacha 产品行为，不建立�
 - 覆盖普通删除、永久删除、已无 current 的历史、Resolved／Unresolved 父范围 purge、
   跨档案共享 ChangeSet 失效和幸存档案不变。
 - 覆盖显式重引入后 Undo 恢复原活动 Tombstone，以及 marker/version 变化时拒绝撤销。
-

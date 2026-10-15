@@ -14,16 +14,10 @@ public enum GachaRefreshSource
     ManualUrl = 3
 }
 
-public enum GachaRefreshMode
-{
-    Incremental = 0,
-    Full = 1
-}
-
 public sealed record GachaRefreshRequest(
     GameAccount GameAccount,
     GachaRefreshSource Source,
-    GachaRefreshMode Mode = GachaRefreshMode.Incremental,
+    GachaImportMode Mode = GachaImportMode.Incremental,
     Guid? PassportAccountId = null,
     string? ManualUrl = null,
     string? GameInstallationPath = null,

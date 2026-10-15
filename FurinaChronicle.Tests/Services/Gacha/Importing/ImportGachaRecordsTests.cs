@@ -156,6 +156,58 @@ public sealed class ImportGachaRecordsTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_FullMode_ReplacesMatchingFact()
+    {
+        string directory = Path.Combine(
+            Path.GetTempPath(),
+            "FurinaChronicleTests",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        string databasePath = Path.Combine(directory, "test.db3");
+        var database = new FurinaDatabase(
+            new SqliteDatabaseOptions(databasePath));
+        try
+        {
+            var archiveRepository = new SqlitePlayerArchiveRepository(database);
+            var accountRepository = new SqliteGameAccountRepository(database);
+            var gachaRepository = new SqliteGachaRecordRepository(database);
+            var service = new ImportGachaRecords(
+                new JsonGachaRecordReader(),
+                new CommitGachaRecords(
+                    new SqliteGachaAtomicChangeStore(database)),
+                accountRepository);
+            await archiveRepository.AddAsync(Archive);
+            await accountRepository.AddAsync(Account);
+            await using MemoryStream initial = CreateStream(SampleJson);
+            await service.ExecuteAsync(initial, AccountId);
+            await using MemoryStream replacement = CreateStream(
+                SampleJson.Replace("芙宁娜", "水神", StringComparison.Ordinal));
+
+            GachaRecordImportResult result = await service.ExecuteAsync(
+                replacement,
+                AccountId,
+                GachaImportMode.Full);
+
+            Assert.Equal(0, result.ImportedCount);
+            Assert.Equal(1, result.UpdatedCount);
+            Assert.Equal(3, result.DuplicateCount);
+            IReadOnlyList<GachaRecord> stored =
+                await gachaRepository.GetRecentAsync(AccountId, 20);
+            Assert.Equal(
+                "水神",
+                Assert.Single(
+                    stored,
+                    record => record.ExternalRecordId ==
+                        "200000000000000001").ItemName);
+        }
+        finally
+        {
+            await database.DisposeAsync();
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
     public async Task ExecuteAsync_UnknownAccount_ThrowsBeforeReadingSource()
     {
         var gachaRepository =

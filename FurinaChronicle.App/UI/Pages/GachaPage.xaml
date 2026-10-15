@@ -111,8 +111,8 @@
                                 IsEnabled="{Binding IsNotBusy}"
                                 Text="输入 URL 刷新" />
                             <HorizontalStackLayout Spacing="4" VerticalOptions="Center">
-                                <CheckBox IsChecked="{Binding IsFullRefresh}" IsEnabled="{Binding IsNotBusy}" />
-                                <Label Text="全量刷新" VerticalTextAlignment="Center" />
+                                <CheckBox IsChecked="{Binding IsFullImportMode}" IsEnabled="{Binding IsNotBusy}" />
+                                <Label Text="全量导入模式（覆盖相同记录）" VerticalTextAlignment="Center" />
                             </HorizontalStackLayout>
                             <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}" />
                         </HorizontalStackLayout>

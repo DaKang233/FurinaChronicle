@@ -72,6 +72,7 @@ public sealed class PlanGachaPortableImportTests
             GachaPortableIdentityPlanKind.AliasSourceToTarget,
             accountPlan.Identity.Kind);
         Assert.Equal(1, accountPlan.AddCount);
+        Assert.Equal(0, accountPlan.ReplaceCount);
         Assert.Equal(1, accountPlan.SkipCount);
         Assert.Equal(1, accountPlan.ConflictCount);
         Assert.Contains(
@@ -84,6 +85,60 @@ public sealed class PlanGachaPortableImportTests
         Assert.Single(await archives.GetAllAsync());
         Assert.Single(await accounts.GetByArchiveIdAsync(archive.Id));
         Assert.Equal(2, await records.CountAsync(targetAccount.Id));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ReplaceMode_PlansReplacementInsteadOfConflict()
+    {
+        var archives = new InMemoryPlayerArchiveRepository();
+        var accounts = new InMemoryGameAccountRepository();
+        var records = new InMemoryGachaRecordRepository([]);
+        PlayerArchive archive = ArchiveTestData.Archive("Archive");
+        await archives.AddAsync(archive);
+        GameRoleNaturalIdentity naturalIdentity =
+            GenshinGameRoleIdentity.Create(
+                "100000001",
+                GameServerRegion.ChinaOfficial);
+        var identity = new GameRoleIdentity(
+            GameRoleIdentityId.FromNaturalIdentity(naturalIdentity),
+            naturalIdentity);
+        GameAccount targetAccount = ArchiveTestData.Account(
+            archive.Id,
+            naturalIdentity.Uid,
+            GameServerRegion.ChinaOfficial,
+            roleIdentity: identity);
+        await accounts.AddAsync(targetAccount);
+        GachaRecord existing = CreateRecord(
+            targetAccount.Id,
+            "1",
+            "old");
+        await records.SaveBatchAsync([existing]);
+        GachaPortablePackage package = CreatePackage(
+            archive.Name,
+            naturalIdentity,
+            identity.Id,
+            [existing with
+            {
+                GameAccountId = SourceAccountId,
+                ItemId = "corrected"
+            }]);
+
+        GachaPortableImportPlan plan = await new PlanGachaPortableImport(
+            archives,
+            accounts,
+            records,
+            new FixedTimeProvider()).ExecuteAsync(
+                new GachaPortableImportPlanRequest(
+                    package,
+                    Mode: GachaPortableApplyMode.ReplaceExisting));
+
+        GachaPortableAccountImportPlan account = Assert.Single(plan.Accounts);
+        Assert.Equal(GachaPortableApplyMode.ReplaceExisting, plan.Mode);
+        Assert.Equal(1, account.ReplaceCount);
+        Assert.Equal(0, account.ConflictCount);
+        Assert.Equal(existing, Assert.Single(account.Replacements).ExpectedTarget);
+        Assert.Equal(1, plan.Preview.ReplaceCount);
+        Assert.True(plan.CanApply);
     }
 
     [Fact]

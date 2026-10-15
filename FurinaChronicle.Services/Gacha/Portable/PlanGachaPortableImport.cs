@@ -45,7 +45,8 @@ public sealed class PlanGachaPortableImport(
                 archivePlan,
                 [],
                 importContext,
-                new GachaPortableImportPreview(0, 0, 0, 0, 0, 0),
+                new GachaPortableImportPreview(0, 0, 0, 0, 0, 0, 0),
+                request.Mode,
                 GachaPortablePackageFingerprint.Compute(request.Package),
                 request.RequireUniqueArchiveNames);
         }
@@ -58,6 +59,7 @@ public sealed class PlanGachaPortableImport(
             accountPlans.Add(await PlanAccountAsync(
                 archivePlan,
                 sourceAccount,
+                request.Mode,
                 cancellationToken));
         }
 
@@ -69,11 +71,13 @@ public sealed class PlanGachaPortableImport(
                 accountPlans.Count(plan => plan.TargetAccountId is null),
                 accountPlans.Count(plan => plan.TargetAccountId is not null),
                 accountPlans.Sum(plan => plan.AddCount),
+                accountPlans.Sum(plan => plan.ReplaceCount),
                 accountPlans.Sum(plan => plan.SkipCount),
                 accountPlans.Sum(plan => plan.ConflictCount),
                 accountPlans.Count(plan =>
                     plan.Identity.Kind ==
                         GachaPortableIdentityPlanKind.AliasSourceToTarget)),
+            request.Mode,
             GachaPortablePackageFingerprint.Compute(request.Package),
             request.RequireUniqueArchiveNames);
     }
@@ -81,6 +85,7 @@ public sealed class PlanGachaPortableImport(
     private async Task<GachaPortableAccountImportPlan> PlanAccountAsync(
         GachaPortableArchivePlan archivePlan,
         GachaPortableAccount sourceAccount,
+        GachaPortableApplyMode mode,
         CancellationToken cancellationToken)
     {
         GameRoleIdentity sourceIdentity = sourceAccount.RoleIdentity;
@@ -122,15 +127,18 @@ public sealed class PlanGachaPortableImport(
                 sourceIdentity.NaturalIdentity,
                 identityPlan,
                 AddCount: sourceAccount.Records.Count,
+                ReplaceCount: 0,
                 SkipCount: 0,
                 ConflictCount: 0,
                 Conflicts: [],
+                Replacements: [],
                 CountOrigins(sourceAccount.Records),
                 TargetAccountUpdatedAt: null,
                 TargetRecordCountAtPlan: null);
         }
 
         var conflicts = new List<GachaPortableRecordConflict>();
+        var replacements = new List<GachaPortableRecordReplacement>();
         int addCount = 0;
         int skipCount = 0;
         for (int offset = 0;
@@ -171,9 +179,19 @@ public sealed class PlanGachaPortableImport(
                 }
                 else
                 {
-                    conflicts.Add(new GachaPortableRecordConflict(
-                        sourceRecord.ExternalRecordId,
-                        differences));
+                    if (mode == GachaPortableApplyMode.ReplaceExisting)
+                    {
+                        replacements.Add(new GachaPortableRecordReplacement(
+                            sourceRecord.ExternalRecordId,
+                            differences,
+                            targetRecord));
+                    }
+                    else
+                    {
+                        conflicts.Add(new GachaPortableRecordConflict(
+                            sourceRecord.ExternalRecordId,
+                            differences));
+                    }
                 }
             }
         }
@@ -188,9 +206,11 @@ public sealed class PlanGachaPortableImport(
             sourceIdentity.NaturalIdentity,
             identityPlan,
             addCount,
+            replacements.Count,
             skipCount,
             conflicts.Count,
             conflicts,
+            replacements,
             CountOrigins(sourceAccount.Records),
             targetAccount.UpdatedAt,
             targetRecordCount);
@@ -211,9 +231,11 @@ public sealed class PlanGachaPortableImport(
                 existingIdentity.Id,
                 "The source role identity GUID already refers to a different natural identity."),
             AddCount: 0,
+            ReplaceCount: 0,
             SkipCount: 0,
             ConflictCount: sourceAccount.Records.Count,
             Conflicts: [],
+            Replacements: [],
             CountOrigins(sourceAccount.Records),
             TargetAccountUpdatedAt: null,
             TargetRecordCountAtPlan: null);

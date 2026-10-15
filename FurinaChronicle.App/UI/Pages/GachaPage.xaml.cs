@@ -304,7 +304,9 @@ public partial class GachaPage : ContentPage
                 await DisplayAlertAsync(
                     "Portable 无法应用",
                     session.Plan.Preview.ConflictCount > 0
-                        ? $"发现 {session.Plan.Preview.ConflictCount} 条不同的非空事实；AddOnly 不会覆盖。\n{conflicts}"
+                        ? session.Plan.Mode == GachaPortableApplyMode.AddOnly
+                            ? $"发现 {session.Plan.Preview.ConflictCount} 条不同的非空事实；仅补充模式不会覆盖。\n{conflicts}"
+                            : $"发现 {session.Plan.Preview.ConflictCount} 条无法安全覆盖的冲突。\n{conflicts}"
                         : "档案或共享身份映射仍存在冲突，请更换目标后重新预览。",
                     "确定");
                 return;
@@ -317,10 +319,14 @@ public partial class GachaPage : ContentPage
                 session.Plan.Preview.AliasCount > 0;
             string undoNotice = infrastructureChanges
                 ? "本次会创建档案、账号或身份别名，因此整个导入不承诺可撤销。"
-                : "本次仅向已有账号新增事实，可按当前撤销保留策略撤销。";
+                : "本次仅变更已有账号事实，可按当前撤销保留策略撤销。";
+            string overwriteNotice = session.Plan.Mode ==
+                GachaPortableApplyMode.ReplaceExisting
+                    ? "全量导入模式会覆盖预览中列出的相同记录，但不会删除来源中缺失的本地记录。"
+                    : "当前为仅补充模式，不会覆盖不同的既有事实。";
             bool confirmed = await DisplayAlertAsync(
                 "确认 Portable 导入",
-                $"{ViewModel.PortableSummary}\n{undoNotice}\n来源事实 provenance 会原样保留，本机接收信息另存为 Receipt。",
+                $"{ViewModel.PortableSummary}\n{overwriteNotice}\n{undoNotice}\n来源事实 provenance 会原样保留，本机接收信息另存为 Receipt。",
                 "应用",
                 "取消");
             if (!confirmed)
@@ -380,7 +386,7 @@ public partial class GachaPage : ContentPage
             string resultMessage = result.Status switch
             {
                 ChangeExecutionStatus.Applied =>
-                    $"已导入 {result.InsertedRecordCount} 条，保留 {result.SkippedRecordCount} 条。",
+                    $"已导入 {result.InsertedRecordCount} 条，覆盖校正 {result.UpdatedRecordCount} 条，保留 {result.SkippedRecordCount} 条。",
                 ChangeExecutionStatus.NoOp =>
                     "目标已经包含相同事实，未写入新内容。",
                 ChangeExecutionStatus.AlreadyCommitted =>
@@ -494,7 +500,10 @@ public partial class GachaPage : ContentPage
                 "取消");
             if (confirmed)
             {
-                await ViewModel.ImportFromTeyvatHelperAutomaticallyAsync();
+                if (await ConfirmFullImportAsync("提瓦特小助手数据"))
+                {
+                    await ViewModel.ImportFromTeyvatHelperAutomaticallyAsync();
+                }
             }
 
             return;
@@ -537,9 +546,12 @@ public partial class GachaPage : ContentPage
             "取消");
         if (manualConfirmed)
         {
-            await ViewModel.ImportFromTeyvatHelperManuallyAsync(
-                uid,
-                gachaUrl);
+            if (await ConfirmFullImportAsync("提瓦特小助手数据"))
+            {
+                await ViewModel.ImportFromTeyvatHelperManuallyAsync(
+                    uid,
+                    gachaUrl);
+            }
         }
     }
 
@@ -612,6 +624,11 @@ public partial class GachaPage : ContentPage
             return;
         }
 
+        if (!await ConfirmFullImportAsync("UIGF 文件"))
+        {
+            return;
+        }
+
         await using Stream stream = await file.OpenReadAsync();
         if (importIntoSelectedAccount)
         {
@@ -625,6 +642,20 @@ public partial class GachaPage : ContentPage
                 stream,
                 file.FileName);
         }
+    }
+
+    private async Task<bool> ConfirmFullImportAsync(string sourceName)
+    {
+        if (!ViewModel.IsFullImportMode)
+        {
+            return true;
+        }
+
+        return await DisplayAlertAsync(
+            "确认全量导入",
+            $"全量导入模式会使用{sourceName}覆盖相同账号、相同记录 ID 的已有事实，并保留 Revision；不会删除来源中缺失的本地记录。是否继续？",
+            "覆盖并导入",
+            "取消");
     }
 
     private async void OnExportArchiveUigfClicked(

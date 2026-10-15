@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 using FurinaChronicle.Core.Archives;
+using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.Records;
 using FurinaChronicle.Core.History;
 using FurinaChronicle.Services.Gacha.History;
@@ -12,7 +13,14 @@ public sealed record GachaPortableImportPlanRequest(
     GachaPortablePackage Package,
     Guid? TargetArchiveId = null,
     bool CreateNewArchive = false,
-    bool RequireUniqueArchiveNames = true);
+    bool RequireUniqueArchiveNames = true,
+    GachaPortableApplyMode Mode = GachaPortableApplyMode.AddOnly);
+
+public enum GachaPortableApplyMode
+{
+    AddOnly = 0,
+    ReplaceExisting = 1
+}
 
 public enum GachaPortableArchivePlanKind
 {
@@ -52,6 +60,11 @@ public sealed record GachaPortableRecordConflict(
     string ExternalRecordId,
     IReadOnlyList<string> DifferentFields);
 
+public sealed record GachaPortableRecordReplacement(
+    string ExternalRecordId,
+    IReadOnlyList<string> DifferentFields,
+    GachaRecord ExpectedTarget);
+
 public sealed record GachaPortableAccountImportPlan(
     Guid SourceAccountReference,
     Guid? TargetAccountId,
@@ -59,9 +72,11 @@ public sealed record GachaPortableAccountImportPlan(
     GameRoleNaturalIdentity NaturalIdentity,
     GachaPortableIdentityPlan Identity,
     int AddCount,
+    int ReplaceCount,
     int SkipCount,
     int ConflictCount,
     IReadOnlyList<GachaPortableRecordConflict> Conflicts,
+    IReadOnlyList<GachaPortableRecordReplacement> Replacements,
     IReadOnlyDictionary<DataOrigin, int> SourceOrigins,
     DateTimeOffset? TargetAccountUpdatedAt,
     int? TargetRecordCountAtPlan);
@@ -75,6 +90,7 @@ public sealed record GachaPortableImportPreview(
     int AccountCreateCount,
     int AccountReuseCount,
     int AddCount,
+    int ReplaceCount,
     int SkipCount,
     int ConflictCount,
     int AliasCount);
@@ -84,6 +100,7 @@ public sealed record GachaPortableImportPlan(
     IReadOnlyList<GachaPortableAccountImportPlan> Accounts,
     GachaPortableImportContext ImportContext,
     GachaPortableImportPreview Preview,
+    GachaPortableApplyMode Mode,
     string PackageFingerprint,
     bool RequireUniqueArchiveNames)
 {
@@ -109,6 +126,7 @@ public sealed record GachaPortableAccountApplyResult(
     Guid TargetAccountId,
     GameRoleIdentityId TargetRoleIdentityId,
     int InsertedRecordCount,
+    int UpdatedRecordCount,
     int SkippedRecordCount);
 
 public sealed record GachaPortableApplyResult(
@@ -117,6 +135,7 @@ public sealed record GachaPortableApplyResult(
     Guid? TargetArchiveId,
     IReadOnlyList<GachaPortableAccountApplyResult> Accounts,
     int InsertedRecordCount,
+    int UpdatedRecordCount,
     int SkippedRecordCount,
     string? ConflictReason = null,
     TombstoneReintroductionWarning? ReintroductionWarning = null,
