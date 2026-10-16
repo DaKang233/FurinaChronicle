@@ -146,6 +146,242 @@ public sealed class GachaPortableDatabaseExportTests
     }
 
     [Fact]
+    public async Task IndexedProductPath_PlansAppliesAndCleansSessionFiles()
+    {
+        await using TestContext source = await TestContext.CreateAsync(1_250);
+        using var packageBytes = new MemoryStream();
+        await using (IGachaPortableExportSnapshot snapshot =
+            await source.CreateSnapshotFactory().OpenAsync(
+                source.Archive.Id,
+                [source.Account.Id]))
+        {
+            await new GachaPortablePackageWriter().WriteAsync(
+                packageBytes,
+                snapshot);
+        }
+        packageBytes.Position = 0;
+        GachaPortablePackage legacyPackage =
+            (await new GachaPortablePackageReader().ReadAsync(packageBytes))
+            .Package;
+        string legacyFingerprint =
+            GachaPortablePackageFingerprint.Compute(legacyPackage);
+        packageBytes.Position = 0;
+        string staging = Path.Combine(
+            Path.GetTempPath(),
+            $"furina-indexed-session-{Guid.NewGuid():N}");
+        var stager = new FileGachaPortableInputStager(staging);
+        IGachaPortableStagedInput staged = await stager.StageAsync(packageBytes);
+        await using IGachaPortableIndexedPackage indexed =
+            await new GachaPortableIndexedPackageFactory(staging)
+                .OpenAsync(staged);
+
+        Assert.Equal(1_250, indexed.RecordCount);
+        Assert.Equal(legacyFingerprint, indexed.PackageFingerprint);
+        Assert.Equal(
+            Enumerable.Range(501, 500).Select(index => index.ToString("D19")),
+            indexed.ReadRecordPage(
+                    indexed.Accounts[0].AccountReference,
+                    500,
+                    500)
+                .Select(record => record.ExternalRecordId));
+
+        await using var destination = await EmptyTestContext.CreateAsync();
+        GachaPortableImportPlan plan =
+            await new PlanGachaPortableImport(
+                destination.Archives,
+                destination.Accounts,
+                destination.Gacha,
+                new FixedTimeProvider())
+            .ExecuteAsync(new GachaPortableIndexedImportPlanRequest(indexed));
+        Assert.Equal(1_250, plan.Preview.AddCount);
+        Assert.Empty(plan.Accounts[0].Replacements);
+        Assert.Empty(plan.Accounts[0].Conflicts);
+
+        GachaPortableApplyResult applied =
+            await destination.Atomic.ApplyAsync(
+                new GachaPortableIndexedApplyRequest(
+                    indexed,
+                    plan,
+                    OperationId.New(),
+                    new DateTimeOffset(
+                        2026,
+                        10,
+                        6,
+                        9,
+                        0,
+                        0,
+                        TimeSpan.FromHours(8)),
+                    Guid.NewGuid()));
+
+        Assert.Equal(ChangeExecutionStatus.Applied, applied.Status);
+        Assert.Equal(1_250, applied.InsertedRecordCount);
+        Assert.Equal(
+            1_250,
+            await destination.Gacha.CountAsync(
+                Assert.Single(applied.Accounts).TargetAccountId));
+
+        await indexed.DisposeAsync();
+        Assert.Empty(Directory.EnumerateFiles(staging));
+    }
+
+    [Fact]
+    public async Task IndexedProductPath_PagesConflictsAndReplacesFromDiskPlan()
+    {
+        await using TestContext source = await TestContext.CreateAsync(20);
+        using var packageBytes = new MemoryStream();
+        await using (IGachaPortableExportSnapshot snapshot =
+            await source.CreateSnapshotFactory().OpenAsync(
+                source.Archive.Id,
+                [source.Account.Id]))
+        {
+            await new GachaPortablePackageWriter().WriteAsync(
+                packageBytes,
+                snapshot);
+        }
+        packageBytes.Position = 0;
+        string staging = Path.Combine(
+            Path.GetTempPath(),
+            $"furina-indexed-conflicts-{Guid.NewGuid():N}");
+        IGachaPortableStagedInput staged =
+            await new FileGachaPortableInputStager(staging)
+                .StageAsync(packageBytes);
+        await using IGachaPortableIndexedPackage indexed =
+            await new GachaPortableIndexedPackageFactory(staging)
+                .OpenAsync(staged);
+
+        await using var destination = await EmptyTestContext.CreateAsync();
+        DateTimeOffset now = source.Archive.CreatedAt;
+        var archive = new PlayerArchive(
+            Guid.NewGuid(),
+            source.Archive.Name,
+            now,
+            now);
+        var account = new GameAccount(
+            Guid.NewGuid(),
+            archive.Id,
+            source.Account.Uid,
+            source.Account.ServerRegion,
+            "Target",
+            false,
+            now,
+            now,
+            source.Account.RoleIdentity);
+        await destination.Archives.AddAsync(archive);
+        await destination.Accounts.AddAsync(account);
+        await destination.Gacha.SaveBatchAsync(
+            Enumerable.Range(1, 20)
+                .Select(index => CreateRecord(account.Id, index) with
+                {
+                    ItemName = $"Old {index}"
+                })
+                .ToArray());
+        var planner = new PlanGachaPortableImport(
+            destination.Archives,
+            destination.Accounts,
+            destination.Gacha,
+            new FixedTimeProvider());
+
+        GachaPortableImportPlan addOnly = await planner.ExecuteAsync(
+            new GachaPortableIndexedImportPlanRequest(indexed));
+        Assert.False(addOnly.CanApply);
+        Assert.Equal(20, addOnly.Preview.ConflictCount);
+        Assert.Equal(12, Assert.Single(addOnly.Accounts).Conflicts.Count);
+        Assert.Equal(
+            Enumerable.Range(6, 5).Select(index => index.ToString("D19")),
+            indexed.ReadConflictPage(
+                    indexed.Accounts[0].AccountReference,
+                    5,
+                    5)
+                .Select(conflict => conflict.ExternalRecordId));
+
+        GachaPortableImportPlan replace = await planner.ExecuteAsync(
+            new GachaPortableIndexedImportPlanRequest(
+                indexed,
+                Mode: GachaPortableApplyMode.ReplaceExisting));
+        Assert.True(replace.CanApply);
+        Assert.Equal(20, replace.Preview.ReplaceCount);
+        Assert.Empty(Assert.Single(replace.Accounts).Replacements);
+        GachaPortableApplyResult applied = await destination.Atomic.ApplyAsync(
+            new GachaPortableIndexedApplyRequest(
+                indexed,
+                replace,
+                OperationId.New(),
+                now.AddHours(1),
+                Guid.NewGuid()));
+        Assert.Equal(ChangeExecutionStatus.Applied, applied.Status);
+        Assert.Equal(20, applied.UpdatedRecordCount);
+        Assert.Equal(
+            "Item 1",
+            (await destination.Gacha.GetByExternalRecordIdsAsync(
+                account.Id,
+                ["0000000000000000001"]))[0].ItemName);
+
+        await indexed.DisposeAsync();
+        Assert.Empty(Directory.EnumerateFiles(staging));
+    }
+
+    [Fact]
+    public async Task IndexedProductPath_SecondPassFailureRollsBackWholeApply()
+    {
+        await using TestContext source = await TestContext.CreateAsync(1_250);
+        using var packageBytes = new MemoryStream();
+        await using (IGachaPortableExportSnapshot snapshot =
+            await source.CreateSnapshotFactory().OpenAsync(
+                source.Archive.Id,
+                [source.Account.Id]))
+        {
+            await new GachaPortablePackageWriter().WriteAsync(
+                packageBytes,
+                snapshot);
+        }
+        packageBytes.Position = 0;
+        string staging = Path.Combine(
+            Path.GetTempPath(),
+            $"furina-indexed-rollback-{Guid.NewGuid():N}");
+        IGachaPortableStagedInput staged =
+            await new FileGachaPortableInputStager(staging)
+                .StageAsync(packageBytes);
+        await using IGachaPortableIndexedPackage indexed =
+            await new GachaPortableIndexedPackageFactory(staging)
+                .OpenAsync(staged);
+        await using var destination = await EmptyTestContext.CreateAsync();
+        GachaPortableImportPlan plan =
+            await new PlanGachaPortableImport(
+                destination.Archives,
+                destination.Accounts,
+                destination.Gacha,
+                new FixedTimeProvider())
+            .ExecuteAsync(new GachaPortableIndexedImportPlanRequest(indexed));
+        var faulting = new FaultingIndexedPackage(indexed, failOnPlanRead: 5);
+
+        await Assert.ThrowsAsync<IOException>(() =>
+            destination.Atomic.ApplyAsync(
+                new GachaPortableIndexedApplyRequest(
+                    faulting,
+                    plan,
+                    OperationId.New(),
+                    source.Archive.CreatedAt.AddHours(1),
+                    Guid.NewGuid())));
+
+        Assert.Empty(await destination.Archives.GetAllAsync());
+        Assert.Equal(
+            0,
+            await destination.Database.Connection.ExecuteScalarAsync<int>(
+                "SELECT COUNT(*) FROM GameAccounts;"));
+        Assert.Equal(
+            0,
+            await destination.Database.Connection.ExecuteScalarAsync<int>(
+                "SELECT COUNT(*) FROM GachaRecords;"));
+        Assert.Equal(
+            0,
+            await destination.Database.Connection.ExecuteScalarAsync<int>(
+                "SELECT COUNT(*) FROM DataChangeSets;"));
+
+        await indexed.DisposeAsync();
+        Assert.Empty(Directory.EnumerateFiles(staging));
+    }
+
+    [Fact]
     public async Task ExportAsync_InvalidSourcePreservesExistingTargetAndCleansStage()
     {
         await using TestContext context = await TestContext.CreateAsync(0);
@@ -370,6 +606,55 @@ public sealed class GachaPortableDatabaseExportTests
             0,
             0,
             TimeSpan.Zero);
+    }
+
+    private sealed class FaultingIndexedPackage(
+        IGachaPortableIndexedPackage inner,
+        int failOnPlanRead)
+        : IGachaPortableIndexedPackage
+    {
+        private int planReads;
+
+        public string FormatVersion => inner.FormatVersion;
+        public DateTimeOffset GeneratedAt => inner.GeneratedAt;
+        public GachaPortableArchive SourceArchive => inner.SourceArchive;
+        public IReadOnlyList<GachaPortableIndexedAccount> Accounts =>
+            inner.Accounts;
+        public int RecordCount => inner.RecordCount;
+        public string PackageFingerprint => inner.PackageFingerprint;
+
+        public IReadOnlyList<GachaRecord> ReadRecordPage(
+            Guid accountReference,
+            int offset,
+            int pageSize) =>
+            inner.ReadRecordPage(accountReference, offset, pageSize);
+
+        public void ResetPlanEntries() => inner.ResetPlanEntries();
+
+        public void StorePlanEntries(
+            Guid accountReference,
+            IReadOnlyList<GachaPortableIndexedPlanEntry> entries) =>
+            inner.StorePlanEntries(accountReference, entries);
+
+        public IReadOnlyList<GachaPortableIndexedPlanEntry> ReadPlanPage(
+            Guid accountReference,
+            int offset,
+            int pageSize)
+        {
+            if (Interlocked.Increment(ref planReads) == failOnPlanRead)
+            {
+                throw new IOException("Injected indexed page read failure.");
+            }
+            return inner.ReadPlanPage(accountReference, offset, pageSize);
+        }
+
+        public IReadOnlyList<GachaPortableRecordConflict> ReadConflictPage(
+            Guid accountReference,
+            int offset,
+            int pageSize) =>
+            inner.ReadConflictPage(accountReference, offset, pageSize);
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
     private sealed class EmptyTestContext : IAsyncDisposable

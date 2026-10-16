@@ -16,6 +16,84 @@ public sealed class PlanGachaPortableImport(
     TimeProvider timeProvider)
 {
     private const int RecordLookupBatchSize = 500;
+    private const int ConflictPreviewLimit = 12;
+
+    public async Task<GachaPortableImportPlan> ExecuteAsync(
+        GachaPortableIndexedImportPlanRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(request.Package);
+        if (request.TargetArchiveId is not null && request.CreateNewArchive)
+        {
+            throw new ArgumentException(
+                "An existing target archive and a new archive cannot both be selected.",
+                nameof(request));
+        }
+
+        request.Package.ResetPlanEntries();
+        IReadOnlyList<PlayerArchive> archives =
+            await archiveRepository.GetAllAsync(cancellationToken);
+        var compatibilityPackage = new GachaPortablePackage(
+            request.Package.GeneratedAt,
+            request.Package.SourceArchive,
+            []);
+        GachaPortableArchivePlan archivePlan = ResolveArchivePlan(
+            new GachaPortableImportPlanRequest(
+                compatibilityPackage,
+                request.TargetArchiveId,
+                request.CreateNewArchive,
+                request.RequireUniqueArchiveNames,
+                request.Mode),
+            archives);
+        var importContext = new GachaPortableImportContext(
+            DataOrigin.FurinaImport,
+            timeProvider.GetUtcNow(),
+            Guid.NewGuid());
+        if (archivePlan.Kind == GachaPortableArchivePlanKind.RequiresSelection)
+        {
+            return new GachaPortableImportPlan(
+                archivePlan,
+                [],
+                importContext,
+                new GachaPortableImportPreview(0, 0, 0, 0, 0, 0, 0),
+                request.Mode,
+                request.Package.PackageFingerprint,
+                request.RequireUniqueArchiveNames);
+        }
+
+        var accountPlans = new List<GachaPortableAccountImportPlan>(
+            request.Package.Accounts.Count);
+        foreach (GachaPortableIndexedAccount sourceAccount in
+                 request.Package.Accounts)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            accountPlans.Add(await PlanIndexedAccountAsync(
+                request.Package,
+                archivePlan,
+                sourceAccount,
+                request.Mode,
+                cancellationToken));
+        }
+
+        return new GachaPortableImportPlan(
+            archivePlan,
+            accountPlans,
+            importContext,
+            new GachaPortableImportPreview(
+                accountPlans.Count(plan => plan.TargetAccountId is null),
+                accountPlans.Count(plan => plan.TargetAccountId is not null),
+                accountPlans.Sum(plan => plan.AddCount),
+                accountPlans.Sum(plan => plan.ReplaceCount),
+                accountPlans.Sum(plan => plan.SkipCount),
+                accountPlans.Sum(plan => plan.ConflictCount),
+                accountPlans.Count(plan =>
+                    plan.Identity.Kind ==
+                        GachaPortableIdentityPlanKind.AliasSourceToTarget)),
+            request.Mode,
+            request.Package.PackageFingerprint,
+            request.RequireUniqueArchiveNames);
+    }
 
     public async Task<GachaPortableImportPlan> ExecuteAsync(
         GachaPortableImportPlanRequest request,
@@ -215,6 +293,185 @@ public sealed class PlanGachaPortableImport(
             targetAccount.UpdatedAt,
             targetRecordCount);
     }
+
+    private async Task<GachaPortableAccountImportPlan> PlanIndexedAccountAsync(
+        IGachaPortableIndexedPackage package,
+        GachaPortableArchivePlan archivePlan,
+        GachaPortableIndexedAccount sourceAccount,
+        GachaPortableApplyMode mode,
+        CancellationToken cancellationToken)
+    {
+        GameRoleIdentity sourceIdentity = sourceAccount.RoleIdentity;
+        GameRoleIdentity? identityBySourceId =
+            await accountRepository.GetRoleIdentityByIdAsync(
+                sourceIdentity.Id,
+                cancellationToken);
+        if (identityBySourceId is not null &&
+            identityBySourceId.NaturalIdentity != sourceIdentity.NaturalIdentity)
+        {
+            return CreateIndexedIdentityCollisionPlan(
+                sourceAccount,
+                identityBySourceId);
+        }
+
+        GameAccount? targetAccount = null;
+        if (archivePlan.TargetArchiveId is Guid targetArchiveId)
+        {
+            targetAccount =
+                await accountRepository.GetByArchiveIdAndNaturalIdentityAsync(
+                    targetArchiveId,
+                    sourceIdentity.NaturalIdentity,
+                    cancellationToken);
+        }
+        GameRoleIdentity? targetIdentity = targetAccount?.RoleIdentity ??
+            await accountRepository.GetRoleIdentityByNaturalIdentityAsync(
+                sourceIdentity.NaturalIdentity,
+                cancellationToken);
+        GachaPortableIdentityPlan identityPlan = ResolveIdentityPlan(
+            sourceIdentity,
+            targetIdentity);
+
+        var originCounts = new Dictionary<DataOrigin, int>();
+        int addCount = 0;
+        int replaceCount = 0;
+        int skipCount = 0;
+        int conflictCount = 0;
+        var conflictPreview = new List<GachaPortableRecordConflict>(
+            ConflictPreviewLimit);
+        for (int offset = 0;
+             offset < sourceAccount.RecordCount;
+             offset += RecordLookupBatchSize)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            IReadOnlyList<GachaRecord> sourceBatch = package.ReadRecordPage(
+                sourceAccount.AccountReference,
+                offset,
+                RecordLookupBatchSize);
+            foreach (GachaRecord record in sourceBatch)
+            {
+                originCounts[record.Provenance.Origin] =
+                    originCounts.GetValueOrDefault(record.Provenance.Origin) + 1;
+            }
+
+            Dictionary<string, GachaRecord> targetById;
+            if (targetAccount is null)
+            {
+                targetById = new Dictionary<string, GachaRecord>(
+                    StringComparer.Ordinal);
+            }
+            else
+            {
+                IReadOnlyList<GachaRecord> targetRecords =
+                    await recordRepository.GetByExternalRecordIdsAsync(
+                        targetAccount.Id,
+                        sourceBatch.Select(record => record.ExternalRecordId)
+                            .ToArray(),
+                        cancellationToken);
+                targetById = targetRecords.ToDictionary(
+                    record => record.ExternalRecordId,
+                    StringComparer.Ordinal);
+            }
+
+            var entries = new List<GachaPortableIndexedPlanEntry>(
+                sourceBatch.Count);
+            foreach (GachaRecord sourceRecord in sourceBatch)
+            {
+                if (!targetById.TryGetValue(
+                        sourceRecord.ExternalRecordId,
+                        out GachaRecord? targetRecord))
+                {
+                    addCount++;
+                    entries.Add(new GachaPortableIndexedPlanEntry(
+                        sourceRecord,
+                        GachaPortableIndexedPlanKind.Add,
+                        []));
+                    continue;
+                }
+
+                string[] differences = GetFactDifferences(
+                    targetRecord,
+                    sourceRecord);
+                if (differences.Length == 0)
+                {
+                    skipCount++;
+                    entries.Add(new GachaPortableIndexedPlanEntry(
+                        sourceRecord,
+                        GachaPortableIndexedPlanKind.Skip,
+                        []));
+                }
+                else if (mode == GachaPortableApplyMode.ReplaceExisting)
+                {
+                    replaceCount++;
+                    entries.Add(new GachaPortableIndexedPlanEntry(
+                        sourceRecord,
+                        GachaPortableIndexedPlanKind.Replace,
+                        differences,
+                        targetRecord));
+                }
+                else
+                {
+                    conflictCount++;
+                    var conflict = new GachaPortableRecordConflict(
+                        sourceRecord.ExternalRecordId,
+                        differences);
+                    if (conflictPreview.Count < ConflictPreviewLimit)
+                    {
+                        conflictPreview.Add(conflict);
+                    }
+                    entries.Add(new GachaPortableIndexedPlanEntry(
+                        sourceRecord,
+                        GachaPortableIndexedPlanKind.Conflict,
+                        differences));
+                }
+            }
+            package.StorePlanEntries(sourceAccount.AccountReference, entries);
+        }
+
+        int? targetRecordCount = targetAccount is null
+            ? null
+            : await recordRepository.CountAsync(
+                targetAccount.Id,
+                cancellationToken);
+        return new GachaPortableAccountImportPlan(
+            sourceAccount.AccountReference,
+            targetAccount?.Id,
+            targetAccount is null ? Guid.NewGuid() : null,
+            sourceIdentity.NaturalIdentity,
+            identityPlan,
+            addCount,
+            replaceCount,
+            skipCount,
+            conflictCount,
+            conflictPreview,
+            Replacements: [],
+            originCounts,
+            targetAccount?.UpdatedAt,
+            targetRecordCount);
+    }
+
+    private static GachaPortableAccountImportPlan
+        CreateIndexedIdentityCollisionPlan(
+            GachaPortableIndexedAccount sourceAccount,
+            GameRoleIdentity existingIdentity) =>
+        new(
+            sourceAccount.AccountReference,
+            TargetAccountId: null,
+            ProposedAccountId: null,
+            sourceAccount.RoleIdentity.NaturalIdentity,
+            new GachaPortableIdentityPlan(
+                GachaPortableIdentityPlanKind.Collision,
+                sourceAccount.RoleIdentity.Id,
+                existingIdentity.Id,
+                "The source role identity GUID already refers to a different natural identity."),
+            AddCount: 0,
+            ReplaceCount: 0,
+            SkipCount: 0,
+            ConflictCount: sourceAccount.RecordCount,
+            Conflicts: [],
+            Replacements: [],
+            SourceOrigins: new Dictionary<DataOrigin, int>(),
+            TargetAccountUpdatedAt: null,
+            TargetRecordCountAtPlan: null);
 
     private static GachaPortableAccountImportPlan CreateIdentityCollisionPlan(
         GachaPortableAccount sourceAccount,

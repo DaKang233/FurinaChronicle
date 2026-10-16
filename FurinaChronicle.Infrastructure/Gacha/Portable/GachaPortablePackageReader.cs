@@ -92,7 +92,7 @@ public sealed class GachaPortablePackageReader(
         }
     }
 
-    private Dictionary<string, ZipArchiveEntry> IndexEntries(
+    internal Dictionary<string, ZipArchiveEntry> IndexEntries(
         ZipArchive archive)
     {
         int maximumEntries = 1 + (2 * limits.MaximumAccountCount);
@@ -142,7 +142,7 @@ public sealed class GachaPortablePackageReader(
         return entries;
     }
 
-    private async Task<GachaPortableManifestDto> ReadManifestAsync(
+    internal async Task<GachaPortableManifestDto> ReadManifestAsync(
         IReadOnlyDictionary<string, ZipArchiveEntry> entries,
         CancellationToken cancellationToken)
     {
@@ -186,7 +186,7 @@ public sealed class GachaPortablePackageReader(
         }
     }
 
-    private void ValidateManifest(
+    internal void ValidateManifest(
         GachaPortableManifestDto manifest,
         IReadOnlyDictionary<string, ZipArchiveEntry> entries)
     {
@@ -538,7 +538,7 @@ public sealed class GachaPortablePackageReader(
         return records;
     }
 
-    private static PortableStandardRecord ParseStandardRecord(
+    internal static PortableStandardRecord ParseStandardRecord(
         PortableUigfRecordDto? record,
         string path)
     {
@@ -742,7 +742,7 @@ public sealed class GachaPortablePackageReader(
         }
     }
 
-    private static GachaRecord ToDomainRecord(
+    internal static GachaRecord ToDomainRecord(
         Guid accountReference,
         PortableStandardRecord standard,
         GachaPortableSupplementDto supplement,
@@ -828,7 +828,7 @@ public sealed class GachaPortablePackageReader(
         };
     }
 
-    private static void ValidateDeclaredPayload(
+    internal static void ValidateDeclaredPayload(
         ZipArchiveEntry entry,
         long expectedLength,
         string path)
@@ -842,7 +842,7 @@ public sealed class GachaPortablePackageReader(
         }
     }
 
-    private static void ValidateHash(
+    internal static void ValidateHash(
         HashingReadStream stream,
         long expectedLength,
         string expectedHash,
@@ -866,20 +866,21 @@ public sealed class GachaPortablePackageReader(
         }
     }
 
-    private JsonSerializerOptions CreateJsonOptions() => new()
+    internal JsonSerializerOptions CreateJsonOptions() => new()
     {
         MaxDepth = limits.MaximumJsonDepth,
         PropertyNameCaseInsensitive = false,
     };
 
-    private sealed record PortableStandardRecord(
-        string ExternalRecordId,
-        string ItemId,
-        string? ItemName,
-        string? ItemType,
-        int? RankType,
-        string GachaType,
-        string UigfGachaType,
-        int Count,
-        DateTimeOffset Time);
 }
+
+internal sealed record PortableStandardRecord(
+    string ExternalRecordId,
+    string ItemId,
+    string? ItemName,
+    string? ItemType,
+    int? RankType,
+    string GachaType,
+    string UigfGachaType,
+    int Count,
+    DateTimeOffset Time);

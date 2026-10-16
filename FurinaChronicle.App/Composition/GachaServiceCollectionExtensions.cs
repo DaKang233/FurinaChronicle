@@ -118,9 +118,12 @@ internal static class GachaServiceCollectionExtensions
         services.AddSingleton<
             IGachaPortablePackageWriter,
             GachaPortablePackageWriter>();
-        services.AddSingleton<
-            IGachaPortablePackageReader,
-            GachaPortablePackageReader>();
+        services.AddSingleton<IGachaPortableIndexedPackageFactory>(
+            _ => new GachaPortableIndexedPackageFactory(
+                Path.Combine(
+                    FileSystem.CacheDirectory,
+                    "gacha-portable-index"),
+                limits));
         services.AddSingleton<
             IGachaPortableExportSnapshotFactory,
             SqliteGachaPortableExportSnapshotFactory>();

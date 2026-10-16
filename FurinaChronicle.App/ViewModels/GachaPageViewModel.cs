@@ -33,7 +33,7 @@ public partial class GachaPageViewModel(
 	IPassportSelectionStore passportSelectionStore,
 	TeyvatHelperUigfImportSource teyvatHelperUigfImportSource,
 	IGachaPortableInputStager portableInputStager,
-	IGachaPortablePackageReader portablePackageReader,
+	IGachaPortableIndexedPackageFactory portableIndexedPackageFactory,
 	PlanGachaPortableImport planPortableImport,
 	IGachaPortableImportApplier portableImportApplier,
 	IGachaPortableExportFileService portableExportFileService,
@@ -121,18 +121,16 @@ public partial class GachaPageViewModel(
 		ArgumentNullException.ThrowIfNull(source);
 		IGachaPortableStagedInput staged =
 			await portableInputStager.StageAsync(source, cancellationToken);
+		IGachaPortableIndexedPackage? indexedPackage = null;
 		try
 		{
-			await using Stream stagedStream =
-				await staged.OpenReadAsync(cancellationToken);
-			GachaPortableReadResult read =
-				await portablePackageReader.ReadAsync(
-					stagedStream,
-					cancellationToken);
+			indexedPackage = await portableIndexedPackageFactory.OpenAsync(
+				staged,
+				cancellationToken);
 			GachaPortableImportPlan plan =
 				await planPortableImport.ExecuteAsync(
-					new GachaPortableImportPlanRequest(
-						read.Package,
+					new GachaPortableIndexedImportPlanRequest(
+						indexedPackage,
 						targetArchiveId,
 						createNewArchive,
 						Mode: IsFullImportMode
@@ -141,14 +139,22 @@ public partial class GachaPageViewModel(
 					cancellationToken);
 			PortableSummary = FormatPortablePlan(plan, staged.Length);
 			return new GachaPortableImportSession(
-				staged,
-				read.Package,
+				indexedPackage,
 				plan,
-				DateTimeOffset.Now);
+				DateTimeOffset.Now,
+				staged.Sha256,
+				staged.Length);
 		}
 		catch
 		{
-			await staged.DisposeAsync();
+			if (indexedPackage is not null)
+			{
+				await indexedPackage.DisposeAsync();
+			}
+			else
+			{
+				await staged.DisposeAsync();
+			}
 			throw;
 		}
 	}
@@ -161,7 +167,7 @@ public partial class GachaPageViewModel(
 	{
 		ArgumentNullException.ThrowIfNull(session);
 		session.Plan = await planPortableImport.ExecuteAsync(
-			new GachaPortableImportPlanRequest(
+			new GachaPortableIndexedImportPlanRequest(
 				session.Package,
 				targetArchiveId,
 				createNewArchive,
@@ -184,7 +190,7 @@ public partial class GachaPageViewModel(
 	{
 		ArgumentNullException.ThrowIfNull(session);
 		return portableImportApplier.ApplyAsync(
-			new GachaPortableApplyRequest(
+			new GachaPortableIndexedApplyRequest(
 				session.Package,
 				session.Plan,
 				session.OperationId,

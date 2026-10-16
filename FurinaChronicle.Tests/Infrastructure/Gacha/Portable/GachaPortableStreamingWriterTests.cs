@@ -5,11 +5,14 @@ using System.Runtime.CompilerServices;
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Infrastructure.Gacha.Portable;
+using FurinaChronicle.Infrastructure.Persistence;
 using FurinaChronicle.Services.Gacha.Portable;
+using FurinaChronicle.Tests.TestDoubles;
+using Xunit.Abstractions;
 
 namespace FurinaChronicle.Tests.Infrastructure.Gacha.Portable;
 
-public sealed class GachaPortableStreamingWriterTests
+public sealed class GachaPortableStreamingWriterTests(ITestOutputHelper output)
 {
     [Fact]
     public async Task WriteAsync_TwentyThousandGeneratedRecordsRemainSequential()
@@ -45,6 +48,141 @@ public sealed class GachaPortableStreamingWriterTests
             if (File.Exists(path))
             {
                 File.Delete(path);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task IndexedReader_OneHundredThousandRecordsUsesBoundedManagedMemory()
+    {
+        string directory = Path.Combine(
+            Path.GetTempPath(),
+            $"furina-portable-indexed-{Guid.NewGuid():N}");
+        string staging = Path.Combine(directory, "session");
+        string path = Path.Combine(directory, "source.fcgp");
+        Directory.CreateDirectory(directory);
+        var snapshot = new GeneratedSnapshot(100_000);
+        try
+        {
+            await using (var destination = new FileStream(
+                path,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.None,
+                81920,
+                FileOptions.Asynchronous | FileOptions.SequentialScan))
+            {
+                await new GachaPortablePackageWriter().WriteAsync(
+                    destination,
+                    snapshot);
+            }
+
+            await using FileStream input = File.OpenRead(path);
+            IGachaPortableStagedInput staged =
+                await new FileGachaPortableInputStager(staging)
+                    .StageAsync(input);
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+            long baseline = GC.GetTotalMemory(forceFullCollection: true);
+            long peak = baseline;
+            Task<IGachaPortableIndexedPackage> opening =
+                new GachaPortableIndexedPackageFactory(staging)
+                    .OpenAsync(staged);
+            while (!opening.IsCompleted)
+            {
+                peak = Math.Max(peak, GC.GetTotalMemory(false));
+                await Task.Delay(5);
+            }
+            await using IGachaPortableIndexedPackage indexed = await opening;
+            peak = Math.Max(peak, GC.GetTotalMemory(false));
+            Task<GachaPortableImportPlan> planning =
+                new PlanGachaPortableImport(
+                    new InMemoryPlayerArchiveRepository(),
+                    new InMemoryGameAccountRepository(),
+                    new InMemoryGachaRecordRepository(),
+                    TimeProvider.System)
+                .ExecuteAsync(new GachaPortableIndexedImportPlanRequest(
+                    indexed));
+            while (!planning.IsCompleted)
+            {
+                peak = Math.Max(peak, GC.GetTotalMemory(false));
+                await Task.Delay(5);
+            }
+            GachaPortableImportPlan plan = await planning;
+            peak = Math.Max(peak, GC.GetTotalMemory(false));
+            long peakDelta = Math.Max(0, peak - baseline);
+            output.WriteLine(
+                $"100k indexed import managed-memory delta: {peakDelta:N0} bytes; " +
+                $"container: {new FileInfo(path).Length:N0} bytes.");
+
+            Assert.Equal(100_000, indexed.RecordCount);
+            Assert.Equal(100_000, Assert.Single(indexed.Accounts).RecordCount);
+            Assert.Equal(100_000, plan.Preview.AddCount);
+            Assert.Empty(Assert.Single(plan.Accounts).Conflicts);
+            Assert.Empty(Assert.Single(plan.Accounts).Replacements);
+            Assert.Equal(
+                "0000000000000100000",
+                Assert.Single(indexed.ReadRecordPage(
+                    indexed.Accounts[0].AccountReference,
+                    99_999,
+                    1)).ExternalRecordId);
+            Assert.True(
+                peakDelta < 192L * 1024 * 1024,
+                $"The 100k indexed reader used {peakDelta:N0} managed bytes above baseline.");
+
+            await indexed.DisposeAsync();
+            Assert.Empty(Directory.EnumerateFiles(staging));
+        }
+        finally
+        {
+            await snapshot.DisposeAsync();
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task IndexedReader_CancellationCleansPartialIndexAndStagedInput()
+    {
+        string directory = Path.Combine(
+            Path.GetTempPath(),
+            $"furina-portable-cancel-{Guid.NewGuid():N}");
+        string staging = Path.Combine(directory, "session");
+        string path = Path.Combine(directory, "source.fcgp");
+        Directory.CreateDirectory(directory);
+        var snapshot = new GeneratedSnapshot(100);
+        try
+        {
+            await using (var outputStream = File.Create(path))
+            {
+                await new GachaPortablePackageWriter().WriteAsync(
+                    outputStream,
+                    snapshot);
+            }
+            await using FileStream input = File.OpenRead(path);
+            IGachaPortableStagedInput staged =
+                await new FileGachaPortableInputStager(staging)
+                    .StageAsync(input);
+            using var cancellation = new CancellationTokenSource();
+            cancellation.Cancel();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                new GachaPortableIndexedPackageFactory(staging).OpenAsync(
+                    staged,
+                    cancellation.Token));
+            await staged.DisposeAsync();
+
+            Assert.Empty(Directory.EnumerateFiles(staging));
+        }
+        finally
+        {
+            await snapshot.DisposeAsync();
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
             }
         }
     }

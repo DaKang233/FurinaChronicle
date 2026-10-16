@@ -8,23 +8,23 @@ namespace FurinaChronicle.App.ViewModels;
 
 public sealed class GachaPortableImportSession : IAsyncDisposable
 {
-    private readonly IGachaPortableStagedInput stagedInput;
-
     internal GachaPortableImportSession(
-        IGachaPortableStagedInput stagedInput,
-        GachaPortablePackage package,
+        IGachaPortableIndexedPackage package,
         GachaPortableImportPlan plan,
-        DateTimeOffset receivedAt)
+        DateTimeOffset receivedAt,
+        string sourceSha256,
+        long sourceLength)
     {
-        this.stagedInput = stagedInput;
         Package = package;
         Plan = plan;
         ReceivedAt = receivedAt;
+        SourceSha256 = sourceSha256;
+        SourceLength = sourceLength;
         OperationId = OperationId.New();
         ReceiptBatchId = Guid.NewGuid();
     }
 
-    public GachaPortablePackage Package { get; }
+    public IGachaPortableIndexedPackage Package { get; }
 
     public GachaPortableImportPlan Plan { get; internal set; }
 
@@ -34,11 +34,11 @@ public sealed class GachaPortableImportSession : IAsyncDisposable
 
     public Guid ReceiptBatchId { get; }
 
-    public string SourceSha256 => stagedInput.Sha256;
+    public string SourceSha256 { get; }
 
-    public long SourceLength => stagedInput.Length;
+    public long SourceLength { get; }
 
-    public ValueTask DisposeAsync() => stagedInput.DisposeAsync();
+    public ValueTask DisposeAsync() => Package.DisposeAsync();
 }
 
 public sealed record GachaPortableExportArtifact(

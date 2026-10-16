@@ -40,6 +40,53 @@ public interface IGachaPortableStagedInput : IAsyncDisposable
         CancellationToken cancellationToken = default);
 }
 
+/// <summary>
+/// A private, session-scoped disk index used by the product import path.
+/// Implementations must not retain the complete record set in managed memory.
+/// </summary>
+public interface IGachaPortableIndexedPackage : IAsyncDisposable
+{
+    string FormatVersion { get; }
+
+    DateTimeOffset GeneratedAt { get; }
+
+    GachaPortableArchive SourceArchive { get; }
+
+    IReadOnlyList<GachaPortableIndexedAccount> Accounts { get; }
+
+    int RecordCount { get; }
+
+    string PackageFingerprint { get; }
+
+    IReadOnlyList<FurinaChronicle.Core.Gacha.GachaRecord> ReadRecordPage(
+        Guid accountReference,
+        int offset,
+        int pageSize);
+
+    void ResetPlanEntries();
+
+    void StorePlanEntries(
+        Guid accountReference,
+        IReadOnlyList<GachaPortableIndexedPlanEntry> entries);
+
+    IReadOnlyList<GachaPortableIndexedPlanEntry> ReadPlanPage(
+        Guid accountReference,
+        int offset,
+        int pageSize);
+
+    IReadOnlyList<GachaPortableRecordConflict> ReadConflictPage(
+        Guid accountReference,
+        int offset,
+        int pageSize);
+}
+
+public interface IGachaPortableIndexedPackageFactory
+{
+    Task<IGachaPortableIndexedPackage> OpenAsync(
+        IGachaPortableStagedInput stagedInput,
+        CancellationToken cancellationToken = default);
+}
+
 public interface IGachaPortableExportSnapshot : IAsyncDisposable
 {
     DateTimeOffset GeneratedAt { get; }

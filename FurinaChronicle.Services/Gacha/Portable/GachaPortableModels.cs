@@ -38,3 +38,23 @@ public sealed record GachaPortableWriteResult(
 public sealed record GachaPortableReadResult(
     string FormatVersion,
     GachaPortablePackage Package);
+
+public sealed record GachaPortableIndexedAccount(
+    Guid AccountReference,
+    GameRoleIdentity RoleIdentity,
+    string? DisplayName,
+    int RecordCount);
+
+public enum GachaPortableIndexedPlanKind
+{
+    Add = 1,
+    Replace = 2,
+    Skip = 3,
+    Conflict = 4,
+}
+
+public sealed record GachaPortableIndexedPlanEntry(
+    GachaRecord Source,
+    GachaPortableIndexedPlanKind Kind,
+    IReadOnlyList<string> DifferentFields,
+    GachaRecord? ExpectedTarget = null);

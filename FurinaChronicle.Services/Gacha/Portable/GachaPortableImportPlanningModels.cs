@@ -16,6 +16,13 @@ public sealed record GachaPortableImportPlanRequest(
     bool RequireUniqueArchiveNames = true,
     GachaPortableApplyMode Mode = GachaPortableApplyMode.AddOnly);
 
+public sealed record GachaPortableIndexedImportPlanRequest(
+    IGachaPortableIndexedPackage Package,
+    Guid? TargetArchiveId = null,
+    bool CreateNewArchive = false,
+    bool RequireUniqueArchiveNames = true,
+    GachaPortableApplyMode Mode = GachaPortableApplyMode.AddOnly);
+
 public enum GachaPortableApplyMode
 {
     AddOnly = 0,
@@ -121,6 +128,16 @@ public sealed record GachaPortableApplyRequest(
         ReintroductionConfirmations = null,
     Guid? CleanupConfirmationId = null);
 
+public sealed record GachaPortableIndexedApplyRequest(
+    IGachaPortableIndexedPackage Package,
+    GachaPortableImportPlan Plan,
+    OperationId OperationId,
+    DateTimeOffset ReceivedAt,
+    Guid ReceiptBatchId,
+    IReadOnlyList<TombstoneReintroductionConfirmation>?
+        ReintroductionConfirmations = null,
+    Guid? CleanupConfirmationId = null);
+
 public sealed record GachaPortableAccountApplyResult(
     Guid SourceAccountReference,
     Guid TargetAccountId,
@@ -147,5 +164,9 @@ public interface IGachaPortableImportApplier
 {
     Task<GachaPortableApplyResult> ApplyAsync(
         GachaPortableApplyRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<GachaPortableApplyResult> ApplyAsync(
+        GachaPortableIndexedApplyRequest request,
         CancellationToken cancellationToken = default);
 }
