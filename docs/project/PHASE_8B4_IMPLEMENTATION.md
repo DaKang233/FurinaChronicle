@@ -2,7 +2,7 @@
 
 状态：Accepted implementation contract
 
-实施状态：In progress（2026-10-08）
+实施状态：In progress（2026-10-17；代码与自动化完成，设备验收待关闭）
 
 基线：`feat/phase-8`，起始提交 `184f3cd97a421e72a41009d408e5007250bf7a28`
 
@@ -59,13 +59,13 @@ Tombstone／Portable Apply 基础。Q1～Q7 的首版产品选择由
 |---|---|---|
 | P0 基线、矩阵、契约 | Completed | 本文和 ADR 0014；421／421 基线 |
 | P1 原子前置条件 | Completed | expected-absent、版本 ABA、after-content、专用操作拒绝、Portable 容量确认；427／427 |
-| P2 受控大文件暂存 | Partial | 已完成有限缓冲私有暂存、容器上限、可重开 lease 与兼容增量指纹；磁盘关联索引／分页 Plan 尚未完成 |
+| P2 受控大文件暂存 | Completed (code/host automation) | 产品入口使用会话私有 SQLite：流式关联 UIGF/supplement、分页 Plan/冲突、两遍分页 Apply；第二遍仍在一个主数据库事务中提交 |
 | P3 接管生产获取 | Completed | 三种刷新、UIGF／小助手共用核心和兼容 JSON 走统一政策；自动新档案／账号与事实同事务；精确档案名；相关全量回归通过 |
 | P4 删除闭环 | Completed | 普通删除、单条／账号／档案 purge，Resolved 档案身份与 Unresolved 本地账号 marker，共享 Undo 失效 |
 | P5 纠正／历史／Undo UI | Completed (code/automation) | `UserEntered` 纠正、修订查看、普通／永久删除、最新 eligible Undo、0～1000 设置；页面人工走查未完成 |
 | P6 Portable 文件产品流 | Completed (code/automation) | picker、暂存、预览／映射、冲突／marker 确认、Apply、私有文件复验后保存；双端系统 provider 尚未实机验收 |
 | P7 关闭旧旁路 | Completed | production `SaveBatchAsync`、父实体 repository Delete 调用者为 0；架构反例测试保护边界 |
-| P8 双端真实验收 | Partial | 版本校验、445 项测试、双平台 Release build、Windows 与 Android 真机启动通过；Android Documents picker 打开／取消恢复通过，Windows picker 和跨端往返仍待人工确认 |
+| P8 双端真实验收 | Partial | 版本校验、460 项测试及宿主 100k 测量通过；双平台 Release build 已重新验证，Windows/Android 真实 Portable 文件、跨端往返、进程终止和空间不足仍待人工确认 |
 
 ## 本地提交记录
 
@@ -82,6 +82,7 @@ Tombstone／Portable Apply 基础。Q1～Q7 的首版产品选择由
 | `dcb82cc` | P3 收口 | 自动创建父实体与事实同事务；精确名称与默认唯一约束 |
 | `a49ad1a` | P8 | 软件版本推进到 `0.8.5`，PhaseLabel `8B.4` |
 | `e06b628` | P7 收口 | concrete SaveBatch 内部化；移除 concrete 父实体 Delete；架构反例扩展 |
+| `52e6a3b` | P2 收口 | 会话私有 SQLite、流式关联、分页 Plan/冲突及单事务分页 Apply |
 
 ## Q1～Q7 实际实现
 
@@ -105,17 +106,20 @@ Tombstone／Portable Apply 基础。Q1～Q7 的首版产品选择由
 - 服务可见的 `IGachaRecordRepository` 没有 `SaveBatchAsync`；SQLite／内存 concrete 仓库的 legacy `SaveBatchAsync` 已改为仅测试友元程序集可见。`IGameAccountRepository`／`IPlayerArchiveRepository` 及其 SQLite concrete repository 均没有父实体 Delete。关系级 cascade 测试只在测试程序集以直接 SQL 验证 Schema，不构成生产入口。
 - Schema migration、测试 fixture 和测试专用内存 committer 是隔离例外，不属于生产旁路。
 
-## P2 未关闭原因
+## P2 实际关闭方式
 
-当前 `FileGachaPortableInputStager` 已用 64 KiB buffer 将非 seekable provider 内容复制到私有文件，并在复制时校验容器 byte 上限及 SHA-256；坏包、取消和异常会删除暂存文件。
+`FileGachaPortableInputStager` 继续用 64 KiB buffer 将 provider 内容复制到私有文件并计算容器 SHA-256。产品 UI 不再从 DI 取得完整模型 `IGachaPortablePackageReader`；该 Reader 只保留为兼容 Codec／小型 fixture。生产流程改为：
 
-但生产 `GachaPortablePackageReader` 仍把每账号 UIGF 和 supplement 合并为完整 `IReadOnlyList<GachaRecord>`；`PlanGachaPortableImport` 仍保存全部冲突；`SqliteGachaAtomicChangeStore.ApplyAsync` 仍为整包准备 mutation 集合。因此当前实现不满足“Reader／Plan／conflict／mutation 均不整体物化”，也没有 100k 双端峰值内存证据。`2,000,000` 仍只是格式解析安全上限，不是产品运行承诺。不得通过降低上限、只分批写入或只把源文件落盘宣称 P2 完成。
+1. `GachaPortableIndexedPackageFactory` 增量读取 supplement NDJSON 和 UIGF token，将关联后的规范记录写入一次会话专用的私有 SQLite；
+2. `PlanGachaPortableImport` 每 500 条查询目标并把 disposition、差异和覆盖前快照写回索引；公开 Plan 只保留计数和最多 12 条冲突预览，完整冲突通过分页接口读取；
+3. `SqliteGachaAtomicChangeStore` 第一遍分页重验并汇总容量，第二遍分页重建 mutation、写事实／Revision／Undo／Receipt；两遍均位于同一个主数据库事务，任一后段故障回滚父实体和已经写入的事实；
+4. 会话完成、取消或解析失败时关闭并删除索引与源暂存，不形成第二套长期数据源。
 
-后续最小安全实现应是一次导入会话专用的私有 SQLite（或等价磁盘索引）：增量解析标准与 supplement、以账号＋External ID 关联、分页 Plan／冲突、事务内分批读取但单业务事务 Apply，并随会话取消／完成清理。它不是长期领域库或第二套写入体系。
+自动化覆盖 1,250 条完整 Apply、20 条分页冲突／全量覆盖、第二遍写入 500 条后故障回滚、取消清理，以及 100,000 条 Reader＋Plan。2026-10-17 Windows x64 测得 100k 容器为 1,482,268 bytes，相对测试基线的托管内存采样峰值增量为 18,236,048 bytes。这个数值是当前宿主证据，不是跨设备性能承诺；Android 与 Windows UI 进程的实际峰值仍属于 P8 人工验收。`2,000,000` 继续只是安全上限。
 
-## P8 当前证据（2026-10-08）
+## P8 当前证据（更新至 2026-10-17）
 
-- `dotnet test ... --configuration Release --no-restore`：445／445 通过（移除 3 个不再属于仓库契约的 legacy Delete 测试后；父实体 purge/cascade 仍由专用测试覆盖）。
+- `dotnet test ... --configuration Release --no-restore`：460／460 通过；新增生产索引、分页冲突／覆盖、后段事务回滚、取消清理和 100k Reader＋Plan 覆盖。
 - `build/Verify-Versioning.ps1`：通过；人工版本源为 `0.8.5`／`8B.4`。
 - Windows Release build：`net10.0-windows10.0.19041.0`，0 警告、0 错误；Windows 11 Pro `10.0.26200` 上进程启动并保持响应。系统 picker／saver 与真实文件往返：**Not run / awaiting manual interaction**。
 - Android Release build：`net10.0-android`，SDK `E:\AndroidSDK`，0 警告、0 错误；最终产品代码 APK SHA-256 为 `34A21E39DEBEA3EC5AB9A1C8CF590F365BF022221D478E2A2DFD206CBB4D952B`。已通过 ADB 在 vivo V2353A（Android 14／SDK 34，约 7.24 GiB RAM）保留数据覆盖安装，设备报告 `versionCode=113`、`versionName=0.8.5`；主 Activity 启动并保持前台。Android Documents picker 已实际打开，并通过系统返回取消后安全恢复到 FurinaChronicle 主界面；进程错误通道未见 AndroidRuntime／Mono／.NET 未处理异常。后台杀进程后的会话重建和真实文件 Apply：**Not run**。
@@ -129,13 +133,13 @@ Tombstone／Portable Apply 基础。Q1～Q7 的首版产品选择由
 | 1 | Pass (automation/code) | 生产入口清单完整；legacy Save/Delete 无生产调用者 |
 | 2 | Pass (automation/code) | 所有已实现来源有 SQLite fixture；自动父实体与事实同事务 |
 | 3～7 | Pass (automation/code) | 变化分类、版本、Undo、purge、Portable 产品流均有反例；实际 UI／provider 证据另列 |
-| 8 | **Fail / Partial** | Plan、conflict、mutation 仍整体物化；无 100k 双端测量 |
+| 8 | **Pass (code/host automation) / device Partial** | 产品 Reader、Plan/conflict、mutation 不再整体物化；宿主 100k 测量通过，双端 UI 进程实测待 P8 |
 | 9 | **Partial** | Windows 与 Android 真机均已启动；Android Documents picker 打开／取消恢复通过，Windows picker 和双向传递未运行 |
 | 10 | Pass (automation) | 既有导入导出、统计、真实抽数和独立查询回归纳入 445 项测试；人工回归未完整执行 |
 | 11 | Partial | 迁移/fail-safe fixture、版本校验和双平台 build 通过；双平台 publish／真实旧库与设备验收未在本轮完整执行 |
 | 12 | Pass | Q1～Q7 已进入 ADR 0014；本表区分代码、自动化和设备证据 |
 
-结论：8B.4 **不能标记 Completed**。可以把 P0、P1、P3～P7 视为代码／自动化工作包完成；P2 与 P8 是剩余关闭门槛。
+结论：8B.4 的非人工代码与自动化工作包 P0～P7 已关闭；整个 8B.4 **仍不能标记 Completed**，唯一剩余关闭门槛为 P8 真实 Windows／Android 文件与设备验收。
 
 ## 证据纪律
 

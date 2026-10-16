@@ -20,7 +20,9 @@
 | Windows ↔ Android 文件选择器实机往返 | — | 尚未验收，格式保持“未发布” |
 | 真实数据库导入再导出 | 自动化 fixture | 数据库 A→数据库 B→再导出语义通过；尚无产品 UI/实机跨端验收 |
 
-当前输入源已用有限 buffer 复制到私有、可 seek 暂存并计算容器 SHA-256；SQLite 导出端和 ZIP 交付复验为分页／流式。`IGachaPortablePackageReader`、Plan/conflict 与 Apply mutation 准备仍会物化整个包，不能宣称为 2,000,000 条记录的端到端有界内存执行器，也尚未取得 100k 双端实测。磁盘关联索引与分页 Plan/Apply 仍是 8B.4 的未关闭项；格式保持未发布。
+当前输入源先以有限 buffer 复制到私有、可 seek 暂存并计算容器 SHA-256；产品导入随后使用一次会话专用 SQLite，增量关联 UIGF/supplement，分页生成 Plan/冲突，并以两遍分页读取在单一主数据库事务中 Apply。旧 `IGachaPortablePackageReader` 只保留为兼容 Codec／小型 fixture，不注册为产品 UI 依赖。SQLite 导出端和 ZIP 交付复验同样为分页／流式。
+
+100k Reader＋Plan 已取得 Windows x64 宿主自动化证据，但 Windows／Android UI 进程实际峰值、系统文件 provider 与跨端往返仍需 P8 人工验证。2,000,000 条限制仍是防御性安全上限，不是公开的设备性能承诺；格式保持未发布。
 
 ## 结构化错误
 
