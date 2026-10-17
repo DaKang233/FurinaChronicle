@@ -69,6 +69,17 @@ public partial class GachaPageViewModel(
 	public partial bool IsRefreshRunning { get; set; }
 
 	[ObservableProperty]
+	public partial bool IsPortableImportRunning { get; set; }
+
+	[ObservableProperty]
+	public partial string PortableProgressTitle { get; set; } =
+		"正在准备 Portable 导入";
+
+	[ObservableProperty]
+	public partial string PortableProgressDetail { get; set; } =
+		"正在等待选择文件…";
+
+	[ObservableProperty]
 	public partial string RefreshProgressTitle { get; set; } = "正在准备抽卡记录刷新";
 
 	[ObservableProperty]

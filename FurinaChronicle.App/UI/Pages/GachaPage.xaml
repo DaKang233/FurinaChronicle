@@ -209,5 +209,43 @@
                 <gacha:GachaRefreshProgressView />
             </Border>
         </Grid>
+
+        <Grid
+            BackgroundColor="#99000000"
+            IsVisible="{Binding IsPortableImportRunning}"
+            InputTransparent="False"
+            ZIndex="1100">
+            <Border
+                BackgroundColor="{AppThemeBinding Light=#FFFFFFFF, Dark=#FF202020}"
+                HorizontalOptions="Center"
+                Margin="24"
+                MaximumWidthRequest="640"
+                Padding="24"
+                Stroke="{AppThemeBinding Light=#406B7280, Dark=#40D1D5DB}"
+                StrokeShape="RoundRectangle 12"
+                VerticalOptions="Center">
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
+                    <ActivityIndicator
+                        HeightRequest="32"
+                        IsRunning="{Binding IsPortableImportRunning}"
+                        VerticalOptions="Start"
+                        WidthRequest="32" />
+                    <VerticalStackLayout Grid.Column="1" Spacing="6">
+                        <Label
+                            FontAttributes="Bold"
+                            FontSize="20"
+                            Text="{Binding PortableProgressTitle}" />
+                        <Label
+                            FontSize="13"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding PortableProgressDetail}" />
+                        <Label
+                            FontSize="11"
+                            Opacity="0.72"
+                            Text="导入期间已暂停本页其他操作。请勿关闭应用。" />
+                    </VerticalStackLayout>
+                </Grid>
+            </Border>
+        </Grid>
     </Grid>
 </ContentPage>

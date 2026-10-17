@@ -219,11 +219,20 @@ public partial class GachaPage : ContentPage
 
     private async void OnImportPortableClicked(object? sender, EventArgs e)
     {
-        if (portableOperationRunning)
+        if (portableOperationRunning || ViewModel.IsBusy)
         {
             return;
         }
         portableOperationRunning = true;
+        Shell? shell = Shell.Current;
+        FlyoutBehavior? previousBehavior = shell?.FlyoutBehavior;
+        BeginPortableImportUi(
+            "正在选择 Portable 文件",
+            "请在系统文件选择器中选择要导入的 Furina Gacha Portable ZIP。");
+        if (shell is not null)
+        {
+            shell.FlyoutBehavior = FlyoutBehavior.Disabled;
+        }
         try
         {
             FileResult? file = await FilePicker.Default.PickAsync(
@@ -235,6 +244,10 @@ public partial class GachaPage : ContentPage
             {
                 return;
             }
+
+            SetPortableProgress(
+                "正在选择导入目标",
+                "文件已选择。请确认档案匹配方式；本页其他操作会保持暂停。");
 
             const string automatic = "按档案名称自动匹配";
             const string selected = "导入到当前所选档案";
@@ -255,6 +268,9 @@ public partial class GachaPage : ContentPage
                 ? ViewModel.SelectedArchive?.Id
                 : null;
             bool createNew = targetMode == create;
+            SetPortableProgress(
+                "正在读取并验证 Portable 数据",
+                "正在建立私有磁盘索引、校验数据并生成导入预览。大型档案可能需要一些时间。");
             await using Stream source = await file.OpenReadAsync();
             await using GachaPortableImportSession session =
                 await ViewModel.PreparePortableImportAsync(
@@ -276,6 +292,9 @@ public partial class GachaPage : ContentPage
                 string[] mappingChoices = ViewModel.SelectedArchive is null
                     ? [create]
                     : [selected, create];
+                SetPortableProgress(
+                    "需要确认档案映射",
+                    "检测到档案名称需要人工确认。选择后会重新计算导入预览。");
                 string? mapping = await DisplayActionSheetAsync(
                     $"来源档案：{session.Package.SourceArchive.Name}\n{candidateSummary}",
                     "取消",
@@ -285,6 +304,9 @@ public partial class GachaPage : ContentPage
                 {
                     return;
                 }
+                SetPortableProgress(
+                    "正在重新计算导入预览",
+                    "正在按新的档案映射重新检查账号、冲突和已有记录。");
                 await ViewModel.ReplanPortableImportAsync(
                     session,
                     mapping == selected ? ViewModel.SelectedArchive?.Id : null,
@@ -324,6 +346,9 @@ public partial class GachaPage : ContentPage
                 GachaPortableApplyMode.ReplaceExisting
                     ? "全量导入模式会覆盖预览中列出的相同记录，但不会删除来源中缺失的本地记录。"
                     : "当前为仅补充模式，不会覆盖不同的既有事实。";
+            SetPortableProgress(
+                "等待确认 Portable 导入",
+                "请核对系统确认框中的新增、覆盖、保留和撤销说明。");
             bool confirmed = await DisplayAlertAsync(
                 "确认 Portable 导入",
                 $"{ViewModel.PortableSummary}\n{overwriteNotice}\n{undoNotice}\n来源事实 provenance 会原样保留，本机接收信息另存为 Receipt。",
@@ -336,6 +361,10 @@ public partial class GachaPage : ContentPage
 
             IReadOnlyList<TombstoneReintroductionConfirmation>? reintroductions = null;
             Guid? cleanupConfirmation = null;
+            SetPortableProgress(
+                "正在应用 Portable 数据",
+                $"正在以单一事务写入 {session.Plan.Preview.AddCount} 条新增记录、" +
+                $"{session.Plan.Preview.ReplaceCount} 条覆盖记录；完成前不会提交部分结果。");
             GachaPortableApplyResult result =
                 await ViewModel.ApplyPortableImportAsync(session);
             if (result.Status == ChangeExecutionStatus.Suppressed)
@@ -345,6 +374,9 @@ public partial class GachaPage : ContentPage
                     (result.ReintroductionWarning is null
                         ? []
                         : [result.ReintroductionWarning]);
+                SetPortableProgress(
+                    "检测到永久删除标记",
+                    "必须由你明确确认是否重新引入；取消不会改变数据库。");
                 bool restoreConfirmed = await DisplayAlertAsync(
                     "将重新引入永久删除的记录",
                     $"此包命中 {warnings.Count} 条当前档案的本地永久删除标记。只有本次明确确认才会重新引入；以后自动刷新仍不会获得通用恢复授权。是否继续？",
@@ -359,6 +391,9 @@ public partial class GachaPage : ContentPage
                         warning.TombstoneKey,
                         warning.TombstoneVersion,
                         warning.Reference)).ToArray();
+                SetPortableProgress(
+                    "正在重新引入已确认记录",
+                    "正在按精确 Tombstone 版本重新验证并原子提交。");
                 result = await ViewModel.ApplyPortableImportAsync(
                     session,
                     reintroductions);
@@ -367,6 +402,9 @@ public partial class GachaPage : ContentPage
                 result.CleanupPlan is not null)
             {
                 HistoryCleanupPlan plan = result.CleanupPlan;
+                SetPortableProgress(
+                    "存储空间需要人工确认",
+                    "可清理较早撤销材料，但不会删除 Revision 或业务事实。");
                 bool cleanupConfirmed = await DisplayAlertAsync(
                     "需要清理较早撤销材料",
                     $"继续需要清理 {plan.Candidates.Count} 份较早撤销材料（约 {plan.ReclaimableBytes} 字节）；不会删除 Revision。",
@@ -377,6 +415,9 @@ public partial class GachaPage : ContentPage
                     return;
                 }
                 cleanupConfirmation = plan.ConfirmationId;
+                SetPortableProgress(
+                    "正在清理并继续导入",
+                    "正在同一事务中重新验证空间、清理已确认的撤销材料并应用 Portable 数据。");
                 result = await ViewModel.ApplyPortableImportAsync(
                     session,
                     reintroductions,
@@ -399,6 +440,7 @@ public partial class GachaPage : ContentPage
             if (result.Status is ChangeExecutionStatus.Applied or
                 ChangeExecutionStatus.AlreadyCommitted)
             {
+                EndPortableImportUi();
                 await ViewModel.InitializeAsync();
             }
         }
@@ -412,8 +454,39 @@ public partial class GachaPage : ContentPage
         }
         finally
         {
+            EndPortableImportUi();
+            if (shell is not null && previousBehavior is FlyoutBehavior behavior)
+            {
+                shell.FlyoutBehavior = behavior;
+            }
             portableOperationRunning = false;
         }
+    }
+
+    protected override bool OnBackButtonPressed()
+    {
+        return ViewModel.IsPortableImportRunning ||
+            base.OnBackButtonPressed();
+    }
+
+    private void BeginPortableImportUi(string title, string detail)
+    {
+        ViewModel.PortableProgressTitle = title;
+        ViewModel.PortableProgressDetail = detail;
+        ViewModel.IsBusy = true;
+        ViewModel.IsPortableImportRunning = true;
+    }
+
+    private void SetPortableProgress(string title, string detail)
+    {
+        ViewModel.PortableProgressTitle = title;
+        ViewModel.PortableProgressDetail = detail;
+    }
+
+    private void EndPortableImportUi()
+    {
+        ViewModel.IsPortableImportRunning = false;
+        ViewModel.IsBusy = false;
     }
 
     private async void OnExportPortableClicked(object? sender, EventArgs e)
