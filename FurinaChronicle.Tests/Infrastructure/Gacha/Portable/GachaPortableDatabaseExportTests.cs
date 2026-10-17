@@ -7,6 +7,7 @@ using FurinaChronicle.Core.Records;
 using FurinaChronicle.Infrastructure.Gacha.Portable;
 using FurinaChronicle.Infrastructure.Persistence.Sqlite;
 using FurinaChronicle.Services.Gacha;
+using FurinaChronicle.Services.Gacha.History;
 using FurinaChronicle.Services.Gacha.Portable;
 using FurinaChronicle.Core.History;
 
@@ -382,6 +383,184 @@ public sealed class GachaPortableDatabaseExportTests
     }
 
     [Fact]
+    public async Task IndexedProductPath_InsufficientStorageRejectsWithoutCreatingParentsOrFacts()
+    {
+        await using TestContext source = await TestContext.CreateAsync(1);
+        using var packageBytes = new MemoryStream();
+        await using (IGachaPortableExportSnapshot snapshot =
+            await source.CreateSnapshotFactory().OpenAsync(
+                source.Archive.Id,
+                [source.Account.Id]))
+        {
+            await new GachaPortablePackageWriter().WriteAsync(
+                packageBytes,
+                snapshot);
+        }
+        packageBytes.Position = 0;
+        string staging = Path.Combine(
+            Path.GetTempPath(),
+            $"furina-indexed-no-space-{Guid.NewGuid():N}");
+        IGachaPortableStagedInput staged =
+            await new FileGachaPortableInputStager(staging)
+                .StageAsync(packageBytes);
+        await using IGachaPortableIndexedPackage indexed =
+            await new GachaPortableIndexedPackageFactory(staging)
+                .OpenAsync(staged);
+        await using var destination = await EmptyTestContext.CreateAsync();
+        GachaPortableImportPlan plan =
+            await new PlanGachaPortableImport(
+                destination.Archives,
+                destination.Accounts,
+                destination.Gacha,
+                new FixedTimeProvider())
+            .ExecuteAsync(new GachaPortableIndexedImportPlanRequest(indexed));
+        var constrained = new SqliteGachaAtomicChangeStore(
+            destination.Database,
+            new FixedCapacityProvider(0));
+
+        IOException exception = await Assert.ThrowsAsync<IOException>(() =>
+            constrained.ApplyAsync(
+                new GachaPortableIndexedApplyRequest(
+                    indexed,
+                    plan,
+                    OperationId.New(),
+                    source.Archive.CreatedAt.AddHours(1),
+                    Guid.NewGuid())));
+
+        Assert.Contains(
+            "not enough storage",
+            exception.Message,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(await destination.Archives.GetAllAsync());
+        Assert.Equal(
+            0,
+            await destination.Database.Connection.ExecuteScalarAsync<int>(
+                "SELECT COUNT(*) FROM GameAccounts;"));
+        Assert.Equal(
+            0,
+            await destination.Database.Connection.ExecuteScalarAsync<int>(
+                "SELECT COUNT(*) FROM GachaRecords;"));
+        Assert.Equal(
+            0,
+            await destination.Database.Connection.ExecuteScalarAsync<int>(
+                "SELECT COUNT(*) FROM DataChangeSets;"));
+
+        await indexed.DisposeAsync();
+        Assert.Empty(Directory.EnumerateFiles(staging));
+    }
+
+    [Fact]
+    public async Task IndexedProductPath_LowStorageRequiresCleanupConfirmationAndCommitsAtomically()
+    {
+        await using TestContext source = await TestContext.CreateAsync(1);
+        using var packageBytes = new MemoryStream();
+        await using (IGachaPortableExportSnapshot snapshot =
+            await source.CreateSnapshotFactory().OpenAsync(
+                source.Archive.Id,
+                [source.Account.Id]))
+        {
+            await new GachaPortablePackageWriter().WriteAsync(
+                packageBytes,
+                snapshot);
+        }
+        packageBytes.Position = 0;
+        string staging = Path.Combine(
+            Path.GetTempPath(),
+            $"furina-indexed-cleanup-{Guid.NewGuid():N}");
+        IGachaPortableStagedInput staged =
+            await new FileGachaPortableInputStager(staging)
+                .StageAsync(packageBytes);
+        await using IGachaPortableIndexedPackage indexed =
+            await new GachaPortableIndexedPackageFactory(staging)
+                .OpenAsync(staged);
+        await using var destination = await EmptyTestContext.CreateAsync();
+        DateTimeOffset now = source.Archive.CreatedAt;
+        var archive = new PlayerArchive(
+            Guid.NewGuid(),
+            source.Archive.Name,
+            now,
+            now);
+        var account = new GameAccount(
+            Guid.NewGuid(),
+            archive.Id,
+            source.Account.Uid,
+            source.Account.ServerRegion,
+            "Target",
+            false,
+            now,
+            now,
+            source.Account.RoleIdentity);
+        await destination.Archives.AddAsync(archive);
+        await destination.Accounts.AddAsync(account);
+        GachaRecord large = CreateRecord(account.Id, 99) with
+        {
+            ExternalRecordId = "seed-large",
+            ItemName = new string('A', 24_000)
+        };
+        await destination.Atomic.CommitAsync(
+            new GachaAtomicChangeRequest(
+                OperationId.New(),
+                DataChangeOperationKind.Import,
+                DataOrigin.FurinaImport,
+                "large undo seed",
+                now,
+                now.AddSeconds(1),
+                [new GachaFactMutation(
+                    new GachaFactReference(
+                        account.Id,
+                        large.ExternalRecordId),
+                    large)]));
+        GachaPortableImportPlan plan =
+            await new PlanGachaPortableImport(
+                destination.Archives,
+                destination.Accounts,
+                destination.Gacha,
+                new FixedTimeProvider())
+            .ExecuteAsync(new GachaPortableIndexedImportPlanRequest(indexed));
+        var constrained = new SqliteGachaAtomicChangeStore(
+            destination.Database,
+            new FixedCapacityProvider(0));
+        OperationId operationId = OperationId.New();
+        var request = new GachaPortableIndexedApplyRequest(
+            indexed,
+            plan,
+            operationId,
+            now.AddHours(1),
+            Guid.NewGuid());
+
+        GachaPortableApplyResult pending =
+            await constrained.ApplyAsync(request);
+
+        Assert.Equal(ChangeExecutionStatus.NeedsConfirmation, pending.Status);
+        HistoryCleanupPlan cleanup = Assert.IsType<HistoryCleanupPlan>(
+            pending.CleanupPlan);
+        Assert.NotEmpty(cleanup.Candidates);
+        Assert.Empty(await destination.Gacha.GetByExternalRecordIdsAsync(
+            account.Id,
+            ["0000000000000000001"]));
+        GachaPortableApplyResult applied = await constrained.ApplyAsync(
+            request with
+            {
+                CleanupConfirmationId = cleanup.ConfirmationId
+            });
+
+        Assert.Equal(ChangeExecutionStatus.Applied, applied.Status);
+        Assert.Equal(1, applied.InsertedRecordCount);
+        Assert.Single(await destination.Gacha.GetByExternalRecordIdsAsync(
+            account.Id,
+            ["0000000000000000001"]));
+        Assert.Equal(
+            1,
+            await destination.Database.Connection.ExecuteScalarAsync<int>(
+                "SELECT COUNT(*) FROM OperationHistory " +
+                "WHERE IneligibilityReason = ?;",
+                (int)UndoIneligibilityReason.CapacityEvicted));
+
+        await indexed.DisposeAsync();
+        Assert.Empty(Directory.EnumerateFiles(staging));
+    }
+
+    [Fact]
     public async Task ExportAsync_InvalidSourcePreservesExistingTargetAndCleansStage()
     {
         await using TestContext context = await TestContext.CreateAsync(0);
@@ -606,6 +785,13 @@ public sealed class GachaPortableDatabaseExportTests
             0,
             0,
             TimeSpan.Zero);
+    }
+
+    private sealed class FixedCapacityProvider(long availableBytes)
+        : IHistoryStorageCapacityProvider
+    {
+        public HistoryStorageCapacity GetCapacity() =>
+            new(availableBytes);
     }
 
     private sealed class FaultingIndexedPackage(

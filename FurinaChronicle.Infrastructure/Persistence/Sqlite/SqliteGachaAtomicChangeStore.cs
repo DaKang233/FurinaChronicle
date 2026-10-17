@@ -1976,6 +1976,9 @@ public sealed class SqliteGachaAtomicChangeStore
         var accounts = new List<PreparedIndexedPortableAccount>(
             request.Package.Accounts.Count);
         var warnings = new List<TombstoneReintroductionWarning>();
+        bool archiveHasTombstones = connection.ExecuteScalar<int>(
+            "SELECT COUNT(*) FROM LocalOnlyTombstones WHERE ArchiveId = ?;",
+            archiveId.ToString("D")) > 0;
         int mutationCount = 0;
         long snapshotBytes = 0;
 
@@ -2000,6 +2003,17 @@ public sealed class SqliteGachaAtomicChangeStore
                     archiveId,
                     targetIdentityId,
                     plan);
+            // A newly proposed account has no current facts. When its archive
+            // also has no deletion marker (including inactive version high
+            // water) and the account GUID has no historical fact reference,
+            // every planned Add starts at version 1. This avoids two rounds
+            // of per-record state/version lookups while preserving the
+            // conservative path for purge/reintroduction.
+            bool useFreshAccountFastPath = createAccount &&
+                !archiveHasTombstones &&
+                !HasHistoricalFactReferences(
+                    connection,
+                    targetAccountId);
 
             int inserted = 0;
             int updated = 0;
@@ -2016,15 +2030,20 @@ public sealed class SqliteGachaAtomicChangeStore
                         500);
                 foreach (GachaPortableIndexedPlanEntry entry in page)
                 {
-                    PreparedMutation? mutation = PrepareIndexedMutation(
-                        connection,
-                        entry,
-                        archiveId,
-                        targetAccountId,
-                        targetIdentityId,
-                        request.Plan.Mode,
-                        request.ReintroductionConfirmations ?? [],
-                        warnings);
+                    PreparedMutation? mutation = useFreshAccountFastPath
+                        ? PrepareFreshAccountMutation(
+                            entry,
+                            archiveId,
+                            targetAccountId)
+                        : PrepareIndexedMutation(
+                            connection,
+                            entry,
+                            archiveId,
+                            targetAccountId,
+                            targetIdentityId,
+                            request.Plan.Mode,
+                            request.ReintroductionConfirmations ?? [],
+                            warnings);
                     switch (entry.Kind)
                     {
                         case GachaPortableIndexedPlanKind.Add:
@@ -2062,6 +2081,7 @@ public sealed class SqliteGachaAtomicChangeStore
                 targetAccountId,
                 targetIdentityId,
                 createAccount,
+                useFreshAccountFastPath,
                 inserted,
                 updated,
                 skipped));
@@ -2306,6 +2326,41 @@ public sealed class SqliteGachaAtomicChangeStore
                 reference,
                 archiveId));
         }
+        return new PreparedMutation(
+            archiveId,
+            Before: null,
+            proposed,
+            GachaRecordChangeKind.Substantive,
+            EntityChangeKind.Insert);
+    }
+
+    private static bool HasHistoricalFactReferences(
+        SQLiteConnection connection,
+        Guid gameAccountId) =>
+        connection.ExecuteScalar<int>(
+            "SELECT COUNT(*) FROM EntityChanges " +
+            "WHERE EntityKind = ? AND EntityReference LIKE ?;",
+            EntityKind,
+            $"{gameAccountId:D}/%") > 0;
+
+    private static PreparedMutation PrepareFreshAccountMutation(
+        GachaPortableIndexedPlanEntry entry,
+        Guid archiveId,
+        Guid targetAccountId)
+    {
+        if (entry.Kind != GachaPortableIndexedPlanKind.Add ||
+            entry.ExpectedTarget is not null)
+        {
+            throw new PortableApplyConflictException(
+                "A fresh Portable account contains a non-add plan entry.");
+        }
+
+        GachaRecord targetRecord = entry.Source with
+        {
+            GameAccountId = targetAccountId
+        };
+        GachaRecordRow proposed = GachaRecordRow.FromDomain(targetRecord);
+        proposed.Version = 1;
         return new PreparedMutation(
             archiveId,
             Before: null,
@@ -3234,15 +3289,20 @@ public sealed class SqliteGachaAtomicChangeStore
                         500);
                 foreach (GachaPortableIndexedPlanEntry entry in page)
                 {
-                    PreparedMutation? mutation = PrepareIndexedMutation(
-                        connection,
-                        entry,
-                        preparation.ArchiveId,
-                        account.TargetAccountId,
-                        account.TargetIdentityId,
-                        request.Plan.Mode,
-                        request.ReintroductionConfirmations ?? [],
-                        warnings);
+                    PreparedMutation? mutation = account.UseFreshAccountFastPath
+                        ? PrepareFreshAccountMutation(
+                            entry,
+                            preparation.ArchiveId,
+                            account.TargetAccountId)
+                        : PrepareIndexedMutation(
+                            connection,
+                            entry,
+                            preparation.ArchiveId,
+                            account.TargetAccountId,
+                            account.TargetIdentityId,
+                            request.Plan.Mode,
+                            request.ReintroductionConfirmations ?? [],
+                            warnings);
                     if (mutation is null)
                     {
                         continue;
@@ -3253,6 +3313,7 @@ public sealed class SqliteGachaAtomicChangeStore
                             "A Tombstone changed during the Portable transaction.");
                     }
                     ActiveTombstone? reintroduced =
+                        !account.UseFreshAccountFastPath &&
                         mutation.EntityChangeKind == EntityChangeKind.Insert
                             ? ReadActiveTombstone(
                                 connection,
@@ -4590,6 +4651,7 @@ public sealed class SqliteGachaAtomicChangeStore
         Guid TargetAccountId,
         GameRoleIdentityId TargetIdentityId,
         bool CreateAccount,
+        bool UseFreshAccountFastPath,
         int InsertedRecordCount,
         int UpdatedRecordCount,
         int SkippedRecordCount)
