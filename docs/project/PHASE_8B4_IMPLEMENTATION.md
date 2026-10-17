@@ -2,7 +2,7 @@
 
 状态：Accepted implementation contract
 
-实施状态：In progress（2026-10-17；代码与自动化完成，设备验收待关闭）
+实施状态：In progress（更新至 2026-10-18；真实双端基本流程已验证，当前性能／进度修正待设备回归）
 
 基线：`feat/phase-8`，起始提交 `184f3cd97a421e72a41009d408e5007250bf7a28`
 
@@ -62,10 +62,10 @@ Tombstone／Portable Apply 基础。Q1～Q7 的首版产品选择由
 | P2 受控大文件暂存 | Completed (code/host automation) | 产品入口使用会话私有 SQLite：流式关联 UIGF/supplement、分页 Plan/冲突、两遍分页 Apply；第二遍仍在一个主数据库事务中提交 |
 | P3 接管生产获取 | Completed | 三种刷新、UIGF／小助手共用核心和兼容 JSON 走统一政策；自动新档案／账号与事实同事务；精确档案名；相关全量回归通过 |
 | P4 删除闭环 | Completed | 普通删除、单条／账号／档案 purge，Resolved 档案身份与 Unresolved 本地账号 marker，共享 Undo 失效 |
-| P5 纠正／历史／Undo UI | Completed (code/automation) | `UserEntered` 纠正、修订查看、普通／永久删除、最新 eligible Undo、0～1000 设置；页面人工走查未完成 |
-| P6 Portable 文件产品流 | Completed (code/automation) | picker、暂存、预览／映射、冲突／marker 确认、Apply、私有文件复验后保存；双端系统 provider 尚未实机验收 |
+| P5 纠正／历史／Undo UI | Completed | `UserEntered` 纠正、修订查看、普通／永久删除、最新 eligible Undo、0～1000 设置；维护者报告双平台验证可行 |
+| P6 Portable 文件产品流 | Completed (current patch needs regression) | Windows／Android 真实 picker、导入、导出与幂等已验证；2026-10-18 增加分阶段进度和操作锁定，待两端重新走查 |
 | P7 关闭旧旁路 | Completed | production `SaveBatchAsync`、父实体 repository Delete 调用者为 0；架构反例测试保护边界 |
-| P8 双端真实验收 | Partial | 版本校验、460 项测试及宿主 100k 测量通过；双平台 Release build 已重新验证，Windows/Android 真实 Portable 文件、跨端往返、进程终止和空间不足仍待人工确认 |
+| P8 双端真实验收 | Partial | 维护者已验证两端真实导入／导出、幂等和多次进程中断后的数据一致性；462 项测试、真实 14,484 条宿主性能测量和空间不足反例通过。当前 UI／快路径需设备回归，100k 设备级测量仍未取得 |
 
 ## 本地提交记录
 
@@ -83,6 +83,8 @@ Tombstone／Portable Apply 基础。Q1～Q7 的首版产品选择由
 | `a49ad1a` | P8 | 软件版本推进到 `0.8.5`，PhaseLabel `8B.4` |
 | `e06b628` | P7 收口 | concrete SaveBatch 内部化；移除 concrete 父实体 Delete；架构反例扩展 |
 | `52e6a3b` | P2 收口 | 会话私有 SQLite、流式关联、分页 Plan/冲突及单事务分页 Apply |
+| `435d22f` | P8 性能／容量 | 新账号无历史／Tombstone 时使用版本 1 快路径；增加空间不足拒绝、清理确认与原子提交反例 |
+| `4b5b5a5` | P8 UI | Portable 读取、预览、应用、Tombstone／空间确认阶段显示阻塞进度并禁用本页操作 |
 
 ## Q1～Q7 实际实现
 
@@ -115,15 +117,17 @@ Tombstone／Portable Apply 基础。Q1～Q7 的首版产品选择由
 3. `SqliteGachaAtomicChangeStore` 第一遍分页重验并汇总容量，第二遍分页重建 mutation、写事实／Revision／Undo／Receipt；两遍均位于同一个主数据库事务，任一后段故障回滚父实体和已经写入的事实；
 4. 会话完成、取消或解析失败时关闭并删除索引与源暂存，不形成第二套长期数据源。
 
-自动化覆盖 1,250 条完整 Apply、20 条分页冲突／全量覆盖、第二遍写入 500 条后故障回滚、取消清理，以及 100,000 条 Reader＋Plan。2026-10-17 Windows x64 测得 100k 容器为 1,482,268 bytes，相对测试基线的托管内存采样峰值增量为 18,236,048 bytes。这个数值是当前宿主证据，不是跨设备性能承诺；Android 与 Windows UI 进程的实际峰值仍属于 P8 人工验收。`2,000,000` 继续只是安全上限。
+自动化覆盖 1,250 条完整 Apply、20 条分页冲突／全量覆盖、第二遍写入 500 条后故障回滚、取消清理，以及 100,000 条 Reader＋Plan。2026-10-17 Windows x64 测得 100k 容器为 1,482,268 bytes，相对测试基线的托管内存采样峰值增量为 18,236,048 bytes。
 
-## P8 当前证据（更新至 2026-10-17）
+2026-10-18 的真实双平台导出样本各含 9 个账号、14,484 条记录，压缩后 321,323／348,920 bytes，展开约 6.75 MB。此前导入到空目标会在两遍 Apply 中逐条查询当前事实、版本和 Tombstone。当前仅在“新账号＋档案没有任何 Tombstone（包括非活动版本高水位）＋账号 GUID 没有历史事实引用”时使用直接版本 1 快路径；其他场景仍走完整保守检查。Windows x64 临时数据库测量分别为 2,854 ms 和 2,781 ms，其中 Apply 为 930／936 ms。该结果是宿主诊断，不替代 Android 或 Windows UI 实测。`2,000,000` 继续只是安全上限。
 
-- `dotnet test ... --configuration Release --no-restore`：460／460 通过；新增生产索引、分页冲突／覆盖、后段事务回滚、取消清理和 100k Reader＋Plan 覆盖。
+## P8 当前证据（更新至 2026-10-18）
+
+- `dotnet test ... --configuration Release --no-restore`：462／462 通过；除既有索引、分页、回滚和 100k Reader＋Plan 外，新增“完全不足不落父实体／事实／历史”和“可清理时先确认、确认后原子提交”两个 Indexed 产品路径反例。
 - `build/Verify-Versioning.ps1`：通过；人工版本源为 `0.8.5`／`8B.4`。
-- Windows Release build：`net10.0-windows10.0.19041.0`，0 警告、0 错误；Windows 11 Pro `10.0.26200` 上进程启动并保持响应。系统 picker／saver 与真实文件往返：**Not run / awaiting manual interaction**。
-- Android Release build：`net10.0-android`，SDK `E:\AndroidSDK`，0 警告、0 错误；最终产品代码 APK SHA-256 为 `34A21E39DEBEA3EC5AB9A1C8CF590F365BF022221D478E2A2DFD206CBB4D952B`。已通过 ADB 在 vivo V2353A（Android 14／SDK 34，约 7.24 GiB RAM）保留数据覆盖安装，设备报告 `versionCode=113`、`versionName=0.8.5`；主 Activity 启动并保持前台。Android Documents picker 已实际打开，并通过系统返回取消后安全恢复到 FurinaChronicle 主界面；进程错误通道未见 AndroidRuntime／Mono／.NET 未处理异常。后台杀进程后的会话重建和真实文件 Apply：**Not run**。
-- Windows → Android → Windows 和反向真实 Portable 文件逐字段往返、100k 文件、提交前后进程终止、空间不足：**Not run**。
+- Windows Release build：`net10.0-windows10.0.19041.0`，独立输出目录下 0 警告、0 错误；默认输出被维护者当前 Visual Studio 调试实例锁定，不终止该实例。维护者已确认 Windows 真实 Portable 导入／导出、幂等和进程中断后数据正常。
+- Android Release build：`net10.0-android`，SDK `E:\AndroidSDK`，0 警告、0 错误；维护者已确认 Android 真实 Portable 导入／导出、幂等和进程中断后数据正常。
+- 维护者报告此前清单中的其他双平台功能可行；本次新增进度层和空目标快路径尚未安装到两端复验。100k 文件的 UI 进程耗时／峰值和真实低空间设备仍未测；低空间业务语义已有确定性自动测试。
 - 未执行 `adb uninstall`、`pm clear` 或任何会清除现有手机数据的操作。
 
 ## Exit Criteria 核对
@@ -133,13 +137,13 @@ Tombstone／Portable Apply 基础。Q1～Q7 的首版产品选择由
 | 1 | Pass (automation/code) | 生产入口清单完整；legacy Save/Delete 无生产调用者 |
 | 2 | Pass (automation/code) | 所有已实现来源有 SQLite fixture；自动父实体与事实同事务 |
 | 3～7 | Pass (automation/code) | 变化分类、版本、Undo、purge、Portable 产品流均有反例；实际 UI／provider 证据另列 |
-| 8 | **Pass (code/host automation) / device Partial** | 产品 Reader、Plan/conflict、mutation 不再整体物化；宿主 100k 测量通过，双端 UI 进程实测待 P8 |
-| 9 | **Partial** | Windows 与 Android 真机均已启动；Android Documents picker 打开／取消恢复通过，Windows picker 和双向传递未运行 |
-| 10 | Pass (automation) | 既有导入导出、统计、真实抽数和独立查询回归纳入 445 项测试；人工回归未完整执行 |
+| 8 | **Pass (code/host automation) / device Partial** | 产品 Reader、Plan/conflict、mutation 不再整体物化；宿主 100k 和真实 14,484 条样本测量通过，100k 双端 UI 进程实测仍缺失 |
+| 9 | **Pass (maintainer report) / current patch Partial** | 维护者确认两端真实 picker、导入／导出、幂等和进程中断安全；本次进度／快路径修改待复验 |
+| 10 | Pass | 既有导入导出、统计、真实抽数和独立查询纳入 462 项测试；维护者报告双平台功能可行 |
 | 11 | Partial | 迁移/fail-safe fixture、版本校验和双平台 build 通过；双平台 publish／真实旧库与设备验收未在本轮完整执行 |
 | 12 | Pass | Q1～Q7 已进入 ADR 0014；本表区分代码、自动化和设备证据 |
 
-结论：8B.4 的非人工代码与自动化工作包 P0～P7 已关闭；整个 8B.4 **仍不能标记 Completed**，唯一剩余关闭门槛为 P8 真实 Windows／Android 文件与设备验收。
+结论：8B.4 的代码与自动化工作包已关闭，原先列出的真实双端基本流程已由维护者确认。整个 8B.4 暂不标记 Completed：需要在 Windows／Android 上复验本次进度层和空目标导入耗时，并按退出标准补充 100k 设备级资源证据，或由维护者明确接受 14,484 条真实样本作为当前设备门槛。
 
 ## 证据纪律
 
