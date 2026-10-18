@@ -3,6 +3,7 @@
 
 using FurinaChronicle.App.ViewModels;
 using FurinaChronicle.Services.Gacha.History;
+using FurinaChronicle.Services.History;
 
 namespace FurinaChronicle.App.UI.Gacha;
 

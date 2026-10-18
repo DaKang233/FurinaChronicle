@@ -5,6 +5,7 @@ using FurinaChronicle.App.ViewModels;
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.History;
 using FurinaChronicle.Services.Gacha.History;
+using FurinaChronicle.Services.History;
 
 namespace FurinaChronicle.App.UI.Pages;
 
@@ -76,7 +77,7 @@ public partial class ArchiveHistoryPage : ContentPage
                 return;
             }
 
-            GachaAtomicChangeResult result = await ViewModel.UndoLatestAsync(
+            ArchiveOperationResult result = await ViewModel.UndoLatestAsync(
                 OperationId.New());
             await ShowResultAsync(result);
         }
@@ -127,7 +128,7 @@ public partial class ArchiveHistoryPage : ContentPage
     private static Task ShowErrorAsync(Exception exception) =>
         Shell.Current.DisplayAlertAsync("操作失败", exception.Message, "确定");
 
-    private static Task ShowResultAsync(GachaAtomicChangeResult result)
+    private static Task ShowResultAsync(ArchiveOperationResult result)
     {
         string message = result.Status switch
         {

@@ -7,6 +7,7 @@ using FurinaChronicle.App.ViewModels;
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.History;
 using FurinaChronicle.Services.Gacha.History;
+using FurinaChronicle.Services.History;
 using FurinaChronicle.Services.Gacha.Portable;
 using FurinaChronicle.Services.Gacha.Refreshing;
 using System.ComponentModel;

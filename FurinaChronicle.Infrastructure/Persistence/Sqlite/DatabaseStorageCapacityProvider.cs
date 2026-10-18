@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 using FurinaChronicle.Services.Gacha.History;
+using FurinaChronicle.Services.History;
 
 namespace FurinaChronicle.Infrastructure.Persistence.Sqlite;
 

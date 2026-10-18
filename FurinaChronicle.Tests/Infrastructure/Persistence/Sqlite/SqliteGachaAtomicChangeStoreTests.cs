@@ -8,6 +8,7 @@ using FurinaChronicle.Core.Records;
 using FurinaChronicle.Infrastructure.Persistence.Sqlite;
 using FurinaChronicle.Services.Gacha;
 using FurinaChronicle.Services.Gacha.History;
+using FurinaChronicle.Services.History;
 using SQLite;
 
 namespace FurinaChronicle.Tests.Infrastructure.Persistence.Sqlite;
@@ -470,6 +471,43 @@ public sealed class SqliteGachaAtomicChangeStoreTests
                 FROM OperationHistory
                 WHERE UndoneByChangeSetId IS NOT NULL;
                 """));
+    }
+
+    [Fact]
+    public async Task ArchiveHistoryPort_UnknownEntityKindRejectsWholeUndo()
+    {
+        await using SqliteRepositoryTestContext context =
+            await CreateContextAsync();
+        Guid accountId = await AddAccountAsync(context);
+        GachaFactReference reference = new(accountId, "shared-history-1");
+        await context.AtomicGacha.CommitAsync(CreateRequest(
+            DataChangeOperationKind.Import,
+            new GachaFactMutation(
+                reference,
+                CreateRecord(accountId, reference.ExternalRecordId))));
+        GachaFactState inserted = Assert.IsType<GachaFactState>(
+            await context.AtomicGacha.GetCurrentAsync(reference));
+        using (SQLiteConnection raw = context.OpenRawConnection())
+        {
+            raw.Execute(
+                "UPDATE UndoMaterials SET EntityKind = ?;",
+                "future_unknown_entity");
+        }
+        IArchiveOperationHistoryStore history = context.AtomicGacha;
+        DateTimeOffset time =
+            new(2026, 10, 18, 10, 0, 0, TimeSpan.FromHours(8));
+
+        ArchiveOperationResult result = await history.UndoLatestAsync(
+            new ArchiveUndoRequest(
+                OperationId.New(),
+                inserted.ArchiveId,
+                time,
+                time.AddSeconds(1)));
+
+        Assert.Equal(ChangeExecutionStatus.Conflict, result.Status);
+        Assert.Contains("unsupported", result.ConflictReason);
+        Assert.NotNull(await context.AtomicGacha.GetCurrentAsync(reference));
+        Assert.Single(await history.GetHistoryAsync(inserted.ArchiveId, 10));
     }
 
     [Fact]

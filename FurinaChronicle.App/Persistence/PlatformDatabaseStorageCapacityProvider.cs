@@ -3,6 +3,7 @@
 
 using FurinaChronicle.Infrastructure.Persistence.Sqlite;
 using FurinaChronicle.Services.Gacha.History;
+using FurinaChronicle.Services.History;
 
 namespace FurinaChronicle.App.Persistence;
 

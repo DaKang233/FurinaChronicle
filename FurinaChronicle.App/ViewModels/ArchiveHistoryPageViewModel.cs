@@ -7,6 +7,7 @@ using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.History;
 using FurinaChronicle.Services.Archives;
 using FurinaChronicle.Services.Gacha.History;
+using FurinaChronicle.Services.History;
 using System.Collections.ObjectModel;
 
 namespace FurinaChronicle.App.ViewModels;
@@ -14,7 +15,7 @@ namespace FurinaChronicle.App.ViewModels;
 public partial class ArchiveHistoryPageViewModel(
     GetPlayerArchives getPlayerArchives,
     IGachaAtomicChangeStore atomicChangeStore,
-    ManageGachaHistory manageGachaHistory)
+    IArchiveOperationHistoryStore operationHistoryStore)
     : ObservableObject
 {
     public ObservableCollection<PlayerArchive> Archives { get; } = [];
@@ -126,7 +127,7 @@ public partial class ArchiveHistoryPageViewModel(
     public GachaOperationHistoryDisplayItem? GetLatestUndoCandidate() =>
         OperationHistory.FirstOrDefault(item => item.IsUndoEligible);
 
-    public async Task<GachaAtomicChangeResult> UndoLatestAsync(
+    public async Task<ArchiveOperationResult> UndoLatestAsync(
         OperationId operationId)
     {
         if (IsBusy)
@@ -134,14 +135,18 @@ public partial class ArchiveHistoryPageViewModel(
             throw new InvalidOperationException("另一项修改历史操作仍在执行。");
         }
 
-        GachaAtomicChangeResult? result = null;
+        ArchiveOperationResult? result = null;
         await ExecuteBusyAsync(async () =>
         {
             Guid archiveId = SelectedArchive?.Id ??
                 throw new InvalidOperationException("请先选择档案。");
-            result = await manageGachaHistory.UndoLatestAsync(
-                operationId,
-                archiveId);
+            DateTimeOffset now = DateTimeOffset.Now;
+            result = await operationHistoryStore.UndoLatestAsync(
+                new ArchiveUndoRequest(
+                    operationId,
+                    archiveId,
+                    now,
+                    now));
             if (result.Status is ChangeExecutionStatus.Applied or
                 ChangeExecutionStatus.AlreadyCommitted)
             {
@@ -163,7 +168,7 @@ public partial class ArchiveHistoryPageViewModel(
             Guid archiveId = SelectedArchive?.Id ??
                 throw new InvalidOperationException("请先选择档案。");
             UndoLimitChangeResult result =
-                await atomicChangeStore.SetUndoLimitAsync(archiveId, limit);
+                await operationHistoryStore.SetUndoLimitAsync(archiveId, limit);
             UndoLimit = result.CurrentLimit;
             StatusMessage = result.EvictedChangeSetIds.Count == 0
                 ? $"撤销保留次数已设为 {result.CurrentLimit}。"
@@ -194,7 +199,7 @@ public partial class ArchiveHistoryPageViewModel(
             return;
         }
 
-        UndoLimit = await atomicChangeStore.GetUndoLimitAsync(
+        UndoLimit = await operationHistoryStore.GetUndoLimitAsync(
             SelectedArchive.Id);
         await LoadOperationListCoreAsync(updateStatus: true);
     }
@@ -210,7 +215,7 @@ public partial class ArchiveHistoryPageViewModel(
         }
 
         IReadOnlyList<OperationHistoryItem> history =
-            await atomicChangeStore.GetHistoryAsync(SelectedArchive.Id, 30);
+            await operationHistoryStore.GetHistoryAsync(SelectedArchive.Id, 30);
         foreach (OperationHistoryItem item in history)
         {
             OperationHistory.Add(

@@ -5,6 +5,7 @@ using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.History;
 using FurinaChronicle.Core.Records;
 using FurinaChronicle.Core.Archives;
+using FurinaChronicle.Services.History;
 
 namespace FurinaChronicle.Services.Gacha.History;
 
@@ -254,39 +255,6 @@ public sealed record GachaScopePurgeRequest(
     DateTimeOffset CommittedAt,
     string Summary);
 
-public sealed record HistoryStorageCapacity(long? AvailableBytes)
-{
-    public bool IsKnown => AvailableBytes is not null;
-}
-
-public interface IHistoryStorageCapacityProvider
-{
-    HistoryStorageCapacity GetCapacity();
-}
-
-public sealed record HistoryCleanupCandidate(
-    Guid ChangeSetId,
-    IReadOnlyList<Guid> ArchiveIds,
-    long MaterialBytes);
-
-public sealed record HistoryCleanupPlan(
-    Guid ConfirmationId,
-    long RequiredBytes,
-    long AvailableBytes,
-    long ReclaimableBytes,
-    IReadOnlyList<HistoryCleanupCandidate> Candidates);
-
-public sealed record OperationHistoryItem(
-    Guid ChangeSetId,
-    DataChangeOperationKind OperationKind,
-    DateTimeOffset CommittedAt,
-    string Summary,
-    int AffectedRecordCount,
-    bool IsUndoEligible,
-    UndoIneligibilityReason IneligibilityReason,
-    Guid? UndoneByChangeSetId,
-    IReadOnlyList<Guid> ArchiveIds);
-
 public sealed record GachaRevisionItem(
     Guid RevisionId,
     Guid ChangeSetId,
@@ -297,11 +265,6 @@ public sealed record GachaRevisionItem(
     GachaRecord? Before,
     GachaRecord? After,
     DateTimeOffset CreatedAt);
-
-public sealed record UndoLimitChangeResult(
-    int PreviousLimit,
-    int CurrentLimit,
-    IReadOnlyList<Guid> EvictedChangeSetIds);
 
 public sealed class GachaUndoRequest
 {

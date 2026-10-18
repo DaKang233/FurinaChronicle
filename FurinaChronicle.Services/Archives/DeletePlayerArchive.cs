@@ -5,11 +5,12 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using FurinaChronicle.Core.History;
-using FurinaChronicle.Services.Gacha.History;
+using FurinaChronicle.Services.History;
 
 namespace FurinaChronicle.Services.Archives;
 
-public sealed class DeletePlayerArchive(IGachaAtomicChangeStore atomicChangeStore)
+public sealed class DeletePlayerArchive(
+    IArchiveOperationHistoryStore operationHistoryStore)
 {
     public async Task ExecuteAsync(Guid playerArchiveId, CancellationToken cancellationToken = default)
     {
@@ -19,8 +20,8 @@ public sealed class DeletePlayerArchive(IGachaAtomicChangeStore atomicChangeStor
         }
 
         DateTimeOffset now = DateTimeOffset.Now;
-        await atomicChangeStore.PurgeArchiveAsync(
-            new GachaScopePurgeRequest(
+        await operationHistoryStore.PurgeArchiveAsync(
+            new ArchiveScopePurgeRequest(
                 OperationId.New(),
                 playerArchiveId,
                 now,

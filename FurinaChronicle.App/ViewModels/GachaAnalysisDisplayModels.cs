@@ -8,6 +8,7 @@ using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.Gacha.Metadata;
 using FurinaChronicle.Core.History;
 using FurinaChronicle.Services.Gacha.History;
+using FurinaChronicle.Services.History;
 using FurinaChronicle.Services.Gacha.Analytics;
 using System.Collections.ObjectModel;
 

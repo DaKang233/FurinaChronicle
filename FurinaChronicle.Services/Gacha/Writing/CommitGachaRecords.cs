@@ -6,6 +6,7 @@ using FurinaChronicle.Core.History;
 using FurinaChronicle.Core.Records;
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Services.Gacha.History;
+using FurinaChronicle.Services.History;
 
 namespace FurinaChronicle.Services.Gacha.Writing;
 

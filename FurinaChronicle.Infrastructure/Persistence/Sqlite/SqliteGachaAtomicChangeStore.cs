@@ -10,13 +10,15 @@ using FurinaChronicle.Core.Records;
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Services.Gacha.History;
 using FurinaChronicle.Services.Gacha.Portable;
+using FurinaChronicle.Services.History;
 using SQLite;
 
 namespace FurinaChronicle.Infrastructure.Persistence.Sqlite;
 
 public sealed class SqliteGachaAtomicChangeStore
     : IGachaAtomicChangeStore,
-      IGachaPortableImportApplier
+      IGachaPortableImportApplier,
+      IArchiveOperationHistoryStore
 {
     internal const int SnapshotFormatVersion = 1;
     internal const string EntityKind = "gacha_record";
@@ -764,6 +766,22 @@ public sealed class SqliteGachaAtomicChangeStore
             "The Gacha undo transaction did not produce a result.");
     }
 
+    async Task<ArchiveOperationResult>
+        IArchiveOperationHistoryStore.UndoLatestAsync(
+            ArchiveUndoRequest request,
+            CancellationToken cancellationToken)
+    {
+        GachaAtomicChangeResult result = await UndoLatestAsync(
+            new GachaUndoRequest(
+                request.OperationId,
+                request.ArchiveId,
+                request.StartedAt,
+                request.CommittedAt,
+                request.Summary),
+            cancellationToken);
+        return ToArchiveOperationResult(result);
+    }
+
     public async Task<GachaAtomicChangeResult> IrreversiblyDeleteAsync(
         GachaIrreversibleDeleteRequest request,
         CancellationToken cancellationToken = default)
@@ -917,6 +935,28 @@ public sealed class SqliteGachaAtomicChangeStore
         GachaScopePurgeRequest request,
         CancellationToken cancellationToken = default) =>
         PurgeScopeAsync(request, purgeArchive: true, cancellationToken);
+
+    async Task<ArchiveOperationResult>
+        IArchiveOperationHistoryStore.PurgeAccountAsync(
+            ArchiveScopePurgeRequest request,
+            CancellationToken cancellationToken)
+    {
+        GachaAtomicChangeResult result = await PurgeAccountAsync(
+            ToGachaScopePurgeRequest(request),
+            cancellationToken);
+        return ToArchiveOperationResult(result);
+    }
+
+    async Task<ArchiveOperationResult>
+        IArchiveOperationHistoryStore.PurgeArchiveAsync(
+            ArchiveScopePurgeRequest request,
+            CancellationToken cancellationToken)
+    {
+        GachaAtomicChangeResult result = await PurgeArchiveAsync(
+            ToGachaScopePurgeRequest(request),
+            cancellationToken);
+        return ToArchiveOperationResult(result);
+    }
 
     private async Task<GachaAtomicChangeResult> PurgeScopeAsync(
         GachaScopePurgeRequest request,
@@ -1208,6 +1248,25 @@ public sealed class SqliteGachaAtomicChangeStore
         return result ?? throw new InvalidOperationException(
             "The Gacha scope purge did not produce a result.");
     }
+
+    private static GachaScopePurgeRequest ToGachaScopePurgeRequest(
+        ArchiveScopePurgeRequest request) =>
+        new(
+            request.OperationId,
+            request.ScopeId,
+            request.StartedAt,
+            request.CommittedAt,
+            request.Summary);
+
+    private static ArchiveOperationResult ToArchiveOperationResult(
+        GachaAtomicChangeResult result) =>
+        new(
+            result.Status,
+            result.ChangeSetId,
+            result.AffectedRecordCount,
+            result.ConflictReason,
+            result.OriginalStatus,
+            result.CleanupPlan);
 
     public async Task<GachaPortableApplyResult> ApplyAsync(
         GachaPortableApplyRequest request,
