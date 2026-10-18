@@ -15,10 +15,11 @@ using SQLite;
 
 namespace FurinaChronicle.Infrastructure.Persistence.Sqlite;
 
-public sealed class SqliteGachaAtomicChangeStore
+public sealed partial class SqliteGachaAtomicChangeStore
     : IGachaAtomicChangeStore,
       IGachaPortableImportApplier,
-      IArchiveOperationHistoryStore
+      IArchiveOperationHistoryStore,
+      FurinaChronicle.Services.HistoryDomains.IArchiveDomainHistoryStore
 {
     internal const int SnapshotFormatVersion = 1;
     internal const string EntityKind = "gacha_record";
@@ -530,17 +531,36 @@ public sealed class SqliteGachaAtomicChangeStore
                     ORDER BY Id;
                     """,
                     originalChangeSetId);
-            if (materials.Count == 0 ||
-                materials.Any(material =>
-                    material.EntityKind != EntityKind ||
-                    material.SnapshotFormatVersion !=
-                        SnapshotFormatVersion))
+            bool allGacha = materials.Count > 0 &&
+                materials.All(material =>
+                    material.EntityKind == EntityKind &&
+                    material.SnapshotFormatVersion ==
+                        SnapshotFormatVersion);
+            bool allArchiveDomain = materials.Count > 0 &&
+                materials.All(material =>
+                    IsArchiveDomainEntityKind(material.EntityKind) &&
+                    material.SnapshotFormatVersion ==
+                        DomainSnapshotFormatVersion);
+            if (!allGacha && !allArchiveDomain)
             {
                 result = new GachaAtomicChangeResult(
                     ChangeExecutionStatus.Conflict,
                     ChangeSetId: null,
                     AffectedRecordCount: 0,
                     "Undo material is missing or uses an unsupported format.");
+                return;
+            }
+
+            if (allArchiveDomain)
+            {
+                result = UndoArchiveDomainChangeSet(
+                    connection,
+                    request,
+                    ParseRequiredGuid(
+                        originalChangeSetId,
+                        "original change set"),
+                    archiveIds,
+                    materials);
                 return;
             }
 
@@ -1033,6 +1053,7 @@ public sealed class SqliteGachaAtomicChangeStore
             }
 
             var facts = new List<PurgeFact>();
+            var domainFacts = new List<PurgeDomainFact>();
             var affectedChangeSets = new HashSet<Guid>();
             foreach (Guid accountId in accountIds)
             {
@@ -1111,6 +1132,51 @@ public sealed class SqliteGachaAtomicChangeStore
                         Math.Max(1, versionHighWater)));
                 }
 
+                foreach (DomainIdentityRow row in connection
+                    .Query<DomainIdentityRow>(
+                        """
+                        SELECT DomainKind, EntityId FROM ArchiveDomainFacts
+                        WHERE GameAccountId = ?
+                        UNION
+                        SELECT DomainKind, EntityId FROM ArchiveDomainRevisions
+                        WHERE GameAccountId = ?;
+                        """,
+                        accountId.ToString("D"),
+                        accountId.ToString("D")))
+                {
+                    long versionHighWater = connection.ExecuteScalar<long>(
+                        """
+                        SELECT MAX(Value) FROM
+                        (
+                            SELECT COALESCE(MAX(Version), 0) AS Value
+                            FROM ArchiveDomainFacts
+                            WHERE DomainKind = ? AND EntityId = ?
+                            UNION ALL
+                            SELECT COALESCE(MAX(COALESCE(AfterVersion, BeforeVersion, 0)), 0)
+                            FROM ArchiveDomainRevisions
+                            WHERE DomainKind = ? AND EntityId = ?
+                            UNION ALL
+                            SELECT COALESCE(MAX(COALESCE(AfterVersion, BeforeVersion, 0)), 0)
+                            FROM EntityChanges
+                            WHERE EntityKind = ? AND EntityReference = ?
+                        );
+                        """,
+                        row.DomainKind,
+                        row.EntityId,
+                        row.DomainKind,
+                        row.EntityId,
+                        row.DomainKind,
+                        $"{accountId:D}/{row.EntityId}");
+                    domainFacts.Add(new PurgeDomainFact(
+                        CreateDomainTombstoneKey(
+                            archiveId,
+                            accountId,
+                            scope.GameRoleIdentityId,
+                            row.DomainKind,
+                            row.EntityId),
+                        Math.Max(1, versionHighWater)));
+                }
+
                 foreach (ChangeSetIdRow row in connection
                     .Query<ChangeSetIdRow>(
                         """
@@ -1127,6 +1193,32 @@ public sealed class SqliteGachaAtomicChangeStore
                         EntityKind,
                         prefix + "%",
                         EntityKind,
+                        prefix + "%"))
+                {
+                    affectedChangeSets.Add(ParseRequiredGuid(
+                        row.ChangeSetId,
+                        "change set"));
+                }
+                foreach (ChangeSetIdRow row in connection
+                    .Query<ChangeSetIdRow>(
+                        """
+                        SELECT DISTINCT ChangeSetId FROM ArchiveDomainRevisions
+                        WHERE GameAccountId = ?
+                        UNION
+                        SELECT DISTINCT ChangeSetId FROM EntityChanges
+                        WHERE EntityKind IN (?, ?, ?) AND EntityReference LIKE ?
+                        UNION
+                        SELECT DISTINCT ChangeSetId FROM UndoMaterials
+                        WHERE EntityKind IN (?, ?, ?) AND EntityReference LIKE ?;
+                        """,
+                        accountId.ToString("D"),
+                        ItemObservationEntityKind,
+                        ManualAcquisitionEntityKind,
+                        ChallengeObservationEntityKind,
+                        prefix + "%",
+                        ItemObservationEntityKind,
+                        ManualAcquisitionEntityKind,
+                        ChallengeObservationEntityKind,
                         prefix + "%"))
                 {
                     affectedChangeSets.Add(ParseRequiredGuid(
@@ -1158,8 +1250,20 @@ public sealed class SqliteGachaAtomicChangeStore
                     "DELETE FROM GachaRevisions WHERE GameAccountId = ?;",
                     accountId.ToString("D"));
                 connection.Execute(
+                    "DELETE FROM ArchiveDomainRevisions WHERE GameAccountId = ?;",
+                    accountId.ToString("D"));
+                connection.Execute(
                     "DELETE FROM EntityChanges WHERE EntityKind = ? AND EntityReference LIKE ?;",
                     EntityKind,
+                    prefix + "%");
+                connection.Execute(
+                    """
+                    DELETE FROM EntityChanges
+                    WHERE EntityKind IN (?, ?, ?) AND EntityReference LIKE ?;
+                    """,
+                    ItemObservationEntityKind,
+                    ManualAcquisitionEntityKind,
+                    ChallengeObservationEntityKind,
                     prefix + "%");
                 connection.Execute(
                     """
@@ -1170,7 +1274,13 @@ public sealed class SqliteGachaAtomicChangeStore
                 connection.Execute(
                     "DELETE FROM GachaRecords WHERE GameAccountId = ?;",
                     accountId.ToString("D"));
+                connection.Execute(
+                    "DELETE FROM ArchiveDomainFacts WHERE GameAccountId = ?;",
+                    accountId.ToString("D"));
             }
+            connection.Execute(
+                "DELETE FROM DomainPortableReceipts WHERE TargetArchiveId = ?;",
+                archiveId.ToString("D"));
 
             Guid changeSetId = Guid.NewGuid();
             InsertScopePurgeChangeSet(
@@ -1178,8 +1288,33 @@ public sealed class SqliteGachaAtomicChangeStore
                 request,
                 changeSetId,
                 archiveId,
-                facts.Count);
+                facts.Count + domainFacts.Count);
             foreach (PurgeFact fact in facts)
+            {
+                connection.Execute(
+                    """
+                    INSERT INTO LocalOnlyTombstones
+                        (TombstoneKey, TombstoneVersion, ArchiveId, IsActive,
+                         DeletedByChangeSetId, DeletedAtUtcTicks,
+                         ReintroducedByChangeSetId)
+                    VALUES (?, ?, ?, 1, ?, ?, NULL)
+                    ON CONFLICT(TombstoneKey)
+                    DO UPDATE SET
+                        TombstoneVersion = MAX(
+                            TombstoneVersion + 1,
+                            excluded.TombstoneVersion),
+                        IsActive = 1,
+                        DeletedByChangeSetId = excluded.DeletedByChangeSetId,
+                        DeletedAtUtcTicks = excluded.DeletedAtUtcTicks,
+                        ReintroducedByChangeSetId = NULL;
+                    """,
+                    fact.TombstoneKey,
+                    fact.VersionHighWater,
+                    archiveId.ToString("D"),
+                    changeSetId.ToString("D"),
+                    request.CommittedAt.UtcDateTime.Ticks);
+            }
+            foreach (PurgeDomainFact fact in domainFacts)
             {
                 connection.Execute(
                     """
@@ -1237,12 +1372,12 @@ public sealed class SqliteGachaAtomicChangeStore
                 request.OperationId.ToString(),
                 changeSetId.ToString("D"),
                 (int)ChangeExecutionStatus.Applied,
-                facts.Count,
+                facts.Count + domainFacts.Count,
                 request.CommittedAt.UtcDateTime.Ticks);
             result = new GachaAtomicChangeResult(
                 ChangeExecutionStatus.Applied,
                 changeSetId,
-                facts.Count);
+                facts.Count + domainFacts.Count);
         });
 
         return result ?? throw new InvalidOperationException(

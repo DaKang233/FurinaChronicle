@@ -8,6 +8,7 @@ using FurinaChronicle.Services.Abstractions;
 using FurinaChronicle.Services.Gacha.History;
 using FurinaChronicle.Services.Gacha.Portable;
 using FurinaChronicle.Services.History;
+using FurinaChronicle.Services.HistoryDomains;
 
 namespace FurinaChronicle.App.Composition;
 
@@ -32,6 +33,9 @@ internal static class PersistenceServiceCollectionExtensions
             provider => provider.GetRequiredService<
                 SqliteGachaAtomicChangeStore>());
         services.AddSingleton<IArchiveOperationHistoryStore>(
+            provider => provider.GetRequiredService<
+                SqliteGachaAtomicChangeStore>());
+        services.AddSingleton<IArchiveDomainHistoryStore>(
             provider => provider.GetRequiredService<
                 SqliteGachaAtomicChangeStore>());
         services.AddSingleton<IGachaPortableImportApplier>(

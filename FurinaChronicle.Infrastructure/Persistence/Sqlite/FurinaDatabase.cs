@@ -8,7 +8,8 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite;
 
 public sealed class FurinaDatabase : IAsyncDisposable
 {
-    private const int CurrentSchemaVersion = 5;
+    private const int CurrentSchemaVersion = 6;
+    private const int AtomicHistorySchemaVersion = 5;
     private const int ProvenanceSchemaVersion = 4;
     private const int SharedIdentitySchemaVersion = 3;
     private const int PreSharedIdentitySchemaVersion = 2;
@@ -103,6 +104,11 @@ public sealed class FurinaDatabase : IAsyncDisposable
             {
                 await MigrateVersionFourToCurrentAsync(cancellationToken);
             }
+            else if (applicationId == CurrentApplicationId &&
+                     schemaVersion == AtomicHistorySchemaVersion)
+            {
+                await MigrateVersionFiveToCurrentAsync(cancellationToken);
+            }
             else if (applicationId == 0 &&
                      schemaVersion == 0 &&
                      await IsEmptyDatabaseAsync(cancellationToken))
@@ -149,6 +155,7 @@ public sealed class FurinaDatabase : IAsyncDisposable
             MigrateVersionTwoToVersionThree(connection, cancellationToken);
             MigrateVersionThreeToVersionFour(connection);
             MigrateVersionFourToVersionFive(connection);
+            MigrateVersionFiveToVersionSix(connection);
             SetCurrentSchemaVersion(connection);
         });
     }
@@ -164,6 +171,7 @@ public sealed class FurinaDatabase : IAsyncDisposable
             MigrateVersionTwoToVersionThree(connection, cancellationToken);
             MigrateVersionThreeToVersionFour(connection);
             MigrateVersionFourToVersionFive(connection);
+            MigrateVersionFiveToVersionSix(connection);
             SetCurrentSchemaVersion(connection);
         });
     }
@@ -178,6 +186,7 @@ public sealed class FurinaDatabase : IAsyncDisposable
             cancellationToken.ThrowIfCancellationRequested();
             MigrateVersionThreeToVersionFour(connection);
             MigrateVersionFourToVersionFive(connection);
+            MigrateVersionFiveToVersionSix(connection);
             SetCurrentSchemaVersion(connection);
         });
     }
@@ -191,6 +200,19 @@ public sealed class FurinaDatabase : IAsyncDisposable
         {
             cancellationToken.ThrowIfCancellationRequested();
             MigrateVersionFourToVersionFive(connection);
+            MigrateVersionFiveToVersionSix(connection);
+            SetCurrentSchemaVersion(connection);
+        });
+    }
+
+    private async Task MigrateVersionFiveToCurrentAsync(
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await Connection.RunInTransactionAsync(connection =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            MigrateVersionFiveToVersionSix(connection);
             SetCurrentSchemaVersion(connection);
         });
     }
@@ -309,6 +331,10 @@ public sealed class FurinaDatabase : IAsyncDisposable
             "ALTER TABLE GachaRecords ADD COLUMN Version INTEGER NOT NULL DEFAULT 1;");
         CreateHistoryTables(connection);
     }
+
+    private static void MigrateVersionFiveToVersionSix(
+        SQLiteConnection connection) =>
+        CreateArchiveDomainHistoryTables(connection);
 
     private static void SetCurrentSchemaVersion(SQLiteConnection connection)
     {
@@ -523,6 +549,51 @@ public sealed class FurinaDatabase : IAsyncDisposable
                 "TargetRoleIdentityId",
             ],
             cancellationToken);
+        await ValidateTableColumnsAsync(
+            "ArchiveDomainFacts",
+            [
+                "DomainKind",
+                "EntityId",
+                "GameAccountId",
+                "ArchiveId",
+                "TypeKey",
+                "SequenceUtcTicks",
+                "Version",
+                "ContentHash",
+                "SnapshotFormatVersion",
+                "SnapshotJson",
+            ],
+            cancellationToken);
+        await ValidateTableColumnsAsync(
+            "ArchiveDomainRevisions",
+            [
+                "RevisionId",
+                "ChangeSetId",
+                "DomainKind",
+                "EntityId",
+                "GameAccountId",
+                "ChangeKind",
+                "BeforeVersion",
+                "AfterVersion",
+                "SnapshotFormatVersion",
+                "BeforeSnapshotJson",
+                "AfterSnapshotJson",
+                "CreatedAtUtcTicks",
+            ],
+            cancellationToken);
+        await ValidateTableColumnsAsync(
+            "DomainPortableReceipts",
+            [
+                "ReceiptId",
+                "ChangeSetId",
+                "DatasetKind",
+                "PackageFingerprint",
+                "ReceivedAtUtcTicks",
+                "ReceivedAtOffsetMinutes",
+                "TargetArchiveId",
+                "RecordCount",
+            ],
+            cancellationToken);
 
         List<ForeignKeyViolationRow> violations =
             await Connection.QueryAsync<ForeignKeyViolationRow>(
@@ -642,6 +713,7 @@ public sealed class FurinaDatabase : IAsyncDisposable
                 """);
 
             CreateHistoryTables(connection);
+            CreateArchiveDomainHistoryTables(connection);
 
             connection.Execute(
                 """
@@ -888,6 +960,101 @@ public sealed class FurinaDatabase : IAsyncDisposable
             """
             CREATE INDEX IX_LocalOnlyTombstones_Archive_Active
             ON LocalOnlyTombstones(ArchiveId, IsActive);
+            """);
+    }
+
+    private static void CreateArchiveDomainHistoryTables(
+        SQLiteConnection connection)
+    {
+        connection.Execute(
+            """
+            CREATE TABLE ArchiveDomainFacts
+            (
+                DomainKind TEXT NOT NULL,
+                EntityId TEXT NOT NULL,
+                GameAccountId TEXT NOT NULL,
+                ArchiveId TEXT NOT NULL,
+                TypeKey TEXT,
+                SequenceUtcTicks INTEGER,
+                Version INTEGER NOT NULL,
+                ContentHash TEXT NOT NULL,
+                SnapshotFormatVersion INTEGER NOT NULL,
+                SnapshotJson TEXT NOT NULL,
+                PRIMARY KEY (DomainKind, EntityId),
+                FOREIGN KEY (GameAccountId)
+                    REFERENCES GameAccounts(Id)
+                    ON DELETE CASCADE,
+                FOREIGN KEY (ArchiveId)
+                    REFERENCES PlayerArchives(Id)
+                    ON DELETE CASCADE
+            );
+            """);
+        connection.Execute(
+            """
+            CREATE TABLE ArchiveDomainRevisions
+            (
+                RevisionId TEXT PRIMARY KEY NOT NULL,
+                ChangeSetId TEXT NOT NULL,
+                DomainKind TEXT NOT NULL,
+                EntityId TEXT NOT NULL,
+                GameAccountId TEXT NOT NULL,
+                ChangeKind INTEGER NOT NULL,
+                BeforeVersion INTEGER,
+                AfterVersion INTEGER,
+                SnapshotFormatVersion INTEGER NOT NULL,
+                BeforeSnapshotJson TEXT,
+                AfterSnapshotJson TEXT,
+                CreatedAtUtcTicks INTEGER NOT NULL,
+                FOREIGN KEY (ChangeSetId)
+                    REFERENCES DataChangeSets(ChangeSetId)
+                    ON DELETE CASCADE
+            );
+            """);
+        connection.Execute(
+            """
+            CREATE TABLE DomainPortableReceipts
+            (
+                ReceiptId TEXT PRIMARY KEY NOT NULL,
+                ChangeSetId TEXT NOT NULL UNIQUE,
+                DatasetKind TEXT NOT NULL,
+                PackageFingerprint TEXT NOT NULL,
+                ReceivedAtUtcTicks INTEGER NOT NULL,
+                ReceivedAtOffsetMinutes INTEGER NOT NULL,
+                TargetArchiveId TEXT NOT NULL,
+                RecordCount INTEGER NOT NULL,
+                FOREIGN KEY (ChangeSetId)
+                    REFERENCES DataChangeSets(ChangeSetId)
+            );
+            """);
+        connection.Execute(
+            """
+            CREATE INDEX IX_ArchiveDomainFacts_Account_Kind_Sequence
+            ON ArchiveDomainFacts(
+                GameAccountId,
+                DomainKind,
+                SequenceUtcTicks,
+                EntityId);
+            """);
+        connection.Execute(
+            """
+            CREATE INDEX IX_ArchiveDomainFacts_Archive
+            ON ArchiveDomainFacts(ArchiveId, DomainKind);
+            """);
+        connection.Execute(
+            """
+            CREATE INDEX IX_ArchiveDomainRevisions_Fact
+            ON ArchiveDomainRevisions(
+                DomainKind,
+                EntityId,
+                CreatedAtUtcTicks);
+            """);
+        connection.Execute(
+            """
+            CREATE UNIQUE INDEX UX_DomainPortableReceipts_Dataset_Fingerprint_Target
+            ON DomainPortableReceipts(
+                DatasetKind,
+                PackageFingerprint,
+                TargetArchiveId);
             """);
     }
 

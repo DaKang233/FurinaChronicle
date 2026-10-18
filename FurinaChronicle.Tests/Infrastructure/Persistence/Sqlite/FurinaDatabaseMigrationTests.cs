@@ -10,10 +10,10 @@ namespace FurinaChronicle.Tests.Infrastructure.Persistence.Sqlite;
 public sealed class FurinaDatabaseMigrationTests
 {
     private const int CurrentApplicationId = 0x46554348;
-    private const int CurrentSchemaVersion = 5;
+    private const int CurrentSchemaVersion = 6;
 
     [Fact]
-    public async Task InitializeAsync_NewDatabase_CreatesCurrentVersionFiveSchema()
+    public async Task InitializeAsync_NewDatabase_CreatesCurrentVersionSixSchema()
     {
         await using var fixture = MigrationFixture.Create();
 
@@ -362,6 +362,44 @@ public sealed class FurinaDatabaseMigrationTests
     }
 
     [Fact]
+    public async Task InitializeAsync_VersionFive_AddsDomainHistoryWithoutInventingFacts()
+    {
+        await using var fixture = MigrationFixture.Create();
+        await using (FurinaDatabase database = fixture.OpenDatabase())
+        {
+            await database.InitializeAsync();
+        }
+        using (SQLiteConnection legacy = fixture.OpenRawConnection())
+        {
+            legacy.Execute(
+                "DROP INDEX UX_DomainPortableReceipts_Dataset_Fingerprint_Target;");
+            legacy.Execute("DROP INDEX IX_ArchiveDomainRevisions_Fact;");
+            legacy.Execute("DROP INDEX IX_ArchiveDomainFacts_Archive;");
+            legacy.Execute("DROP INDEX IX_ArchiveDomainFacts_Account_Kind_Sequence;");
+            legacy.Execute("DROP TABLE DomainPortableReceipts;");
+            legacy.Execute("DROP TABLE ArchiveDomainRevisions;");
+            legacy.Execute("DROP TABLE ArchiveDomainFacts;");
+            legacy.Execute("PRAGMA user_version = 5;");
+        }
+
+        await using (FurinaDatabase database = fixture.OpenDatabase())
+        {
+            await database.InitializeAsync();
+        }
+
+        using SQLiteConnection connection = fixture.OpenRawConnection();
+        AssertCurrentSchema(connection);
+        Assert.Equal(
+            0,
+            connection.ExecuteScalar<int>(
+                "SELECT COUNT(*) FROM ArchiveDomainFacts;"));
+        Assert.Equal(
+            0,
+            connection.ExecuteScalar<int>(
+                "SELECT COUNT(*) FROM ArchiveDomainRevisions;"));
+    }
+
+    [Fact]
     public async Task InitializeAsync_VersionFourLateFailure_RollsBackEntireMigration()
     {
         await using var fixture = MigrationFixture.Create();
@@ -582,9 +620,12 @@ public sealed class FurinaDatabaseMigrationTests
             .ToArray();
         Assert.Equal(
             [
+                "ArchiveDomainFacts",
+                "ArchiveDomainRevisions",
                 "ArchiveUndoSettings",
                 "DataChangeSetArchives",
                 "DataChangeSets",
+                "DomainPortableReceipts",
                 "EntityChanges",
                 "GachaRecords",
                 "GachaRevisions",

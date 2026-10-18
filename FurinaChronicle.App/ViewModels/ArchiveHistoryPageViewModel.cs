@@ -8,6 +8,7 @@ using FurinaChronicle.Core.History;
 using FurinaChronicle.Services.Archives;
 using FurinaChronicle.Services.Gacha.History;
 using FurinaChronicle.Services.History;
+using FurinaChronicle.Services.HistoryDomains;
 using System.Collections.ObjectModel;
 
 namespace FurinaChronicle.App.ViewModels;
@@ -15,7 +16,8 @@ namespace FurinaChronicle.App.ViewModels;
 public partial class ArchiveHistoryPageViewModel(
     GetPlayerArchives getPlayerArchives,
     IGachaAtomicChangeStore atomicChangeStore,
-    IArchiveOperationHistoryStore operationHistoryStore)
+    IArchiveOperationHistoryStore operationHistoryStore,
+    IArchiveDomainHistoryStore domainHistoryStore)
     : ObservableObject
 {
     public ObservableCollection<PlayerArchive> Archives { get; } = [];
@@ -118,9 +120,19 @@ public partial class ArchiveHistoryPageViewModel(
                 SelectedOperationRevisions.Add(
                     GachaRevisionDisplayItem.FromDomain(revision));
             }
-            RevisionStatus = revisions.Count == 0
-                ? "此操作没有保留可显示的 Gacha 修订内容。"
-                : $"已加载 {revisions.Count} 条修订。";
+            if (revisions.Count > 0)
+            {
+                RevisionStatus = $"已加载 {revisions.Count} 条 Gacha 修订。";
+                return;
+            }
+
+            IReadOnlyList<DomainRevisionItem> domainRevisions =
+                await domainHistoryStore.GetDomainRevisionsAsync(
+                    SelectedOperation.Item.ChangeSetId);
+            RevisionStatus = domainRevisions.Count == 0
+                ? "此操作没有保留可显示的事实修订内容。"
+                : $"此操作包含 {domainRevisions.Count} 条角色、武器或挑战修订；" +
+                    "当前页面仅提供领域摘要，完整详情将在对应业务页面中呈现。";
         });
     }
 
