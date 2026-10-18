@@ -5,11 +5,13 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using FurinaChronicle.Core.Challenges;
+using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.History;
 using FurinaChronicle.Core.Inventory;
 using FurinaChronicle.Core.Records;
 using FurinaChronicle.Services.History;
 using FurinaChronicle.Services.HistoryDomains;
+using FurinaChronicle.Services.HistoryDomains.Portable;
 using FurinaChronicle.Services.Gacha.History;
 using SQLite;
 
@@ -115,6 +117,179 @@ public sealed partial class SqliteGachaAtomicChangeStore
             DomainCommitEnvelope.From(request),
             proposals,
             cancellationToken);
+    }
+
+    public Task<ArchiveOperationResult> ApplyArchiveDomainPortableAsync(
+        ArchiveDomainPortableApplyRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (request.Package.FormatMajor != 1 ||
+            request.Plan.ConflictCount != 0 ||
+            request.Package.DatasetKind != request.Plan.DatasetKind ||
+            !string.Equals(
+                request.Package.PackageFingerprint,
+                request.Plan.PackageFingerprint,
+                StringComparison.Ordinal))
+        {
+            return Task.FromResult(DomainConflict(
+                "The Portable package or plan is incompatible or contains conflicts."));
+        }
+
+        Dictionary<Guid, ArchiveDomainPortableAccount> sources =
+            request.Package.Accounts.ToDictionary(
+                account => account.SourceAccountId);
+        var accountExpectations = new List<PortableAccountExpectation>();
+        var proposals = new List<DomainProposal>();
+        var portableRevisions = new List<PortableManualRevision>();
+        foreach (ArchiveDomainPortableAccountPlan accountPlan in
+                 request.Plan.Accounts)
+        {
+            if (!sources.TryGetValue(
+                    accountPlan.SourceAccountId,
+                    out ArchiveDomainPortableAccount? source))
+            {
+                return Task.FromResult(DomainConflict(
+                    "The Portable plan references an account absent from the package."));
+            }
+            DateTimeOffset now = request.ReceivedAt;
+            var targetIdentity = new GameRoleIdentity(
+                accountPlan.TargetRoleIdentityId,
+                source.RoleIdentity.NaturalIdentity);
+            var targetAccount = new GameAccount(
+                accountPlan.TargetAccountId,
+                request.Plan.TargetArchiveId,
+                source.RoleIdentity.NaturalIdentity.Uid,
+                ResolvePortableServerRegion(
+                    source.RoleIdentity.NaturalIdentity.Server),
+                DisplayName: null,
+                IsPlaceholder: false,
+                now,
+                now,
+                targetIdentity);
+            accountExpectations.Add(new PortableAccountExpectation(
+                targetAccount,
+                accountPlan.CreateAccount));
+
+            foreach (ItemStateObservation observation in
+                     source.ItemObservations)
+            {
+                ItemStateObservation mapped = new(
+                    observation.ObservationId,
+                    accountPlan.TargetAccountId,
+                    observation.Kind,
+                    observation.CollectionCompleteness,
+                    observation.Entries,
+                    observation.Provenance);
+                proposals.Add(DomainProposal.Immutable(
+                    ItemObservationEntityKind,
+                    mapped.ObservationId.ToString(),
+                    mapped.GameAccountId,
+                    ((int)mapped.Kind).ToString(
+                        System.Globalization.CultureInfo.InvariantCulture),
+                    mapped.Provenance.Timestamps.ObservedAt?
+                        .UtcDateTime.Ticks,
+                    JsonSerializer.Serialize(
+                        ItemObservationPayload.FromDomain(mapped),
+                        DomainJsonOptions)));
+            }
+            foreach (ManualAcquisition acquisition in
+                     source.ManualAcquisitions)
+            {
+                ManualAcquisition mapped = MapAcquisition(
+                    acquisition,
+                    accountPlan.TargetAccountId);
+                proposals.Add(DomainProposal.Mutable(
+                    ManualAcquisitionEntityKind,
+                    mapped.AcquisitionId.ToString(),
+                    mapped.GameAccountId,
+                    mapped.TypeId,
+                    mapped.OccurredAt.UtcStart?.UtcDateTime.Ticks,
+                    JsonSerializer.Serialize(
+                        ManualAcquisitionPayload.FromDomain(mapped),
+                        DomainJsonOptions),
+                    expectedVersion: null));
+            }
+            foreach (ChallengeObservation observation in
+                     source.ChallengeObservations)
+            {
+                if (observation.Mode != ChallengeMode.SpiralAbyss)
+                {
+                    return Task.FromResult(DomainConflict(
+                        "The Portable package contains an unsupported challenge mode."));
+                }
+                ChallengeObservation mapped = new(
+                    observation.ObservationId,
+                    accountPlan.TargetAccountId,
+                    observation.Mode,
+                    observation.SeasonId,
+                    observation.PeriodStart,
+                    observation.PeriodEnd,
+                    observation.Completeness,
+                    observation.SpiralAbyssFloors,
+                    observation.Provenance);
+                proposals.Add(DomainProposal.Immutable(
+                    ChallengeObservationEntityKind,
+                    mapped.ObservationId.ToString(),
+                    mapped.GameAccountId,
+                    $"{(int)mapped.Mode}:{mapped.SeasonId}",
+                    mapped.Provenance.Timestamps.ObservedAt?
+                        .UtcDateTime.Ticks,
+                    JsonSerializer.Serialize(
+                        ChallengeObservationPayload.FromDomain(mapped),
+                        DomainJsonOptions)));
+            }
+            portableRevisions.AddRange(source.ManualRevisions.Select(
+                revision => new PortableManualRevision(
+                    accountPlan.TargetAccountId,
+                    revision with
+                    {
+                        Before = revision.Before is null
+                            ? null
+                            : MapAcquisition(
+                                revision.Before,
+                                accountPlan.TargetAccountId),
+                        After = revision.After is null
+                            ? null
+                            : MapAcquisition(
+                                revision.After,
+                                accountPlan.TargetAccountId),
+                    })));
+        }
+        if (proposals.Count == 0)
+        {
+            return Task.FromResult(DomainConflict(
+                "A Portable package must contain at least one supported fact."));
+        }
+
+        PlayerArchive? archiveToCreate = request.Plan.CreateArchive
+            ? new PlayerArchive(
+                request.Plan.TargetArchiveId,
+                request.Package.SourceArchiveName,
+                request.ReceivedAt,
+                request.ReceivedAt)
+            : null;
+        var portable = new PortableApplyContext(
+            request.Package.DatasetKind,
+            request.Package.PackageFingerprint,
+            request.Plan.TargetArchiveId,
+            request.ReceivedAt,
+            archiveToCreate,
+            accountExpectations,
+            portableRevisions,
+            request.Plan.AddCount,
+            request.Plan.SkipCount);
+        var envelope = new DomainCommitEnvelope(
+            request.OperationId,
+            DataChangeOperationKind.Import,
+            DataOrigin.FurinaImport,
+            request.Summary,
+            request.ReceivedAt,
+            request.ReceivedAt,
+            request.CaptureUndo,
+            request.CleanupConfirmationId,
+            portable);
+        return CommitDomainAsync(envelope, proposals, cancellationToken);
     }
 
     public async Task<IReadOnlyList<ItemStateObservation>>
@@ -229,6 +404,63 @@ public sealed partial class SqliteGachaAtomicChangeStore
                 new DateTimeOffset(row.CreatedAtUtcTicks, TimeSpan.Zero)))
             .ToArray();
     }
+
+    public async Task<ChallengeObservation?>
+        GetCurrentChallengeEvidenceAsync(
+            Guid gameAccountId,
+            ChallengeMode mode,
+            string seasonId,
+            CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(seasonId);
+        IReadOnlyList<ChallengeObservation> observations =
+            await GetChallengeObservationsAsync(
+                gameAccountId,
+                mode,
+                cancellationToken);
+        return observations
+            .Where(item => item.SeasonId == seasonId)
+            .OrderByDescending(item => item.Completeness)
+            .ThenByDescending(item =>
+                item.Provenance.Timestamps.ObservedAt?.UtcDateTime.Ticks ??
+                long.MinValue)
+            .ThenByDescending(item => item.ObservationId.Value)
+            .FirstOrDefault();
+    }
+
+    public async Task<IReadOnlyList<ManualAcquisitionRevisionItem>>
+        GetManualAcquisitionRevisionsAsync(
+            Guid gameAccountId,
+            CancellationToken cancellationToken = default)
+    {
+        ValidateAccountId(gameAccountId);
+        await database.InitializeAsync(cancellationToken);
+        List<ArchiveDomainRevisionRow> rows = await database.Connection
+            .QueryAsync<ArchiveDomainRevisionRow>(
+                """
+                SELECT * FROM ArchiveDomainRevisions
+                WHERE GameAccountId = ? AND DomainKind = ?
+                ORDER BY CreatedAtUtcTicks, rowid;
+                """,
+                gameAccountId.ToString("D"),
+                ManualAcquisitionEntityKind);
+        return rows.Select(row => new ManualAcquisitionRevisionItem(
+                ParseRequiredGuid(row.RevisionId, "revision"),
+                ParseRequiredGuid(row.ChangeSetId, "change set"),
+                (EntityChangeKind)row.ChangeKind,
+                row.BeforeVersion is null
+                    ? null
+                    : new FactVersion(row.BeforeVersion.Value),
+                row.AfterVersion is null
+                    ? null
+                    : new FactVersion(row.AfterVersion.Value),
+                DeserializeAcquisitionFromDomainSnapshot(
+                    row.BeforeSnapshotJson),
+                DeserializeAcquisitionFromDomainSnapshot(
+                    row.AfterSnapshotJson),
+                new DateTimeOffset(row.CreatedAtUtcTicks, TimeSpan.Zero)))
+            .ToArray();
+    }
     private async Task<ArchiveOperationResult> CommitDomainAsync(
         DomainCommitEnvelope envelope,
         IReadOnlyCollection<DomainProposal> proposals,
@@ -252,17 +484,64 @@ public sealed partial class SqliteGachaAtomicChangeStore
                 return;
             }
 
+            if (envelope.Portable is not null)
+            {
+                int receiptCount = connection.ExecuteScalar<int>(
+                    """
+                    SELECT COUNT(*) FROM DomainPortableReceipts
+                    WHERE DatasetKind = ? AND PackageFingerprint = ?
+                      AND TargetArchiveId = ?;
+                    """,
+                    envelope.Portable.DatasetKind.ToString(),
+                    envelope.Portable.PackageFingerprint,
+                    envelope.Portable.TargetArchiveId.ToString("D"));
+                if (receiptCount > 0)
+                {
+                    InsertDomainCommitResult(
+                        connection,
+                        envelope,
+                        changeSetId: null,
+                        ChangeExecutionStatus.NoOp,
+                        affectedRecordCount: 0);
+                    result = new ArchiveOperationResult(
+                        ChangeExecutionStatus.NoOp,
+                        ChangeSetId: null,
+                        AffectedRecordCount: 0);
+                    return;
+                }
+                if (!TryValidatePortableParents(
+                        connection,
+                        envelope.Portable,
+                        out string? parentConflict))
+                {
+                    result = DomainConflict(parentConflict!);
+                    return;
+                }
+                if (!TryValidatePortableRevisions(
+                        connection,
+                        envelope.Portable,
+                        out string? revisionConflict))
+                {
+                    result = DomainConflict(revisionConflict!);
+                    return;
+                }
+            }
+
             var prepared = new List<PreparedDomainMutation>();
             int suppressed = 0;
+            int skipped = 0;
             foreach (DomainProposal proposal in proposals)
             {
-                Guid archiveId = ReadArchiveId(
-                    connection,
-                    proposal.GameAccountId);
+                Guid archiveId = envelope.Portable?.TargetArchiveId ??
+                    ReadArchiveId(connection, proposal.GameAccountId);
+                string? roleIdentityId = envelope.Portable?
+                    .FindAccount(proposal.GameAccountId)?
+                    .Account.RoleIdentity?.Id.ToString();
                 if (ReadActiveDomainTombstone(
                         connection,
                         archiveId,
-                        proposal) is not null)
+                        proposal,
+                        roleIdentityId) is not null)
                 {
                     suppressed++;
                     continue;
@@ -350,6 +629,7 @@ public sealed partial class SqliteGachaAtomicChangeStore
                         }
                         if (payload.Length == 0)
                         {
+                            skipped++;
                             continue;
                         }
                     }
@@ -372,6 +652,7 @@ public sealed partial class SqliteGachaAtomicChangeStore
                         hash,
                         StringComparison.Ordinal))
                 {
+                    skipped++;
                     continue;
                 }
                 if (proposal.IsImmutable)
@@ -400,7 +681,21 @@ public sealed partial class SqliteGachaAtomicChangeStore
             {
                 return;
             }
-            if (prepared.Count == 0)
+            if (envelope.Portable is not null &&
+                (suppressed != 0 ||
+                 prepared.Count != envelope.Portable.ExpectedAddCount ||
+                 skipped != envelope.Portable.ExpectedSkipCount))
+            {
+                result = DomainConflict(
+                    suppressed != 0
+                        ? "The Portable plan contains permanently deleted facts and requires an explicit reintroduction decision."
+                        : "The Portable target changed after planning; create a new preview before applying.");
+                return;
+            }
+            int portableRevisionAdds = envelope.Portable is null
+                ? 0
+                : CountNewPortableRevisions(connection, envelope.Portable);
+            if (prepared.Count == 0 && portableRevisionAdds == 0)
             {
                 ChangeExecutionStatus status = suppressed > 0
                     ? ChangeExecutionStatus.Suppressed
@@ -422,6 +717,8 @@ public sealed partial class SqliteGachaAtomicChangeStore
             }
 
             Guid[] archiveIds = prepared.Select(item => item.ArchiveId)
+                .Append(envelope.Portable?.TargetArchiveId ?? Guid.Empty)
+                .Where(id => id != Guid.Empty)
                 .Distinct()
                 .ToArray();
             long snapshotBytes = prepared.Sum(item =>
@@ -460,6 +757,10 @@ public sealed partial class SqliteGachaAtomicChangeStore
                     cleanupPlan.Candidates.Select(item => item.ChangeSetId));
             }
 
+            if (envelope.Portable is not null)
+            {
+                InsertPortableParents(connection, envelope.Portable);
+            }
             Guid changeSetId = Guid.NewGuid();
             InsertDomainChangeSet(
                 connection,
@@ -467,7 +768,8 @@ public sealed partial class SqliteGachaAtomicChangeStore
                 changeSetId,
                 archiveIds,
                 prepared.Count);
-            bool captureUndo = envelope.CaptureUndo &&
+            bool captureUndo = prepared.Count > 0 &&
+                envelope.CaptureUndo &&
                 UndoRetentionPolicy.ShouldCaptureNewMaterial(
                     archiveIds.Select(id => ReadUndoLimit(connection, id)));
             long materialBytes = 0;
@@ -478,7 +780,15 @@ public sealed partial class SqliteGachaAtomicChangeStore
                     connection,
                     changeSetId,
                     envelope.CommittedAt,
-                    mutation);
+                    mutation,
+                    insertRevision: envelope.Portable is null ||
+                        mutation.After?.DomainKind !=
+                            ManualAcquisitionEntityKind &&
+                        mutation.Before?.DomainKind !=
+                            ManualAcquisitionEntityKind ||
+                        !envelope.Portable.HasRevisionFor(
+                            mutation.After?.EntityId ??
+                            mutation.Before!.EntityId));
                 if (captureUndo)
                 {
                     materialBytes += InsertDomainUndoMaterial(
@@ -486,6 +796,33 @@ public sealed partial class SqliteGachaAtomicChangeStore
                         changeSetId,
                         mutation);
                 }
+            }
+            if (envelope.Portable is not null)
+            {
+                foreach (PortableManualRevision revision in
+                         envelope.Portable.ManualRevisions)
+                {
+                    InsertPortableManualRevision(
+                        connection,
+                        changeSetId,
+                        revision);
+                }
+                connection.Execute(
+                    """
+                    INSERT INTO DomainPortableReceipts
+                        (ReceiptId, ChangeSetId, DatasetKind,
+                         PackageFingerprint, ReceivedAtUtcTicks,
+                         ReceivedAtOffsetMinutes, TargetArchiveId, RecordCount)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+                    """,
+                    Guid.NewGuid().ToString("D"),
+                    changeSetId.ToString("D"),
+                    envelope.Portable.DatasetKind.ToString(),
+                    envelope.Portable.PackageFingerprint,
+                    envelope.Portable.ReceivedAt.UtcDateTime.Ticks,
+                    checked((int)envelope.Portable.ReceivedAt.Offset.TotalMinutes),
+                    envelope.Portable.TargetArchiveId.ToString("D"),
+                    prepared.Count);
             }
             connection.Execute(
                 """
@@ -617,7 +954,8 @@ public sealed partial class SqliteGachaAtomicChangeStore
         SQLiteConnection connection,
         Guid changeSetId,
         DateTimeOffset committedAt,
-        PreparedDomainMutation mutation)
+        PreparedDomainMutation mutation,
+        bool insertRevision = true)
     {
         ArchiveDomainFactRow identity = mutation.After ?? mutation.Before!;
         string reference = $"{identity.GameAccountId}/{identity.EntityId}";
@@ -634,6 +972,10 @@ public sealed partial class SqliteGachaAtomicChangeStore
             (int)mutation.ChangeKind,
             mutation.Before?.Version,
             mutation.After?.Version);
+        if (!insertRevision)
+        {
+            return;
+        }
         connection.Execute(
             """
             INSERT INTO ArchiveDomainRevisions
@@ -707,6 +1049,267 @@ public sealed partial class SqliteGachaAtomicChangeStore
             affectedRecordCount,
             envelope.CommittedAt.UtcDateTime.Ticks);
 
+    private static bool TryValidatePortableParents(
+        SQLiteConnection connection,
+        PortableApplyContext portable,
+        out string? conflict)
+    {
+        string archiveId = portable.TargetArchiveId.ToString("D");
+        int archiveCount = connection.ExecuteScalar<int>(
+            "SELECT COUNT(*) FROM PlayerArchives WHERE Id = ?;",
+            archiveId);
+        if (portable.ArchiveToCreate is not null)
+        {
+            if (archiveCount != 0)
+            {
+                conflict = "The target archive already exists after planning.";
+                return false;
+            }
+        }
+        else if (archiveCount != 1)
+        {
+            conflict = "The planned target archive no longer exists.";
+            return false;
+        }
+
+        foreach (PortableAccountExpectation expectation in portable.Accounts)
+        {
+            GameAccount account = expectation.Account;
+            GameRoleIdentity identity = account.RoleIdentity!;
+            GameRoleIdentityRow? existingIdentity = connection
+                .Query<GameRoleIdentityRow>(
+                    "SELECT * FROM GameRoleIdentities WHERE Id = ?;",
+                    identity.Id.ToString())
+                .SingleOrDefault();
+            if (existingIdentity is not null &&
+                existingIdentity.ToDomain() != identity)
+            {
+                conflict =
+                    "A shared role identity ID maps to another natural identity.";
+                return false;
+            }
+            GameAccountRow? existingAccount = connection
+                .Query<GameAccountRow>(
+                    "SELECT * FROM GameAccounts WHERE Id = ?;",
+                    account.Id.ToString("D"))
+                .SingleOrDefault();
+            if (expectation.Create)
+            {
+                if (existingAccount is not null)
+                {
+                    conflict =
+                        "The planned target account ID is already in use.";
+                    return false;
+                }
+            }
+            else if (existingAccount is null ||
+                     existingAccount.PlayerArchiveId != archiveId ||
+                     existingAccount.GameRoleIdentityId !=
+                     identity.Id.ToString())
+            {
+                conflict =
+                    "The planned target account mapping changed after planning.";
+                return false;
+            }
+        }
+
+        conflict = null;
+        return true;
+    }
+
+    private static void InsertPortableParents(
+        SQLiteConnection connection,
+        PortableApplyContext portable)
+    {
+        if (portable.ArchiveToCreate is not null)
+        {
+            connection.Insert(PlayerArchiveRow.FromDomain(
+                portable.ArchiveToCreate));
+        }
+        foreach (PortableAccountExpectation expectation in portable.Accounts)
+        {
+            GameAccount account = expectation.Account;
+            GameRoleIdentity identity = account.RoleIdentity!;
+            int identityCount = connection.ExecuteScalar<int>(
+                "SELECT COUNT(*) FROM GameRoleIdentities WHERE Id = ?;",
+                identity.Id.ToString());
+            if (identityCount == 0)
+            {
+                connection.Insert(GameRoleIdentityRow.FromDomain(identity));
+            }
+            if (expectation.Create)
+            {
+                connection.Insert(GameAccountRow.FromDomain(account));
+            }
+        }
+    }
+
+    private static bool TryValidatePortableRevisions(
+        SQLiteConnection connection,
+        PortableApplyContext portable,
+        out string? conflict)
+    {
+        foreach (PortableManualRevision item in portable.ManualRevisions)
+        {
+            ArchiveDomainRevisionRow? existing = connection
+                .Query<ArchiveDomainRevisionRow>(
+                    "SELECT * FROM ArchiveDomainRevisions WHERE RevisionId = ?;",
+                    item.Revision.RevisionId.ToString("D"))
+                .SingleOrDefault();
+            if (existing is not null &&
+                !PortableRevisionEquals(existing, portable, item))
+            {
+                conflict =
+                    "A Portable manual revision ID already exists with different content.";
+                return false;
+            }
+        }
+        conflict = null;
+        return true;
+    }
+
+    private static int CountNewPortableRevisions(
+        SQLiteConnection connection,
+        PortableApplyContext portable) =>
+        portable.ManualRevisions.Count(item =>
+            connection.ExecuteScalar<int>(
+                "SELECT COUNT(*) FROM ArchiveDomainRevisions WHERE RevisionId = ?;",
+                item.Revision.RevisionId.ToString("D")) == 0);
+
+    private static bool PortableRevisionEquals(
+        ArchiveDomainRevisionRow existing,
+        PortableApplyContext portable,
+        PortableManualRevision item)
+    {
+        ManualAcquisitionRevisionItem revision = item.Revision;
+        ArchiveDomainFactRow? before = revision.Before is null
+            ? null
+            : CreatePortableAcquisitionRow(
+                revision.Before,
+                portable.TargetArchiveId,
+                revision.BeforeVersion?.Value ?? 1);
+        ArchiveDomainFactRow? after = revision.After is null
+            ? null
+            : CreatePortableAcquisitionRow(
+                revision.After,
+                portable.TargetArchiveId,
+                revision.AfterVersion?.Value ?? 1);
+        ArchiveDomainFactRow identity = after ?? before!;
+        return existing.DomainKind == ManualAcquisitionEntityKind &&
+            existing.EntityId == identity.EntityId &&
+            existing.GameAccountId == item.TargetAccountId.ToString("D") &&
+            existing.ChangeKind == (int)revision.ChangeKind &&
+            existing.BeforeVersion == revision.BeforeVersion?.Value &&
+            existing.AfterVersion == revision.AfterVersion?.Value &&
+            existing.BeforeSnapshotJson == (before is null
+                ? null
+                : SerializeDomainSnapshot(before)) &&
+            existing.AfterSnapshotJson == (after is null
+                ? null
+                : SerializeDomainSnapshot(after)) &&
+            existing.CreatedAtUtcTicks == revision.CreatedAt.UtcDateTime.Ticks;
+    }
+
+    private static void InsertPortableManualRevision(
+        SQLiteConnection connection,
+        Guid changeSetId,
+        PortableManualRevision portable)
+    {
+        ManualAcquisitionRevisionItem revision = portable.Revision;
+        if (connection.ExecuteScalar<int>(
+                "SELECT COUNT(*) FROM ArchiveDomainRevisions WHERE RevisionId = ?;",
+                revision.RevisionId.ToString("D")) != 0)
+        {
+            return;
+        }
+        Guid archiveId = ReadArchiveId(connection, portable.TargetAccountId);
+        ArchiveDomainFactRow? before = revision.Before is null
+            ? null
+            : CreatePortableAcquisitionRow(
+                revision.Before,
+                archiveId,
+                revision.BeforeVersion?.Value ?? 1);
+        ArchiveDomainFactRow? after = revision.After is null
+            ? null
+            : CreatePortableAcquisitionRow(
+                revision.After,
+                archiveId,
+                revision.AfterVersion?.Value ?? 1);
+        ArchiveDomainFactRow identity = after ?? before ??
+            throw new InvalidDataException(
+                "A Portable manual revision has no before or after fact.");
+        connection.Execute(
+            """
+            INSERT INTO ArchiveDomainRevisions
+                (RevisionId, ChangeSetId, DomainKind, EntityId,
+                 GameAccountId, ChangeKind, BeforeVersion, AfterVersion,
+                 SnapshotFormatVersion, BeforeSnapshotJson,
+                 AfterSnapshotJson, CreatedAtUtcTicks)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """,
+            revision.RevisionId.ToString("D"),
+            changeSetId.ToString("D"),
+            ManualAcquisitionEntityKind,
+            identity.EntityId,
+            portable.TargetAccountId.ToString("D"),
+            (int)revision.ChangeKind,
+            revision.BeforeVersion?.Value,
+            revision.AfterVersion?.Value,
+            DomainSnapshotFormatVersion,
+            before is null ? null : SerializeDomainSnapshot(before),
+            after is null ? null : SerializeDomainSnapshot(after),
+            revision.CreatedAt.UtcDateTime.Ticks);
+    }
+
+    private static ArchiveDomainFactRow CreatePortableAcquisitionRow(
+        ManualAcquisition acquisition,
+        Guid archiveId,
+        long version)
+    {
+        string payload = JsonSerializer.Serialize(
+            ManualAcquisitionPayload.FromDomain(acquisition),
+            DomainJsonOptions);
+        return new ArchiveDomainFactRow
+        {
+            DomainKind = ManualAcquisitionEntityKind,
+            EntityId = acquisition.AcquisitionId.ToString(),
+            GameAccountId = acquisition.GameAccountId.ToString("D"),
+            ArchiveId = archiveId.ToString("D"),
+            TypeKey = acquisition.TypeId,
+            SequenceUtcTicks = acquisition.OccurredAt.UtcStart?
+                .UtcDateTime.Ticks,
+            Version = version,
+            ContentHash = ComputeDomainHash(payload),
+            SnapshotFormatVersion = DomainSnapshotFormatVersion,
+            SnapshotJson = payload,
+        };
+    }
+
+    private static ManualAcquisition MapAcquisition(
+        ManualAcquisition source,
+        Guid targetAccountId) =>
+        new(
+            source.AcquisitionId,
+            targetAccountId,
+            source.Kind,
+            source.TypeId,
+            source.OccurredAt,
+            source.Reason,
+            source.ReasonDetail,
+            source.Provenance);
+
+    private static GameServerRegion ResolvePortableServerRegion(
+        string server) => server switch
+        {
+            "cn_gf01" => GameServerRegion.ChinaOfficial,
+            "cn_qd01" => GameServerRegion.ChinaBilibili,
+            "os_usa" => GameServerRegion.America,
+            "os_euro" => GameServerRegion.Europe,
+            "os_asia" => GameServerRegion.Asia,
+            "os_cht" => GameServerRegion.TaiwanHongKongMacao,
+            _ => GameServerRegion.Unknown,
+        };
+
     private static ArchiveDomainFactRow? ReadDomainCurrent(
         SQLiteConnection connection,
         string domainKind,
@@ -720,7 +1323,8 @@ public sealed partial class SqliteGachaAtomicChangeStore
     private static TombstoneRow? ReadActiveDomainTombstone(
         SQLiteConnection connection,
         Guid archiveId,
-        DomainProposal proposal) =>
+        DomainProposal proposal,
+        string? roleIdentityId = null) =>
         connection.Query<TombstoneRow>(
                 """
                 SELECT TombstoneKey, TombstoneVersion, ArchiveId, IsActive,
@@ -731,7 +1335,7 @@ public sealed partial class SqliteGachaAtomicChangeStore
                 CreateDomainTombstoneKey(
                     archiveId,
                     proposal.GameAccountId,
-                    ReadRoleIdentityId(
+                    roleIdentityId ?? ReadRoleIdentityId(
                         connection,
                         proposal.GameAccountId),
                     proposal.DomainKind,
@@ -1001,6 +1605,16 @@ public sealed partial class SqliteGachaAtomicChangeStore
          throw new InvalidDataException("Invalid manual acquisition payload."))
         .ToDomain();
 
+    private static ManualAcquisition?
+        DeserializeAcquisitionFromDomainSnapshot(string? snapshotJson)
+    {
+        ArchiveDomainFactRow? row =
+            DeserializeDomainSnapshot(snapshotJson);
+        return row is null
+            ? null
+            : DeserializeManualAcquisition(row.SnapshotJson);
+    }
+
     private static ChallengeObservation DeserializeChallengeObservation(
         string json) =>
         (JsonSerializer.Deserialize<ChallengeObservationPayload>(
@@ -1037,7 +1651,8 @@ public sealed partial class SqliteGachaAtomicChangeStore
         DateTimeOffset StartedAt,
         DateTimeOffset CommittedAt,
         bool CaptureUndo,
-        Guid? CleanupConfirmationId)
+        Guid? CleanupConfirmationId,
+        PortableApplyContext? Portable = null)
     {
         public static DomainCommitEnvelope From(
             ItemObservationCommitRequest request) =>
@@ -1075,6 +1690,34 @@ public sealed partial class SqliteGachaAtomicChangeStore
                 request.CaptureUndo,
                 request.CleanupConfirmationId);
     }
+
+    private sealed record PortableApplyContext(
+        ArchiveDomainDatasetKind DatasetKind,
+        string PackageFingerprint,
+        Guid TargetArchiveId,
+        DateTimeOffset ReceivedAt,
+        PlayerArchive? ArchiveToCreate,
+        IReadOnlyList<PortableAccountExpectation> Accounts,
+        IReadOnlyList<PortableManualRevision> ManualRevisions,
+        int ExpectedAddCount,
+        int ExpectedSkipCount)
+    {
+        public PortableAccountExpectation? FindAccount(Guid accountId) =>
+            Accounts.SingleOrDefault(item => item.Account.Id == accountId);
+
+        public bool HasRevisionFor(string entityId) =>
+            ManualRevisions.Any(item =>
+                item.Revision.Before?.AcquisitionId.ToString() == entityId ||
+                item.Revision.After?.AcquisitionId.ToString() == entityId);
+    }
+
+    private sealed record PortableAccountExpectation(
+        GameAccount Account,
+        bool Create);
+
+    private sealed record PortableManualRevision(
+        Guid TargetAccountId,
+        ManualAcquisitionRevisionItem Revision);
 
     private sealed record DomainProposal(
         string DomainKind,

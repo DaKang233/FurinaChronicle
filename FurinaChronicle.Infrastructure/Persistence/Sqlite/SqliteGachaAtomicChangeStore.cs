@@ -11,6 +11,7 @@ using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Services.Gacha.History;
 using FurinaChronicle.Services.Gacha.Portable;
 using FurinaChronicle.Services.History;
+using FurinaChronicle.Services.HistoryDomains.Portable;
 using SQLite;
 
 namespace FurinaChronicle.Infrastructure.Persistence.Sqlite;
@@ -19,7 +20,8 @@ public sealed partial class SqliteGachaAtomicChangeStore
     : IGachaAtomicChangeStore,
       IGachaPortableImportApplier,
       IArchiveOperationHistoryStore,
-      FurinaChronicle.Services.HistoryDomains.IArchiveDomainHistoryStore
+      FurinaChronicle.Services.HistoryDomains.IArchiveDomainHistoryStore,
+      IArchiveDomainPortableApplier
 {
     internal const int SnapshotFormatVersion = 1;
     internal const string EntityKind = "gacha_record";

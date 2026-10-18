@@ -222,6 +222,16 @@ public sealed record DomainRevisionItem(
     string? AfterSnapshotJson,
     DateTimeOffset CreatedAt);
 
+public sealed record ManualAcquisitionRevisionItem(
+    Guid RevisionId,
+    Guid ChangeSetId,
+    EntityChangeKind ChangeKind,
+    FactVersion? BeforeVersion,
+    FactVersion? AfterVersion,
+    ManualAcquisition? Before,
+    ManualAcquisition? After,
+    DateTimeOffset CreatedAt);
+
 public interface IArchiveDomainHistoryStore
 {
     Task<ArchiveOperationResult> CommitItemObservationsAsync(
@@ -251,7 +261,18 @@ public interface IArchiveDomainHistoryStore
         ChallengeMode? mode = null,
         CancellationToken cancellationToken = default);
 
+    Task<ChallengeObservation?> GetCurrentChallengeEvidenceAsync(
+        Guid gameAccountId,
+        ChallengeMode mode,
+        string seasonId,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<DomainRevisionItem>> GetDomainRevisionsAsync(
         Guid changeSetId,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<ManualAcquisitionRevisionItem>>
+        GetManualAcquisitionRevisionsAsync(
+            Guid gameAccountId,
+            CancellationToken cancellationToken = default);
 }
