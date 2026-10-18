@@ -58,6 +58,7 @@ Chronicle 不是领域事实来源。没有注册 Chronicle 或删除其缓存�
 - 新增事实推进 source epoch，新查询重建而旧游标继续使用不可变旧代；纠正、普通／不可逆删除、Undo 与父范围 purge 推进 destructive epoch，旧游标返回 `CursorInvalidated`。
 - generation 最多保留当前与前一代、生命周期 24 小时；缓存清除／回收返回 `CursorExpired`。损坏或构建异常不会改变领域事实。
 - `IChronicleQueryService` 提供账号／档案 scope、Profile、筛选、重建、清缓存与 Markdown。没有 Chronicle 页面，因而本轮没有用户界面或真机交互验收项。
+- 自动重建仅批量读取已有本地 Gacha 元数据数据库，不调用会触发网络刷新的 Provider；已有缓存可恢复稳定 item ID 的角色／武器类型和星级，缺失时按安全 Unknown 退化。
 - 当前成就贡献器仅消费调用方提供的虚构/未来输入，没有成就数据库、UIAF 或真实重要目录。幻想真境剧诗、幽境危战没有生产 Contributor。
 
 ## 自动化与宿主证据
@@ -70,7 +71,7 @@ Chronicle 不是领域事实来源。没有注册 Chronicle 或删除其缓存�
 
 最终验证（2026-10-19，Windows 开发宿主）：
 
-- `dotnet test ... --configuration Release --no-restore`：516／516 通过；
+- `dotnet test ... --configuration Release --no-restore`：517／517 通过；
 - `build/Verify-Versioning.ps1`：通过；
 - `git diff --check`：通过；
 - Windows `net10.0-windows10.0.19041.0` Release：通过，0 警告／0 错误；
