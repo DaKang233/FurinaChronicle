@@ -301,6 +301,31 @@ public sealed class SqliteChronicleQueryServiceTests
             "SELECT COUNT(*) FROM ChronicleEntries;"));
     }
 
+    [Fact]
+    public async Task ArchiveAccountSelectionUsesDistinctGenerationIdentity()
+    {
+        await using SqliteRepositoryTestContext context =
+            SqliteRepositoryTestContext.Create();
+        (PlayerArchive archive, GameAccount first) = await Parents(context);
+        GameAccount second = SqliteRepositoryTestContext.CreateAccount(
+            archive.Id, uid: "800000002");
+        await context.Accounts.AddAsync(second);
+        await Commit(context, first.Id, "first", Time(10));
+        await Commit(context, second.Id, "second", Time(20));
+        var service = Service(context);
+        ChronicleScope selected = new(ChronicleScopeKind.Archive, archive.Id,
+            new HashSet<Guid> { first.Id });
+        ChronicleScope all = new(ChronicleScopeKind.Archive, archive.Id);
+        await service.RebuildAsync(selected, Catalog());
+
+        ChroniclePage selectedPage = await service.QueryAsync(Query(selected, 50));
+        ChroniclePage allPage = await service.QueryAsync(Query(all, 50));
+
+        Assert.Single(selectedPage.Entries);
+        Assert.Equal(2, allPage.Entries.Count);
+        Assert.NotEqual(selectedPage.GenerationId, allPage.GenerationId);
+    }
+
     private static SqliteChronicleQueryService Service(
         SqliteRepositoryTestContext context) => new(
             context.Database, context.Gacha, context.Accounts,

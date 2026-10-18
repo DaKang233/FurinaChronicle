@@ -235,12 +235,14 @@ public sealed class SqliteChronicleQueryService(
             connection.Execute(
                 """
                 INSERT INTO ChronicleGenerations
-                    (GenerationId, ScopeKind, ScopeId, SourceEpoch, DestructiveEpoch,
+                    (GenerationId, ScopeKind, ScopeId, ScopeSelectionHash,
+                     SourceEpoch, DestructiveEpoch,
                      ProjectionVersion, ProfileVersion, CatalogVersion,
                      CreatedAtUtcTicks, ExpiresAtUtcTicks, IsInvalidated)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0);
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0);
                 """,
                 generationId, (int)scope.Kind, scope.Id.ToString("D"),
+                ScopeSelectionHash(scope),
                 expected.SourceEpoch, expected.DestructiveEpoch,
                 ChronicleVersions.Projection, ChronicleVersions.Profile,
                 catalogVersion, now.UtcTicks, now.Add(GenerationLifetime).UtcTicks);
@@ -266,11 +268,12 @@ public sealed class SqliteChronicleQueryService(
             List<string> stale = connection.Query<GenerationIdRow>(
                     """
                     SELECT GenerationId FROM ChronicleGenerations
-                    WHERE ScopeKind = ? AND ScopeId = ?
+                    WHERE ScopeKind = ? AND ScopeId = ? AND ScopeSelectionHash = ?
                     ORDER BY CreatedAtUtcTicks DESC
                     LIMIT -1 OFFSET ?;
                     """,
-                    (int)scope.Kind, scope.Id.ToString("D"), MaximumGenerationsPerScope)
+                    (int)scope.Kind, scope.Id.ToString("D"),
+                    ScopeSelectionHash(scope), MaximumGenerationsPerScope)
                 .Select(item => item.GenerationId).ToList();
             foreach (string id in stale)
             {
@@ -379,12 +382,14 @@ public sealed class SqliteChronicleQueryService(
         return (await database.Connection.QueryAsync<GenerationRow>(
             """
             SELECT * FROM ChronicleGenerations
-            WHERE ScopeKind = ? AND ScopeId = ? AND SourceEpoch = ?
+            WHERE ScopeKind = ? AND ScopeId = ? AND ScopeSelectionHash = ?
+              AND SourceEpoch = ?
               AND DestructiveEpoch = ? AND IsInvalidated = 0
               AND ProjectionVersion = ? AND ProfileVersion = ?
             ORDER BY CreatedAtUtcTicks DESC LIMIT 1;
             """,
-            (int)scope.Kind, scope.Id.ToString("D"), state.SourceEpoch,
+            (int)scope.Kind, scope.Id.ToString("D"), ScopeSelectionHash(scope),
+            state.SourceEpoch,
             state.DestructiveEpoch, ChronicleVersions.Projection,
             ChronicleVersions.Profile)).SingleOrDefault();
     }
@@ -478,6 +483,15 @@ public sealed class SqliteChronicleQueryService(
 
         static string Set<T>(IReadOnlySet<T>? values) =>
             values is null ? string.Empty : string.Join(",", values.OrderBy(value => value));
+    }
+
+    private static string ScopeSelectionHash(ChronicleScope scope)
+    {
+        string canonical = scope.SelectedAccountIds is { Count: > 0 }
+            ? string.Join(",", scope.SelectedAccountIds.Order())
+            : "all";
+        return Convert.ToHexString(
+            SHA256.HashData(Encoding.UTF8.GetBytes(canonical))).ToLowerInvariant();
     }
 
     private static string EncodeCursor(CursorWire cursor) =>

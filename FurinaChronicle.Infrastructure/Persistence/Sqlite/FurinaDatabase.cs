@@ -630,7 +630,7 @@ public sealed class FurinaDatabase : IAsyncDisposable
             "ChronicleGenerations",
             [
                 "GenerationId", "ScopeKind", "ScopeId", "SourceEpoch",
-                "DestructiveEpoch", "ProjectionVersion", "ProfileVersion",
+                "ScopeSelectionHash", "DestructiveEpoch", "ProjectionVersion", "ProfileVersion",
                 "CatalogVersion", "CreatedAtUtcTicks", "ExpiresAtUtcTicks",
                 "IsInvalidated",
             ],
@@ -1129,6 +1129,7 @@ public sealed class FurinaDatabase : IAsyncDisposable
                 GenerationId TEXT PRIMARY KEY NOT NULL,
                 ScopeKind INTEGER NOT NULL,
                 ScopeId TEXT NOT NULL,
+                ScopeSelectionHash TEXT NOT NULL,
                 SourceEpoch INTEGER NOT NULL,
                 DestructiveEpoch INTEGER NOT NULL,
                 ProjectionVersion INTEGER NOT NULL,
@@ -1166,7 +1167,7 @@ public sealed class FurinaDatabase : IAsyncDisposable
         connection.Execute(
             """
             CREATE INDEX IX_ChronicleGenerations_Scope_Current
-            ON ChronicleGenerations(ScopeKind, ScopeId, IsInvalidated, CreatedAtUtcTicks DESC);
+            ON ChronicleGenerations(ScopeKind, ScopeId, ScopeSelectionHash, IsInvalidated, CreatedAtUtcTicks DESC);
             """);
         connection.Execute(
             """
