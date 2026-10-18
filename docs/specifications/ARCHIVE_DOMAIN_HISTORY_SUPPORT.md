@@ -7,7 +7,7 @@
 | 生产领域 | 角色状态、武器状态、手工获取 | 深境螺旋观察 |
 | 输入 | 有界内部 collector fixture；手工事实用例 | 有界内部 collector fixture |
 | 在线 Provider | Not implemented | Not implemented |
-| SQLite | Schema 6 `ArchiveDomainFacts` / `ArchiveDomainRevisions` | 同左 |
+| SQLite | 当前主库 Schema 7；领域事实仍为 `ArchiveDomainFacts` / `ArchiveDomainRevisions` | 同左 |
 | 查询 | 账号＋种类＋UTC 半开时间范围，最多 500/页 | 账号＋模式／期次＋UTC 半开时间范围，最多 500/页 |
 | 历史 | 全部不可变观察；手工事实稳定 ID＋修订链 | 全部观察＋当前最佳证据派生查询 |
 | 人类可读 | Markdown，含范围、来源、缺值、字段及派生变化 | Markdown，含周期、来源、层／间、星数和实际／未知时间 |
@@ -18,5 +18,6 @@
 | future major | 拒绝 | 拒绝 |
 | Windows / Android 编译 | 自动化验收项 | 自动化验收项 |
 | Windows↔Android 实际文件往返 | Not run；等待 8B.7 entry/harness，完成前不公开发布 | Not run；等待 8B.7 entry/harness，完成前不公开发布 |
+| Chronicle | Character／Weapon Profile；观察和状态变化默认显式开启才显示 | Challenge Profile；深境螺旋每期最多一个 Main 完成节点 |
 
-未实施：角色／武器和挑战的完整产品 UI、米游社／HoYoLAB 在线采集、幻想真境剧诗、幽境危战、Chronicle Contributor、完整 Archive、Sync / ChangeJournal。内部 collector fixture 用于证明 Source→Domain 边界，不是对外交换格式；用户交换应使用 Portable。当前 App 没有新领域 Portable 的产品入口，不能要求维护者从正式 UI 完成尚不可达的手工验收。
+未实施：角色／武器和挑战的完整产品 UI、米游社／HoYoLAB 在线采集、幻想真境剧诗、幽境危战、真实成就目录、完整 Archive、Sync / ChangeJournal。Chronicle Contributor 与服务级查询已实现，但没有完整产品页面，也不是领域保存／导出前置条件。内部 collector fixture 用于证明 Source→Domain 边界，不是对外交换格式；用户交换应使用 Portable。当前 App 没有新领域 Portable 的产品入口，不能要求维护者从正式 UI 完成尚不可达的手工验收。

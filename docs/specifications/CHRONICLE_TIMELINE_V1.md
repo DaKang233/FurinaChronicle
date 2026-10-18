@@ -2,7 +2,7 @@
 
 状态：Draft
 
-本文件定义首版 Chronicle 子系统的读取投影语义。ADR 0009、0010 的核心决定与产品行为继续 Accepted，但本文件不是已发布交换格式，也不是所有领域的共享持久化模型。
+本文件定义首版 Chronicle 子系统的读取投影语义。ADR 0009、0010 的核心决定与产品行为继续 Accepted；EntryId、证据退化、generation／游标生命周期与深境螺旋完成规则已由 ADR 0018／0019 冻结并在 8B.6 实现。本文件仍不是已发布交换格式，也不是所有领域的共享持久化模型。
 
 字段名、投影身份、Profile、序列和游标在 8B.6 Chronicle 验证前冻结；若其中某部分更早进入持久化或公开格式，则提前冻结该部分。8B.0 只冻结真正共享且影响数据解释、跨端身份、公开兼容或迁移安全的最小契约，不等待整个草案。
 
@@ -121,13 +121,14 @@ Domain + Kind + GameAccountId + SourceEntityType + SourceEntityId + ProjectionVe
 
 ## 6. 排序与游标
 
-本节是 Chronicle 子系统的分页候选方案，不是领域持久化或 8B.0 的通用前置条件。序列分配、重建生命周期以及修订/撤销/删除/Profile 变化后的旧游标行为仍须在 8B.6 fixture 评审中闭合；当前描述只覆盖新投影插入，不能据此宣称任意修改下均有稳定快照。
+本节的旧 `ProjectionSequence / AsOfSequence` 方案已由 ADR 0018 的有限不可变 generation 取代。它不是领域持久化或通用同步序列。
 
 默认顺序为：
 
 ```text
-ProjectionSequence <= AsOfSequence,
-SortAtUtc DESC, EntryId DESC
+Timed first,
+SortAtUtc DESC, EntryId DESC,
+then Undated by EntryId DESC
 ```
 
 `SortAtUtc`：
@@ -137,9 +138,9 @@ SortAtUtc DESC, EntryId DESC
 - 已知 `UncertainInterval`：`EndAt`；
 - 未知发生时间：依次使用 `ObservedAt`、`FetchedAt`，并设置相应 `SortBasis`。
 
-首次查询必须取得稳定的 `AsOfSequence`。游标必须至少包含 `AsOfSequence`、`SortAtUtc` 与 `EntryId`。请求下一页时，查询必须继续限制 `ProjectionSequence <= AsOfSequence`，并使用严格小于排序复合键的记录，保证同一次分页遍历期间刷新产生的记录不会插入后续页面。
+首次查询绑定一个已原子发布的不可变 generation。游标绑定 generation、规范 scope／filter／Profile hash、投影／Profile／游标版本和最后排序键。新增事实产生新 generation，但有效旧游标继续读取旧代；纠正、删除、Undo 或 purge 令受影响旧游标返回 `CursorInvalidated`。回收、清缓存或超期返回 `CursorExpired`，不得静默切到新第一页。
 
-新查询可以取得更大的 `AsOfSequence` 并看到刷新结果。若实现不维护投影序列，则不得声称支持刷新期间稳定分页。
+8B.6 首版每 scope 最多保留当前和前一代，生命周期 24 小时；这些是可调整的内部缓存策略，不是 Portable 或未来同步协议。
 
 ## 7. 查询范围
 

@@ -19,7 +19,7 @@
 - 8B.4 保持 Gacha 独立能力并适配共享基础；8B.5 提前建立角色/武器和挑战的独立窄纵切，允许 fixture 输入，不要求完整 UI/API。
 - 8B.6 在领域独立保存、查询和导出后验证 Chronicle 消费；8B.7 汇总迁移、平台和回归门槛。
 - 具体字段、领域 Schema 和 Chronicle 查询细节在对应工作包首次持久化/公开使用前冻结，详见 [Phase 8B 实施计划](PHASE_8B_PLAN.md)。完整 Archive 和未来 Sync 不阻塞当前领域。
-- 当前状态：In progress；8B.0～8B.5 实现工作包已关闭。角色／武器状态、手工获取和首批深境螺旋已形成独立 Source→SQLite→Query/History→Markdown→Portable 窄纵切；主数据库为 Schema 6。新领域尚无产品文件入口，其 Windows↔Android 实际语义往返延期到 8B.7，完成前内部 Portable 不公开发布。此前 14,484 条 Gacha Portable 真实记录可在两端数秒内导入且内存无明显增长；100k 设备压力测试继续作为非阻塞质量项。
+- 当前状态：In progress；8B.0～8B.6 实现工作包已关闭。主数据库为 Schema 7；角色／武器状态、手工获取和首批深境螺旋保持独立能力，并由可重建 Chronicle generation 提供账号／档案 Profile、稳定分页与服务级 Markdown。100k 合成 Gacha 宿主压力已通过；这不是设备 UI 指标。新领域尚无产品文件入口，其 Windows↔Android 实际语义往返和真实应用 Schema 7 升级证据延期到 8B.7，完成前内部 Portable 不公开发布。
 
 ## Phase 8C：首个跨端闭环
 

@@ -2,7 +2,7 @@
 
 状态：Accepted target
 
-阶段状态：In progress（Phase 8A 已于 2026-10-04 关闭；8B.0～8B.5 实现工作包已关闭；新领域跨端文件证据延期到 8B.7）
+阶段状态：In progress（Phase 8A 已关闭；8B.0～8B.6 实现工作包已关闭；新领域跨端文件与真实 Schema 7 应用升级证据延期到 8B.7）
 
 维护者已确认 ADR 0009、0010 和 Q06。本计划按 [ADR 0011](../decisions/0011-domain-first-product-scope.md) 收敛：最小共享基础先行，领域先独立保存、查询和导出，Chronicle 后消费。不要求一次冻结所有未来领域。
 
@@ -160,6 +160,8 @@
 - 不要求完整 Chronicle UI；投影字段仍属于 Draft，直到对应契约评审完成。
 
 退出标准：投影确定性、账号副本范围、默认产品行为与重建测试通过；删除可选索引不影响领域查询/导出，且可重建相同业务结果。Chronicle 不承担完整领域数据导出。
+
+实现状态：Completed。Schema 7 增加事务内 scope epoch 和可删除 generation 缓存；Gacha、手工获取、物品观察、深境螺旋从现有领域进入确定投影，支持账号／档案 Profile 查询、严格游标和服务级 Markdown。实现与宿主压力证据见 [8B.6 实施记录](PHASE_8B6_IMPLEMENTATION.md)。完整 UI、真实成就目录和未支持挑战模式未进入本包。
 
 ## 工作包 8B.7：质量门槛与交接
 

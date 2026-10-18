@@ -2,7 +2,7 @@
 
 状态：Accepted implementation contract
 
-实施状态：In progress（P0 completed）
+实施状态：Implementation completed；平台构建已验证，产品 UI／真机交互不适用
 
 基线：`feat/phase-8 @ c38d6e17d92572cdb02962594b295c2390fbd90e`
 
@@ -41,14 +41,50 @@ Chronicle 不是领域事实来源。没有注册 Chronicle 或删除其缓存�
 | 工作包 | 状态 | 说明 |
 |---|---|---|
 | P0 契约、基线、反例 | Completed | Release 493／493 通过；ADR 0018／0019 冻结 |
-| P1 纯模型、证据、Profile | Pending | 不依赖 SQLite／MAUI／网络 |
-| P2 Gacha／手工获取 | Pending | 从当前有效 SQLite 事实投影 |
-| P3 状态观察／差异 | Pending | 不确定区间与显式开关 |
-| P4 深境螺旋／成就 fixture | Pending | 生产仅深境螺旋；成就只用虚构输入 |
-| P5 generation／游标 | Pending | 有界一致读取、原子发布与稳定分页 |
-| P6 写入失效闭环 | Pending | 生产入口、Undo、永久删除、purge |
-| P7 综合实库与报告 | Pending | 重建、故障、性能与领域自治 |
-| P8 版本、文档、构建 | Pending | 自动化与设备证据分离 |
+| P1 纯模型、证据、Profile | Completed | Core 纯模型；确定 EntryId、时间退化、Profile／状态开关 |
+| P2 Gacha／手工获取 | Completed | 当前有效事实；基础来源与派生注释分离；无覆盖不声明真实首次／ExactPity |
+| P3 状态观察／差异 | Completed | 只比较双方覆盖字段；Partial 缺项不造删除；变化为不确定区间 |
+| P4 深境螺旋／成就 fixture | Completed | 生产仅深境螺旋；成就仅虚构重要目录输入 |
+| P5 generation／游标 | Completed | Schema 7；24 小时、每 scope 最多两代；严格 scope／filter／Profile 游标 |
+| P6 写入失效闭环 | Completed | 事实表事务触发器覆盖新增／修改／删除；Undo、父范围删除和 purge 受控失效 |
+| P7 综合实库与报告 | Completed | SQLite→Contributor→Profile→Markdown；取消不发布半代；100k 宿主压力通过 |
+| P8 版本、文档、构建 | Completed | `0.8.7 / 8B.6`；Release 测试及双平台构建记录见下 |
+
+## 实际实现边界
+
+- 当前主库为 Schema 7；`ChronicleScopeStates` 是最小权威 epoch，`ChronicleGenerations`／`ChronicleEntries` 是可删除缓存，不进入任何 Portable。
+- generation 构建按 500 条读取来源，单账号来源事实和单 scope 投影各有 250,000 条硬上限；超过时明确失败且不发布半代。
+- 同一 generation 采用 `Timed → Undated`、`SortAtUtc DESC, EntryId DESC`；区间筛选按 UTC 半开窗口重叠判断。
+- 新增事实推进 source epoch，新查询重建而旧游标继续使用不可变旧代；纠正、普通／不可逆删除、Undo 与父范围 purge 推进 destructive epoch，旧游标返回 `CursorInvalidated`。
+- generation 最多保留当前与前一代、生命周期 24 小时；缓存清除／回收返回 `CursorExpired`。损坏或构建异常不会改变领域事实。
+- `IChronicleQueryService` 提供账号／档案 scope、Profile、筛选、重建、清缓存与 Markdown。没有 Chronicle 页面，因而本轮没有用户界面或真机交互验收项。
+- 当前成就贡献器仅消费调用方提供的虚构/未来输入，没有成就数据库、UIAF 或真实重要目录。幻想真境剧诗、幽境危战没有生产 Contributor。
+
+## 自动化与宿主证据
+
+- 纯规则覆盖稳定 EntryId、Instant／Interval／UncertainInterval／Undated、同秒／聚合记录、Unknown／Ambiguous、安全本地里程碑、状态覆盖边界和深渊每期单一完成节点。
+- SQLite 集成覆盖新增后旧游标稳定、新查询换代；纠正／Undo／不可逆删除失效；跨 filter 拒绝；清缓存过期；跨档案隔离；取消无半代。
+- 综合用例从生产 Gacha、物品观察、深境螺旋事务写入口开始，完成 Profile 查询和 Markdown 输出，而非直接填投影表。
+- 显式 100,000 条合成 Gacha 宿主压力：测试通过；55.49 秒（含编译、测试宿主和 fixture 写入），监测到的 `dotnet test` 进程峰值工作集 137.3 MiB。该数据不是 Windows／Android 设备 UI 指标。
+- 压力反例发现并修复序号证据引用 O(n²) 增长；现在每条只保留首条／当前边界引用。
+
+最终验证（2026-10-19，Windows 开发宿主）：
+
+- `dotnet test ... --configuration Release --no-restore`：515／515 通过；
+- `build/Verify-Versioning.ps1`：通过；
+- `git diff --check`：通过；
+- Windows `net10.0-windows10.0.19041.0` Release：通过，0 警告／0 错误；
+- Android `net10.0-android` Release，`AndroidSdkDirectory=E:\AndroidSDK`：通过，0 警告／0 错误；
+- 版权头检查：通过。
+
+未运行／延期：真实 Windows Schema 6 应用数据库升级、Android 应用创建 Schema 7、真机 UI、跨端新领域文件往返。这些属于 8B.7 的设备/文件证据；自动迁移测试和双平台编译不冒充实际应用验收。由于本轮没有 Chronicle 产品页面，不存在可达的 Chronicle UI 人工测试步骤。
+
+## 8B.7 交接
+
+- 验证 Windows 现有 Schema 6 数据库升级到 Schema 7，以及 Android 新建 Schema 7 数据库；自动迁移测试不能替代真实应用数据库证据。
+- 为角色／武器与挑战 Portable 提供实际文件入口或受控 harness，完成 Windows↔Android 语义往返；格式仍为 internal / unpublished。
+- 若未来增加 Chronicle 页面，另行验证真实 UI 的分页、筛选、缓存重建和本地化文本；8B.6 不虚构该证据。
+- 继续验证禁用 Chronicle 注册后领域 Query／History／Markdown／Portable；架构上没有反向依赖，现有回归保持通过。
 
 ## 明确不属于本轮
 
