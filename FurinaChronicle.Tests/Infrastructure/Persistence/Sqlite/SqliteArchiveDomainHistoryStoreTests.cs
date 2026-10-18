@@ -409,6 +409,168 @@ public sealed class SqliteArchiveDomainHistoryStoreTests
         Assert.Equal(ChangeExecutionStatus.Applied, independent.Status);
     }
 
+    [Fact]
+    public async Task PagedQueries_FilterRangeAndReturnNewestFirst()
+    {
+        await using SqliteRepositoryTestContext context =
+            await CreateContextAsync();
+        Guid accountId = await AddAccountAsync(context);
+        ItemStateObservation[] items = Enumerable.Range(0, 3)
+            .Select(index =>
+            {
+                ItemStateObservation seed = CharacterObservation(
+                    ItemObservationId.New(),
+                    accountId,
+                    80 + index);
+                return new ItemStateObservation(
+                    seed.ObservationId,
+                    accountId,
+                    seed.Kind,
+                    seed.CollectionCompleteness,
+                    seed.Entries,
+                    new RecordProvenance(
+                        DataOrigin.OfficialApi,
+                        new RecordTimestamps(
+                            ObservedAt: TestTime().AddDays(index))));
+            })
+            .ToArray();
+        await context.AtomicGacha.CommitItemObservationsAsync(
+            ItemRequest(items));
+
+        ManualAcquisition character = Acquisition(accountId, "character");
+        var weapon = new ManualAcquisition(
+            ManualAcquisitionId.New(),
+            accountId,
+            InventoryItemKind.Weapon,
+            "WEAPON_15514",
+            OccurrenceTime.At(
+                TestTime().AddDays(2),
+                TimePrecision.Second),
+            ManualAcquisitionReason.Other,
+            "event weapon",
+            new RecordProvenance(DataOrigin.UserEntered));
+        await context.AtomicGacha.CommitManualAcquisitionsAsync(
+            ManualRequest([
+                new ManualAcquisitionMutation(
+                    character.AcquisitionId,
+                    accountId,
+                    character),
+                new ManualAcquisitionMutation(
+                    weapon.AcquisitionId,
+                    accountId,
+                    weapon),
+            ], DataChangeOperationKind.Import));
+
+        ChallengeObservation first = Challenge(accountId, 3, sequence: 1);
+        ChallengeObservation second = Challenge(accountId, 6, sequence: 2);
+        await context.AtomicGacha.CommitChallengeObservationsAsync(
+            ChallengeRequest([first, second]));
+
+        ArchiveDomainPage<ItemStateObservation> itemPage =
+            await context.AtomicGacha.GetItemObservationPageAsync(
+                new ItemObservationPageQuery(
+                    accountId,
+                    InventoryItemKind.Character,
+                    ObservedFrom: TestTime().AddDays(1),
+                    ObservedTo: TestTime().AddDays(3),
+                    Limit: 1));
+        Assert.Equal(2, itemPage.TotalCount);
+        Assert.Single(itemPage.Items);
+        Assert.Equal(
+            TestTime().AddDays(2),
+            itemPage.Items[0].Provenance.Timestamps.ObservedAt);
+
+        ArchiveDomainPage<ManualAcquisitionState> manualPage =
+            await context.AtomicGacha.GetManualAcquisitionPageAsync(
+                new ManualAcquisitionPageQuery(
+                    accountId,
+                    InventoryItemKind.Weapon));
+        Assert.Equal(1, manualPage.TotalCount);
+        Assert.Equal(InventoryItemKind.Weapon,
+            Assert.Single(manualPage.Items).Acquisition.Kind);
+
+        ArchiveDomainPage<ChallengeObservation> challengePage =
+            await context.AtomicGacha.GetChallengeObservationPageAsync(
+                new ChallengeObservationPageQuery(
+                    accountId,
+                    ChallengeMode.SpiralAbyss,
+                    first.SeasonId,
+                    Limit: 1));
+        Assert.Equal(2, challengePage.TotalCount);
+        Assert.Equal(
+            second.ObservationId,
+            Assert.Single(challengePage.Items).ObservationId);
+    }
+
+    [Fact]
+    public async Task Challenge_AdjacentSameContentAndStableSourceRetryAreNoOp()
+    {
+        await using SqliteRepositoryTestContext context =
+            await CreateContextAsync();
+        Guid accountId = await AddAccountAsync(context);
+        ChallengeObservation first = Challenge(accountId, 6, sequence: 1);
+        Assert.Equal(
+            ChangeExecutionStatus.Applied,
+            (await context.AtomicGacha.CommitChallengeObservationsAsync(
+                ChallengeRequest([first]))).Status);
+
+        ChallengeObservation adjacent = CloneChallenge(
+            first,
+            ChallengeObservationId.New(),
+            TestTime().AddMinutes(2),
+            sourceRecordId: "different-source-record");
+        Assert.Equal(
+            ChangeExecutionStatus.NoOp,
+            (await context.AtomicGacha.CommitChallengeObservationsAsync(
+                ChallengeRequest([adjacent]))).Status);
+
+        string stableSource = first.Provenance.Source!.SourceRecordId!;
+        ChallengeObservation stableRetry = CloneChallenge(
+            first,
+            ChallengeObservationId.New(),
+            TestTime().AddDays(1),
+            stableSource);
+        Assert.Equal(
+            ChangeExecutionStatus.NoOp,
+            (await context.AtomicGacha.CommitChallengeObservationsAsync(
+                ChallengeRequest([stableRetry]))).Status);
+        Assert.Single(
+            await context.AtomicGacha.GetChallengeObservationsAsync(accountId));
+
+        ChallengeObservation conflictingSource = CloneChallenge(
+            Challenge(accountId, 3, sequence: 3),
+            ChallengeObservationId.New(),
+            TestTime().AddDays(2),
+            stableSource);
+        Assert.Equal(
+            ChangeExecutionStatus.Conflict,
+            (await context.AtomicGacha.CommitChallengeObservationsAsync(
+                ChallengeRequest([conflictingSource]))).Status);
+    }
+
+    private static ChallengeObservation CloneChallenge(
+        ChallengeObservation source,
+        ChallengeObservationId id,
+        DateTimeOffset observedAt,
+        string sourceRecordId) =>
+        new(
+            id,
+            source.GameAccountId,
+            source.Mode,
+            source.SeasonId,
+            source.PeriodStart,
+            source.PeriodEnd,
+            source.Completeness,
+            source.SpiralAbyssFloors,
+            new RecordProvenance(
+                DataOrigin.OfficialApi,
+                new RecordTimestamps(
+                    ObservedAt: observedAt,
+                    FetchedAt: observedAt.AddSeconds(1)),
+                new DataSourceReference(
+                    "miyoushe",
+                    sourceRecordId: sourceRecordId)));
+
     private static async Task<SqliteRepositoryTestContext> CreateContextAsync()
     {
         SqliteRepositoryTestContext context =

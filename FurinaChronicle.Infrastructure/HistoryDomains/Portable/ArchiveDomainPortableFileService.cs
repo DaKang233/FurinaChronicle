@@ -408,11 +408,10 @@ public sealed class ArchiveDomainPortableFileService(
         }
         else
         {
-            Dictionary<ChallengeObservationId, ChallengeObservation> existing =
-                (await history.GetChallengeObservationsAsync(
+            var existing = (await history.GetChallengeObservationsAsync(
                     targetAccountId,
                     cancellationToken: cancellationToken))
-                .ToDictionary(item => item.ObservationId);
+                .ToList();
             foreach (ChallengeObservation challenge in
                      source.ChallengeObservations)
             {
@@ -426,19 +425,107 @@ public sealed class ArchiveDomainPortableFileService(
                     challenge.Completeness,
                     challenge.SpiralAbyssFloors,
                     challenge.Provenance);
-                CountComparison(
-                    existing.TryGetValue(
-                        challenge.ObservationId,
-                        out ChallengeObservation? target),
-                    target,
-                    mapped,
-                    $"challenge observation {challenge.ObservationId}",
-                    ref add,
-                    ref skip,
-                    conflicts);
+                ChallengePlanDecision decision = ClassifyChallenge(
+                    existing,
+                    mapped);
+                if (decision == ChallengePlanDecision.Add)
+                {
+                    add++;
+                    existing.Add(mapped);
+                }
+                else if (decision == ChallengePlanDecision.Skip)
+                {
+                    skip++;
+                }
+                else
+                {
+                    conflicts.Add(
+                        $"challenge observation {challenge.ObservationId} conflicts with target evidence.");
+                }
             }
         }
         return (add, skip, conflicts.ToArray());
+    }
+
+    private static ChallengePlanDecision ClassifyChallenge(
+        IReadOnlyCollection<ChallengeObservation> existing,
+        ChallengeObservation proposed)
+    {
+        ChallengeObservation? sameId = existing.SingleOrDefault(item =>
+            item.ObservationId == proposed.ObservationId);
+        if (sameId is not null)
+        {
+            return ChallengeBusinessEquals(sameId, proposed)
+                ? ChallengePlanDecision.Skip
+                : ChallengePlanDecision.Conflict;
+        }
+        string? sourceRecordId = proposed.Provenance.Source?.SourceRecordId;
+        if (!string.IsNullOrWhiteSpace(sourceRecordId))
+        {
+            ChallengeObservation? sameSource = existing.SingleOrDefault(item =>
+                item.Mode == proposed.Mode &&
+                item.SeasonId == proposed.SeasonId &&
+                item.Provenance.Source?.SourceRecordId == sourceRecordId);
+            if (sameSource is not null)
+            {
+                return ChallengeBusinessEquals(sameSource, proposed)
+                    ? ChallengePlanDecision.Skip
+                    : ChallengePlanDecision.Conflict;
+            }
+        }
+        DateTimeOffset? observed = proposed.Provenance.Timestamps.ObservedAt;
+        if (observed is null)
+        {
+            return string.IsNullOrWhiteSpace(sourceRecordId)
+                ? ChallengePlanDecision.Conflict
+                : ChallengePlanDecision.Add;
+        }
+        ChallengeObservation[] ordered = existing
+            .Where(item =>
+                item.Mode == proposed.Mode &&
+                item.SeasonId == proposed.SeasonId &&
+                item.Provenance.Timestamps.ObservedAt is not null)
+            .OrderBy(item => item.Provenance.Timestamps.ObservedAt)
+            .ThenBy(item => item.ObservationId.Value)
+            .ToArray();
+        ChallengeObservation[] sameTime = ordered.Where(item =>
+            item.Provenance.Timestamps.ObservedAt!.Value.UtcDateTime ==
+            observed.Value.UtcDateTime).ToArray();
+        if (sameTime.Length > 0)
+        {
+            return sameTime.All(item => ChallengeBusinessEquals(item, proposed))
+                ? ChallengePlanDecision.Skip
+                : ChallengePlanDecision.Conflict;
+        }
+        ChallengeObservation? previous = ordered.LastOrDefault(item =>
+            item.Provenance.Timestamps.ObservedAt!.Value.UtcDateTime <
+            observed.Value.UtcDateTime);
+        ChallengeObservation? next = ordered.FirstOrDefault(item =>
+            item.Provenance.Timestamps.ObservedAt!.Value.UtcDateTime >
+            observed.Value.UtcDateTime);
+        return new[] { previous, next }
+            .Where(item => item is not null)
+            .Any(item => ChallengeBusinessEquals(item!, proposed))
+                ? ChallengePlanDecision.Skip
+                : ChallengePlanDecision.Add;
+    }
+
+    private static bool ChallengeBusinessEquals(
+        ChallengeObservation left,
+        ChallengeObservation right) =>
+        left.Mode == right.Mode &&
+        left.SeasonId == right.SeasonId &&
+        left.PeriodStart == right.PeriodStart &&
+        left.PeriodEnd == right.PeriodEnd &&
+        left.Completeness == right.Completeness &&
+        JsonSerializer.Serialize(left.SpiralAbyssFloors, CompactJson) ==
+        JsonSerializer.Serialize(right.SpiralAbyssFloors, CompactJson);
+
+    private enum ChallengePlanDecision
+    {
+        Add,
+        Skip,
+        Conflict,
     }
 
     private static void CountComparison<T>(

@@ -232,6 +232,37 @@ public sealed record ManualAcquisitionRevisionItem(
     ManualAcquisition? After,
     DateTimeOffset CreatedAt);
 
+public sealed record ArchiveDomainPage<T>(
+    IReadOnlyList<T> Items,
+    int Offset,
+    int Limit,
+    int TotalCount);
+
+public sealed record ItemObservationPageQuery(
+    Guid GameAccountId,
+    InventoryItemKind? Kind = null,
+    DateTimeOffset? ObservedFrom = null,
+    DateTimeOffset? ObservedTo = null,
+    int Offset = 0,
+    int Limit = 100);
+
+public sealed record ManualAcquisitionPageQuery(
+    Guid GameAccountId,
+    InventoryItemKind? Kind = null,
+    DateTimeOffset? OccurredFrom = null,
+    DateTimeOffset? OccurredTo = null,
+    int Offset = 0,
+    int Limit = 100);
+
+public sealed record ChallengeObservationPageQuery(
+    Guid GameAccountId,
+    ChallengeMode? Mode = null,
+    string? SeasonId = null,
+    DateTimeOffset? ObservedFrom = null,
+    DateTimeOffset? ObservedTo = null,
+    int Offset = 0,
+    int Limit = 100);
+
 public interface IArchiveDomainHistoryStore
 {
     Task<ArchiveOperationResult> CommitItemObservationsAsync(
@@ -251,15 +282,30 @@ public interface IArchiveDomainHistoryStore
         InventoryItemKind? kind = null,
         CancellationToken cancellationToken = default);
 
+    Task<ArchiveDomainPage<ItemStateObservation>>
+        GetItemObservationPageAsync(
+            ItemObservationPageQuery query,
+            CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<ManualAcquisitionState>> GetManualAcquisitionsAsync(
         Guid gameAccountId,
         bool includeDeleted = false,
         CancellationToken cancellationToken = default);
 
+    Task<ArchiveDomainPage<ManualAcquisitionState>>
+        GetManualAcquisitionPageAsync(
+            ManualAcquisitionPageQuery query,
+            CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<ChallengeObservation>> GetChallengeObservationsAsync(
         Guid gameAccountId,
         ChallengeMode? mode = null,
         CancellationToken cancellationToken = default);
+
+    Task<ArchiveDomainPage<ChallengeObservation>>
+        GetChallengeObservationPageAsync(
+            ChallengeObservationPageQuery query,
+            CancellationToken cancellationToken = default);
 
     Task<ChallengeObservation?> GetCurrentChallengeEvidenceAsync(
         Guid gameAccountId,

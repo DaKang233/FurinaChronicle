@@ -321,6 +321,40 @@ public sealed partial class SqliteGachaAtomicChangeStore
             .ToArray();
     }
 
+    public async Task<ArchiveDomainPage<ItemStateObservation>>
+        GetItemObservationPageAsync(
+            ItemObservationPageQuery query,
+            CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        ValidatePageQuery(query.GameAccountId, query.Offset, query.Limit);
+        (string where, object[] arguments) = BuildPagedWhere(
+            query.GameAccountId,
+            ItemObservationEntityKind,
+            query.Kind is null
+                ? null
+                : ((int)query.Kind.Value).ToString(
+                    System.Globalization.CultureInfo.InvariantCulture),
+            query.ObservedFrom,
+            query.ObservedTo,
+            typeKeyPrefix: false);
+        await database.InitializeAsync(cancellationToken);
+        int total = await database.Connection.ExecuteScalarAsync<int>(
+            $"SELECT COUNT(*) FROM ArchiveDomainFacts WHERE {where};",
+            arguments);
+        List<ArchiveDomainFactRow> rows = await database.Connection
+            .QueryAsync<ArchiveDomainFactRow>(
+                $"SELECT * FROM ArchiveDomainFacts WHERE {where} " +
+                "ORDER BY SequenceUtcTicks IS NULL, SequenceUtcTicks DESC, EntityId LIMIT ? OFFSET ?;",
+                [.. arguments, query.Limit, query.Offset]);
+        return new ArchiveDomainPage<ItemStateObservation>(
+            rows.Select(row => DeserializeItemObservation(row.SnapshotJson))
+                .ToArray(),
+            query.Offset,
+            query.Limit,
+            total);
+    }
+
     public async Task<IReadOnlyList<ManualAcquisitionState>>
         GetManualAcquisitionsAsync(
             Guid gameAccountId,
@@ -345,6 +379,41 @@ public sealed partial class SqliteGachaAtomicChangeStore
             .ToArray();
     }
 
+    public async Task<ArchiveDomainPage<ManualAcquisitionState>>
+        GetManualAcquisitionPageAsync(
+            ManualAcquisitionPageQuery query,
+            CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        ValidatePageQuery(query.GameAccountId, query.Offset, query.Limit);
+        (string where, object[] arguments) = BuildPagedWhere(
+            query.GameAccountId,
+            ManualAcquisitionEntityKind,
+            typeKey: null,
+            query.OccurredFrom,
+            query.OccurredTo,
+            typeKeyPrefix: false,
+            payloadKind: query.Kind is null ? null : (int)query.Kind.Value);
+        await database.InitializeAsync(cancellationToken);
+        int total = await database.Connection.ExecuteScalarAsync<int>(
+            $"SELECT COUNT(*) FROM ArchiveDomainFacts WHERE {where};",
+            arguments);
+        List<ArchiveDomainFactRow> rows = await database.Connection
+            .QueryAsync<ArchiveDomainFactRow>(
+                $"SELECT * FROM ArchiveDomainFacts WHERE {where} " +
+                "ORDER BY SequenceUtcTicks IS NULL, SequenceUtcTicks DESC, EntityId LIMIT ? OFFSET ?;",
+                [.. arguments, query.Limit, query.Offset]);
+        return new ArchiveDomainPage<ManualAcquisitionState>(
+            rows.Select(row => new ManualAcquisitionState(
+                    DeserializeManualAcquisition(row.SnapshotJson),
+                    new FactVersion(row.Version),
+                    ParseRequiredGuid(row.ArchiveId, "archive")))
+                .ToArray(),
+            query.Offset,
+            query.Limit,
+            total);
+    }
+
     public async Task<IReadOnlyList<ChallengeObservation>>
         GetChallengeObservationsAsync(
             Guid gameAccountId,
@@ -366,6 +435,43 @@ public sealed partial class SqliteGachaAtomicChangeStore
                 DeserializeChallengeObservation(row.SnapshotJson))
             .Where(observation => mode is null || observation.Mode == mode)
             .ToArray();
+    }
+
+    public async Task<ArchiveDomainPage<ChallengeObservation>>
+        GetChallengeObservationPageAsync(
+            ChallengeObservationPageQuery query,
+            CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        ValidatePageQuery(query.GameAccountId, query.Offset, query.Limit);
+        string? typeKey = query.SeasonId is null
+            ? query.Mode is null
+                ? null
+                : $"{(int)query.Mode.Value}:"
+            : $"{(int)(query.Mode ?? ChallengeMode.SpiralAbyss)}:{query.SeasonId.Trim()}";
+        (string where, object[] arguments) = BuildPagedWhere(
+            query.GameAccountId,
+            ChallengeObservationEntityKind,
+            typeKey,
+            query.ObservedFrom,
+            query.ObservedTo,
+            typeKeyPrefix: query.SeasonId is null && query.Mode is not null);
+        await database.InitializeAsync(cancellationToken);
+        int total = await database.Connection.ExecuteScalarAsync<int>(
+            $"SELECT COUNT(*) FROM ArchiveDomainFacts WHERE {where};",
+            arguments);
+        List<ArchiveDomainFactRow> rows = await database.Connection
+            .QueryAsync<ArchiveDomainFactRow>(
+                $"SELECT * FROM ArchiveDomainFacts WHERE {where} " +
+                "ORDER BY SequenceUtcTicks IS NULL, SequenceUtcTicks DESC, EntityId LIMIT ? OFFSET ?;",
+                [.. arguments, query.Limit, query.Offset]);
+        return new ArchiveDomainPage<ChallengeObservation>(
+            rows.Select(row => DeserializeChallengeObservation(
+                    row.SnapshotJson))
+                .ToArray(),
+            query.Offset,
+            query.Limit,
+            total);
     }
 
     public async Task<IReadOnlyList<DomainRevisionItem>>
@@ -461,6 +567,69 @@ public sealed partial class SqliteGachaAtomicChangeStore
                 new DateTimeOffset(row.CreatedAtUtcTicks, TimeSpan.Zero)))
             .ToArray();
     }
+
+    private static void ValidatePageQuery(
+        Guid accountId,
+        int offset,
+        int limit)
+    {
+        ValidateAccountId(accountId);
+        if (offset < 0 || limit is < 1 or > 500)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(limit),
+                "History pages require a non-negative offset and a limit from 1 through 500.");
+        }
+    }
+
+    private static (string Where, object[] Arguments) BuildPagedWhere(
+        Guid accountId,
+        string domainKind,
+        string? typeKey,
+        DateTimeOffset? from,
+        DateTimeOffset? to,
+        bool typeKeyPrefix,
+        int? payloadKind = null)
+    {
+        if (from is not null && to is not null &&
+            to.Value.ToUniversalTime() <= from.Value.ToUniversalTime())
+        {
+            throw new ArgumentException(
+                "The history time range must have an end after its start.");
+        }
+        var clauses = new List<string>
+        {
+            "GameAccountId = ?",
+            "DomainKind = ?",
+        };
+        var arguments = new List<object>
+        {
+            accountId.ToString("D"),
+            domainKind,
+        };
+        if (typeKey is not null)
+        {
+            clauses.Add(typeKeyPrefix ? "TypeKey LIKE ?" : "TypeKey = ?");
+            arguments.Add(typeKeyPrefix ? typeKey + "%" : typeKey);
+        }
+        if (payloadKind is not null)
+        {
+            clauses.Add("json_extract(SnapshotJson, '$.kind') = ?");
+            arguments.Add(payloadKind.Value);
+        }
+        if (from is not null)
+        {
+            clauses.Add("SequenceUtcTicks >= ?");
+            arguments.Add(from.Value.UtcDateTime.Ticks);
+        }
+        if (to is not null)
+        {
+            clauses.Add("SequenceUtcTicks < ?");
+            arguments.Add(to.Value.UtcDateTime.Ticks);
+        }
+        return (string.Join(" AND ", clauses), arguments.ToArray());
+    }
+
     private async Task<ArchiveOperationResult> CommitDomainAsync(
         DomainCommitEnvelope envelope,
         IReadOnlyCollection<DomainProposal> proposals,
@@ -595,21 +764,59 @@ public sealed partial class SqliteGachaAtomicChangeStore
                             "Ambiguous challenge observation: neither a trusted observation time nor a stable source record ID is available.");
                         return;
                     }
+                    if (current is not null &&
+                        ChallengeBusinessContentEquals(
+                            DeserializeChallengePayload(current.SnapshotJson),
+                            challenge))
+                    {
+                        payload = string.Empty;
+                    }
+                    ArchiveDomainFactRow[] related = connection
+                        .Query<ArchiveDomainFactRow>(
+                            """
+                            SELECT * FROM ArchiveDomainFacts
+                            WHERE GameAccountId = ? AND DomainKind = ?
+                              AND TypeKey = ? AND EntityId <> ?;
+                            """,
+                            proposal.GameAccountId.ToString("D"),
+                            proposal.DomainKind,
+                            proposal.TypeKey,
+                            proposal.EntityId)
+                        .ToArray();
+                    string? sourceRecordId =
+                        challenge.Provenance.SourceRecordId;
+                    if (payload.Length != 0 &&
+                        !string.IsNullOrWhiteSpace(sourceRecordId))
+                    {
+                        foreach (ArchiveDomainFactRow candidate in related)
+                        {
+                            ChallengeObservationPayload existing =
+                                DeserializeChallengePayload(
+                                    candidate.SnapshotJson);
+                            if (!string.Equals(
+                                    existing.Provenance.SourceRecordId,
+                                    sourceRecordId,
+                                    StringComparison.Ordinal))
+                            {
+                                continue;
+                            }
+                            if (ChallengeBusinessContentEquals(
+                                    existing,
+                                    challenge))
+                            {
+                                payload = string.Empty;
+                                break;
+                            }
+                            result = DomainConflict(
+                                "A stable challenge source record ID already exists with different business content.");
+                            return;
+                        }
+                    }
                     if (proposal.SequenceUtcTicks is long sequence)
                     {
-                        ArchiveDomainFactRow[] sameTime = connection
-                            .Query<ArchiveDomainFactRow>(
-                                """
-                                SELECT * FROM ArchiveDomainFacts
-                                WHERE GameAccountId = ? AND DomainKind = ?
-                                  AND TypeKey = ? AND SequenceUtcTicks = ?
-                                  AND EntityId <> ?;
-                                """,
-                                proposal.GameAccountId.ToString("D"),
-                                proposal.DomainKind,
-                                proposal.TypeKey,
-                                sequence,
-                                proposal.EntityId)
+                        ArchiveDomainFactRow[] sameTime = related
+                            .Where(item =>
+                                item.SequenceUtcTicks == sequence)
                             .ToArray();
                         foreach (ArchiveDomainFactRow candidate in sameTime)
                         {
@@ -632,6 +839,31 @@ public sealed partial class SqliteGachaAtomicChangeStore
                             skipped++;
                             continue;
                         }
+                        ArchiveDomainFactRow? previous = related
+                            .Where(item => item.SequenceUtcTicks < sequence)
+                            .OrderByDescending(item => item.SequenceUtcTicks)
+                            .ThenByDescending(item => item.EntityId)
+                            .FirstOrDefault();
+                        ArchiveDomainFactRow? next = related
+                            .Where(item => item.SequenceUtcTicks > sequence)
+                            .OrderBy(item => item.SequenceUtcTicks)
+                            .ThenBy(item => item.EntityId)
+                            .FirstOrDefault();
+                        if (new[] { previous, next }
+                            .Where(item => item is not null)
+                            .Any(item => ChallengeBusinessContentEquals(
+                                DeserializeChallengePayload(
+                                    item!.SnapshotJson),
+                                challenge)))
+                        {
+                            skipped++;
+                            continue;
+                        }
+                    }
+                    else if (payload.Length == 0)
+                    {
+                        skipped++;
+                        continue;
                     }
                 }
                 if (current is null)
