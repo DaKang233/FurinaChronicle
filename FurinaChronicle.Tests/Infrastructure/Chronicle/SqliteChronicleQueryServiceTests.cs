@@ -19,6 +19,61 @@ namespace FurinaChronicle.Tests.Infrastructure.Chronicle;
 public sealed class SqliteChronicleQueryServiceTests
 {
     [Fact]
+    [Trait("Category", "Stress")]
+    public async Task SyntheticHundredThousandGacha_RebuildsAndPages()
+    {
+        if (!string.Equals(
+                Environment.GetEnvironmentVariable("FURINA_RUN_CHRONICLE_STRESS"),
+                "1",
+                StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        await using SqliteRepositoryTestContext context =
+            SqliteRepositoryTestContext.Create();
+        (_, GameAccount account) = await Parents(context);
+        await context.Database.InitializeAsync();
+        using (var raw = context.OpenRawConnection())
+        {
+            raw.RunInTransaction(() =>
+            {
+                for (int index = 0; index < 100_000; index++)
+                {
+                    bool five = index % 100 == 0;
+                    DateTimeOffset time = Time(0).AddSeconds(index);
+                    raw.Execute(
+                        """
+                        INSERT INTO GachaRecords
+                            (GameAccountId, ExternalRecordId, ItemName, ItemId,
+                             ItemType, GachaType, UigfGachaType, RankType, Count,
+                             TimeUtcTicks, TimeOffsetMinutes, Origin, Version)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, 1);
+                        """,
+                        account.Id.ToString("D"), index.ToString("D12"),
+                        five ? "Synthetic Five" : "Synthetic Three",
+                        five ? "synthetic-five" : "synthetic-three",
+                        five ? "Character" : "Weapon", "301", "301",
+                        five ? 5 : 3, time.UtcTicks,
+                        (int)time.Offset.TotalMinutes, (int)DataOrigin.StandardImport);
+                }
+            });
+        }
+
+        var service = Service(context);
+        ChronicleScope scope = new(ChronicleScopeKind.Account, account.Id);
+        await service.RebuildAsync(scope, Catalog());
+        ChroniclePage first = await service.QueryAsync(Query(scope, 500));
+
+        Assert.Equal(500, first.Entries.Count);
+        Assert.NotNull(first.NextCursor);
+        using var verification = context.OpenRawConnection();
+        Assert.Equal(1_001, verification.ExecuteScalar<int>(
+            "SELECT COUNT(*) FROM ChronicleEntries WHERE GenerationId = ?;",
+            first.GenerationId));
+    }
+
+    [Fact]
     public async Task InsertKeepsOldCursorStableButNewQuerySeesNewGeneration()
     {
         await using SqliteRepositoryTestContext context =

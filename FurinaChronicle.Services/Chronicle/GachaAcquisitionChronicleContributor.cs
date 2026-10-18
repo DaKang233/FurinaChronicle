@@ -305,9 +305,12 @@ public sealed class GachaAcquisitionChronicleContributor
                     declaredComplete
                         ? "chronicle.evidence.declared-complete-order"
                         : "chronicle.evidence.local-record-order",
-                    ordered.Take(ordinal).Select(item =>
-                        $"{item.SourceEntityType}:{item.SourceEntityId}")
-                        .ToArray()));
+                    index == 0
+                        ? [$"{ordered[index].SourceEntityType}:{ordered[index].SourceEntityId}"]
+                        : [
+                            $"{ordered[0].SourceEntityType}:{ordered[0].SourceEntityId}",
+                            $"{ordered[index].SourceEntityType}:{ordered[index].SourceEntityId}",
+                        ]));
         }
     }
 
