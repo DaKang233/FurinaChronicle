@@ -2,7 +2,7 @@
 
 状态：Accepted target
 
-阶段状态：In progress（Phase 8A 已于 2026-10-04 关闭；8B.0～8B.4 实现工作包已完成，下一工作包为 8B.5）
+阶段状态：In progress（Phase 8A 已于 2026-10-04 关闭；8B.0～8B.5 实现工作包已关闭；新领域跨端文件证据延期到 8B.7）
 
 维护者已确认 ADR 0009、0010 和 Q06。本计划按 [ADR 0011](../decisions/0011-domain-first-product-scope.md) 收敛：最小共享基础先行，领域先独立保存、查询和导出，Chronicle 后消费。不要求一次冻结所有未来领域。
 
@@ -122,7 +122,7 @@
 
 ## 工作包 8B.5：独立领域窄纵切
 
-实施状态：Ready to start（8B.4 已关闭；具体字段、自然键和首批 fixture 在首次持久化／公开导出前按本节冻结）
+实施状态：Implementation completed（2026-10-18；自动化与双平台 Release 构建完成；内部 Portable 的 Windows↔Android 实际文件往返等待人工验收，未公开发布）
 
 按 [统一领域能力原则](../architecture/OVERVIEW.md) 验证角色/武器和挑战。允许 fixture 或文件导入作为早期输入，不要求完整官方采集和完整 UI。
 
@@ -144,6 +144,8 @@
 - 首批模式的自然键、内容指纹和范围语义在保存/导出前冻结；具体完成规则在相关完成节点实施前冻结。
 
 退出标准：两个领域都走通 Source fixture → Domain → SQLite → Query/History → Human-readable Export，以及 Portable → Re-import。即使没有 Contributor 或禁用 Chronicle，事实、历史和导出仍完整可用。
+
+实现与验证边界见 [Phase 8B.5 实施记录](PHASE_8B5_IMPLEMENTATION.md)、[角色／武器规范](../specifications/CHARACTER_WEAPON_HISTORY_V1.md)、[挑战规范](../specifications/CHALLENGE_HISTORY_V1.md) 与 [支持矩阵](../specifications/ARCHIVE_DOMAIN_HISTORY_SUPPORT.md)。Schema 6、跨领域 OperationHistory、有限 Undo／purge／Tombstone、分页查询、有界 collector adapter、Markdown、两个独立 Portable v1、Schema／示例和 A→B 重导入已完成。完整在线 Provider、产品 UI 和 Chronicle 消费不属于本包。
 
 ## 工作包 8B.6：Chronicle 综合消费验证
 
