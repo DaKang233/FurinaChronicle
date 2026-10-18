@@ -1,8 +1,8 @@
 # Phase 8B.5 实施契约与验证记录
 
-状态：Proposed implementation contract
+状态：Accepted implementation contract
 
-实施状态：P0 contract review
+实施状态：In progress（P0 completed）
 
 基线：`feat/phase-8 @ 6b3a8fe0a7bec8592da31a00e1e31512d17dcb8d`
 
@@ -52,16 +52,16 @@
 - 缺少可靠完成时间时 `OccurredAt` 保持 Unknown；周期末、观察时间和抓取时间不得冒充完成时间。
 - 8B.5 不冻结完成节点条件，只保存 8B.6 判断所需证据。
 
-## 待维护者确认的 Proposed 语义
+## 已确认语义
 
-[ADR 0016](../decisions/0016-character-weapon-observations-and-acquisitions.md) 和 [ADR 0017](../decisions/0017-challenge-observation-history.md) 当前为 Proposed。首次创建对应生产 Schema 或 Portable 格式前必须确认：
+[ADR 0016](../decisions/0016-character-weapon-observations-and-acquisitions.md) 和 [ADR 0017](../decisions/0017-challenge-observation-history.md) 已于 2026-10-18 接受：
 
 1. 手工 Week 使用周一 00:00 开始、固定来源偏移（默认 UTC+8）的 `[start,end)` 日历周；
 2. 观察重试、A→B→A、迟到和同刻冲突政策；
 3. 角色／武器集合与字段完整度，以及无实例 ID 武器采用类型汇总；
 4. Portable 携带全部不可变观察历史和手工事实修订，不携带本机 Undo 槽、限额或 Tombstone。
 
-在上述语义确认前，可以实现跨领域协调器、纯值对象和反例，但不得将依赖选择的字段写入生产数据库或宣称 Portable v1 已冻结。
+具体私有表结构和内部格式字段仍须由实现、Schema 和反例共同固定；未完成双平台往返前不得宣称 Portable 已公开发布。
 
 ## 生产入口与协调矩阵
 
@@ -92,9 +92,8 @@ P0 fixture 编号沿用实施计划的 S01～S04、M01～M05、C01～C06、I01�
 
 | 工作包 | 状态 | 说明 |
 |---|---|---|
-| P0 契约与反例 | In progress | 基线通过；ADR 0016／0017 等待维护者确认 |
+| P0 契约与反例 | Completed | 基线通过；ADR 0016／0017 已由维护者接受 |
 | P1 跨领域历史与 purge | Pending | 不依赖 Portable 公开格式，但必须先于新增领域生产写入 |
-| P2～P4 角色／武器纵切 | Blocked on P0 semantics | 可先完成纯模型和协调反例，持久化／格式等待确认 |
-| P5～P6 挑战纵切 | Blocked on P0 semantics | 持久化／格式等待确认 |
+| P2～P4 角色／武器纵切 | Pending | 字段、完整度、周边界和 Portable 历史范围已获授权 |
+| P5～P6 挑战纵切 | Pending | 身份、回返、迟到和 Portable 历史范围已获授权 |
 | P7 综合回归与交接 | Pending | 人工设备项单列，不用自动化冒充 |
-

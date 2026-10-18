@@ -2,7 +2,7 @@
 
 状态：Draft；内部格式未发布
 
-本规范的持久化和 Portable 语义依赖 Proposed ADR 0016。字段名称在 P0 评审后冻结。
+本规范的持久化和 Portable 语义依赖 Accepted ADR 0016。字段名称由 8B.5 的 Schema、机器校验和反例共同冻结。
 
 ## 数据集
 
@@ -24,4 +24,3 @@
 Portable 保存来源账号自然身份和共享身份引用、全部不可变观察、手工当前事实及修订链。目标数据库重新生成本地 `GameAccountId`，保留稳定观察／获取引用；来源 provenance 与目标接收 Receipt 分开。
 
 不包含本机 Undo、UndoLimit、OperationId、LocalOnlyTombstone、图标缓存、显示名称或 SQLite Row。future major、未知枚举、悬空引用、同 ID 不同内容和资源超限在写数据库前结构化拒绝。
-
