@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://www.dakang233.com/schemas/furina-character-weapon-history/1/dataset.schema.json",
+  "title": "Furina character and weapon history Portable v1",
+  "type": "object",
+  "required": ["format", "package"],
+  "properties": {
+    "format": { "const": "furina-domain-history" },
+    "package": {
+      "type": "object",
+      "required": ["dataset_kind", "format_major", "format_minor", "package_fingerprint", "source_archive_id", "source_archive_name", "exported_at", "accounts"],
+      "properties": {
+        "dataset_kind": { "const": 1 },
+        "format_major": { "const": 1 },
+        "format_minor": { "type": "integer", "minimum": 0 },
+        "package_fingerprint": { "$ref": "#/$defs/sha256" },
+        "source_archive_id": { "$ref": "#/$defs/guid" },
+        "source_archive_name": { "type": "string", "minLength": 1 },
+        "exported_at": { "type": "string", "format": "date-time" },
+        "accounts": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": { "$ref": "#/$defs/account" }
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "guid": { "type": "string", "format": "uuid" },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "identity": {
+      "type": "object",
+      "required": ["id", "natural_identity"],
+      "properties": {
+        "id": { "$ref": "#/$defs/guid" },
+        "natural_identity": {
+          "type": "object",
+          "required": ["game_biz", "server", "uid"],
+          "properties": {
+            "game_biz": { "enum": ["hk4e_cn", "hk4e_global"] },
+            "server": { "enum": ["cn_gf01", "cn_qd01", "os_usa", "os_euro", "os_asia", "os_cht"] },
+            "uid": { "type": "string", "pattern": "^[0-9]+$" }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "timestamps": {
+      "type": "object",
+      "properties": {
+        "observed_at": { "type": ["string", "null"], "format": "date-time" },
+        "fetched_at": { "type": ["string", "null"], "format": "date-time" },
+        "imported_at": { "type": ["string", "null"], "format": "date-time" }
+      },
+      "additionalProperties": true
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["origin", "timestamps"],
+      "properties": {
+        "origin": { "enum": [0, 1, 2, 3, 4, 5, 6, 7] },
+        "timestamps": { "$ref": "#/$defs/timestamps" },
+        "source": { "type": ["object", "null"] },
+        "acquisition_batch_id": { "oneOf": [{ "$ref": "#/$defs/guid" }, { "type": "null" }] }
+      },
+      "additionalProperties": true
+    },
+    "entry": {
+      "type": "object",
+      "required": ["kind", "type_id", "field_coverage", "field_completeness"],
+      "properties": {
+        "kind": { "enum": [1, 2] },
+        "type_id": { "type": "string", "minLength": 1 },
+        "instance_id": { "type": ["string", "null"] },
+        "quantity": { "type": ["integer", "null"], "minimum": 0 },
+        "level": { "type": ["integer", "null"], "minimum": 0 },
+        "progression": { "type": ["integer", "null"], "minimum": 0 },
+        "field_coverage": { "type": "integer", "minimum": 0, "maximum": 7 },
+        "field_completeness": { "enum": [0, 1, 2] }
+      },
+      "additionalProperties": true
+    },
+    "item_observation": {
+      "type": "object",
+      "required": ["observation_id", "game_account_id", "kind", "collection_completeness", "entries", "provenance"],
+      "properties": {
+        "observation_id": { "$ref": "#/$defs/guid" },
+        "game_account_id": { "$ref": "#/$defs/guid" },
+        "kind": { "enum": [1, 2] },
+        "collection_completeness": { "enum": [0, 1, 2] },
+        "entries": { "type": "array", "items": { "$ref": "#/$defs/entry" } },
+        "provenance": { "$ref": "#/$defs/provenance" }
+      },
+      "additionalProperties": true
+    },
+    "occurrence": {
+      "type": "object",
+      "required": ["kind"],
+      "properties": {
+        "kind": { "enum": [0, 1, 2, 3] },
+        "start": { "type": ["string", "null"], "format": "date-time" },
+        "end": { "type": ["string", "null"], "format": "date-time" },
+        "precision": { "type": ["integer", "null"], "minimum": 1, "maximum": 5 }
+      },
+      "additionalProperties": true
+    },
+    "manual_acquisition": {
+      "type": "object",
+      "required": ["acquisition_id", "game_account_id", "kind", "type_id", "occurred_at", "reason", "provenance"],
+      "properties": {
+        "acquisition_id": { "$ref": "#/$defs/guid" },
+        "game_account_id": { "$ref": "#/$defs/guid" },
+        "kind": { "enum": [1, 2] },
+        "type_id": { "type": "string", "minLength": 1 },
+        "occurred_at": { "$ref": "#/$defs/occurrence" },
+        "reason": { "enum": [0, 1, 2, 3, 4, 5] },
+        "reason_detail": { "type": ["string", "null"] },
+        "provenance": { "$ref": "#/$defs/provenance" }
+      },
+      "additionalProperties": true
+    },
+    "revision": {
+      "type": "object",
+      "required": ["revision_id", "change_set_id", "change_kind", "created_at"],
+      "properties": {
+        "revision_id": { "$ref": "#/$defs/guid" },
+        "change_set_id": { "$ref": "#/$defs/guid" },
+        "change_kind": { "enum": [1, 2, 3] },
+        "before_version": { "type": ["integer", "null"], "minimum": 1 },
+        "after_version": { "type": ["integer", "null"], "minimum": 1 },
+        "before": { "oneOf": [{ "$ref": "#/$defs/manual_acquisition" }, { "type": "null" }] },
+        "after": { "oneOf": [{ "$ref": "#/$defs/manual_acquisition" }, { "type": "null" }] },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": true
+    },
+    "account": {
+      "type": "object",
+      "required": ["source_account_id", "role_identity", "item_observations", "manual_acquisitions", "manual_revisions", "challenge_observations"],
+      "properties": {
+        "source_account_id": { "$ref": "#/$defs/guid" },
+        "role_identity": { "$ref": "#/$defs/identity" },
+        "item_observations": { "type": "array", "items": { "$ref": "#/$defs/item_observation" } },
+        "manual_acquisitions": { "type": "array", "items": { "$ref": "#/$defs/manual_acquisition" } },
+        "manual_revisions": { "type": "array", "items": { "$ref": "#/$defs/revision" } },
+        "challenge_observations": { "type": "array", "maxItems": 0 }
+      },
+      "additionalProperties": true
+    }
+  }
+}
