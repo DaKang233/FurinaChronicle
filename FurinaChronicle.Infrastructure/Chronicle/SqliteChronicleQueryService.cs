@@ -9,6 +9,7 @@ using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.Inventory;
 using FurinaChronicle.Core.Records;
 using FurinaChronicle.Infrastructure.Persistence.Sqlite;
+using FurinaChronicle.Infrastructure.Gacha.Metadata.Persistence;
 using FurinaChronicle.Services.Abstractions;
 using FurinaChronicle.Services.Chronicle;
 using FurinaChronicle.Services.HistoryDomains;
@@ -20,7 +21,8 @@ public sealed class SqliteChronicleQueryService(
     FurinaDatabase database,
     IGachaRecordRepository gachaRepository,
     IGameAccountRepository accountRepository,
-    IArchiveDomainHistoryStore domainStore) : IChronicleQueryService
+    IArchiveDomainHistoryStore domainStore,
+    GachaMetadataDatabase? metadataDatabase = null) : IChronicleQueryService
 {
     private const int SourcePageSize = 500;
     private const int MaximumSourceFactsPerAccount = 250_000;
@@ -119,6 +121,8 @@ public sealed class SqliteChronicleQueryService(
         ArgumentNullException.ThrowIfNull(itemCatalog);
         scope.Validate();
         await database.InitializeAsync(cancellationToken);
+        IChronicleItemCatalogSnapshot effectiveCatalog =
+            await ResolveCatalogAsync(itemCatalog, cancellationToken);
 
         for (int attempt = 0; attempt < 3; attempt++)
         {
@@ -147,7 +151,8 @@ public sealed class SqliteChronicleQueryService(
                 IReadOnlyList<Core.Challenges.ChallengeObservation> challengeObservations =
                     await ReadChallengesAsync(accountId, cancellationToken);
                 entries.AddRange(new GachaAcquisitionChronicleContributor().Project(
-                    accountId, gacha, manual, itemCatalog, new ChronicleProjectionEvidence()));
+                    accountId, gacha, manual, effectiveCatalog,
+                    new ChronicleProjectionEvidence()));
                 entries.AddRange(new InventoryChronicleContributor().Project(accountId, itemObservations));
                 entries.AddRange(new ChallengeChronicleContributor().Project(accountId, challengeObservations));
                 if (entries.Count > MaximumProjectedEntriesPerScope)
@@ -163,7 +168,7 @@ public sealed class SqliteChronicleQueryService(
             {
                 continue;
             }
-            await PublishAsync(scope, after, itemCatalog.Version, entries, cancellationToken);
+            await PublishAsync(scope, after, effectiveCatalog.Version, entries, cancellationToken);
             return;
         }
         throw new InvalidOperationException("Chronicle source facts changed repeatedly while building a generation.");
@@ -297,6 +302,21 @@ public sealed class SqliteChronicleQueryService(
             ids = ids.Where(scope.SelectedAccountIds.Contains);
         }
         return ids.Order().ToArray();
+    }
+
+    private async Task<IChronicleItemCatalogSnapshot> ResolveCatalogAsync(
+        IChronicleItemCatalogSnapshot requested,
+        CancellationToken cancellationToken)
+    {
+        if (requested is not EmptyChronicleItemCatalogSnapshot ||
+            metadataDatabase is null)
+        {
+            return requested;
+        }
+        (string version, IReadOnlyList<GachaMetadataItemRow> items) =
+            await metadataDatabase.ReadLocalSnapshotAsync(
+                GachaGame.GenshinImpact, cancellationToken);
+        return new LocalCatalogSnapshot(version, items);
     }
 
     private async Task<IReadOnlyList<ItemStateObservation>> ReadItemsAsync(
@@ -534,6 +554,39 @@ public sealed class SqliteChronicleQueryService(
         public long? SortAtUtcTicks { get; set; }
         public int IsUndated { get; set; }
         public string PayloadJson { get; set; } = string.Empty;
+    }
+
+    private sealed class LocalCatalogSnapshot : IChronicleItemCatalogSnapshot
+    {
+        private readonly Dictionary<string, ChronicleItemDescriptor> items;
+
+        public LocalCatalogSnapshot(
+            string version,
+            IEnumerable<GachaMetadataItemRow> source)
+        {
+            Version = $"gacha-metadata:{version}";
+            items = new Dictionary<string, ChronicleItemDescriptor>(
+                StringComparer.Ordinal);
+            foreach (GachaMetadataItemRow item in source)
+            {
+                InventoryItemKind? kind = item.ItemType switch
+                {
+                    "Character" => InventoryItemKind.Character,
+                    "Weapon" => InventoryItemKind.Weapon,
+                    _ => null,
+                };
+                if (kind is not null)
+                {
+                    items[item.ItemId] = new ChronicleItemDescriptor(
+                        item.ItemId, kind.Value, item.RankType);
+                }
+            }
+        }
+
+        public string Version { get; }
+
+        public ChronicleItemDescriptor? Find(string itemId) =>
+            items.GetValueOrDefault(itemId);
     }
 
     private sealed record CursorWire(

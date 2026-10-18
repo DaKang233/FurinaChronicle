@@ -9,6 +9,8 @@ using FurinaChronicle.Core.History;
 using FurinaChronicle.Core.Inventory;
 using FurinaChronicle.Core.Records;
 using FurinaChronicle.Infrastructure.Chronicle;
+using FurinaChronicle.Infrastructure.Gacha.Metadata;
+using FurinaChronicle.Infrastructure.Gacha.Metadata.Persistence;
 using FurinaChronicle.Services.Chronicle;
 using FurinaChronicle.Services.Gacha.History;
 using FurinaChronicle.Services.HistoryDomains;
@@ -326,6 +328,48 @@ public sealed class SqliteChronicleQueryServiceTests
         Assert.NotEqual(selectedPage.GenerationId, allPage.GenerationId);
     }
 
+    [Fact]
+    public async Task AutomaticRebuildUsesLocalMetadataWithoutRemoteRefresh()
+    {
+        await using SqliteRepositoryTestContext context =
+            SqliteRepositoryTestContext.Create();
+        (_, GameAccount account) = await Parents(context);
+        await Commit(context, account.Id, "1", Time(10),
+            itemType: "角色");
+        string directory = Path.Combine(Path.GetTempPath(),
+            "FurinaChronicleChronicleMetadataTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            await using var metadata = new GachaMetadataDatabase(
+                new GachaMetadataOptions(Path.Combine(directory, "metadata.db3")));
+            await metadata.InitializeAsync();
+            await metadata.Connection.ExecuteAsync(
+                """
+                INSERT INTO GachaMetadataItems
+                    (GameId, ItemId, ItemType, RankType, IconUrl)
+                VALUES (?, ?, ?, ?, NULL);
+                """,
+                (int)GachaGame.GenshinImpact, "synthetic-five", "Character", 5);
+            var service = new SqliteChronicleQueryService(
+                context.Database, context.Gacha, context.Accounts,
+                context.AtomicGacha, metadata);
+            ChronicleScope scope = new(ChronicleScopeKind.Account, account.Id);
+
+            ChroniclePage page = await service.QueryAsync(new ChronicleQuery(
+                scope, new ChronicleProfileRequest(ChronicleTimeline.Character),
+                new ChronicleFilter(IncludeUndated: true), 50));
+
+            ChronicleEntry entry = Assert.Single(page.Entries);
+            Assert.Equal("synthetic-five", entry.ItemId);
+            Assert.True(entry.Timelines.HasFlag(ChronicleTimeline.Character));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     private static SqliteChronicleQueryService Service(
         SqliteRepositoryTestContext context) => new(
             context.Database, context.Gacha, context.Accounts,
@@ -353,12 +397,13 @@ public sealed class SqliteChronicleQueryServiceTests
         string externalId,
         DateTimeOffset time,
         DataChangeOperationKind kind = DataChangeOperationKind.Import,
-        long? expectedVersion = null)
+        long? expectedVersion = null,
+        string itemType = "Character")
     {
         var record = new GachaRecord(accountId, externalId, "Synthetic", 5, time)
         {
             ItemId = "synthetic-five",
-            ItemType = "Character",
+            ItemType = itemType,
             UigfGachaType = "301",
             Provenance = new RecordProvenance(DataOrigin.StandardImport),
         };

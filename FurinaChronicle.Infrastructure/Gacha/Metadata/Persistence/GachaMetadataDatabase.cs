@@ -113,6 +113,27 @@ public sealed class GachaMetadataDatabase : IAsyncDisposable
     }
 
     internal async Task<(
+        string Version,
+        IReadOnlyList<GachaMetadataItemRow> Items)> ReadLocalSnapshotAsync(
+        GachaGame game,
+        CancellationToken cancellationToken)
+    {
+        await InitializeAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        List<GachaMetadataItemRow> items =
+            await Connection.QueryAsync<GachaMetadataItemRow>(
+                """
+                SELECT GameId, ItemId, ItemType, RankType, IconUrl
+                FROM GachaMetadataItems
+                WHERE GameId = ?
+                ORDER BY ItemId;
+                """,
+                (int)game);
+        GachaMetadataStateRow? state = await GetStateAsync(game, cancellationToken);
+        return (state?.ContentSha256 ?? "local-empty-v1", items);
+    }
+
+    internal async Task<(
         GachaMetadataItemRow? Item,
         IReadOnlyList<GachaMetadataNameRow> Names)> FindAsync(
         GachaGame game,
