@@ -52,7 +52,7 @@ Chronicle 不是领域事实来源。没有注册 Chronicle 或删除其缓存�
 
 ## 实际实现边界
 
-- 当前主库为 Schema 7；`ChronicleScopeStates` 是最小权威 epoch，`ChronicleGenerations`／`ChronicleEntries` 是可删除缓存，不进入任何 Portable。
+- 当前主库为 Schema 7；`ChronicleScopeStates` 是最小权威 epoch，`ChronicleGenerations`／`ChronicleEntries` 是可删除缓存，不进入任何 Portable。档案 scope 的规范账号选择集合有独立哈希，不会把子集 generation 误用于全档案查询。
 - generation 构建按 500 条读取来源，单账号来源事实和单 scope 投影各有 250,000 条硬上限；超过时明确失败且不发布半代。
 - 同一 generation 采用 `Timed → Undated`、`SortAtUtc DESC, EntryId DESC`；区间筛选按 UTC 半开窗口重叠判断。
 - 新增事实推进 source epoch，新查询重建而旧游标继续使用不可变旧代；纠正、普通／不可逆删除、Undo 与父范围 purge 推进 destructive epoch，旧游标返回 `CursorInvalidated`。
@@ -70,7 +70,7 @@ Chronicle 不是领域事实来源。没有注册 Chronicle 或删除其缓存�
 
 最终验证（2026-10-19，Windows 开发宿主）：
 
-- `dotnet test ... --configuration Release --no-restore`：515／515 通过；
+- `dotnet test ... --configuration Release --no-restore`：516／516 通过；
 - `build/Verify-Versioning.ps1`：通过；
 - `git diff --check`：通过；
 - Windows `net10.0-windows10.0.19041.0` Release：通过，0 警告／0 错误；
