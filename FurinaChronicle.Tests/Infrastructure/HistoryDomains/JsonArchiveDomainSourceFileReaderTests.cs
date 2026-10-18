@@ -92,6 +92,23 @@ public sealed class JsonArchiveDomainSourceFileReaderTests
             exported.SpiralAbyssFloors.Single().Chambers[1].CompletedAt.Kind);
         Assert.Equal(TimeSpan.FromHours(8),
             exported.Provenance.Timestamps.ObservedAt!.Value.Offset);
+
+        using var itemReport = new StringWriter();
+        await files.ExportMarkdownAsync(
+            archive.Id,
+            ArchiveDomainDatasetKind.CharacterWeaponHistory,
+            itemReport);
+        Assert.Contains("字段 Quantity", itemReport.ToString());
+        Assert.Contains("未提供", itemReport.ToString());
+        Assert.Contains("characters-20261018", itemReport.ToString());
+
+        using var challengeReport = new StringWriter();
+        await files.ExportMarkdownAsync(
+            archive.Id,
+            ArchiveDomainDatasetKind.ChallengeHistory,
+            challengeReport);
+        Assert.Contains("第 12 层", challengeReport.ToString());
+        Assert.Contains("发生时间未知", challengeReport.ToString());
     }
 
     [Fact]

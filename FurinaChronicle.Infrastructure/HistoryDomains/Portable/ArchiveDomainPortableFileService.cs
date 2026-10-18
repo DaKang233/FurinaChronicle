@@ -286,16 +286,28 @@ public sealed class ArchiveDomainPortableFileService(
             if (datasetKind ==
                 ArchiveDomainDatasetKind.CharacterWeaponHistory)
             {
-                foreach (ItemStateObservation observation in
-                         await history.GetItemObservationsAsync(
-                             account.Id,
-                             cancellationToken: cancellationToken))
+                IReadOnlyList<ItemStateObservation> observations =
+                    await history.GetItemObservationsAsync(
+                        account.Id,
+                        cancellationToken: cancellationToken);
+                foreach (ItemStateObservation observation in observations)
                 {
                     await destination.WriteLineAsync(
                         $"- 状态观察 `{observation.ObservationId}`：" +
                         $"{observation.Kind}，集合完整度 {observation.CollectionCompleteness}，" +
                         $"观察时间 {FormatTime(observation.Provenance.Timestamps.ObservedAt)}，" +
-                        $"来源 {observation.Provenance.Origin}，{observation.Entries.Count} 项");
+                        $"抓取时间 {FormatTime(observation.Provenance.Timestamps.FetchedAt)}，" +
+                        $"来源 {FormatSource(observation.Provenance)}，{observation.Entries.Count} 项");
+                    foreach (InventoryStateEntry entry in observation.Entries)
+                    {
+                        await destination.WriteLineAsync(
+                            $"  - `{EscapeMarkdown(entry.TypeId)}`：" +
+                            $"实例 {FormatMissing(entry.InstanceId)}，" +
+                            $"数量 {FormatMissing(entry.Quantity)}，" +
+                            $"等级 {FormatMissing(entry.Level)}，" +
+                            $"进度 {FormatMissing(entry.Progression)}，" +
+                            $"字段 {entry.FieldCoverage} / {entry.FieldCompleteness}");
+                    }
                 }
                 foreach (ManualAcquisitionState acquisition in
                          await history.GetManualAcquisitionsAsync(
@@ -306,7 +318,37 @@ public sealed class ArchiveDomainPortableFileService(
                         $"- 手工获取 `{acquisition.Acquisition.AcquisitionId}`：" +
                         $"{EscapeMarkdown(acquisition.Acquisition.TypeId)}，" +
                         $"{FormatOccurrence(acquisition.Acquisition.OccurredAt)}，" +
-                        $"原因 {acquisition.Acquisition.Reason}");
+                        $"原因 {acquisition.Acquisition.Reason}，" +
+                        $"说明 {FormatMissing(acquisition.Acquisition.ReasonDetail)}，" +
+                        $"版本 {acquisition.Version.Value}");
+                }
+                foreach (IGrouping<InventoryItemKind, ItemStateObservation>
+                         group in observations.GroupBy(item => item.Kind))
+                {
+                    ItemStateObservation[] ordered = group
+                        .OrderBy(item =>
+                            item.Provenance.Timestamps.ObservedAt?
+                                .UtcDateTime.Ticks ?? long.MinValue)
+                        .ThenBy(item => item.ObservationId.Value)
+                        .ToArray();
+                    for (int index = 1; index < ordered.Length; index++)
+                    {
+                        IReadOnlyList<InventoryStateChange> changes =
+                            ItemStateHistoryComparer.Compare(
+                                ordered[index - 1],
+                                ordered[index]);
+                        await destination.WriteLineAsync(
+                            $"- 派生变化 {group.Key}：" +
+                            $"{FormatTime(ordered[index - 1].Provenance.Timestamps.ObservedAt)} 至 " +
+                            $"{FormatTime(ordered[index].Provenance.Timestamps.ObservedAt)}，" +
+                            $"{changes.Count} 项；变化时刻通常仅能确定在该区间内");
+                        foreach (InventoryStateChange change in changes)
+                        {
+                            await destination.WriteLineAsync(
+                                $"  - `{EscapeMarkdown(change.StableItemKey)}`：" +
+                                $"{change.ChangeKind} / {change.Certainty}");
+                        }
+                    }
                 }
             }
             else
@@ -320,7 +362,24 @@ public sealed class ArchiveDomainPortableFileService(
                         $"- `{observation.SeasonId}` / `{observation.ObservationId}`：" +
                         $"{observation.Completeness}，观察时间 " +
                         $"{FormatTime(observation.Provenance.Timestamps.ObservedAt)}，" +
-                        $"{observation.SpiralAbyssFloors.Count} 层");
+                        $"周期 {FormatTime(observation.PeriodStart)} 至 " +
+                        $"{FormatTime(observation.PeriodEnd)}，来源 " +
+                        $"{FormatSource(observation.Provenance)}");
+                    foreach (SpiralAbyssFloorResult floor in
+                             observation.SpiralAbyssFloors)
+                    {
+                        await destination.WriteLineAsync(
+                            $"  - 第 {floor.Floor} 层：{floor.Stars} 星，" +
+                            $"{floor.Completeness}");
+                        foreach (SpiralAbyssChamberResult chamber in
+                                 floor.Chambers)
+                        {
+                            await destination.WriteLineAsync(
+                                $"    - 第 {chamber.Chamber} 间：" +
+                                $"{chamber.Stars} 星，" +
+                                $"完成时间 {FormatOccurrence(chamber.CompletedAt)}");
+                        }
+                    }
                 }
             }
         }
@@ -709,6 +768,16 @@ public sealed class ArchiveDomainPortableFileService(
             : $"{value.Kind} {FormatTime(value.Start)}" +
               (value.End is null ? string.Empty : $" 至 {FormatTime(value.End)}") +
               $"（精度 {value.Precision}）";
+
+    private static string FormatMissing(object? value) =>
+        value?.ToString() ?? "未提供";
+
+    private static string FormatSource(RecordProvenance provenance) =>
+        $"{provenance.Origin}" +
+        (provenance.Source is null
+            ? string.Empty
+            : $" / {EscapeMarkdown(provenance.Source.Provider ?? "未知提供方")}" +
+              $" / {EscapeMarkdown(provenance.Source.SourceRecordId ?? provenance.Source.SourceSnapshotId ?? "无引用")}");
 
     private sealed record PortableWireDocument(
         string Format,
