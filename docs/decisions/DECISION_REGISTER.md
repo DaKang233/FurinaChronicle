@@ -36,5 +36,7 @@
 
 | D30 | 角色／武器观察分别声明集合与字段完整度；无实例 ID 武器保存类型汇总；手工 Week 为周一 UTC+8 `[start,end)`；Portable 携带观察与事实修订但不迁移本机 Undo/Tombstone | Accepted | ADR 0016，维护者确认 |
 | D31 | 挑战观察使用稳定引用和相邻内容判重；可信顺序保留 A→B→A；迟到不倒退当前视图；同刻冲突不按导入顺序覆盖 | Accepted | ADR 0017，维护者确认 |
+| D32 | Chronicle 使用有界不可变 generation；新增事实不污染旧快照，纠正／删除／Undo／purge 使旧游标显式失效；全无时间事实进入 Undated | Accepted | ADR 0018，维护者确认 |
+| D33 | 深境螺旋首版以版本化目标末关 12-3 的规范化 Chamber 结果作为完成证据；完成与满星分离，每期主时间线最多一个完成节点 | Accepted | ADR 0019，维护者确认 |
 
 当前工作包契约和后期服务决策集中记录在 [OPEN_QUESTIONS.md](../project/OPEN_QUESTIONS.md)，按实施时点闭合，不得由 Agent 静默改变语义。D19、D20 的核心决定及既有产品行为继续 Accepted；D21 收敛依赖关系，不冻结 Chronicle Draft 的字段或未来同步协议。

@@ -21,3 +21,5 @@
 - [0015：统一 Gacha 全量导入模式](0015-unified-full-gacha-import-mode.md)
 - [0016：角色／武器状态观察与手工获取事实](0016-character-weapon-observations-and-acquisitions.md)
 - [0017：挑战观察身份、回返与乱序历史](0017-challenge-observation-history.md)
+- [0018：Chronicle generation、游标与证据退化](0018-chronicle-generation-and-evidence.md)
+- [0019：深境螺旋 Chronicle 完成证据](0019-spiral-abyss-chronicle-completion.md)
