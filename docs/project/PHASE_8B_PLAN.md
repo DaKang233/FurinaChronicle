@@ -2,7 +2,7 @@
 
 状态：Accepted target
 
-阶段状态：In progress（Phase 8A 已于 2026-10-04 关闭；8B.0～8B.3 实现工作包已完成，下一工作包为 8B.4）
+阶段状态：In progress（Phase 8A 已于 2026-10-04 关闭；8B.0～8B.4 实现工作包已完成，下一工作包为 8B.5）
 
 维护者已确认 ADR 0009、0010 和 Q06。本计划按 [ADR 0011](../decisions/0011-domain-first-product-scope.md) 收敛：最小共享基础先行，领域先独立保存、查询和导出，Chronicle 后消费。不要求一次冻结所有未来领域。
 
@@ -109,7 +109,7 @@
 
 ## 工作包 8B.4：现有 Gacha 适配
 
-实施状态：In progress（2026-10-08；生产语义见 ADR 0014，实施与验证记录见
+实施状态：Completed（2026-10-18；生产语义见 ADR 0014，实施与验证记录见
 [Phase 8B.4 实施契约](PHASE_8B4_IMPLEMENTATION.md)）
 
 - 将现有账号、时间和来源映射到共享基础；
@@ -121,6 +121,8 @@
 退出标准：现有抽卡回归不退化，旧记录迁移后归属和语义保持，不启用 Chronicle 仍能查询、查看历史和导出。
 
 ## 工作包 8B.5：独立领域窄纵切
+
+实施状态：Ready to start（8B.4 已关闭；具体字段、自然键和首批 fixture 在首次持久化／公开导出前按本节冻结）
 
 按 [统一领域能力原则](../architecture/OVERVIEW.md) 验证角色/武器和挑战。允许 fixture 或文件导入作为早期输入，不要求完整官方采集和完整 UI。
 

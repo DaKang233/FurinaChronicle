@@ -2,7 +2,7 @@
 
 状态：Accepted implementation contract
 
-实施状态：In progress（更新至 2026-10-18；真实双端基本流程已验证，当前性能／进度修正待设备回归）
+实施状态：Completed（2026-10-18；代码、自动化及 Windows／Android 真实流程验收已关闭；100k 设备压力测试延期为非阻塞质量项）
 
 基线：`feat/phase-8`，起始提交 `184f3cd97a421e72a41009d408e5007250bf7a28`
 
@@ -63,9 +63,9 @@ Tombstone／Portable Apply 基础。Q1～Q7 的首版产品选择由
 | P3 接管生产获取 | Completed | 三种刷新、UIGF／小助手共用核心和兼容 JSON 走统一政策；自动新档案／账号与事实同事务；精确档案名；相关全量回归通过 |
 | P4 删除闭环 | Completed | 普通删除、单条／账号／档案 purge，Resolved 档案身份与 Unresolved 本地账号 marker，共享 Undo 失效 |
 | P5 纠正／历史／Undo UI | Completed | `UserEntered` 纠正、修订查看、普通／永久删除、最新 eligible Undo、0～1000 设置；维护者报告双平台验证可行 |
-| P6 Portable 文件产品流 | Completed (current patch needs regression) | Windows／Android 真实 picker、导入、导出与幂等已验证；2026-10-18 增加分阶段进度和操作锁定，待两端重新走查 |
+| P6 Portable 文件产品流 | Completed | Windows／Android 真实 picker、导入、导出与幂等已验证；分阶段进度、操作锁定和空目标快路径已经双端重新走查 |
 | P7 关闭旧旁路 | Completed | production `SaveBatchAsync`、父实体 repository Delete 调用者为 0；架构反例测试保护边界 |
-| P8 双端真实验收 | Partial | 维护者已验证两端真实导入／导出、幂等和多次进程中断后的数据一致性；462 项测试、真实 14,484 条宿主性能测量和空间不足反例通过。当前 UI／快路径需设备回归，100k 设备级测量仍未取得 |
+| P8 双端真实验收 | Completed | 维护者已验证两端真实导入／导出、幂等、多次进程中断后的数据一致性、分阶段进度和操作锁定；14,484 条真实记录在两端均可于数秒内导入，内存无明显增长。100k 设备压力测试因暂无数据集延期，不阻塞本工作包关闭 |
 
 ## 本地提交记录
 
@@ -119,7 +119,7 @@ Tombstone／Portable Apply 基础。Q1～Q7 的首版产品选择由
 
 自动化覆盖 1,250 条完整 Apply、20 条分页冲突／全量覆盖、第二遍写入 500 条后故障回滚、取消清理，以及 100,000 条 Reader＋Plan。2026-10-17 Windows x64 测得 100k 容器为 1,482,268 bytes，相对测试基线的托管内存采样峰值增量为 18,236,048 bytes。
 
-2026-10-18 的真实双平台导出样本各含 9 个账号、14,484 条记录，压缩后 321,323／348,920 bytes，展开约 6.75 MB。此前导入到空目标会在两遍 Apply 中逐条查询当前事实、版本和 Tombstone。当前仅在“新账号＋档案没有任何 Tombstone（包括非活动版本高水位）＋账号 GUID 没有历史事实引用”时使用直接版本 1 快路径；其他场景仍走完整保守检查。Windows x64 临时数据库测量分别为 2,854 ms 和 2,781 ms，其中 Apply 为 930／936 ms。该结果是宿主诊断，不替代 Android 或 Windows UI 实测。`2,000,000` 继续只是安全上限。
+2026-10-18 的真实双平台导出样本各含 9 个账号、14,484 条记录，压缩后 321,323／348,920 bytes，展开约 6.75 MB。此前导入到空目标会在两遍 Apply 中逐条查询当前事实、版本和 Tombstone。当前仅在“新账号＋档案没有任何 Tombstone（包括非活动版本高水位）＋账号 GUID 没有历史事实引用”时使用直接版本 1 快路径；其他场景仍走完整保守检查。Windows x64 临时数据库测量分别为 2,854 ms 和 2,781 ms，其中 Apply 为 930／936 ms。随后维护者在 Windows 和 Android 上确认相同现实规模数据均可在数秒内完成导入，分阶段进度可见，导入期间操作被锁定，内存使用量无明显变化。`2,000,000` 继续只是防御性安全上限，不构成公开设备性能承诺。
 
 ## P8 当前证据（更新至 2026-10-18）
 
@@ -127,7 +127,8 @@ Tombstone／Portable Apply 基础。Q1～Q7 的首版产品选择由
 - `build/Verify-Versioning.ps1`：通过；人工版本源为 `0.8.5`／`8B.4`。
 - Windows Release build：`net10.0-windows10.0.19041.0`，独立输出目录下 0 警告、0 错误；默认输出被维护者当前 Visual Studio 调试实例锁定，不终止该实例。维护者已确认 Windows 真实 Portable 导入／导出、幂等和进程中断后数据正常。
 - Android Release build：`net10.0-android`，SDK `E:\AndroidSDK`，0 警告、0 错误；维护者已确认 Android 真实 Portable 导入／导出、幂等和进程中断后数据正常。
-- 维护者报告此前清单中的其他双平台功能可行；本次新增进度层和空目标快路径尚未安装到两端复验。100k 文件的 UI 进程耗时／峰值和真实低空间设备仍未测；低空间业务语义已有确定性自动测试。
+- 维护者已在 Windows 和 Android 上复验新增进度层、操作锁定与空目标快路径：现实样本均在数秒内导入完成，内存使用量无明显变化；导出后重导入继续保持幂等。
+- 当前没有可用的 100k 真实数据集。100k Reader＋Plan 已有宿主自动化证据，设备级耗时、峰值内存、中断和低空间组合测试延期为非阻塞压力测试；取得合适数据集后补测，不反向阻塞 8B.5。低空间业务语义已有确定性自动测试。
 - 未执行 `adb uninstall`、`pm clear` 或任何会清除现有手机数据的操作。
 
 ## Exit Criteria 核对
@@ -137,16 +138,17 @@ Tombstone／Portable Apply 基础。Q1～Q7 的首版产品选择由
 | 1 | Pass (automation/code) | 生产入口清单完整；legacy Save/Delete 无生产调用者 |
 | 2 | Pass (automation/code) | 所有已实现来源有 SQLite fixture；自动父实体与事实同事务 |
 | 3～7 | Pass (automation/code) | 变化分类、版本、Undo、purge、Portable 产品流均有反例；实际 UI／provider 证据另列 |
-| 8 | **Pass (code/host automation) / device Partial** | 产品 Reader、Plan/conflict、mutation 不再整体物化；宿主 100k 和真实 14,484 条样本测量通过，100k 双端 UI 进程实测仍缺失 |
-| 9 | **Pass (maintainer report) / current patch Partial** | 维护者确认两端真实 picker、导入／导出、幂等和进程中断安全；本次进度／快路径修改待复验 |
+| 8 | **Pass** | 产品 Reader、Plan/conflict、mutation 不再整体物化；宿主 100k 自动化和双端真实 14,484 条样本通过，设备内存无明显增长；100k 设备压力测试延期为非阻塞质量项 |
+| 9 | **Pass (maintainer report)** | 维护者确认两端真实 picker、分阶段进度、操作锁定、导入／导出、幂等、数秒级空目标导入和进程中断安全 |
 | 10 | Pass | 既有导入导出、统计、真实抽数和独立查询纳入 462 项测试；维护者报告双平台功能可行 |
-| 11 | Partial | 迁移/fail-safe fixture、版本校验和双平台 build 通过；双平台 publish／真实旧库与设备验收未在本轮完整执行 |
+| 11 | Pass within 8B.4 scope | 迁移/fail-safe fixture、版本校验和双平台 build 通过，现实数据流程已在两端验收；跨 Schema／平台完整发布矩阵仍由 8B.7 汇总，不作为 8B.4 重复门槛 |
 | 12 | Pass | Q1～Q7 已进入 ADR 0014；本表区分代码、自动化和设备证据 |
 
-结论：8B.4 的代码与自动化工作包已关闭，原先列出的真实双端基本流程已由维护者确认。整个 8B.4 暂不标记 Completed：需要在 Windows／Android 上复验本次进度层和空目标导入耗时，并按退出标准补充 100k 设备级资源证据，或由维护者明确接受 14,484 条真实样本作为当前设备门槛。
+结论：8B.4 已完成。代码、自动化、现实规模性能和 Windows／Android 产品流程均已取得对应证据；维护者接受 14,484 条真实记录作为当前设备验收样本。暂无 100k 真实数据集，因此 100k 设备级耗时、峰值内存和低空间组合验证转为后续非阻塞压力测试，不构成 8B.5 的前置条件。
 
 ## 证据纪律
 
 每个工作包完成后记录实际提交、自动化和平台证据。Build、CI、fixture、模拟器和
-真机证据分别标注；未实际执行的项目写 `Not run` 或 `Blocked`。完整 P8 未满足前，
-不得将整个 8B.4 标为 Completed。
+真机证据分别标注；未实际执行的项目写 `Not run`、`Blocked` 或 `Deferred`。延期的
+压力测试不得被描述为已经取得设备证据，也不得在缺少新风险信号时反向否定已经完成的
+现实规模验收。

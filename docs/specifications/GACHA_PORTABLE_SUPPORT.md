@@ -14,15 +14,15 @@
 | 导入 Plan/Preview | Windows/Android 共用代码 | 已实现只读 AddOnly 规划，不修改数据库 |
 | 生产 AddOnly Apply | SQLite Schema 5 | 服务入口已实现；档案、身份、账号、别名、事实、收据和 ChangeSet 同事务 |
 | CSV/XLSX 可读导出 | Windows/Android 共用代码 | 包含所选范围、档案/身份、原始字段、来源和时间说明 |
-| 产品文件导入／导出 UI | Windows/Android | picker、私有暂存、预览／映射／Apply、复验后 saver 已由维护者双端验证；2026-10-18 新增分阶段进度与页面操作锁定，待复验 |
+| 产品文件导入／导出 UI | Windows/Android | picker、私有暂存、预览／映射／Apply、复验后 saver、分阶段进度和页面操作锁定已由维护者双端验证 |
 | Windows 平台构建 | `net10.0-windows10.0.19041.0 / win-x64` | 2026-10-18 Release 独立输出构建通过，0 警告、0 错误 |
 | Android 平台构建 | `net10.0-android` | 2026-10-18 Release 构建通过，SDK `E:\AndroidSDK`，0 警告、0 错误 |
-| Windows ↔ Android 文件选择器实机往返 | — | 维护者报告双平台实际流程可行；本次 UI／快路径修改待回归，格式保持“未发布” |
+| Windows ↔ Android 文件选择器实机往返 | — | 维护者报告双平台实际流程及 UI／快路径回归均可行；格式保持“未发布” |
 | 真实数据库导入再导出 | 自动化＋双端维护者验收 | 导出后再导入幂等；多次进程中断后数据正常 |
 
 当前输入源先以有限 buffer 复制到私有、可 seek 暂存并计算容器 SHA-256；产品导入随后使用一次会话专用 SQLite，增量关联 UIGF/supplement，分页生成 Plan/冲突，并以两遍分页读取在单一主数据库事务中 Apply。旧 `IGachaPortablePackageReader` 只保留为兼容 Codec／小型 fixture，不注册为产品 UI 依赖。SQLite 导出端和 ZIP 交付复验同样为分页／流式。
 
-100k Reader＋Plan 已取得 Windows x64 宿主自动化证据。真实双平台样本为 9 个账号、14,484 条记录；空目标新账号在无任何 Tombstone／历史引用时使用受限版本 1 快路径，Windows x64 临时数据库两份样本端到端分别为 2,854 ms／2,781 ms，Apply 为 930 ms／936 ms。快路径之外仍保留完整版本和 Tombstone 检查。Windows／Android UI 的新进度体验、实际耗时以及 100k 峰值仍需回归。2,000,000 条限制仍是防御性安全上限，不是公开设备性能承诺；格式保持未发布。
+100k Reader＋Plan 已取得 Windows x64 宿主自动化证据。真实双平台样本为 9 个账号、14,484 条记录；空目标新账号在无任何 Tombstone／历史引用时使用受限版本 1 快路径，Windows x64 临时数据库两份样本端到端分别为 2,854 ms／2,781 ms，Apply 为 930 ms／936 ms。快路径之外仍保留完整版本和 Tombstone 检查。维护者随后确认该现实样本在 Windows 和 Android 上均可于数秒内完成导入，进度反馈与操作锁定正常，内存使用量无明显变化。当前没有可用的 100k 真实数据集，其设备级耗时、峰值内存、中断和低空间组合验证作为后续非阻塞压力测试保留。2,000,000 条限制仍是防御性安全上限，不是公开设备性能承诺；格式保持未发布。
 
 ## 结构化错误
 
