@@ -140,7 +140,9 @@ public sealed class GachaAcquisitionChronicleContributor
         ChronicleTimeline timelines = isFiveStarGacha
             ? ChronicleTimeline.Main
             : ChronicleTimeline.None;
-        ChronicleGranularity granularity = ChronicleGranularity.Detailed;
+        ChronicleGranularity granularity = isFiveStarGacha
+            ? ChronicleGranularity.Default
+            : ChronicleGranularity.Detailed;
         string? milestone = null;
         ChronicleEvidence acquisitionEvidence = ordinal?.Evidence ??
             ChronicleEvidence.Unknown(

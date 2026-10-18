@@ -12,6 +12,8 @@ using FurinaChronicle.Services.HistoryDomains;
 using FurinaChronicle.Services.HistoryDomains.Portable;
 using FurinaChronicle.Infrastructure.HistoryDomains.Portable;
 using FurinaChronicle.Infrastructure.HistoryDomains.Importing;
+using FurinaChronicle.Infrastructure.Chronicle;
+using FurinaChronicle.Services.Chronicle;
 using FurinaChronicle.Services.HistoryDomains.Importing;
 
 namespace FurinaChronicle.App.Composition;
@@ -56,6 +58,7 @@ internal static class PersistenceServiceCollectionExtensions
                 SqliteGachaAtomicChangeStore>());
         services.AddSingleton<IPlayerArchiveRepository, SqlitePlayerArchiveRepository>();
         services.AddSingleton<IGameAccountRepository, SqliteGameAccountRepository>();
+        services.AddSingleton<IChronicleQueryService, SqliteChronicleQueryService>();
 
         return services;
     }

@@ -10,10 +10,10 @@ namespace FurinaChronicle.Tests.Infrastructure.Persistence.Sqlite;
 public sealed class FurinaDatabaseMigrationTests
 {
     private const int CurrentApplicationId = 0x46554348;
-    private const int CurrentSchemaVersion = 6;
+    private const int CurrentSchemaVersion = 7;
 
     [Fact]
-    public async Task InitializeAsync_NewDatabase_CreatesCurrentVersionSixSchema()
+    public async Task InitializeAsync_NewDatabase_CreatesCurrentVersionSevenSchema()
     {
         await using var fixture = MigrationFixture.Create();
 
@@ -371,6 +371,15 @@ public sealed class FurinaDatabaseMigrationTests
         }
         using (SQLiteConnection legacy = fixture.OpenRawConnection())
         {
+            foreach (string trigger in legacy.Query<NameRow>(
+                         "SELECT name FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'TR_Chronicle_%';")
+                     .Select(row => row.Name))
+            {
+                legacy.Execute($"DROP TRIGGER {trigger};");
+            }
+            legacy.Execute("DROP TABLE ChronicleEntries;");
+            legacy.Execute("DROP TABLE ChronicleGenerations;");
+            legacy.Execute("DROP TABLE ChronicleScopeStates;");
             legacy.Execute(
                 "DROP INDEX UX_DomainPortableReceipts_Dataset_Fingerprint_Target;");
             legacy.Execute("DROP INDEX IX_ArchiveDomainRevisions_Fact;");
@@ -623,6 +632,9 @@ public sealed class FurinaDatabaseMigrationTests
                 "ArchiveDomainFacts",
                 "ArchiveDomainRevisions",
                 "ArchiveUndoSettings",
+                "ChronicleEntries",
+                "ChronicleGenerations",
+                "ChronicleScopeStates",
                 "DataChangeSetArchives",
                 "DataChangeSets",
                 "DomainPortableReceipts",

@@ -8,7 +8,9 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite;
 
 public sealed class FurinaDatabase : IAsyncDisposable
 {
-    private const int CurrentSchemaVersion = 6;
+    private const int CurrentSchemaVersion = 7;
+    private const int ChronicleSchemaVersion = 7;
+    private const int ArchiveDomainSchemaVersion = 6;
     private const int AtomicHistorySchemaVersion = 5;
     private const int ProvenanceSchemaVersion = 4;
     private const int SharedIdentitySchemaVersion = 3;
@@ -109,6 +111,11 @@ public sealed class FurinaDatabase : IAsyncDisposable
             {
                 await MigrateVersionFiveToCurrentAsync(cancellationToken);
             }
+            else if (applicationId == CurrentApplicationId &&
+                     schemaVersion == ArchiveDomainSchemaVersion)
+            {
+                await MigrateVersionSixToCurrentAsync(cancellationToken);
+            }
             else if (applicationId == 0 &&
                      schemaVersion == 0 &&
                      await IsEmptyDatabaseAsync(cancellationToken))
@@ -156,6 +163,7 @@ public sealed class FurinaDatabase : IAsyncDisposable
             MigrateVersionThreeToVersionFour(connection);
             MigrateVersionFourToVersionFive(connection);
             MigrateVersionFiveToVersionSix(connection);
+            MigrateVersionSixToVersionSeven(connection);
             SetCurrentSchemaVersion(connection);
         });
     }
@@ -172,6 +180,7 @@ public sealed class FurinaDatabase : IAsyncDisposable
             MigrateVersionThreeToVersionFour(connection);
             MigrateVersionFourToVersionFive(connection);
             MigrateVersionFiveToVersionSix(connection);
+            MigrateVersionSixToVersionSeven(connection);
             SetCurrentSchemaVersion(connection);
         });
     }
@@ -187,6 +196,7 @@ public sealed class FurinaDatabase : IAsyncDisposable
             MigrateVersionThreeToVersionFour(connection);
             MigrateVersionFourToVersionFive(connection);
             MigrateVersionFiveToVersionSix(connection);
+            MigrateVersionSixToVersionSeven(connection);
             SetCurrentSchemaVersion(connection);
         });
     }
@@ -201,6 +211,7 @@ public sealed class FurinaDatabase : IAsyncDisposable
             cancellationToken.ThrowIfCancellationRequested();
             MigrateVersionFourToVersionFive(connection);
             MigrateVersionFiveToVersionSix(connection);
+            MigrateVersionSixToVersionSeven(connection);
             SetCurrentSchemaVersion(connection);
         });
     }
@@ -213,6 +224,19 @@ public sealed class FurinaDatabase : IAsyncDisposable
         {
             cancellationToken.ThrowIfCancellationRequested();
             MigrateVersionFiveToVersionSix(connection);
+            MigrateVersionSixToVersionSeven(connection);
+            SetCurrentSchemaVersion(connection);
+        });
+    }
+
+    private async Task MigrateVersionSixToCurrentAsync(
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await Connection.RunInTransactionAsync(connection =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            MigrateVersionSixToVersionSeven(connection);
             SetCurrentSchemaVersion(connection);
         });
     }
@@ -335,6 +359,10 @@ public sealed class FurinaDatabase : IAsyncDisposable
     private static void MigrateVersionFiveToVersionSix(
         SQLiteConnection connection) =>
         CreateArchiveDomainHistoryTables(connection);
+
+    private static void MigrateVersionSixToVersionSeven(
+        SQLiteConnection connection) =>
+        CreateChronicleProjectionTables(connection);
 
     private static void SetCurrentSchemaVersion(SQLiteConnection connection)
     {
@@ -594,6 +622,28 @@ public sealed class FurinaDatabase : IAsyncDisposable
                 "RecordCount",
             ],
             cancellationToken);
+        await ValidateTableColumnsAsync(
+            "ChronicleScopeStates",
+            ["ScopeKind", "ScopeId", "SourceEpoch", "DestructiveEpoch"],
+            cancellationToken);
+        await ValidateTableColumnsAsync(
+            "ChronicleGenerations",
+            [
+                "GenerationId", "ScopeKind", "ScopeId", "SourceEpoch",
+                "DestructiveEpoch", "ProjectionVersion", "ProfileVersion",
+                "CatalogVersion", "CreatedAtUtcTicks", "ExpiresAtUtcTicks",
+                "IsInvalidated",
+            ],
+            cancellationToken);
+        await ValidateTableColumnsAsync(
+            "ChronicleEntries",
+            [
+                "GenerationId", "EntryId", "SortAtUtcTicks", "IsUndated",
+                "OccurredStartUtcTicks", "OccurredEndUtcTicks", "Domain", "Kind",
+                "Timelines", "MinimumGranularity", "BaseOrigin", "RankType",
+                "ItemId", "PayloadJson",
+            ],
+            cancellationToken);
 
         List<ForeignKeyViolationRow> violations =
             await Connection.QueryAsync<ForeignKeyViolationRow>(
@@ -714,6 +764,7 @@ public sealed class FurinaDatabase : IAsyncDisposable
 
             CreateHistoryTables(connection);
             CreateArchiveDomainHistoryTables(connection);
+            CreateChronicleProjectionTables(connection);
 
             connection.Execute(
                 """
@@ -1056,6 +1107,171 @@ public sealed class FurinaDatabase : IAsyncDisposable
                 PackageFingerprint,
                 TargetArchiveId);
             """);
+    }
+
+    private static void CreateChronicleProjectionTables(SQLiteConnection connection)
+    {
+        connection.Execute(
+            """
+            CREATE TABLE ChronicleScopeStates
+            (
+                ScopeKind INTEGER NOT NULL,
+                ScopeId TEXT NOT NULL,
+                SourceEpoch INTEGER NOT NULL DEFAULT 0,
+                DestructiveEpoch INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (ScopeKind, ScopeId)
+            );
+            """);
+        connection.Execute(
+            """
+            CREATE TABLE ChronicleGenerations
+            (
+                GenerationId TEXT PRIMARY KEY NOT NULL,
+                ScopeKind INTEGER NOT NULL,
+                ScopeId TEXT NOT NULL,
+                SourceEpoch INTEGER NOT NULL,
+                DestructiveEpoch INTEGER NOT NULL,
+                ProjectionVersion INTEGER NOT NULL,
+                ProfileVersion INTEGER NOT NULL,
+                CatalogVersion TEXT NOT NULL,
+                CreatedAtUtcTicks INTEGER NOT NULL,
+                ExpiresAtUtcTicks INTEGER NOT NULL,
+                IsInvalidated INTEGER NOT NULL DEFAULT 0
+            );
+            """);
+        connection.Execute(
+            """
+            CREATE TABLE ChronicleEntries
+            (
+                GenerationId TEXT NOT NULL,
+                EntryId TEXT NOT NULL,
+                SortAtUtcTicks INTEGER,
+                IsUndated INTEGER NOT NULL,
+                OccurredStartUtcTicks INTEGER,
+                OccurredEndUtcTicks INTEGER,
+                Domain INTEGER NOT NULL,
+                Kind INTEGER NOT NULL,
+                Timelines INTEGER NOT NULL,
+                MinimumGranularity INTEGER NOT NULL,
+                BaseOrigin INTEGER NOT NULL,
+                RankType INTEGER,
+                ItemId TEXT,
+                PayloadJson TEXT NOT NULL,
+                PRIMARY KEY (GenerationId, EntryId),
+                FOREIGN KEY (GenerationId)
+                    REFERENCES ChronicleGenerations(GenerationId)
+                    ON DELETE CASCADE
+            );
+            """);
+        connection.Execute(
+            """
+            CREATE INDEX IX_ChronicleGenerations_Scope_Current
+            ON ChronicleGenerations(ScopeKind, ScopeId, IsInvalidated, CreatedAtUtcTicks DESC);
+            """);
+        connection.Execute(
+            """
+            CREATE INDEX IX_ChronicleEntries_Page
+            ON ChronicleEntries(GenerationId, IsUndated, SortAtUtcTicks DESC, EntryId DESC);
+            """);
+
+        CreateChronicleFactTriggers(connection, "GachaRecords", "GameAccountId");
+        CreateChronicleFactTriggers(connection, "ArchiveDomainFacts", "GameAccountId");
+        connection.Execute(
+            """
+            CREATE TRIGGER TR_Chronicle_GameAccounts_DELETE
+            BEFORE DELETE ON GameAccounts
+            BEGIN
+                UPDATE ChronicleScopeStates
+                SET SourceEpoch = SourceEpoch + 1,
+                    DestructiveEpoch = DestructiveEpoch + 1
+                WHERE (ScopeKind = 1 AND ScopeId = OLD.Id)
+                   OR (ScopeKind = 2 AND ScopeId = OLD.PlayerArchiveId);
+                UPDATE ChronicleGenerations SET IsInvalidated = 1
+                WHERE (ScopeKind = 1 AND ScopeId = OLD.Id)
+                   OR (ScopeKind = 2 AND ScopeId = OLD.PlayerArchiveId);
+                DELETE FROM ChronicleEntries WHERE GenerationId IN
+                    (SELECT GenerationId FROM ChronicleGenerations WHERE IsInvalidated = 1);
+            END;
+            """);
+        connection.Execute(
+            """
+            CREATE TRIGGER TR_Chronicle_PlayerArchives_DELETE
+            BEFORE DELETE ON PlayerArchives
+            BEGIN
+                UPDATE ChronicleScopeStates
+                SET SourceEpoch = SourceEpoch + 1,
+                    DestructiveEpoch = DestructiveEpoch + 1
+                WHERE (ScopeKind = 2 AND ScopeId = OLD.Id)
+                   OR (ScopeKind = 1 AND ScopeId IN
+                       (SELECT Id FROM GameAccounts WHERE PlayerArchiveId = OLD.Id));
+                UPDATE ChronicleGenerations SET IsInvalidated = 1
+                WHERE (ScopeKind = 2 AND ScopeId = OLD.Id)
+                   OR (ScopeKind = 1 AND ScopeId IN
+                       (SELECT Id FROM GameAccounts WHERE PlayerArchiveId = OLD.Id));
+                DELETE FROM ChronicleEntries WHERE GenerationId IN
+                    (SELECT GenerationId FROM ChronicleGenerations WHERE IsInvalidated = 1);
+            END;
+            """);
+        connection.Execute(
+            """
+            CREATE TRIGGER TR_Chronicle_UndoScope
+            AFTER INSERT ON DataChangeSetArchives
+            WHEN (SELECT OperationKind FROM DataChangeSets WHERE ChangeSetId = NEW.ChangeSetId) = 5
+            BEGIN
+                UPDATE ChronicleScopeStates
+                SET SourceEpoch = SourceEpoch + 1,
+                    DestructiveEpoch = DestructiveEpoch + 1
+                WHERE (ScopeKind = 2 AND ScopeId = NEW.ArchiveId)
+                   OR (ScopeKind = 1 AND ScopeId IN
+                        (SELECT Id FROM GameAccounts WHERE PlayerArchiveId = NEW.ArchiveId));
+                UPDATE ChronicleGenerations
+                SET IsInvalidated = 1
+                WHERE (ScopeKind = 2 AND ScopeId = NEW.ArchiveId)
+                   OR (ScopeKind = 1 AND ScopeId IN
+                        (SELECT Id FROM GameAccounts WHERE PlayerArchiveId = NEW.ArchiveId));
+                DELETE FROM ChronicleEntries
+                WHERE GenerationId IN
+                    (SELECT GenerationId FROM ChronicleGenerations WHERE IsInvalidated = 1);
+            END;
+            """);
+    }
+
+    private static void CreateChronicleFactTriggers(
+        SQLiteConnection connection,
+        string tableName,
+        string accountColumn)
+    {
+        foreach (string action in new[] { "INSERT", "UPDATE", "DELETE" })
+        {
+            string reference = action == "DELETE" ? "OLD" : "NEW";
+            bool destructive = action != "INSERT";
+            string triggerName = $"TR_Chronicle_{tableName}_{action}";
+            string destructiveUpdate = destructive
+                ? ", DestructiveEpoch = DestructiveEpoch + 1"
+                : string.Empty;
+            string invalidation = destructive
+                ? $"""
+                  UPDATE ChronicleGenerations SET IsInvalidated = 1
+                  WHERE (ScopeKind = 1 AND ScopeId = {reference}.{accountColumn})
+                     OR (ScopeKind = 2 AND ScopeId =
+                         (SELECT PlayerArchiveId FROM GameAccounts WHERE Id = {reference}.{accountColumn}));
+                  DELETE FROM ChronicleEntries WHERE GenerationId IN
+                      (SELECT GenerationId FROM ChronicleGenerations WHERE IsInvalidated = 1);
+                  """
+                : string.Empty;
+            connection.Execute($$"""
+                CREATE TRIGGER {{triggerName}}
+                AFTER {{action}} ON {{tableName}}
+                BEGIN
+                    UPDATE ChronicleScopeStates
+                    SET SourceEpoch = SourceEpoch + 1{{destructiveUpdate}}
+                    WHERE (ScopeKind = 1 AND ScopeId = {{reference}}.{{accountColumn}})
+                       OR (ScopeKind = 2 AND ScopeId =
+                           (SELECT PlayerArchiveId FROM GameAccounts WHERE Id = {{reference}}.{{accountColumn}}));
+                    {{invalidation}}
+                END;
+                """);
+        }
     }
 
     private static void CreateGachaRecordIndexes(SQLiteConnection connection)
