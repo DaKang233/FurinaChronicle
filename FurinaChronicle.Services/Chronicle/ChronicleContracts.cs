@@ -67,10 +67,16 @@ public static class ChronicleProfileRules
         {
             return false;
         }
-        return entry.Kind != ChronicleEntryKind.StateChange ||
+        return entry.Kind is not (
+                ChronicleEntryKind.StateChange or
+                ChronicleEntryKind.StateObservation) ||
             profile.IncludeStateChanges;
     }
 }
+
+public sealed record ChronicleProjectionEvidence(
+    bool DeclaresCompleteGachaHistory = false,
+    string? DeclarationReference = null);
 
 public enum ChronicleScopeKind
 {
