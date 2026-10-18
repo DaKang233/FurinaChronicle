@@ -23,6 +23,8 @@ public sealed class SqliteChronicleQueryService(
     IArchiveDomainHistoryStore domainStore) : IChronicleQueryService
 {
     private const int SourcePageSize = 500;
+    private const int MaximumSourceFactsPerAccount = 250_000;
+    private const int MaximumProjectedEntriesPerScope = 250_000;
     private const int MaximumGenerationsPerScope = 2;
     private static readonly TimeSpan GenerationLifetime = TimeSpan.FromHours(24);
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -131,6 +133,7 @@ public sealed class SqliteChronicleQueryService(
                 {
                     IReadOnlyList<GachaRecord> page = await gachaRepository.GetPageAsync(
                         accountId, offset, SourcePageSize, cancellationToken);
+                    EnsureCapacity(gacha.Count, page.Count, "Gacha facts");
                     gacha.AddRange(page);
                     if (page.Count < SourcePageSize)
                     {
@@ -147,6 +150,11 @@ public sealed class SqliteChronicleQueryService(
                     accountId, gacha, manual, itemCatalog, new ChronicleProjectionEvidence()));
                 entries.AddRange(new InventoryChronicleContributor().Project(accountId, itemObservations));
                 entries.AddRange(new ChallengeChronicleContributor().Project(accountId, challengeObservations));
+                if (entries.Count > MaximumProjectedEntriesPerScope)
+                {
+                    throw new InvalidOperationException(
+                        $"Chronicle projection exceeds the {MaximumProjectedEntriesPerScope} entry safety limit.");
+                }
             }
 
             ScopeStateRow after = await EnsureScopeStateAsync(scope, cancellationToken);
@@ -300,6 +308,8 @@ public sealed class SqliteChronicleQueryService(
                     new ItemObservationPageQuery(accountId, Offset: offset,
                         Limit: SourcePageSize), cancellationToken);
             result.AddRange(page.Items);
+            EnsureCapacity(result.Count - page.Items.Count, page.Items.Count,
+                "item observations");
             if (result.Count >= page.TotalCount) return result;
         }
     }
@@ -316,6 +326,8 @@ public sealed class SqliteChronicleQueryService(
                     new ManualAcquisitionPageQuery(accountId, Offset: offset,
                         Limit: SourcePageSize), cancellationToken);
             result.AddRange(page.Items);
+            EnsureCapacity(result.Count - page.Items.Count, page.Items.Count,
+                "manual acquisitions");
             if (result.Count >= page.TotalCount) return result;
         }
     }
@@ -331,7 +343,18 @@ public sealed class SqliteChronicleQueryService(
                     new ChallengeObservationPageQuery(accountId, Offset: offset,
                         Limit: SourcePageSize), cancellationToken);
             result.AddRange(page.Items);
+            EnsureCapacity(result.Count - page.Items.Count, page.Items.Count,
+                "challenge observations");
             if (result.Count >= page.TotalCount) return result;
+        }
+    }
+
+    private static void EnsureCapacity(int current, int added, string source)
+    {
+        if ((long)current + added > MaximumSourceFactsPerAccount)
+        {
+            throw new InvalidOperationException(
+                $"{source} exceed the {MaximumSourceFactsPerAccount} per-account Chronicle safety limit.");
         }
     }
 

@@ -279,6 +279,28 @@ public sealed class SqliteChronicleQueryServiceTests
         Assert.Contains("Projection rule: 1", writer.ToString());
     }
 
+    [Fact]
+    public async Task CancelledRebuildPublishesNoPartialGeneration()
+    {
+        await using SqliteRepositoryTestContext context =
+            SqliteRepositoryTestContext.Create();
+        (_, GameAccount account) = await Parents(context);
+        await Commit(context, account.Id, "1", Time(10));
+        var service = Service(context);
+        ChronicleScope scope = new(ChronicleScopeKind.Account, account.Id);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            service.RebuildAsync(scope, Catalog(), cancellation.Token));
+
+        using var raw = context.OpenRawConnection();
+        Assert.Equal(0, raw.ExecuteScalar<int>(
+            "SELECT COUNT(*) FROM ChronicleGenerations;"));
+        Assert.Equal(0, raw.ExecuteScalar<int>(
+            "SELECT COUNT(*) FROM ChronicleEntries;"));
+    }
+
     private static SqliteChronicleQueryService Service(
         SqliteRepositoryTestContext context) => new(
             context.Database, context.Gacha, context.Accounts,
