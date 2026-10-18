@@ -16,3 +16,8 @@
 - [0010：经过筛选的多时间线产品模型](0010-curated-multiple-chronicle-timelines.md)
 - [0011：领域优先的产品定位与 Phase 8B 范围](0011-domain-first-product-scope.md)
 - [0012：Gacha Portable v1 使用标准载荷与 Furina 补充载荷](0012-gacha-portable-v1.md)
+- [0013：原子变更集、修订与有限撤销](0013-atomic-revisions-and-bounded-undo.md)
+- [0014：Phase 8B.4 Gacha 生产写入、删除与重引入语义](0014-phase-8b4-gacha-production-semantics.md)
+- [0015：统一 Gacha 全量导入模式](0015-unified-full-gacha-import-mode.md)
+- [0016：角色／武器状态观察与手工获取事实（Proposed）](0016-character-weapon-observations-and-acquisitions.md)
+- [0017：挑战观察身份、回返与乱序历史（Proposed）](0017-challenge-observation-history.md)

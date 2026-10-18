@@ -10,5 +10,7 @@
 
 - [Chronicle 产品需求](CHRONICLE_PRODUCT_REQUIREMENTS.md)：已接受的主时间线、角色/武器/挑战时间线、显示模式、手工获取和验收行为。
 - [Chronicle Timeline v1](CHRONICLE_TIMELINE_V1.md)：Chronicle 子系统的投影身份、排序和贡献者草案；共享基础以各自规范为准，字段在 8B.6 实施前冻结，更早进入持久化/公开格式的部分提前冻结。
+- [角色／武器历史与 Portable v1](CHARACTER_WEAPON_HISTORY_V1.md)：8B.5 Proposed ADR 0016 对应草案，尚未冻结或发布。
+- [挑战观察历史与 Portable v1](CHALLENGE_HISTORY_V1.md)：8B.5 Proposed ADR 0017 对应草案，首批仅规划深境螺旋，尚未冻结或发布。
 
 领域独立的标准、Furina 机器可读载荷和人类可读出口见 [Portable/Export](../architecture/PORTABLE_DATASET.md)。规范化事实不依赖 Chronicle 草案字段，也不以 Contributor 为成立条件。

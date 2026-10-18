@@ -34,4 +34,9 @@
 | D28 | 8B.4 的刷新 Tombstone 采用抑制命中并继续其余记录；UIGF 补空生成 Revision、非空差异冲突；父实体删除按本地副本范围 purge；显式重引入的 Undo 恢复原活动 Tombstone | Accepted | ADR 0014，维护者确认 |
 | D29 | 抽卡页统一全量导入模式作用于刷新、UIGF／小助手、兼容 JSON 和 Portable；只覆盖来源明确包含的同记录，不删除来源缺失记录，且覆盖必须保留 Revision／Undo 与既有 Tombstone 安全语义 | Accepted | ADR 0015，维护者确认 |
 
+## Proposed（不构成已接受决定）
+
+- ADR 0016：角色／武器观察完整度、无实例 ID 武器、手工周边界及 Portable 历史范围。
+- ADR 0017：挑战观察身份、A→B→A、迟到／同刻冲突及 Portable 历史范围。
+
 当前工作包契约和后期服务决策集中记录在 [OPEN_QUESTIONS.md](../project/OPEN_QUESTIONS.md)，按实施时点闭合，不得由 Agent 静默改变语义。D19、D20 的核心决定及既有产品行为继续 Accepted；D21 收敛依赖关系，不冻结 Chronicle Draft 的字段或未来同步协议。
