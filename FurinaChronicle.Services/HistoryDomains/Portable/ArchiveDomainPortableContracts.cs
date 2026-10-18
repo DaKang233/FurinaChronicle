@@ -15,12 +15,21 @@ public enum ArchiveDomainDatasetKind
     ChallengeHistory = 2,
 }
 
+public sealed record PortableManualAcquisitionRevision(
+    Guid RevisionId,
+    EntityChangeKind ChangeKind,
+    FactVersion? BeforeVersion,
+    FactVersion? AfterVersion,
+    ManualAcquisition? Before,
+    ManualAcquisition? After,
+    DateTimeOffset CreatedAt);
+
 public sealed record ArchiveDomainPortableAccount(
     Guid SourceAccountId,
     GameRoleIdentity RoleIdentity,
     IReadOnlyList<ItemStateObservation> ItemObservations,
     IReadOnlyList<ManualAcquisition> ManualAcquisitions,
-    IReadOnlyList<ManualAcquisitionRevisionItem> ManualRevisions,
+    IReadOnlyList<PortableManualAcquisitionRevision> ManualRevisions,
     IReadOnlyList<ChallengeObservation> ChallengeObservations);
 
 public sealed record ArchiveDomainPortablePackage(

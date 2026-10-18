@@ -66,6 +66,9 @@ public sealed class ArchiveDomainPortableFileServiceTests
             ArchiveDomainDatasetKind.CharacterWeaponHistory,
             exported,
             TestTime());
+        Assert.DoesNotContain(
+            "\"change_set_id\"",
+            Encoding.UTF8.GetString(exported.ToArray()));
         exported.Position = 0;
         ArchiveDomainPortablePackage package =
             await source.Files.ReadAsync(exported);

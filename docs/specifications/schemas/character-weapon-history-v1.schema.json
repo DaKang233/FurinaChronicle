@@ -124,10 +124,9 @@
     },
     "revision": {
       "type": "object",
-      "required": ["revision_id", "change_set_id", "change_kind", "created_at"],
+        "required": ["revision_id", "change_kind", "created_at"],
       "properties": {
         "revision_id": { "$ref": "#/$defs/guid" },
-        "change_set_id": { "$ref": "#/$defs/guid" },
         "change_kind": { "enum": [1, 2, 3] },
         "before_version": { "type": ["integer", "null"], "minimum": 1 },
         "after_version": { "type": ["integer", "null"], "minimum": 1 },

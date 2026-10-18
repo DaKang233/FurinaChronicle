@@ -1413,7 +1413,7 @@ public sealed partial class SqliteGachaAtomicChangeStore
         PortableApplyContext portable,
         PortableManualRevision item)
     {
-        ManualAcquisitionRevisionItem revision = item.Revision;
+        PortableManualAcquisitionRevision revision = item.Revision;
         ArchiveDomainFactRow? before = revision.Before is null
             ? null
             : CreatePortableAcquisitionRow(
@@ -1447,7 +1447,7 @@ public sealed partial class SqliteGachaAtomicChangeStore
         Guid changeSetId,
         PortableManualRevision portable)
     {
-        ManualAcquisitionRevisionItem revision = portable.Revision;
+        PortableManualAcquisitionRevision revision = portable.Revision;
         if (connection.ExecuteScalar<int>(
                 "SELECT COUNT(*) FROM ArchiveDomainRevisions WHERE RevisionId = ?;",
                 revision.RevisionId.ToString("D")) != 0)
@@ -1949,7 +1949,7 @@ public sealed partial class SqliteGachaAtomicChangeStore
 
     private sealed record PortableManualRevision(
         Guid TargetAccountId,
-        ManualAcquisitionRevisionItem Revision);
+        PortableManualAcquisitionRevision Revision);
 
     private sealed record DomainProposal(
         string DomainKind,

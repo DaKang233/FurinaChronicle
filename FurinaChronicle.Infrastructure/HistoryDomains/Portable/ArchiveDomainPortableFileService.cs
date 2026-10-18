@@ -65,11 +65,11 @@ public sealed class ArchiveDomainPortableFileService(
                         account.Id,
                         cancellationToken: cancellationToken)
                     : [];
-            IReadOnlyList<ManualAcquisitionRevisionItem> revisions =
+            IReadOnlyList<PortableManualAcquisitionRevision> revisions =
                 datasetKind == ArchiveDomainDatasetKind.CharacterWeaponHistory
-                    ? await history.GetManualAcquisitionRevisionsAsync(
+                    ? (await history.GetManualAcquisitionRevisionsAsync(
                         account.Id,
-                        cancellationToken)
+                        cancellationToken)).Select(ToPortableRevision).ToArray()
                     : [];
             IReadOnlyList<ChallengeObservation> challenges =
                 datasetKind == ArchiveDomainDatasetKind.ChallengeHistory
@@ -110,6 +110,16 @@ public sealed class ArchiveDomainPortableFileService(
         await destination.WriteAsync(payload, cancellationToken);
     }
 
+    private static PortableManualAcquisitionRevision ToPortableRevision(
+        ManualAcquisitionRevisionItem revision) => new(
+            revision.RevisionId,
+            revision.ChangeKind,
+            revision.BeforeVersion,
+            revision.AfterVersion,
+            revision.Before,
+            revision.After,
+            revision.CreatedAt);
+
     public async Task<ArchiveDomainPortablePackage> ReadAsync(
         Stream source,
         CancellationToken cancellationToken = default)
@@ -148,7 +158,7 @@ public sealed class ArchiveDomainPortableFileService(
                 StringComparison.Ordinal))
         {
             throw new InvalidDataException(
-                "The Portable package fingerprint does not match its content.");
+                $"The Portable package fingerprint does not match its content. Expected {wireExpected}, received {wireFingerprint}.");
         }
         PortableWireDocument document =
             await JsonSerializer.DeserializeAsync<PortableWireDocument>(
