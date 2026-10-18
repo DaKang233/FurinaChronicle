@@ -138,11 +138,11 @@ public sealed class SqliteChronicleQueryService(
                     }
                 }
                 IReadOnlyList<ManualAcquisitionState> manual =
-                    await domainStore.GetManualAcquisitionsAsync(accountId, false, cancellationToken);
+                    await ReadManualAsync(accountId, cancellationToken);
                 IReadOnlyList<ItemStateObservation> itemObservations =
-                    await domainStore.GetItemObservationsAsync(accountId, null, cancellationToken);
-                var challengeObservations = await domainStore.GetChallengeObservationsAsync(
-                    accountId, null, cancellationToken);
+                    await ReadItemsAsync(accountId, cancellationToken);
+                IReadOnlyList<Core.Challenges.ChallengeObservation> challengeObservations =
+                    await ReadChallengesAsync(accountId, cancellationToken);
                 entries.AddRange(new GachaAcquisitionChronicleContributor().Project(
                     accountId, gacha, manual, itemCatalog, new ChronicleProjectionEvidence()));
                 entries.AddRange(new InventoryChronicleContributor().Project(accountId, itemObservations));
@@ -286,6 +286,53 @@ public sealed class SqliteChronicleQueryService(
             ids = ids.Where(scope.SelectedAccountIds.Contains);
         }
         return ids.Order().ToArray();
+    }
+
+    private async Task<IReadOnlyList<ItemStateObservation>> ReadItemsAsync(
+        Guid accountId,
+        CancellationToken cancellationToken)
+    {
+        var result = new List<ItemStateObservation>();
+        for (int offset = 0;; offset += SourcePageSize)
+        {
+            ArchiveDomainPage<ItemStateObservation> page =
+                await domainStore.GetItemObservationPageAsync(
+                    new ItemObservationPageQuery(accountId, Offset: offset,
+                        Limit: SourcePageSize), cancellationToken);
+            result.AddRange(page.Items);
+            if (result.Count >= page.TotalCount) return result;
+        }
+    }
+
+    private async Task<IReadOnlyList<ManualAcquisitionState>> ReadManualAsync(
+        Guid accountId,
+        CancellationToken cancellationToken)
+    {
+        var result = new List<ManualAcquisitionState>();
+        for (int offset = 0;; offset += SourcePageSize)
+        {
+            ArchiveDomainPage<ManualAcquisitionState> page =
+                await domainStore.GetManualAcquisitionPageAsync(
+                    new ManualAcquisitionPageQuery(accountId, Offset: offset,
+                        Limit: SourcePageSize), cancellationToken);
+            result.AddRange(page.Items);
+            if (result.Count >= page.TotalCount) return result;
+        }
+    }
+
+    private async Task<IReadOnlyList<Core.Challenges.ChallengeObservation>>
+        ReadChallengesAsync(Guid accountId, CancellationToken cancellationToken)
+    {
+        var result = new List<Core.Challenges.ChallengeObservation>();
+        for (int offset = 0;; offset += SourcePageSize)
+        {
+            ArchiveDomainPage<Core.Challenges.ChallengeObservation> page =
+                await domainStore.GetChallengeObservationPageAsync(
+                    new ChallengeObservationPageQuery(accountId, Offset: offset,
+                        Limit: SourcePageSize), cancellationToken);
+            result.AddRange(page.Items);
+            if (result.Count >= page.TotalCount) return result;
+        }
     }
 
     private async Task<ScopeStateRow> EnsureScopeStateAsync(
