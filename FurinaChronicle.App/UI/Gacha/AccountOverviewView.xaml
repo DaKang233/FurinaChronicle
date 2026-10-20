@@ -6,6 +6,7 @@
 
 <ContentView
     x:Class="FurinaChronicle.App.UI.Gacha.AccountOverviewView"
+    x:Name="OverviewRoot"
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
     xmlns:ui="clr-namespace:FurinaChronicle.App.UI.Gacha"
@@ -41,7 +42,7 @@
                 <DataTemplate x:DataType="viewModels:GachaPoolStatisticsDisplayItem">
                     <Border
                         Padding="14"
-                        HeightRequest="{Binding Source={RelativeSource AncestorType={x:Type ui:AccountOverviewView}}, Path=OverviewCardHeight}"
+                        HeightRequest="{Binding Source={x:Reference OverviewRoot}, Path=OverviewCardHeight}"
                         VerticalOptions="Fill"
                         WidthRequest="{OnPlatform WinUI=380, Default=-1}">
                         <Grid RowDefinitions="Auto,Auto,*" RowSpacing="7">
@@ -79,7 +80,7 @@
 
                             <Grid Grid.Row="2">
                                 <ScrollView
-                                    IsVisible="{Binding Source={RelativeSource AncestorType={x:Type viewModels:GachaAnalysisViewModel}}, Path=IsFiveStarListMode}"
+                                    IsVisible="{Binding Source={x:Reference OverviewRoot}, Path=BindingContext.IsFiveStarListMode}"
                                     Orientation="Vertical">
                                     <VerticalStackLayout
                                         BindableLayout.ItemsSource="{Binding FiveStarHistory}"
@@ -96,7 +97,7 @@
                                 </ScrollView>
 
                                 <ScrollView
-                                    IsVisible="{Binding Source={RelativeSource AncestorType={x:Type viewModels:GachaAnalysisViewModel}}, Path=IsFiveStarGridMode}"
+                                    IsVisible="{Binding Source={x:Reference OverviewRoot}, Path=BindingContext.IsFiveStarGridMode}"
                                     Orientation="Vertical">
                                     <FlexLayout
                                         AlignItems="Start"

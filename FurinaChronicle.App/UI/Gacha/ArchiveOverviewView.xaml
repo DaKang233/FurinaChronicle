@@ -4,8 +4,14 @@
   SPDX-License-Identifier: MIT
 -->
 
+<!--
+  Copyright (c) 2026 DaKang233.
+  SPDX-License-Identifier: MIT
+-->
+
 <ContentView
     x:Class="FurinaChronicle.App.UI.Gacha.ArchiveOverviewView"
+    x:Name="OverviewRoot"
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
     xmlns:ui="clr-namespace:FurinaChronicle.App.UI.Gacha"
@@ -38,7 +44,7 @@
                 <DataTemplate x:DataType="viewModels:GachaPoolStatisticsDisplayItem">
                     <Border
                         Padding="14"
-                        HeightRequest="{Binding Source={RelativeSource AncestorType={x:Type ui:ArchiveOverviewView}}, Path=OverviewCardHeight}"
+                        HeightRequest="{Binding Source={x:Reference OverviewRoot}, Path=OverviewCardHeight}"
                         VerticalOptions="Fill"
                         WidthRequest="{OnPlatform WinUI=380, Default=-1}">
                         <Grid RowDefinitions="Auto,Auto,*" RowSpacing="7">
