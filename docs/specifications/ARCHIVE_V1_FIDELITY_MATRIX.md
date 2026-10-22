@@ -1,6 +1,6 @@
 # Archive v1 数据保真矩阵
 
-状态：8C.0 review baseline；依赖 Proposed ADR 0021
+状态：Accepted 8C.0 fidelity baseline；依赖 Accepted ADR 0021
 
 本矩阵从当前 Schema 7 的持久化对象出发，说明逻辑 Archive 应保留的语义、目标端处理方式和排除原因。表名只用于审查当前覆盖面，不进入公开格式；Archive DTO 不得镜像 SQLite Row。
 
@@ -102,6 +102,6 @@ Archive v1 的“完整”限定为：
 ## 当前支持边界
 
 - UIGF 官方当前列出的 Current 版本为 4.2；现有 Gacha Portable v1 继续固定输出 UIGF 4.2。
-- Furina Archive v1、Gacha history Dataset 和容器布局仍是 Proposed，不是公开格式。
+- Furina Archive v1、Gacha history Dataset 和容器布局已作为内部实施契约接受，但仍不是公开发布格式。
 - Schema 7 足以完成只读逻辑导出；8C.0 不修改生产库，8C.1 不实现恢复。
 - 现有角色／武器及挑战 Portable 虽已通过双端文件验收，仍为 internal / unpublished。

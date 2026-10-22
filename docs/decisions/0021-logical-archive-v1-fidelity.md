@@ -1,8 +1,10 @@
 # ADR 0021：跨端逻辑 Archive v1 的保真与本地状态边界
 
-状态：Proposed
+状态：Accepted
 
 提议日期：2026-10-23
+
+接受日期：2026-10-23
 
 ## 背景
 
@@ -15,7 +17,7 @@ Phase 8B 已提供 Gacha、角色／武器和挑战三个领域的独立 Portabl
 
 直接序列化 SQLite 行会把数据库实现变成公开格式；直接打包生产 SQLite 文件又会泄漏本机状态，并且不能作为 Windows／Android 的长期公开契约。Archive 因此必须使用独立逻辑模型，并明确哪些状态可以跨设备解释。
 
-本 ADR 只提出 8C 首版语义。维护者接受前，不据此发布格式、恢复真实数据库或实现 Replace。
+本 ADR 固定 8C 首版语义。接受不代表格式已经公开发布，也不授权恢复真实数据库或实现 Replace。
 
 ## 已接受且不重新讨论的前提
 
@@ -27,7 +29,7 @@ Phase 8B 已提供 Gacha、角色／武器和挑战三个领域的独立 Portabl
 - Chronicle 是可重建投影，不是事实源，也不进入逻辑 Archive。
 - 凭据、设备路径和平台 URI 不进入普通 Archive。
 
-## 提议决定
+## 决定
 
 ### 1. 产品名称与完整性声明
 
@@ -93,13 +95,13 @@ Archive 不建立“未来所有未知记录永久禁止导入”的新范围标
 
 `Merge` 默认只安全补充；同稳定身份同内容为 NoOp，不同非空事实或 Revision 内容为 Conflict，不能按遍历顺序覆盖。整个 Archive 使用一个 Preview 和一个跨领域事务。
 
-建议的目标撤销边界是：
+目标撤销边界是：
 
 - 只向既有父对象新增事实、且现有领域规则可捕获完整材料时，整个跨领域操作可以成为一个可撤销 ChangeSet；
 - 只要操作创建档案／账号／身份别名、应用来源历史修订、变更设置或存在任一不可撤销子项，整个操作不承诺可撤销；
 - 不允许把一次 Archive 恢复拆成多个“看似可撤销”的独立领域操作。
 
-`Replace` 不在 8C.0～8C.1 实现。建议它只替换用户明确选择的档案／账号／领域范围，不默认清空整库；它本身不可通过普通 Undo 恢复，提交前必须建立受生命周期约束的内部一致恢复点。目标活动 Tombstone、未选档案、凭据和设备设置不受影响。
+`Replace` 不在 8C.0～8C.1 实现。未来只替换用户明确选择的档案／账号／领域范围，不默认清空整库；它本身不可通过普通 Undo 恢复，提交前必须建立受生命周期约束的内部一致恢复点。目标活动 Tombstone、未选档案、凭据和设备设置不受影响。
 
 ### 7. 可移植设置
 
@@ -112,7 +114,7 @@ Archive 不建立“未来所有未知记录永久禁止导入”的新范围标
 
 ### 8. 容器、版本和未知内容
 
-候选容器标识为 `furina-archive`，版本 `1.0`。Archive、各 Dataset、数据库 Schema 和 AppVersion 独立演进。
+容器标识为 `furina-archive`，版本 `1.0`。Archive、各 Dataset、数据库 Schema 和 AppVersion 独立演进。
 
 - 未知 future Archive major 拒绝；
 - 未知必需 Dataset 拒绝；
@@ -128,7 +130,7 @@ Archive 不建立“未来所有未知记录永久禁止导入”的新范围标
 
 未来恢复必须经过 `Inspect → Validate → Migrate → Plan → Preview → Apply → Verify`，并在一个跨领域事务中提交。依次调用三个各自提交的 Portable Apply 不满足原子恢复。
 
-## 容器候选布局
+## 容器布局
 
 ```text
 manifest.json
@@ -150,15 +152,17 @@ checksums.sha256
 - Schema 7 在纯导出阶段无需变更；恢复实现是否需要新表或迁移由 8C.2～8C.3 的事务设计决定。
 - Archive Reader 可以在不打开数据库的情况下验证容器；8C.1 不提供生产 Apply。
 
-## 需要维护者确认
+## 维护者确认
 
-1. 接受“逻辑 Archive”只迁移事实、来源、历史观察、已保留事实 Revision 和白名单设置，不迁移源 Undo／操作历史／Receipt／Tombstone／Chronicle。
-2. 接受 UIGF 继续承载可标准化当前事实，Archive-native Gacha history 无损承载不完整事实、Unresolved 归属和 Revision。
-3. 接受目标 Tombstone 同时阻止当前事实与会泄露已 purge 内容的历史载荷，除非显式重引入。
-4. 接受上述整个 Archive 操作的保守撤销资格规则。
-5. 接受设置白名单及“默认保留目标、Preview 可选择来源”的策略。
-6. 接受 Replace 仅限明确范围、普通 Undo 不恢复 Replace，并要求提交前内部一致恢复点。
-7. 接受 checksums 为唯一哈希真相，以及未知可选 Dataset 只能经明确部分恢复确认后跳过。
+维护者于 2026-10-23 接受以下七项决定：
+
+1. “逻辑 Archive”只迁移事实、来源、历史观察、已保留事实 Revision 和白名单设置，不迁移源 Undo／操作历史／Receipt／Tombstone／Chronicle。
+2. UIGF 继续承载可标准化当前事实，Archive-native Gacha history 无损承载不完整事实、Unresolved 归属和 Revision。
+3. 目标 Tombstone 同时阻止当前事实与会泄露已 purge 内容的历史载荷，除非显式重引入。
+4. 采用上述整个 Archive 操作的保守撤销资格规则。
+5. 采用设置白名单及“默认保留目标、Preview 可选择来源”的策略。
+6. Replace 仅限明确范围、普通 Undo 不恢复 Replace，并要求提交前内部一致恢复点。
+7. checksums 是唯一哈希真相；未知可选 Dataset 只能经明确部分恢复确认后跳过。
 
 ## 测试要求
 

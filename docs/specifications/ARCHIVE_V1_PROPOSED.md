@@ -1,6 +1,6 @@
 # Furina 跨端逻辑 Archive v1（提案）
 
-状态：Proposed；等待 ADR 0021 确认后进入 8C.1
+状态：Accepted internal implementation contract；尚未公开发布
 
 格式标识：`furina-archive`
 
@@ -260,7 +260,7 @@ Validate requested scope
 
 | 能力 | 8C.0 | 8C.1 目标 |
 |---|---|---|
-| 保真矩阵／ADR／示例 | Proposed | Accepted 后同步 |
+| 保真矩阵／ADR／示例 | Accepted | 与实现同步维护 |
 | Services 逻辑 DTO／端口 | 未实现 | 实现 |
 | Archive Writer／Reader／Validator | 未实现 | 实现 |
 | 一致快照导出 | 未实现 | 实现 |
