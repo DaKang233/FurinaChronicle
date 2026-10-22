@@ -21,6 +21,19 @@ Compare a source file and a device re-export:
 dotnet run --project .\eng\phase8b\FurinaChronicle.Phase8BValidation -- compare <source.json> <reexported.json>
 ```
 
+Create a consistent SQLite backup for the Windows application-upgrade check.
+The destination must not already exist:
+
+```powershell
+dotnet run --project .\eng\phase8b\FurinaChronicle.Phase8BValidation -- backup <source.db3> <validation-directory\furinachronicle-validation.db3>
+$env:FURINA_PHASE8B7_DIRECTORY = '<absolute-validation-directory>'
+```
+
+Start a Windows build made with `Phase8BValidationMode=true` from that same
+terminal. Only the copied database is upgraded. The environment override is
+accepted only in validation builds and must be an absolute directory. Android
+continues to use its isolated application-data subdirectory.
+
 Comparison intentionally ignores the target-local archive/account identifiers,
 package fingerprint, export time and receiver operation records. It retains
 stable fact IDs, account attribution, source identity, timestamps and original

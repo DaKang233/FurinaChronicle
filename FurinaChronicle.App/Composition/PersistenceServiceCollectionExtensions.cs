@@ -25,9 +25,20 @@ internal static class PersistenceServiceCollectionExtensions
     {
         string databasePath;
 #if PHASE8B_VALIDATION
+        string? validationDirectory = Environment.GetEnvironmentVariable(
+            "FURINA_PHASE8B7_DIRECTORY");
+        if (!string.IsNullOrWhiteSpace(validationDirectory) &&
+            !Path.IsPathFullyQualified(validationDirectory))
+        {
+            throw new InvalidOperationException(
+                "FURINA_PHASE8B7_DIRECTORY must be an absolute path.");
+        }
         databasePath = Path.Combine(
-            FileSystem.AppDataDirectory,
-            "phase8b7-validation",
+            string.IsNullOrWhiteSpace(validationDirectory)
+                ? Path.Combine(
+                    FileSystem.AppDataDirectory,
+                    "phase8b7-validation")
+                : Path.GetFullPath(validationDirectory),
             "furinachronicle-validation.db3");
 #else
         databasePath = Path.Combine(

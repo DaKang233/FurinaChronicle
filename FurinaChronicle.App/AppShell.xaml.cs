@@ -17,7 +17,9 @@ public partial class AppShell : Shell
     private readonly UserPageViewModel userPageViewModel;
     private readonly ArchivePage archivePage;
     private readonly Phase8BValidationPage phase8BValidationPage;
+#if !PHASE8B_VALIDATION
     private PassportFlyoutHeader? passportFlyoutHeader;
+#endif
     private bool mainNavigationConfigured;
 
     public AppShell(
@@ -72,7 +74,9 @@ public partial class AppShell : Shell
         FlyoutBehavior = collapse
             ? FlyoutBehavior.Flyout
             : FlyoutBehavior.Locked;
+#if !PHASE8B_VALIDATION
         passportFlyoutHeader?.SetSidebarCollapsed(collapse);
+#endif
         FlyoutIsPresented = false;
     }
 

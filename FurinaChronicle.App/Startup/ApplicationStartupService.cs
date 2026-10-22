@@ -9,9 +9,15 @@ using System.Diagnostics;
 
 namespace FurinaChronicle.App.Startup;
 
+#if PHASE8B_VALIDATION
+#pragma warning disable CS9113 // Production-only dependencies are intentionally idle in the isolated validation build.
+#endif
 public sealed class ApplicationStartupService(
     IGachaMetadataRefreshService metadataRefreshService,
     PassportCredentialMaintenanceService credentialMaintenanceService)
+#if PHASE8B_VALIDATION
+#pragma warning restore CS9113
+#endif
 {
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {

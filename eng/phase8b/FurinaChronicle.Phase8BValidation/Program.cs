@@ -15,6 +15,7 @@ using FurinaChronicle.Infrastructure.Persistence.Sqlite;
 using FurinaChronicle.Services.History;
 using FurinaChronicle.Services.HistoryDomains;
 using FurinaChronicle.Services.HistoryDomains.Portable;
+using SQLite;
 
 return await Phase8BValidationTool.RunAsync(args);
 
@@ -42,6 +43,9 @@ internal static class Phase8BValidationTool
                     Path.GetFullPath(args[1]),
                     Path.GetFullPath(args[2])),
                 "inspect" => await InspectAsync(Path.GetFullPath(args[1])),
+                "backup" when args.Length == 3 => await BackupAsync(
+                    Path.GetFullPath(args[1]),
+                    Path.GetFullPath(args[2])),
                 _ => InvalidArguments()
             };
         }
@@ -64,6 +68,7 @@ internal static class Phase8BValidationTool
         Console.WriteLine("  generate <output-directory>");
         Console.WriteLine("  compare <expected.json> <actual.json>");
         Console.WriteLine("  inspect <portable.json>");
+        Console.WriteLine("  backup <source.db3> <new-destination.db3>");
     }
 
     private static async Task<int> GenerateAsync(string outputDirectory)
@@ -199,6 +204,64 @@ internal static class Phase8BValidationTool
         };
         Console.WriteLine(JsonSerializer.Serialize(report, DisplayJson()));
         return 0;
+    }
+
+    private static async Task<int> BackupAsync(
+        string sourcePath,
+        string destinationPath)
+    {
+        if (!File.Exists(sourcePath))
+        {
+            throw new FileNotFoundException(
+                "The source SQLite database does not exist.",
+                sourcePath);
+        }
+        if (File.Exists(destinationPath))
+        {
+            throw new IOException(
+                "The backup destination already exists; it will not be overwritten.");
+        }
+        string? destinationDirectory = Path.GetDirectoryName(destinationPath);
+        if (!string.IsNullOrWhiteSpace(destinationDirectory))
+        {
+            Directory.CreateDirectory(destinationDirectory);
+        }
+
+        var source = new SQLiteAsyncConnection(
+            sourcePath,
+            SQLiteOpenFlags.ReadOnly | SQLiteOpenFlags.FullMutex,
+            storeDateTimeAsTicks: true);
+        try
+        {
+            await source.SetBusyTimeoutAsync(TimeSpan.FromSeconds(10));
+            int schema = await source.ExecuteScalarAsync<int>(
+                "PRAGMA user_version;");
+            int applicationId = await source.ExecuteScalarAsync<int>(
+                "PRAGMA application_id;");
+            string integrity = await source.ExecuteScalarAsync<string>(
+                "PRAGMA quick_check;");
+            if (!string.Equals(integrity, "ok", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidDataException(
+                    $"The source database did not pass PRAGMA quick_check: {integrity}.");
+            }
+            await source.BackupAsync(destinationPath, "main");
+            Console.WriteLine(JsonSerializer.Serialize(new
+            {
+                Source = sourcePath,
+                Destination = destinationPath,
+                SchemaVersion = schema,
+                ApplicationId = $"0x{applicationId:X8}",
+                IntegrityCheck = integrity,
+                DestinationBytes = new FileInfo(destinationPath).Length,
+                DestinationSha256 = await FileSha256Async(destinationPath)
+            }, DisplayJson()));
+            return 0;
+        }
+        finally
+        {
+            await source.CloseAsync();
+        }
     }
 
     private static async Task<ArchiveDomainPortablePackage> ReadPackageAsync(
