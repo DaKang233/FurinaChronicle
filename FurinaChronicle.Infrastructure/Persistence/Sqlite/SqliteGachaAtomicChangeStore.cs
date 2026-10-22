@@ -2080,6 +2080,50 @@ public sealed partial class SqliteGachaAtomicChangeStore
             .ToArray();
     }
 
+    public async Task<IReadOnlyList<GachaRevisionItem>>
+        GetRevisionsByAccountAsync(
+            Guid gameAccountId,
+            CancellationToken cancellationToken = default)
+    {
+        if (gameAccountId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "Game account ID cannot be empty.",
+                nameof(gameAccountId));
+        }
+        await database.InitializeAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        List<GachaRevisionReadRow> rows =
+            await database.Connection.QueryAsync<GachaRevisionReadRow>(
+                """
+                SELECT RevisionId, ChangeSetId, GameAccountId,
+                       ExternalRecordId, ChangeKind, BeforeVersion,
+                       AfterVersion, BeforeSnapshotJson, AfterSnapshotJson,
+                       CreatedAtUtcTicks
+                FROM GachaRevisions
+                WHERE GameAccountId = ?
+                ORDER BY CreatedAtUtcTicks, rowid;
+                """,
+                gameAccountId.ToString("D"));
+        return rows.Select(row => new GachaRevisionItem(
+                ParseRequiredGuid(row.RevisionId, "revision"),
+                ParseRequiredGuid(row.ChangeSetId, "change set"),
+                new GachaFactReference(
+                    ParseRequiredGuid(row.GameAccountId, "game account"),
+                    row.ExternalRecordId),
+                (EntityChangeKind)row.ChangeKind,
+                row.BeforeVersion is long before
+                    ? new FactVersion(before)
+                    : null,
+                row.AfterVersion is long after
+                    ? new FactVersion(after)
+                    : null,
+                DeserializeSnapshot(row.BeforeSnapshotJson)?.ToDomain(),
+                DeserializeSnapshot(row.AfterSnapshotJson)?.ToDomain(),
+                new DateTimeOffset(row.CreatedAtUtcTicks, TimeSpan.Zero)))
+            .ToArray();
+    }
+
     private static IndexedPortablePreparation PrepareIndexedPortableApply(
         SQLiteConnection connection,
         GachaPortableIndexedApplyRequest request,

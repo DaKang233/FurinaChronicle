@@ -355,4 +355,8 @@ public interface IGachaAtomicChangeStore
     Task<IReadOnlyList<GachaRevisionItem>> GetRevisionsAsync(
         Guid changeSetId,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<GachaRevisionItem>> GetRevisionsByAccountAsync(
+        Guid gameAccountId,
+        CancellationToken cancellationToken = default);
 }
