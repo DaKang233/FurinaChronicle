@@ -191,6 +191,62 @@ public sealed class ArchivePackageCodecTests
         Assert.Equal(ArchivePackageErrorCode.ResourceLimitExceeded, exception.Code);
     }
 
+    [Fact]
+    public async Task StreamingUigfValidationCrossesBufferBoundaries()
+    {
+        Guid archiveId = Guid.Parse("00000000-0000-0000-0000-000000000401");
+        Guid accountId = Guid.Parse("00000000-0000-0000-0000-000000000402");
+        DateTimeOffset now = DateTimeOffset.Parse("2026-10-23T12:00:00+00:00");
+        GameRoleIdentity identity = GenshinGameRoleIdentity.CreateIdentity(
+            "100000001",
+            GameServerRegion.ChinaOfficial);
+        var catalog = new ArchiveCatalog(
+            [new ArchiveCatalogRoleIdentity(
+                identity.Id.Value,
+                identity.Id.Value,
+                identity.NaturalIdentity)],
+            [new ArchiveCatalogArchive(
+                archiveId,
+                "Large",
+                now,
+                now,
+                [new ArchiveCatalogAccount(
+                    accountId,
+                    identity.Id.Value,
+                    null,
+                    "100000001",
+                    GameServerRegion.ChinaOfficial,
+                    false,
+                    null,
+                    now,
+                    now)])]);
+        GachaRecord[] records = Enumerable.Range(1, 2_000)
+            .Select(index => Record(
+                accountId,
+                index.ToString("D19"),
+                "10000001",
+                now.AddSeconds(index)))
+            .ToArray();
+        await using var snapshot = new FakeSnapshot(
+            now,
+            catalog,
+            new ArchivePortableSettings(
+                true,
+                [new ArchivePortableArchiveSetting(archiveId, 3)]),
+            new Dictionary<Guid, IReadOnlyList<GachaRecord>>
+            {
+                [accountId] = records,
+            });
+        using var stream = new MemoryStream();
+
+        await new ArchivePackageWriter().WriteAsync(stream, snapshot, Generator());
+        stream.Position = 0;
+        ArchivePackageSummary read = await new ArchivePackageReader()
+            .ReadAndValidateAsync(stream);
+
+        Assert.Equal(2_000, read.GachaCurrentFactCount);
+    }
+
     private static ArchiveGeneratorInfo Generator() =>
         new("FurinaChronicle", "0.8.10.174", "8C.1", "0000000", "test");
 

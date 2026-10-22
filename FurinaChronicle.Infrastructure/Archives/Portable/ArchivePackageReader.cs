@@ -468,18 +468,6 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
         ArchiveCatalog catalog,
         CancellationToken cancellationToken)
     {
-        ArchiveUigfDocument document = await ReadJsonAsync<ArchiveUigfDocument>(
-            entry,
-            limits.MaximumEntryBytes,
-            cancellationToken);
-        if (document.Info?.Version != "v4.2" ||
-            document.Hk4e is not { Count: 1 } ||
-            document.Hk4e[0] is not ArchiveUigfAccount account ||
-            account.List is null)
-        {
-            throw Error(ArchivePackageErrorCode.InvalidPackage,
-                "The embedded UIGF 4.2 document is invalid.", path);
-        }
         Guid accountReference = ParseAccountReferenceFromUigfPath(path);
         ArchiveCatalogAccount catalogAccount = catalog.Archives
             .SelectMany(item => item.Accounts)
@@ -488,17 +476,166 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
                 "An embedded UIGF path references an unknown account.", path);
         ArchiveCatalogRoleIdentity identity = catalog.RoleIdentities.Single(item =>
             item.RoleIdentityReference == catalogAccount.RoleIdentityReference);
-        if (account.Uid != identity.NaturalIdentity.Uid ||
-            account.List.Any(item => item is null ||
-                string.IsNullOrWhiteSpace(item.Id) ||
-                string.IsNullOrWhiteSpace(item.ItemId)))
+
+        await using Stream stream = entry.Open();
+        byte[] buffer = new byte[64 * 1024];
+        int remaining = 0;
+        var state = new JsonReaderState(new JsonReaderOptions
+        {
+            MaxDepth = limits.MaximumJsonDepth,
+            CommentHandling = JsonCommentHandling.Disallow,
+            AllowTrailingCommas = false,
+        });
+        string? pendingProperty = null;
+        string? version = null;
+        string? uid = null;
+        string? recordId = null;
+        string? itemId = null;
+        int infoDepth = -1;
+        int hk4eDepth = -1;
+        int accountDepth = -1;
+        int listDepth = -1;
+        int recordDepth = -1;
+        int accountCount = 0;
+        bool sawList = false;
+        using var sequence = new SequenceAccumulator();
+        try
+        {
+            while (true)
+            {
+                int read = await stream.ReadAsync(
+                    buffer.AsMemory(remaining),
+                    cancellationToken);
+                int available = remaining + read;
+                bool final = read == 0;
+                var reader = new Utf8JsonReader(
+                    buffer.AsSpan(0, available),
+                    final,
+                    state);
+                while (reader.Read())
+                {
+                    switch (reader.TokenType)
+                    {
+                        case JsonTokenType.PropertyName:
+                            pendingProperty = reader.GetString();
+                            break;
+                        case JsonTokenType.StartObject:
+                            if (pendingProperty == "info" && infoDepth < 0)
+                                infoDepth = reader.CurrentDepth;
+                            else if (hk4eDepth >= 0 && accountDepth < 0 &&
+                                reader.CurrentDepth == hk4eDepth + 1)
+                            {
+                                accountDepth = reader.CurrentDepth;
+                                accountCount++;
+                            }
+                            else if (listDepth >= 0 && recordDepth < 0 &&
+                                reader.CurrentDepth == listDepth + 1)
+                            {
+                                recordDepth = reader.CurrentDepth;
+                                recordId = null;
+                                itemId = null;
+                            }
+                            pendingProperty = null;
+                            break;
+                        case JsonTokenType.StartArray:
+                            if (pendingProperty == "hk4e" && hk4eDepth < 0)
+                                hk4eDepth = reader.CurrentDepth;
+                            else if (pendingProperty == "list" && accountDepth >= 0)
+                            {
+                                listDepth = reader.CurrentDepth;
+                                sawList = true;
+                            }
+                            pendingProperty = null;
+                            break;
+                        case JsonTokenType.String:
+                            if (recordDepth >= 0)
+                            {
+                                if (pendingProperty == "id") recordId = reader.GetString();
+                                else if (pendingProperty == "item_id") itemId = reader.GetString();
+                            }
+                            else if (accountDepth >= 0 && pendingProperty == "uid")
+                                uid = reader.GetString();
+                            else if (infoDepth >= 0 && pendingProperty == "version")
+                                version = reader.GetString();
+                            pendingProperty = null;
+                            break;
+                        case JsonTokenType.EndObject:
+                            if (reader.CurrentDepth == recordDepth)
+                            {
+                                if (string.IsNullOrWhiteSpace(recordId) ||
+                                    string.IsNullOrWhiteSpace(itemId))
+                                {
+                                    throw new JsonException(
+                                        "A UIGF record is missing id or item_id.");
+                                }
+                                sequence.Append(recordId);
+                                if (sequence.Count > limits.MaximumGachaFactCount)
+                                {
+                                    throw Error(
+                                        ArchivePackageErrorCode.ResourceLimitExceeded,
+                                        "The embedded UIGF record count exceeds the limit.",
+                                        path);
+                                }
+                                recordDepth = -1;
+                            }
+                            else if (reader.CurrentDepth == accountDepth)
+                                accountDepth = -1;
+                            else if (reader.CurrentDepth == infoDepth)
+                                infoDepth = -1;
+                            pendingProperty = null;
+                            break;
+                        case JsonTokenType.EndArray:
+                            if (reader.CurrentDepth == listDepth) listDepth = -1;
+                            else if (reader.CurrentDepth == hk4eDepth) hk4eDepth = -1;
+                            pendingProperty = null;
+                            break;
+                        default:
+                            if (reader.TokenType is JsonTokenType.Number or
+                                JsonTokenType.True or JsonTokenType.False or
+                                JsonTokenType.Null)
+                                pendingProperty = null;
+                            break;
+                    }
+                }
+                int consumed = checked((int)reader.BytesConsumed);
+                remaining = available - consumed;
+                if (remaining > 0)
+                    buffer.AsSpan(consumed, remaining).CopyTo(buffer);
+                state = reader.CurrentState;
+                if (final)
+                {
+                    if (remaining != 0)
+                        throw new JsonException("The UIGF JSON is truncated.");
+                    break;
+                }
+                if (remaining == buffer.Length)
+                {
+                    throw Error(
+                        ArchivePackageErrorCode.ResourceLimitExceeded,
+                        "A UIGF JSON token exceeds the streaming limit.",
+                        path);
+                }
+            }
+        }
+        catch (JsonException exception)
+        {
+            throw new ArchivePackageException(
+                ArchivePackageErrorCode.InvalidPackage,
+                "The embedded UIGF 4.2 document is invalid.",
+                path,
+                exception);
+        }
+
+        if (version != "v4.2" || accountCount != 1 || !sawList ||
+            uid != identity.NaturalIdentity.Uid)
         {
             throw Error(ArchivePackageErrorCode.InvalidReference,
-                "The embedded UIGF identity or records conflict with the catalog.", path);
+                "The embedded UIGF identity or structure conflicts with the catalog.",
+                path);
         }
         return new UigfValidation(
             accountReference,
-            CreateSequenceSummary(account.List.Select(item => item!.Id!)));
+            sequence.Complete());
     }
 
     private async Task<DomainCounts> ValidateDomainAsync(
