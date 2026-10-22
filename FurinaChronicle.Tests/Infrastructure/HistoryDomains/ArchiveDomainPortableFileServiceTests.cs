@@ -102,6 +102,13 @@ public sealed class ArchiveDomainPortableFileServiceTests
         reexported.Position = 0;
         ArchiveDomainPortablePackage roundTripped =
             await target.Files.ReadAsync(reexported);
+        ArchiveDomainPortableSemanticComparison semanticComparison =
+            ArchiveDomainPortableSemanticComparer.Compare(
+                package,
+                roundTripped);
+        Assert.True(
+            semanticComparison.Equivalent,
+            string.Join(Environment.NewLine, semanticComparison.Differences));
         Assert.Equal(
             package.Accounts.Single().ManualRevisions
                 .Select(item => item.RevisionId),
@@ -156,6 +163,33 @@ public sealed class ArchiveDomainPortableFileServiceTests
             Assert.Single(Assert.Single(saved.SpiralAbyssFloors).Chambers)
                 .CompletedAt.Kind);
         Assert.Equal(challenge.Provenance, saved.Provenance);
+
+        using var reexported = new MemoryStream();
+        await target.Files.ExportAsync(
+            plan.TargetArchiveId,
+            ArchiveDomainDatasetKind.ChallengeHistory,
+            reexported,
+            TestTime().AddMinutes(2));
+        reexported.Position = 0;
+        ArchiveDomainPortablePackage roundTripped =
+            await target.Files.ReadAsync(reexported);
+        ArchiveDomainPortableSemanticComparison semanticComparison =
+            ArchiveDomainPortableSemanticComparer.Compare(
+                package,
+                roundTripped);
+        Assert.True(
+            semanticComparison.Equivalent,
+            string.Join(Environment.NewLine, semanticComparison.Differences));
+
+        ArchiveDomainPortablePlan repeat = await target.Files.PlanAsync(
+            package,
+            plan.TargetArchiveId);
+        Assert.Equal(0, repeat.AddCount);
+        Assert.Equal(1, repeat.SkipCount);
+        Assert.Equal(
+            ChangeExecutionStatus.NoOp,
+            (await target.Store.ApplyArchiveDomainPortableAsync(
+                ApplyRequest(package, repeat))).Status);
     }
 
     [Fact]
