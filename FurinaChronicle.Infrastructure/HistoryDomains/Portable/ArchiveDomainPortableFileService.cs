@@ -27,9 +27,9 @@ public sealed class ArchiveDomainPortableFileService(
     public const int MaximumFactCount = 100_000;
     private const string FormatName = "furina-domain-history";
 
-    private static readonly JsonSerializerOptions CompactJson = CreateOptions(
+    private static readonly JsonSerializerOptions CompactJson = CreatePortableJsonOptions(
         writeIndented: false);
-    private static readonly JsonSerializerOptions DisplayJson = CreateOptions(
+    private static readonly JsonSerializerOptions DisplayJson = CreatePortableJsonOptions(
         writeIndented: true);
 
     public async Task ExportAsync(
@@ -742,7 +742,8 @@ public sealed class ArchiveDomainPortableFileService(
         node.WriteTo(writer, CompactJson);
     }
 
-    private static JsonSerializerOptions CreateOptions(bool writeIndented)
+    internal static JsonSerializerOptions CreatePortableJsonOptions(
+        bool writeIndented)
     {
         var options = new JsonSerializerOptions
         {
