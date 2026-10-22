@@ -214,9 +214,12 @@ public sealed class ArchivePackageWriter(ArchivePortableLimits? limits = null)
             ArchiveFormatVersion.Current.ToString(),
             snapshot.GeneratedAt,
             generator,
-            snapshot.Scope.Kind,
-            snapshot.Catalog.Archives.Select(item => item.ArchiveReference).ToArray(),
-            "supported_logical_scope",
+            new ArchiveDeclaredScope(
+                snapshot.Scope.Kind,
+                snapshot.Catalog.Archives
+                    .Select(item => item.ArchiveReference)
+                    .ToArray(),
+                "supported_logical_scope"),
             datasets,
             SettingsPath,
             ChecksumsPath);

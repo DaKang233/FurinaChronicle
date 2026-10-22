@@ -282,6 +282,11 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
     {
         if (manifest.Format != ArchivePackageWriter.Format ||
             manifest.Datasets is null ||
+            manifest.DeclaredScope is null ||
+            !Enum.IsDefined(manifest.DeclaredScope.Kind) ||
+            manifest.DeclaredScope.ArchiveReferences is null ||
+            manifest.DeclaredScope.CompletenessAssertion !=
+                "supported_logical_scope" ||
             manifest.PortableSettingsPath != ArchivePackageWriter.SettingsPath ||
             manifest.ChecksumsPath != ArchivePackageWriter.ChecksumsPath)
         {
@@ -351,7 +356,8 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
             accounts.Distinct().Count() != accounts.Length ||
             roleReferences.Any(id => id == Guid.Empty) ||
             roleReferences.Distinct().Count() != roleReferences.Length ||
-            !archives.Order().SequenceEqual(manifest.ArchiveReferences.Order()))
+            !archives.Order().SequenceEqual(
+                manifest.DeclaredScope.ArchiveReferences.Order()))
         {
             throw Error(ArchivePackageErrorCode.InvalidReference,
                 "The Archive catalog parent references are invalid.");

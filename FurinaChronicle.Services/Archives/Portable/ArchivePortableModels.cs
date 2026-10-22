@@ -126,14 +126,17 @@ public sealed record ArchiveDatasetDescriptor(
     IReadOnlyDictionary<string, long> RecordCounts,
     long UncompressedLength);
 
+public sealed record ArchiveDeclaredScope(
+    ArchiveExportScopeKind Kind,
+    IReadOnlyList<Guid> ArchiveReferences,
+    string CompletenessAssertion);
+
 public sealed record ArchiveManifest(
     string Format,
     string FormatVersion,
     DateTimeOffset GeneratedAt,
     ArchiveGeneratorInfo Generator,
-    ArchiveExportScopeKind ScopeKind,
-    IReadOnlyList<Guid> ArchiveReferences,
-    string CompletenessAssertion,
+    ArchiveDeclaredScope DeclaredScope,
     IReadOnlyList<ArchiveDatasetDescriptor> Datasets,
     string PortableSettingsPath,
     string ChecksumsPath);
