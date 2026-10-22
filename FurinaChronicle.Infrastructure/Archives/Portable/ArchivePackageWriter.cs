@@ -238,7 +238,9 @@ public sealed class ArchivePackageWriter(ArchivePortableLimits? limits = null)
                 account.AccountReference,
                 cancellationToken))
             {
-                ArchiveGachaHistoryLine line = IsStandardRecord(record)
+                bool standard = account.RoleIdentityReference is not null &&
+                    IsStandardRecord(record);
+                ArchiveGachaHistoryLine line = standard
                     ? new ArchiveGachaHistoryLine(
                         "standard_extension",
                         account.AccountReference,
@@ -254,7 +256,9 @@ public sealed class ArchivePackageWriter(ArchivePortableLimits? limits = null)
                         "nonstandard_current",
                         account.AccountReference,
                         record.ExternalRecordId,
-                        GetReasonCodes(record),
+                        GetReasonCodes(
+                            record,
+                            account.RoleIdentityReference is not null),
                         null,
                         record,
                         null);
@@ -586,9 +590,12 @@ public sealed class ArchivePackageWriter(ArchivePortableLimits? limits = null)
         record.Count > 0 &&
         record.RankType is null or >= 3 and <= 5;
 
-    private static IReadOnlyList<string> GetReasonCodes(GachaRecord record)
+    private static IReadOnlyList<string> GetReasonCodes(
+        GachaRecord record,
+        bool resolvedAccount)
     {
         var result = new List<string>();
+        if (!resolvedAccount) result.Add("unresolved_account");
         if (string.IsNullOrWhiteSpace(record.ItemId)) result.Add("missing_item_id");
         if (string.IsNullOrWhiteSpace(record.GachaType) ||
             !GachaTypes.Contains(record.GachaType)) result.Add("invalid_gacha_type");

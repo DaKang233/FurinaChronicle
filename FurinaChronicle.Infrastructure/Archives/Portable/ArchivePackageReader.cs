@@ -98,21 +98,28 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
             .SelectMany(item => item.Accounts)
             .Select(item => item.AccountReference)
             .ToHashSet();
-        (long gachaFacts, long gachaRevisions) = await ValidateGachaHistoryAsync(
+        GachaHistoryValidation gachaHistory = await ValidateGachaHistoryAsync(
             Require(entries, ArchivePackageWriter.GachaHistoryPath),
             accountReferences,
             cancellationToken);
         long uigfFacts = 0;
+        var uigfSequences = new Dictionary<Guid, SequenceSummary>();
         foreach (ArchiveDatasetDescriptor dataset in manifest.Datasets.Where(item =>
             item.Format == "uigf" && item.FormatVersion == "v4.2"))
         {
             foreach (string path in dataset.Paths)
             {
-                uigfFacts += await ValidateUigfAsync(
+                UigfValidation validated = await ValidateUigfAsync(
                     Require(entries, path),
                     path,
                     catalog,
                     cancellationToken);
+                uigfFacts += validated.Sequence.Count;
+                if (!uigfSequences.TryAdd(validated.AccountReference, validated.Sequence))
+                {
+                    throw Error(ArchivePackageErrorCode.DuplicatePath,
+                        "An account has more than one embedded UIGF payload.", path);
+                }
             }
             RequireCount(dataset, "current_facts", uigfFacts);
         }
@@ -137,10 +144,11 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
         ArchiveDatasetDescriptor history = manifest.Datasets.Single(item =>
             item.Format == "furina-archive-gacha-history" &&
             item.FormatVersion == "1.0");
-        RequireCount(history, "current_facts", gachaFacts);
-        RequireCount(history, "revisions", gachaRevisions);
-        EnsureCount(gachaFacts, limits.MaximumGachaFactCount, "Gacha facts");
-        EnsureCount(gachaRevisions, limits.MaximumGachaRevisionCount, "Gacha revisions");
+        ValidateStandardOneToOne(gachaHistory.StandardSequences, uigfSequences);
+        RequireCount(history, "current_facts", gachaHistory.Facts);
+        RequireCount(history, "revisions", gachaHistory.Revisions);
+        EnsureCount(gachaHistory.Facts, limits.MaximumGachaFactCount, "Gacha facts");
+        EnsureCount(gachaHistory.Revisions, limits.MaximumGachaRevisionCount, "Gacha revisions");
         EnsureCount(domainFacts + domainRevisions,
             limits.MaximumDomainRecordCount * Math.Max(1, catalog.Archives.Count),
             "domain records");
@@ -149,8 +157,8 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
             manifest,
             catalog,
             settings,
-            gachaFacts,
-            gachaRevisions,
+            gachaHistory.Facts,
+            gachaHistory.Revisions,
             domainFacts,
             domainRevisions,
             entries.Values.Where(item => item.FullName != ArchivePackageWriter.ChecksumsPath)
@@ -375,13 +383,14 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
         }
     }
 
-    private async Task<(long Facts, long Revisions)> ValidateGachaHistoryAsync(
+    private async Task<GachaHistoryValidation> ValidateGachaHistoryAsync(
         ZipArchiveEntry entry,
         IReadOnlySet<Guid> accountReferences,
         CancellationToken cancellationToken)
     {
         long facts = 0;
         long revisions = 0;
+        var standardKeys = new Dictionary<Guid, SequenceAccumulator>();
         await using Stream stream = entry.Open();
         using var reader = new StreamReader(
             stream,
@@ -423,6 +432,16 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
             {
                 case "standard_extension" when value.Extension is not null &&
                     value.Record is null && value.Revision is null:
+                    if (!standardKeys.TryGetValue(
+                        value.AccountReference,
+                        out SequenceAccumulator? keys))
+                    {
+                        keys = new SequenceAccumulator();
+                        standardKeys[value.AccountReference] = keys;
+                    }
+                    keys.Append(value.ExternalRecordId);
+                    facts++;
+                    break;
                 case "nonstandard_current" when value.Record is not null &&
                     value.Extension is null && value.Revision is null:
                     facts++;
@@ -437,10 +456,13 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
                         entry.FullName);
             }
         }
-        return (facts, revisions);
+        return new GachaHistoryValidation(
+            facts,
+            revisions,
+            standardKeys.ToDictionary(pair => pair.Key, pair => pair.Value.Complete()));
     }
 
-    private async Task<long> ValidateUigfAsync(
+    private async Task<UigfValidation> ValidateUigfAsync(
         ZipArchiveEntry entry,
         string path,
         ArchiveCatalog catalog,
@@ -474,7 +496,9 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
             throw Error(ArchivePackageErrorCode.InvalidReference,
                 "The embedded UIGF identity or records conflict with the catalog.", path);
         }
-        return account.List.Count;
+        return new UigfValidation(
+            accountReference,
+            CreateSequenceSummary(account.List.Select(item => item!.Id!)));
     }
 
     private async Task<DomainCounts> ValidateDomainAsync(
@@ -643,6 +667,35 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
         return result;
     }
 
+    private static SequenceSummary CreateSequenceSummary(IEnumerable<string> keys)
+    {
+        using var accumulator = new SequenceAccumulator();
+        foreach (string key in keys) accumulator.Append(key);
+        return accumulator.Complete();
+    }
+
+    private static void ValidateStandardOneToOne(
+        IReadOnlyDictionary<Guid, SequenceSummary> history,
+        IReadOnlyDictionary<Guid, SequenceSummary> uigf)
+    {
+        byte[] emptyHash = SHA256.HashData([]);
+        foreach (Guid account in history.Keys.Concat(uigf.Keys).Distinct())
+        {
+            SequenceSummary left = history.TryGetValue(account, out var historyValue)
+                ? historyValue
+                : new SequenceSummary(0, emptyHash);
+            SequenceSummary right = uigf.TryGetValue(account, out var uigfValue)
+                ? uigfValue
+                : new SequenceSummary(0, emptyHash);
+            if (left.Count != right.Count ||
+                !CryptographicOperations.FixedTimeEquals(left.Hash, right.Hash))
+            {
+                throw Error(ArchivePackageErrorCode.RecordCountMismatch,
+                    "UIGF facts and standard Gacha extensions are not one-to-one.");
+            }
+        }
+    }
+
     private static ZipArchiveEntry Require(
         IReadOnlyDictionary<string, ZipArchiveEntry> entries,
         string path) =>
@@ -661,4 +714,44 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
         string? path = null) => new(code, message, path);
 
     private readonly record struct DomainCounts(long Facts, long Revisions);
+
+    private sealed record GachaHistoryValidation(
+        long Facts,
+        long Revisions,
+        IReadOnlyDictionary<Guid, SequenceSummary> StandardSequences);
+
+    private sealed record UigfValidation(
+        Guid AccountReference,
+        SequenceSummary Sequence);
+
+    private sealed record SequenceSummary(long Count, byte[] Hash);
+
+    private sealed class SequenceAccumulator : IDisposable
+    {
+        private readonly IncrementalHash hash =
+            IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        private bool completed;
+
+        public long Count { get; private set; }
+
+        public void Append(string key)
+        {
+            if (completed) throw new InvalidOperationException();
+            byte[] bytes = Encoding.UTF8.GetBytes(key);
+            Span<byte> length = stackalloc byte[sizeof(int)];
+            BitConverter.TryWriteBytes(length, bytes.Length);
+            hash.AppendData(length);
+            hash.AppendData(bytes);
+            Count++;
+        }
+
+        public SequenceSummary Complete()
+        {
+            if (completed) throw new InvalidOperationException();
+            completed = true;
+            return new SequenceSummary(Count, hash.GetHashAndReset());
+        }
+
+        public void Dispose() => hash.Dispose();
+    }
 }
