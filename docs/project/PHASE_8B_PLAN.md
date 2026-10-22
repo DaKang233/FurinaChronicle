@@ -2,7 +2,7 @@
 
 状态：Accepted target
 
-阶段状态：In progress（Phase 8A 已关闭；8B.0～8B.6 实现工作包已关闭；新领域跨端文件与真实 Schema 7 应用升级证据延期到 8B.7）
+阶段状态：Awaiting device evidence（Phase 8A 已关闭；8B.0～8B.6 实现工作包已关闭；8B.7 工程实现完成，等待新领域跨端文件与真实 Schema 7 应用证据）
 
 维护者已确认 ADR 0009、0010 和 Q06。本计划按 [ADR 0011](../decisions/0011-domain-first-product-scope.md) 收敛：最小共享基础先行，领域先独立保存、查询和导出，Chronicle 后消费。不要求一次冻结所有未来领域。
 
@@ -171,6 +171,8 @@
 - 运行抽卡回归、领域端到端、失败数据库不变和无 Chronicle 导出检查；
 - 全部测试使用虚构 UID 和无效占位凭据，日志不包含秘密；
 - 输出完成报告和 8C 输入清单，清楚区分已实现、Accepted target 和 Draft。
+
+实现状态：Implementation complete；Awaiting device/file verification。直接 populated Schema 6→7 与失败回滚、隔离验收入口、正式 exporter 合成样本、严格语义比较器及双平台构建已完成。Windows 实际旧库升级、Android 实际新库重开以及两个 Dataset 的双向真实文件往返尚未执行，因此 8B.7 和 Phase 8B 均未标 Closed。详见 [8B.7 实施记录](PHASE_8B7_IMPLEMENTATION.md) 与 [Phase 8B 退出评审](PHASE_8B_EXIT_REVIEW.md)。
 
 ## 建议提交顺序
 

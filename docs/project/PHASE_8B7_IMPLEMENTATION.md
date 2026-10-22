@@ -2,7 +2,7 @@
 
 状态：Accepted 计划的实施记录
 
-实施状态：In progress；工程工作进行中，设备／文件证据尚未关闭
+实施状态：Implementation complete；Awaiting device/file verification
 
 基线：`feat/phase-8 @ abada0af5b9287dc8d045d6cd32ba0962244e7f5`
 
@@ -25,9 +25,9 @@
 | 项目 | 2026-10-22 实际结果 |
 |---|---|
 | Git | `feat/phase-8 @ abada0a`；开始时工作区干净 |
-| 数据库 | 当前 Schema 7；需要补直接 populated 6→7 迁移证据 |
-| 应用版本 | `0.8.7 / 8B.6`；本包完成工程入口后推进为 `0.8.8 / 8B.7` |
-| 自动化 | Release 517／517 通过 |
+| 数据库 | 当前 Schema 7；直接 populated 6→7、后段失败回滚和取消已有自动化证据 |
+| 应用版本 | `0.8.8 / 8B.7`；Build 继续由 Git commit count 生成 |
+| 自动化 | Release 525／525 通过（设备验收前工程基线） |
 | .NET | 仓库 SDK 选择仍由 `global.json`／构建确定；主机同时安装 .NET 10 与 11 RC |
 | Android | `E:\AndroidSDK` 可用；发现 `emulator-5554`，未发现物理设备 |
 | Windows | Visual Studio 正在运行；执行真实 App／旧库升级前必须避免文件占用并只操作一致副本 |
@@ -37,14 +37,26 @@
 
 | 工作包 | 交付 | 当前状态 |
 |---|---|---|
-| P0 | 基线、边界和证据矩阵 | In progress |
-| P1 | 正式 exporter 生成的虚构验收样本与严格语义比较 | Pending |
-| P2 | 直接 Schema 6→7、后段失败和独立领域出口安全回归 | Pending |
-| P3 | Windows／Android 可达且可关闭的隔离验收入口 | Pending |
-| P4 | 集成回归、版本和双平台设备用构建 | Pending |
+| P0 | 基线、边界和证据矩阵 | Completed |
+| P1 | 正式 exporter 生成的虚构验收样本与严格语义比较 | Automated complete |
+| P2 | 直接 Schema 6→7、后段失败和独立领域出口安全回归 | Automated complete |
+| P3 | Windows／Android 可达且可关闭的隔离验收入口 | Build verified；device run pending |
+| P4 | 集成回归、版本和双平台设备用构建 | Automated/build complete；fixed-commit device artifacts pending |
 | P5 | Windows 实际旧库升级、Android 实际新库创建 | Awaiting device / old database evidence |
 | P6 | 两个 Dataset 的 Windows↔Android 双向文件往返 | Awaiting device evidence |
-| P7 | Phase 8B 退出评审和 8C 输入 | Pending |
+| P7 | Phase 8B 退出评审和 8C 输入 | Draft complete；cannot close before P5/P6 |
+
+## 已完成工程证据
+
+- `Phase8B7MigrationTests` 以生产写入形成 populated Schema 6 边界，覆盖 Gacha、角色／武器、挑战、修订、Undo、Tombstone、Receipt，并验证 6→7 保留、外键、表、触发器及后段冲突回滚；预取消保持库不变。
+- `Phase8BValidationMode=true` 构建只显示隔离验收页，使用 `phase8b7-validation` 数据目录，不执行元数据联网刷新或 Passport 凭据维护。默认构建路径和数据库不变。
+- 页面通过实际系统 picker 的内容流调用正式 Reader／Plan，确认后调用正式原子 Apply；支持两个领域的 Portable 和 Markdown 导出。Android 不把 SAF URI 当路径或写入诊断。
+- `eng/phase8b` 工具从正式领域 Store 和 exporter 生成两类合成成功包；另生成坏指纹、合法指纹 future major、截断、超限和同引用不同内容输入。正式 Reader 已分别接受或按预期拒绝。
+- 严格比较只忽略目标本地档案／账号 ID、包指纹、导出时间和接收端操作记录；保留稳定事实 ID、账号归属、原时间偏移、来源、完整度与手工修订。变异测试证明时间、来源、修订或账号归属损失均会失败。
+- 两个 Dataset 均已通过宿主 Source→Domain→SQLite→Export→Read／Plan→Apply→Re-export 严格语义比较及重复导入 NoOp。该证据不冒充真实设备文件往返。
+- Windows 旧库准备使用工具的 SQLite Online Backup，不只复制主文件；验收构建可通过 `FURINA_PHASE8B7_DIRECTORY` 选择绝对隔离目录，且不会覆盖已存在的目标副本。
+
+相关本地提交：`ce2ec5d`、`db1a4b5`、`a50dd4f`、`ec4ce97`、`7ae1039`、`895c4e6`。
 
 ## 验收入口约束
 

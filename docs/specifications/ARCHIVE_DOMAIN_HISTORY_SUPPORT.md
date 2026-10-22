@@ -16,8 +16,8 @@
 | 资源上限 | 10 MiB；100,000 个事实／修订 | 10 MiB；100,000 个观察 |
 | 旧格式 | 不适用；没有 v0 | 不适用；没有 v0 |
 | future major | 拒绝 | 拒绝 |
-| Windows / Android 编译 | 自动化验收项 | 自动化验收项 |
-| Windows↔Android 实际文件往返 | Not run；等待 8B.7 entry/harness，完成前不公开发布 | Not run；等待 8B.7 entry/harness，完成前不公开发布 |
+| Windows / Android 编译 | 8B.7 隔离验收构建通过；实际运行待验收 | 同左 |
+| Windows↔Android 实际文件往返 | Not run；8B.7 已提供真实 picker／Preview／Apply／export 入口，完成前不公开发布 | 同左 |
 | Chronicle | Character／Weapon Profile；观察和状态变化默认显式开启才显示 | Challenge Profile；深境螺旋每期最多一个 Main 完成节点 |
 
-未实施：角色／武器和挑战的完整产品 UI、米游社／HoYoLAB 在线采集、幻想真境剧诗、幽境危战、真实成就目录、完整 Archive、Sync / ChangeJournal。Chronicle Contributor 与服务级查询已实现，但没有完整产品页面，也不是领域保存／导出前置条件。内部 collector fixture 用于证明 Source→Domain 边界，不是对外交换格式；用户交换应使用 Portable。当前 App 没有新领域 Portable 的产品入口，不能要求维护者从正式 UI 完成尚不可达的手工验收。
+未实施：角色／武器和挑战的完整产品 UI、米游社／HoYoLAB 在线采集、幻想真境剧诗、幽境危战、真实成就目录、完整 Archive、Sync / ChangeJournal。Chronicle Contributor 与服务级查询已实现，但没有完整产品页面，也不是领域保存／导出前置条件。内部 collector fixture 用于证明 Source→Domain 边界，不是对外交换格式；用户交换应使用 Portable。8B.7 的入口是显式构建开关控制的隔离验收页，不是正式产品 UI，也不改变 Portable 的 `internal / unpublished` 状态。
