@@ -12,8 +12,11 @@
 
 工作流首先在 Linux 执行 `FurinaChronicle.Tests` 的 Release 测试。测试通过后，分别在 Windows 托管运行器上生成：
 
-- `net10.0-windows10.0.19041.0`、`win-x64`、自包含且不打包的 Windows Release 应用；
+- 现有 MAUI Windows：`net10.0-windows10.0.19041.0`、`win-x64`、自包含且不打包的 Windows Release 应用；
+- UI-0 独立 WinUI 3 技术小样：`FurinaChronicle.Windows` 的 `win-x64`、自包含且不打包的 Release 应用；
 - `net10.0-android`、内嵌程序集的 Android Release APK。
+
+UI-0 WinUI 产物仅用于技术验证，不表示现有 MAUI Windows 业务能力已迁移，也不应替代现有 Windows 产物。它随包携带 Windows App SDK 的许可与第三方声明。
 
 仓库根目录的 `global.json` 将 SDK 限定在 .NET 10，并允许使用当前 .NET 10 的最新功能带和补丁版本，避免托管运行器预装更高主版本 SDK 后错误选择其他 SDK 或 MAUI 工作负载。
 
@@ -42,11 +45,12 @@ Windows PowerShell 可用下列命令生成密钥库文件的 Base64 文本，�
 
 ## 发布物
 
-每次成功运行会生成两个应用 artifact：
+每次成功运行会生成三个应用 artifact：
 
 - `FurinaChronicle-windows-win-x64-<commit>`；
+- `FurinaChronicle-windows-ui0-preview-win-x64-<commit>`；
 - `FurinaChronicle-android-<commit>`。
 
-Android artifact 同时包含 `SHA256SUMS.txt`。两个 artifact 均附带仓库的 `README.md`、`LICENSE.txt` 与 `THIRD-PARTY-NOTICES.txt`。
+Android artifact 同时包含 `SHA256SUMS.txt`。三个 artifact 均附带仓库的 `README.md`、`LICENSE.txt` 与 `THIRD-PARTY-NOTICES.txt`。
 
 工作流只生成 GitHub Actions artifact，不会自动创建 GitHub Release，也不会自动部署到网站。公开发布仍是独立、可审计的操作。

@@ -1,5 +1,18 @@
 FurinaChronicle includes data derived from Snap.Metadata.
 
+The UI-0 Windows technical preview uses Microsoft Windows App SDK 2.5.1.
+Copyright (c) Microsoft Corporation. All rights reserved.
+Source: https://github.com/microsoft/WindowsAppSDK
+The complete Microsoft license and third-party notice files supplied by the
+NuGet package are included under the Licenses directory of that preview's
+build and publish output.
+
+The existing .NET MAUI Android dependency graph includes
+Xamarin.Google.Android.Material 1.12.0.5, a Microsoft-maintained binding for
+com.google.android.material:material 1.12.0. Its declared license expression
+is MIT AND Apache-2.0.
+Source: https://github.com/xamarin/AndroidX
+
 Snap.Metadata
 Copyright (c) 2022 DGP Studio
 Licensed under the MIT License.

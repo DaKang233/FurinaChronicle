@@ -103,6 +103,33 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: Publish independent WinUI 3 UI-0 host
+        shell: pwsh
+        run: |
+          $outputPath = Join-Path $env:GITHUB_WORKSPACE 'artifacts\windows-ui0\win-x64'
+          dotnet publish .\FurinaChronicle.Windows\FurinaChronicle.Windows.csproj `
+            --configuration Release `
+            --runtime win-x64 `
+            --self-contained true `
+            --output $outputPath `
+            -p:WindowsPackageType=None `
+            -p:WindowsAppSDKSelfContained=true `
+            -p:FurinaRequireReliableVersion=true
+
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+          Copy-Item .\README.md, .\LICENSE.txt, .\THIRD-PARTY-NOTICES.txt $outputPath
+
+      - name: Upload independent WinUI 3 UI-0 host
+        uses: actions/upload-artifact@v7
+        with:
+          name: FurinaChronicle-windows-ui0-preview-win-x64-${{ github.sha }}
+          path: artifacts/windows-ui0/win-x64
+          if-no-files-found: error
+          retention-days: 30
+
   android:
     name: Android Release APK
     needs: test

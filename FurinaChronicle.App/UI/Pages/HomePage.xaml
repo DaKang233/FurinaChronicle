@@ -9,15 +9,80 @@
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
     xmlns:controls="clr-namespace:FurinaChronicle.App.UI.Controls"
+    SafeAreaEdges="All"
     Title="主页">
     <Shell.TitleView>
         <controls:PassportAvatarButton
             IsVisible="{OnPlatform Android=True, WinUI=False}" />
     </Shell.TitleView>
-    <Grid Padding="24">
-        <VerticalStackLayout HorizontalOptions="Center" Spacing="8" VerticalOptions="Center">
-            <Label FontAttributes="Bold" FontSize="30" HorizontalTextAlignment="Center" Text="FurinaChronicle" />
-            <Label HorizontalTextAlignment="Center" Opacity="0.65" Text="主页内容将在后续版本加入。" />
-        </VerticalStackLayout>
+    <Grid x:Name="RootLayout" Padding="16,12,16,16">
+        <ScrollView
+            x:Name="PreviewScrollView"
+            Margin="0,0,0,72"
+            SafeAreaEdges="All">
+            <VerticalStackLayout
+                x:Name="PreviewContent"
+                Margin="0,12"
+                MaximumWidthRequest="720"
+                Spacing="16">
+                <VerticalStackLayout Spacing="4">
+                    <Label FontAttributes="Bold" FontSize="30" Text="FurinaChronicle" />
+                    <Label
+                        FontSize="16"
+                        Opacity="0.72"
+                        Text="UI-0 · Android Material 3 交互验证"
+                        TextColor="{AppThemeBinding Light=#526075, Dark=#B5C1D1}" />
+                </VerticalStackLayout>
+
+                <Border
+                    BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#1B2129}"
+                    IsVisible="{OnPlatform Android=True, WinUI=False}"
+                    Padding="18"
+                    Stroke="{AppThemeBinding Light=#D6DFEA, Dark=#465363}"
+                    StrokeShape="RoundRectangle 16">
+                    <VerticalStackLayout Spacing="12">
+                        <Label FontAttributes="Bold" FontSize="20" Text="原生 BottomSheet 小样" />
+                        <Label
+                            LineBreakMode="WordWrap"
+                            Text="右下角“数据操作”使用 Android Material ExtendedFloatingActionButton；打开的是 Material BottomSheetDialog，不是页面内 Border。样例只处理受控文字，不连接数据库、文件或网络。" />
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10" RowDefinitions="Auto,Auto,Auto" RowSpacing="8">
+                            <Label FontAttributes="Bold" Text="关闭" />
+                            <Label Grid.Column="1" Text="遮罩点击、下滑、关闭按钮或系统返回键" />
+                            <Label Grid.Row="1" FontAttributes="Bold" Text="内容" />
+                            <Label Grid.Row="1" Grid.Column="1" Text="原生滚动区与可唤起键盘的输入框" />
+                            <Label Grid.Row="2" FontAttributes="Bold" Text="安全区" />
+                            <Label Grid.Row="2" Grid.Column="1" Text="系统栏与 IME insets 参与底部内边距" />
+                        </Grid>
+                    </VerticalStackLayout>
+                </Border>
+
+                <Border
+                    BackgroundColor="{AppThemeBinding Light=#EDF2F8, Dark=#28313D}"
+                    Padding="16"
+                    StrokeThickness="0"
+                    StrokeShape="RoundRectangle 12">
+                    <VerticalStackLayout Spacing="6">
+                        <Label FontAttributes="Bold" Text="运行状态" />
+                        <Label
+                            x:Name="LayoutStateLabel"
+                            LineBreakMode="WordWrap"
+                            Text="等待窗口尺寸信息。" />
+                        <Label
+                            x:Name="ThemeStateLabel"
+                            LineBreakMode="WordWrap"
+                            Text="等待主题信息。" />
+                        <Label
+                            x:Name="SheetStateLabel"
+                            LineBreakMode="WordWrap"
+                            Text="面板尚未打开。" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <Label
+                    IsVisible="{OnPlatform Android=False, WinUI=True}"
+                    Opacity="0.65"
+                    Text="Android 原生交互样例只在 Android 目标显示；旧 MAUI Windows 页面保持为回归参考。" />
+            </VerticalStackLayout>
+        </ScrollView>
     </Grid>
 </ContentPage>

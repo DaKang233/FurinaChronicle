@@ -23,3 +23,4 @@
 - [0017：挑战观察身份、回返与乱序历史](0017-challenge-observation-history.md)
 - [0018：Chronicle generation、游标与证据退化](0018-chronicle-generation-and-evidence.md)
 - [0019：深境螺旋 Chronicle 完成证据](0019-spiral-abyss-chronicle-completion.md)
+- [0020：平台专属 UI 宿主与最小展示边界](0020-platform-specific-ui-hosts.md)
