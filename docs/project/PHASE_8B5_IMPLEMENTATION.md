@@ -1,6 +1,6 @@
 # Phase 8B.5 实施契约与验证记录
 
-状态：Accepted implementation contract
+状态：Accepted implementation contract；8B.7 device evidence completed 2026-10-23
 
 实施状态：Implementation completed；device file evidence deferred to 8B.7
 
@@ -129,7 +129,7 @@ P0 fixture 编号沿用实施计划的 S01～S04、M01～M05、C01～C06、I01�
 2. 对同一文件第二次导入，确认 Preview 为全 Skip、Apply 为 NoOp，且历史页没有重复修订。
 3. 确认两端均不会把新格式显示成“已公开稳定”，并记录文件大小、耗时、峰值内存和任何系统文件选择器差异。
 
-当前状态为 `Not run — deferred to 8B.7 entry/harness`，不是人工失败或被设备环境阻塞。这些文件往返证据在 8B.7 汇总；完成前两个新 Portable 数据集保持 internal / unpublished。由于本轮没有新增完整产品页面，在线采集和领域 UI 不作为 8B.5 人工退出条件。
+本工作包关闭时状态为 `Not run — deferred to 8B.7 entry/harness`，不是人工失败或被设备环境阻塞。后续已于 2026-10-23 通过 8B.7 隔离入口完成双平台真实文件往返、重复导入 NoOp、重开以及取消／拒绝路径，并在 [8B.7 实施记录](PHASE_8B7_IMPLEMENTATION.md) 汇总。两个新 Portable 数据集仍保持 internal / unpublished。由于本轮没有新增完整产品页面，在线采集和领域 UI 不作为 8B.5 人工退出条件。
 
 ## 自动化验证（2026-10-18）
 

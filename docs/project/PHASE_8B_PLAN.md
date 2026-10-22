@@ -2,7 +2,7 @@
 
 状态：Accepted target
 
-阶段状态：Awaiting device evidence（Phase 8A 已关闭；8B.0～8B.6 实现工作包已关闭；8B.7 工程实现完成，等待新领域跨端文件与真实 Schema 7 应用证据）
+阶段状态：Closed（2026-10-23；8B.0～8B.7 全部关闭，设备／文件证据及 Windows 历史库限制见退出评审）
 
 维护者已确认 ADR 0009、0010 和 Q06。本计划按 [ADR 0011](../decisions/0011-domain-first-product-scope.md) 收敛：最小共享基础先行，领域先独立保存、查询和导出，Chronicle 后消费。不要求一次冻结所有未来领域。
 
@@ -122,7 +122,7 @@
 
 ## 工作包 8B.5：独立领域窄纵切
 
-实施状态：Implementation completed（2026-10-18；自动化与双平台 Release 构建完成；内部 Portable 的 Windows↔Android 实际文件往返等待人工验收，未公开发布）
+实施状态：Completed（实现于 2026-10-18；Windows↔Android 实际文件往返于 2026-10-23 在 8B.7 关闭；Portable 仍未公开发布）
 
 按 [统一领域能力原则](../architecture/OVERVIEW.md) 验证角色/武器和挑战。允许 fixture 或文件导入作为早期输入，不要求完整官方采集和完整 UI。
 
@@ -172,7 +172,7 @@
 - 全部测试使用虚构 UID 和无效占位凭据，日志不包含秘密；
 - 输出完成报告和 8C 输入清单，清楚区分已实现、Accepted target 和 Draft。
 
-实现状态：Implementation complete；Awaiting device/file verification。直接 populated Schema 6→7 与失败回滚、隔离验收入口、正式 exporter 合成样本、严格语义比较器及双平台构建已完成。Windows 实际旧库升级、Android 实际新库重开以及两个 Dataset 的双向真实文件往返尚未执行，因此 8B.7 和 Phase 8B 均未标 Closed。详见 [8B.7 实施记录](PHASE_8B7_IMPLEMENTATION.md) 与 [Phase 8B 退出评审](PHASE_8B_EXIT_REVIEW.md)。
+实现状态：Completed；Closed（2026-10-23）。直接 populated Schema 6→7 与失败回滚、隔离验收入口、正式 exporter 合成样本、严格语义比较器及双平台构建完成；Android 隔离新库和两个 Dataset 的双向真实文件流程通过。Windows 以精确自动迁移加真实 pre-Schema-7 历史库自然升级结果的组合证据关闭，并保留升级前精确版本未捕获的限制。详见 [8B.7 实施记录](PHASE_8B7_IMPLEMENTATION.md) 与 [Phase 8B 退出评审](PHASE_8B_EXIT_REVIEW.md)。
 
 ## 建议提交顺序
 

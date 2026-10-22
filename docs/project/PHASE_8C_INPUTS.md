@@ -1,6 +1,6 @@
 # Phase 8C 输入清单
 
-状态：Prepared input；Phase 8B 尚待设备／文件验收关闭
+状态：Ready；Phase 8B 已于 2026-10-23 关闭
 
 ## 可直接复用的基础
 
@@ -26,11 +26,11 @@
 - 不在完整 Archive 工作中实现云同步、ChangeJournal、WebDAV、服务端账号、E2EE 或社区大规模统计。
 - 不因未来《崩坏：星穹铁道》扩展而预先统一所有游戏领域模型；首个扩展可优先复用 UIGF 的抽卡入口。
 - 不把 8B.7 隔离验收页当成正式备份／恢复 UI。8C 应在其真实 picker、Preview、Apply、export 证据上建立产品流程，并明确替换或隐藏该入口。
-- 不公开发布角色／武器或挑战 Portable，直到 8B.7 的真实双向文件证据完成并单独审查支持承诺。
+- 8B.7 的真实双向文件证据已经完成，但角色／武器或挑战 Portable 仍保持 internal / unpublished；公开支持承诺需要独立格式审查，不由 Phase 8B 关闭自动产生。
 
 ## 首批建议工作顺序
 
-1. 在关闭 8B.7 设备证据后冻结 Archive manifest 与 Dataset envelope。
+1. 以已关闭的 8B.7 设备证据为输入，冻结 Archive manifest 与 Dataset envelope。
 2. 先实现无附件的本地完整备份、预览和原子恢复，并覆盖 Windows↔Android 文件闭环。
 3. 再加入分类导出、Markdown 报告和可选附件；设置只包含 portable 子集。
 4. 最后根据真实文件体积和恢复性能决定压缩、分卷、RawSnapshot 保留及未来传输接口，不提前实现云端。
