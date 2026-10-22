@@ -16,6 +16,7 @@ public partial class AppShell : Shell
     private readonly UserPage userPage;
     private readonly UserPageViewModel userPageViewModel;
     private readonly ArchivePage archivePage;
+    private readonly Phase8BValidationPage phase8BValidationPage;
     private PassportFlyoutHeader? passportFlyoutHeader;
     private bool mainNavigationConfigured;
 
@@ -25,6 +26,7 @@ public partial class AppShell : Shell
         GachaPage gachaPage,
         ArchiveHistoryPage archiveHistoryPage,
         ArchivePage archivePage,
+        Phase8BValidationPage phase8BValidationPage,
         UserPage userPage,
         UserPageViewModel userPageViewModel)
     {
@@ -33,6 +35,7 @@ public partial class AppShell : Shell
         this.gachaPage = gachaPage;
         this.archiveHistoryPage = archiveHistoryPage;
         this.archivePage = archivePage;
+        this.phase8BValidationPage = phase8BValidationPage;
         this.userPage = userPage;
         this.userPageViewModel = userPageViewModel;
         Items.Add(CreateContent("正在启动", StartupRoute, startupPage));
@@ -48,7 +51,9 @@ public partial class AppShell : Shell
         }
 
         await GoToAsync(HomeRoute, animate: false);
+#if !PHASE8B_VALIDATION
         _ = userPageViewModel.InitializeAsync();
+#endif
     }
 
     public Task ShowUserPageAsync()
@@ -72,15 +77,45 @@ public partial class AppShell : Shell
     }
 
     private string HomeRoute => OperatingSystem.IsAndroid()
+#if PHASE8B_VALIDATION
+        ? "//main/phase8b7-validation"
+        : "//phase8b7-validation";
+#else
         ? "//main/home"
         : "//home";
+#endif
 
     private string UserRoute => OperatingSystem.IsAndroid()
+#if PHASE8B_VALIDATION
+        ? "//main/phase8b7-validation"
+        : "//phase8b7-validation";
+#else
         ? "//main/user"
         : "//user";
+#endif
 
     private void ConfigureMainNavigation()
     {
+#if PHASE8B_VALIDATION
+        if (OperatingSystem.IsAndroid())
+        {
+            FlyoutBehavior = FlyoutBehavior.Disabled;
+            var tabs = new TabBar { Route = "main" };
+            tabs.Items.Add(CreateContent(
+                "8B.7 验收",
+                "phase8b7-validation",
+                phase8BValidationPage));
+            Items.Add(tabs);
+            return;
+        }
+
+        FlyoutBehavior = FlyoutBehavior.Locked;
+        Items.Add(CreateFlyoutItem(
+            "8B.7 隔离验收",
+            "phase8b7-validation",
+            phase8BValidationPage));
+        return;
+#else
         if (OperatingSystem.IsAndroid())
         {
             FlyoutBehavior = FlyoutBehavior.Disabled;
@@ -102,6 +137,7 @@ public partial class AppShell : Shell
         Items.Add(CreateFlyoutItem("档案修改历史", "archive-history", archiveHistoryPage));
         Items.Add(CreateFlyoutItem("档案与账号管理", "archive", archivePage));
         Items.Add(CreateFlyoutItem("用户", "user", userPage));
+#endif
     }
 
     private static FlyoutItem CreateFlyoutItem(

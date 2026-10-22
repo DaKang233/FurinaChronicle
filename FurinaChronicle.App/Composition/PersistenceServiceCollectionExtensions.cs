@@ -23,9 +23,17 @@ internal static class PersistenceServiceCollectionExtensions
     public static IServiceCollection AddPersistence(
         this IServiceCollection services)
     {
-        string databasePath = Path.Combine(
+        string databasePath;
+#if PHASE8B_VALIDATION
+        databasePath = Path.Combine(
+            FileSystem.AppDataDirectory,
+            "phase8b7-validation",
+            "furinachronicle-validation.db3");
+#else
+        databasePath = Path.Combine(
             FileSystem.AppDataDirectory,
             "furinachronicle.db3");
+#endif
         Debug.WriteLine($"FurinaChronicle database: {databasePath}");
 
         services.AddSingleton(new SqliteDatabaseOptions(databasePath));

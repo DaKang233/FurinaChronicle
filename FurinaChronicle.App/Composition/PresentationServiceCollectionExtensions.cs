@@ -22,6 +22,7 @@ internal static class PresentationServiceCollectionExtensions
         services.AddSingleton<ArchivePageViewModel>();
         services.AddSingleton<UserPageViewModel>();
         services.AddSingleton<StartupPageViewModel>();
+        services.AddSingleton<Phase8BValidationPageViewModel>();
 
         services.AddTransient<GachaPage>();
         services.AddTransient<ArchiveHistoryPage>();
@@ -34,6 +35,7 @@ internal static class PresentationServiceCollectionExtensions
         services.AddTransient<MobileCaptchaLoginPage>();
         services.AddTransient<ManualCookieLoginPage>();
         services.AddSingleton<StartupPage>();
+        services.AddSingleton<Phase8BValidationPage>();
 
         services.AddSingleton<AppShell>();
         services.AddSingleton<ApplicationStartupService>();

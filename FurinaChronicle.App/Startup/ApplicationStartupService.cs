@@ -15,6 +15,10 @@ public sealed class ApplicationStartupService(
 {
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
+#if PHASE8B_VALIDATION
+        await Task.CompletedTask;
+        return;
+#else
         GachaMetadataRefreshResult result =
             await metadataRefreshService.RefreshIfNeededAsync(
                 GachaGame.GenshinImpact,
@@ -28,11 +32,16 @@ public sealed class ApplicationStartupService(
         {
             throw new GachaMetadataUnavailableException("没有可用的原神角色和武器元数据。", new InvalidDataException("Metadata refresh completed without producing a usable cache."));
         }
+#endif
     }
 
     public async Task MaintainPassportAccountsAsync(
         CancellationToken cancellationToken = default)
     {
+#if PHASE8B_VALIDATION
+        await Task.CompletedTask;
+        return;
+#else
         try
         {
             PassportMaintenanceResult maintenance =
@@ -53,5 +62,6 @@ public sealed class ApplicationStartupService(
             // Passport maintenance is best-effort and must not block offline use.
             Debug.WriteLine($"Passport maintenance skipped: {exception.Message}");
         }
+#endif
     }
 }

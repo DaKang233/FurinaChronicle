@@ -116,7 +116,8 @@ public sealed class PlatformExportFileSaver
     private static string GetFileTypeDescription(string extension) =>
         extension.ToLowerInvariant() switch
         {
-            ".json" => "UIGF JSON",
+            ".json" => "JSON 数据",
+            ".md" => "Markdown 文档",
             ".csv" => "CSV 表格",
             ".xlsx" => "Excel 工作簿",
             _ => "导出文件"
@@ -191,6 +192,7 @@ public sealed class PlatformExportFileSaver
         Path.GetExtension(fileName).ToLowerInvariant() switch
         {
             ".json" => "application/json",
+            ".md" => "text/markdown",
             ".csv" => "text/csv",
             ".xlsx" =>
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

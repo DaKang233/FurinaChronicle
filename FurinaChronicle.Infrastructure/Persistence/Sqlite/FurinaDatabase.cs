@@ -655,6 +655,24 @@ public sealed class FurinaDatabase : IAsyncDisposable
         }
     }
 
+    public async Task<FurinaDatabaseDiagnostics> GetDiagnosticsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await InitializeAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        int schemaVersion = await Connection.ExecuteScalarAsync<int>(
+            "PRAGMA user_version;");
+        int applicationId = await Connection.ExecuteScalarAsync<int>(
+            "PRAGMA application_id;");
+        string integrityCheck = await Connection.ExecuteScalarAsync<string>(
+            "PRAGMA quick_check;");
+        return new FurinaDatabaseDiagnostics(
+            schemaVersion,
+            applicationId,
+            integrityCheck);
+    }
+
     private async Task ValidateTableColumnsAsync(
         string tableName,
         IReadOnlyCollection<string> requiredColumns,
