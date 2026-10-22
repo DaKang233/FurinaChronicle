@@ -24,3 +24,4 @@
 - [0018：Chronicle generation、游标与证据退化](0018-chronicle-generation-and-evidence.md)
 - [0019：深境螺旋 Chronicle 完成证据](0019-spiral-abyss-chronicle-completion.md)
 - [0020：平台专属 UI 宿主与最小展示边界](0020-platform-specific-ui-hosts.md)
+- [0021：跨端逻辑 Archive v1 的保真与本地状态边界](0021-logical-archive-v1-fidelity.md)（Proposed）

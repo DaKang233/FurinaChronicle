@@ -41,10 +41,24 @@
 | 挑战完成 | 8B.6 | ADR 0019 已接受：首版生产仅深境螺旋，版本化目标末关为正面证据，完成与满星分离，缺证据保持 Unknown |
 | 获取序号和五星间隔 | 8B.6 | ADR 0018 已接受：必须标明 Known／Unknown／Ambiguous 与适用范围；无覆盖证明不宣称真实首次、满命或 ExactPity |
 | Chronicle 子系统 | 8B.6 | ADR 0018 已接受：本地稳定 EntryId、Undated、有界 generation、严格游标绑定，以及纠正／Undo／删除后的显式失效 |
-| 完整 Archive | 8C，容器实现前 | 布局、设置/附件引用、恢复预览和完整跨端闭环 |
+| 完整 Archive | 8C.0，容器实现前 | ADR 0021 已给出逻辑范围、设置、历史、Tombstone、Undo、Replace、版本和资源边界提案；下列七项等待维护者确认 |
 | 重要成就元数据 | 成就及其 Chronicle 节点实施前 | 版本、分类键、来源及实际目录；8B 仅需虚构过滤 fixture |
 
 Week 已由 ADR 0016 固定为周一 UTC+8 `[start,end)`；Chronicle 分页失效、获取证据退化和首批深境螺旋完成条件已由 ADR 0018／0019 闭合。未实施挑战模式、真实重要成就目录和完整 Archive 仍按各自实施时点冻结。
+
+## Phase 8C.0 集中确认
+
+以下问题只涉及 ADR 0021 新增的长期兼容或不可逆语义。身份、名称、Revision 基本语义、LocalOnlyTombstone 本地范围和 Chronicle 派生属性继续沿用 Accepted 决定，不重新开放。
+
+1. 逻辑 Archive 是否只迁移事实、来源、历史观察、已保留事实 Revision、空父对象和白名单设置，而排除源 Undo／ChangeSet／Receipt／Tombstone／Chronicle？
+2. Gacha 是否继续由 UIGF 4.2 承载可标准化当前事实，并以新的 Archive-native history 无损承载 Unresolved 归属、不完整事实和 Revision？
+3. 目标活动 Tombstone 是否同时阻止当前事实和会泄露已 purge 内容的 Revision/history，直到用户进行绑定 marker/version 的显式重引入？
+4. Archive Merge 是否采用整体保守撤销资格：任一父实体创建、来源历史导入、设置变更或不可撤销子项都会使整个操作不承诺可撤销？
+5. 可移植设置首版是否只包含 `RequireUniqueArchiveNames` 和每档案 `UndoLimit`，默认保留目标值，并允许用户在 Preview 中选择来源值？
+6. Replace 是否只作用于用户明确选择的范围，不进入普通 Undo，并要求提交前建立受生命周期约束的内部一致恢复点？
+7. `checksums.sha256` 是否作为条目哈希唯一真相；未知可选 Dataset 是否只允许在明确接受部分恢复后跳过，且不得报告为完整成功？
+
+推荐方案及正反例见 [ADR 0021](../decisions/0021-logical-archive-v1-fidelity.md) 和 [Archive v1 示例](../specifications/examples/ARCHIVE_V1_PROPOSED_EXAMPLES.md)。维护者接受前，8C.1 不把这些字段或行为固化为实现。
 
 ## 已确认事项
 

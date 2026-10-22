@@ -27,6 +27,7 @@
 - Furina 全量 Archive。
 - 将 8B 领域导出形成可直接使用的产品流程，完善抽卡 Markdown 报告；不把可读导出首次验证推迟到本阶段。
 - Windows 与 Android 双向往返验证。
+- 当前状态：8C.0 已启动。基线、22 表保真矩阵、Archive v1 候选规范和审查样例完成；ADR 0021 保持 Proposed，待维护者确认后进入 8C.1 逻辑载荷、Reader／Validator 与一致快照导出。尚未实现生产恢复、Replace 或正式 UI。
 
 ## Phase 9：统一采集框架
 

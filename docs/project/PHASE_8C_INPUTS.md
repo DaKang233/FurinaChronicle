@@ -1,6 +1,6 @@
 # Phase 8C 输入清单
 
-状态：Ready；Phase 8B 已于 2026-10-23 关闭
+状态：Consumed by Phase 8C.0；Phase 8B 已于 2026-10-23 关闭
 
 ## 可直接复用的基础
 
@@ -34,3 +34,5 @@
 2. 先实现无附件的本地完整备份、预览和原子恢复，并覆盖 Windows↔Android 文件闭环。
 3. 再加入分类导出、Markdown 报告和可选附件；设置只包含 portable 子集。
 4. 最后根据真实文件体积和恢复性能决定压缩、分卷、RawSnapshot 保留及未来传输接口，不提前实现云端。
+
+8C.0 已在 [Phase 8C 实施计划](PHASE_8C_PLAN.md) 中记录实际基线，并形成 [ADR 0021](../decisions/0021-logical-archive-v1-fidelity.md)、[保真矩阵](../specifications/ARCHIVE_V1_FIDELITY_MATRIX.md)及候选样例。相关新语义接受前，8C.1 保持等待状态。

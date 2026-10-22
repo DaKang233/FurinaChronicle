@@ -14,6 +14,8 @@ checksums.sha256
 
 Manifest 至少记录格式版本、应用版本、导出时间、来源平台、数据集版本、路径、记录数量、哈希和可选加密信息。
 
+8C.0 的 [ADR 0021 提案](../decisions/0021-logical-archive-v1-fidelity.md) 为避免两份哈希真相，建议由 `checksums.sha256` 统一保存条目哈希，而 Manifest 保存路径、版本、数量和长度。该细化在 ADR 接受前仍是 Proposed，本 Target 段落不表示实现已经完成。
+
 全量备份使用逻辑数据，不把 SQLite 文件作为跨平台公开契约。可重建缓存和设备设置默认不进入备份。
 
 ## 设置分类

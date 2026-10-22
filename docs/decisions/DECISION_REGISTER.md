@@ -40,3 +40,9 @@
 | D33 | 深境螺旋首版以版本化目标末关 12-3 的规范化 Chamber 结果作为完成证据；完成与满星分离，每期主时间线最多一个完成节点 | Accepted | ADR 0019，维护者确认 |
 
 当前工作包契约和后期服务决策集中记录在 [OPEN_QUESTIONS.md](../project/OPEN_QUESTIONS.md)，按实施时点闭合，不得由 Agent 静默改变语义。D19、D20 的核心决定及既有产品行为继续 Accepted；D21 收敛依赖关系，不冻结 Chronicle Draft 的字段或未来同步协议。
+
+## Proposed
+
+| ID | 提案 | 状态 | 来源 |
+|---|---|---|---|
+| D34 | Archive v1 作为跨端逻辑档案，保留已支持事实、历史观察、已保留事实 Revision、空父对象和白名单设置；不迁移源 Undo／操作历史／Receipt／LocalOnlyTombstone／Chronicle，并用独立 Gacha history 承载 UIGF 无法表达的内容 | Proposed | ADR 0021；等待维护者确认 |
