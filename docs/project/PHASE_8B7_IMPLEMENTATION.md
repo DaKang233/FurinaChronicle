@@ -2,9 +2,11 @@
 
 状态：Accepted 计划的实施记录
 
-实施状态：Implementation complete；Awaiting device/file verification
+实施状态：Implementation complete；Android physical startup verified；Awaiting remaining device/file verification
 
-基线：`feat/phase-8 @ abada0af5b9287dc8d045d6cd32ba0962244e7f5`
+实施基线：`feat/phase-8 @ abada0af5b9287dc8d045d6cd32ba0962244e7f5`
+
+最近真机启动证据：`feat/phase-8 @ 174fa9574440e3322f8e552214fbcf3112a3f320`
 
 ## 目标与边界
 
@@ -24,12 +26,12 @@
 
 | 项目 | 2026-10-22 实际结果 |
 |---|---|
-| Git | `feat/phase-8 @ abada0a`；开始时工作区干净 |
+| Git | 实施基线 `abada0a`；Android 真机启动证据固定于 `174fa95`，工作区干净 |
 | 数据库 | 当前 Schema 7；直接 populated 6→7、后段失败回滚和取消已有自动化证据 |
-| 应用版本 | `0.8.8 / 8B.7`；Build 继续由 Git commit count 生成 |
+| 应用版本 | 真机产物 `0.8.8.169 / 8B.7`；Build 继续由 Git commit count 生成 |
 | 自动化 | Release 525／525 通过（设备验收前工程基线） |
 | .NET | 仓库 SDK 选择仍由 `global.json`／构建确定；主机同时安装 .NET 10 与 11 RC |
-| Android | `E:\AndroidSDK` 可用；发现 `emulator-5554`，未发现物理设备 |
+| Android | `E:\AndroidSDK` 可用；ARM64 物理设备已完成覆盖安装和冷启动，设备标识未写入文档；隔离数据库和跨端文件验收仍待完成 |
 | Windows | Visual Studio 正在运行；执行真实 App／旧库升级前必须避免文件占用并只操作一致副本 |
 | UI 重构 | UI-0 已提交；8B.7 继续使用现有 MAUI 生产服务取得跨端证据，不把 UI-0 或未来 UI-5 当成阶段完成 |
 
@@ -40,8 +42,8 @@
 | P0 | 基线、边界和证据矩阵 | Completed |
 | P1 | 正式 exporter 生成的虚构验收样本与严格语义比较 | Automated complete |
 | P2 | 直接 Schema 6→7、后段失败和独立领域出口安全回归 | Automated complete |
-| P3 | Windows／Android 可达且可关闭的隔离验收入口 | Build verified；device run pending |
-| P4 | 集成回归、版本和双平台设备用构建 | Automated/build complete；fixed-commit device artifacts pending |
+| P3 | Windows／Android 可达且可关闭的隔离验收入口 | Android physical startup verified；remaining workflow evidence pending |
+| P4 | 集成回归、版本和双平台设备用构建 | Automated/build complete；fixed-commit ARM64 artifact installed and launched |
 | P5 | Windows 实际旧库升级、Android 实际新库创建 | Awaiting device / old database evidence |
 | P6 | 两个 Dataset 的 Windows↔Android 双向文件往返 | Awaiting device evidence |
 | P7 | Phase 8B 退出评审和 8C 输入 | Draft complete；cannot close before P5/P6 |
@@ -55,6 +57,14 @@
 - 严格比较只忽略目标本地档案／账号 ID、包指纹、导出时间和接收端操作记录；保留稳定事实 ID、账号归属、原时间偏移、来源、完整度与手工修订。变异测试证明时间、来源、修订或账号归属损失均会失败。
 - 两个 Dataset 均已通过宿主 Source→Domain→SQLite→Export→Read／Plan→Apply→Re-export 严格语义比较及重复导入 NoOp。该证据不冒充真实设备文件往返。
 - Windows 旧库准备使用工具的 SQLite Online Backup，不只复制主文件；验收构建可通过 `FURINA_PHASE8B7_DIRECTORY` 选择绝对隔离目录，且不会覆盖已存在的目标副本。
+
+## Android 真机启动证据（2026-10-22）
+
+- 源码为 clean `174fa9574440e3322f8e552214fbcf3112a3f320`，应用版本为 `0.8.8.169 / 8B.7`，目标 RID 为 `android-arm64`。
+- 使用指定 RID 的定向 clean 与 Release build 生成 `FurinaChronicle-0.8.8-8B.7-validation-arm64-Signed.apk`；大小为 21,518,210 字节，SHA-256 为 `d592bf15119e2112653c7ed090440ce9068056fa264aefc24d6ee85a39e769e7`。
+- 通过 `adb install -r` 覆盖安装，设备上的首次安装时间保持不变，未执行 uninstall 或 clear。冷启动完成后进程持续存在，MainActivity 位于前台，等待 10 秒后未发现 AndroidRuntime／.NET 启动崩溃。
+- 同一源码的旧通用 APK 曾因陈旧 `android-arm64` 中间资源在 MAUI 初始化时抛出 `MissingMethodException`。指定 `android-arm64` 定向清理和重新构建后恢复正常；通用规则已写入 [Android 真机构建与部署](../development/ANDROID_PHYSICAL_DEVICE_DEPLOYMENT.md)。
+- 本证据只关闭 ARM64 产物的安装和启动子项，不证明 Android 隔离数据库 Schema 7 的新建／重开，也不证明角色／武器和挑战 Portable 文件往返；P5／P6 因此仍保持未关闭。
 
 相关本地提交：`ce2ec5d`、`db1a4b5`、`a50dd4f`、`ec4ce97`、`7ae1039`、`895c4e6`。
 

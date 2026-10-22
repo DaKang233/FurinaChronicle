@@ -24,7 +24,7 @@ Phase 8B 的领域、持久化、Portable、修订／Undo 和 Chronicle 工程�
 ## 尚未关闭的硬门槛
 
 1. `P5 / Windows`：用真实旧版生成或历史一致备份的 Schema 6 数据库，通过 Windows 验收 App 升级，退出重开并核对业务、外键、修订、Undo、Receipt 和 Chronicle 失效／重建。
-2. `P5 / Android`：物理设备以隔离验收数据库新建 Schema 7，导入、退出重开、查询并导出。当前只发现模拟器，不能替代物理设备。
+2. `P5 / Android`：指定 ARM64 产物已在物理设备完成覆盖安装和冷启动，但仍须以隔离验收数据库新建 Schema 7，导入、退出重开、查询并导出。启动通过不能替代该数据流程证据。
 3. `P6`：角色／武器和挑战各自完成 Windows→Android→Windows、Android 发起→Windows、重复导入、已有自然身份目标、取消和坏包拒绝；实际返回文件须由 `eng/phase8b` 比较器核对。
 4. 设备证据必须绑定完成源码后的具体版本、commit、dirty 状态、文件 SHA-256 和构建产物；工程代码继续变化后按影响范围重验。
 

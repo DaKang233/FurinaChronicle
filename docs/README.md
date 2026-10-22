@@ -40,6 +40,7 @@
 - [ADR 索引](decisions/README.md)
 - [测试要求](development/TESTING.md)
 - [持续集成与发布构建](development/CONTINUOUS_INTEGRATION.md)
+- [Android 真机构建与部署](development/ANDROID_PHYSICAL_DEVICE_DEPLOYMENT.md)
 - [版本策略](development/VERSIONING.md)
 - [版权头规范](development/COPYRIGHT_HEADERS.md)
 - [Chronicle 产品需求](specifications/CHRONICLE_PRODUCT_REQUIREMENTS.md)
