@@ -1,6 +1,6 @@
 # Phase 8C 实施计划与首轮记录
 
-状态：8C.0 contract accepted；8C.1 In progress
+状态：8C.0 contract accepted；8C.1 export foundation completed
 
 启动日期：2026-10-23（Asia/Shanghai）
 
@@ -56,8 +56,8 @@ Phase 8B 已关闭，本阶段不重开 8B.7。Windows 历史库升级前精确 
 |---|---|
 | ADR 0021 | Accepted 2026-10-23 |
 | 22 表保真矩阵 | Review complete |
-| Archive v1 候选规范 | Review complete |
-| 最小／完整／负例 | Review complete；机器生成 ZIP 等待 8C.1 |
+| Archive v1 内部实施规范 | Accepted；与 8C.1 实现同步 |
+| 最小／完整／负例 | Review complete；正式 Writer／Reader 在自动化中生成并回读 |
 | Version 里程碑 | `0.8.9 / 8C.0`；8C.1 开始后为 `0.8.10 / 8C.1` |
 | 生产库／真实用户数据访问 | Not run；不在范围 |
 | Windows／Android 设备流程 | Not run；8C.0 不产生设备产物 |
@@ -106,10 +106,10 @@ IArchiveAtomicRestorer       // 8C.3 实现
 |---|---|---|
 | P0 | 基线、文档、22 表盘点、UIGF 核对 | Completed |
 | P1 | ADR 0021、保真矩阵、容器与示例 | Completed / Accepted |
-| P2 | Services 逻辑模型与版本派发 | In progress |
-| P3 | Infrastructure Reader／Validator／Codec | Pending P2 |
-| P4 | 一致快照与 logical exporter | Pending P2～P3 |
-| P5 | 自动化、三宿主适用构建、阶段记录 | Pending 8C.1 implementation |
+| P2 | Services 逻辑模型与版本派发 | Completed |
+| P3 | Infrastructure Reader／Validator／Codec | Completed |
+| P4 | 一致快照与 logical exporter | Completed |
+| P5 | 自动化、三宿主适用构建、阶段记录 | Completed；设备与生产恢复不在本轮范围 |
 
 ## 验收
 
@@ -126,6 +126,17 @@ IArchiveAtomicRestorer       // 8C.3 实现
 - MAUI Windows、独立 WinUI 和 Android 适用构建。
 
 8C.1 只可称为“导出基础完成”，不能称为 Archive 恢复或跨端闭环完成。
+
+## 8C.1 完成记录
+
+- 版本为 `0.8.10 / 8C.1`；数据库仍为 Schema 7，没有生产数据库迁移。
+- 正式 Writer 保留 catalog、标准与非标准 Gacha 当前事实、Gacha Revision、角色／武器观察、手工获取及其 Revision、挑战观察和白名单设置。
+- Reader 在写库前执行路径、哈希、长度、版本、资源上限、父引用、跨 Dataset 数量及 UIGF／补充历史一一对应校验；UIGF 与 Gacha NDJSON 使用流式读取。
+- Exporter 使用 SQLite Online Backup 创建 app-private 一致快照，正式 Reader 回读通过后才返回成功；成功、失败和取消均清理 session。
+- Release 测试为 547/547；MAUI Windows、独立 WinUI、Android（`E:\AndroidSDK`）适用构建均为 0 警告、0 错误。
+- CI 未运行：本轮提交尚未推送。Windows／Android 真实文件交互、真实生产库导出和跨端恢复均为 `Not run`；8C.1 没有产品 UI，也没有恢复实现，不能据此补造设备证据。
+
+详细文件、保真范围和验证结果见 [8C.1 实施记录](PHASE_8C1_IMPLEMENTATION.md)。
 
 ## 8C.2～8C.3 最短交接
 

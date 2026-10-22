@@ -1,16 +1,16 @@
-# Furina 跨端逻辑 Archive v1（提案）
+# Furina 跨端逻辑 Archive v1（内部实施规范）
 
 状态：Accepted internal implementation contract；尚未公开发布
 
 格式标识：`furina-archive`
 
-候选版本：`1.0`
+内部格式版本：`1.0`
 
 ## 用途
 
 Archive v1 在 Windows 与 Android 之间迁移已支持领域的逻辑事实和历史。它不是数据库镜像，不包含凭据或源设备撤销栈，也不证明账号全部游戏历史完整。
 
-本规范当前只供审查；维护者接受前不得宣称对外支持，不得用于生产恢复。
+本规范已经作为 8C.0／8C.1 的内部实施契约接受。8C.1 只实现一致导出和只读校验；格式尚未公开发布，也不得用于生产恢复。
 
 ## 固定容器规则
 
@@ -20,7 +20,7 @@ Archive v1 在 Windows 与 Android 之间迁移已支持领域的逻辑事实和
 - `checksums.sha256` 按路径 Ordinal 升序列出除自身外的每个条目，格式为小写十六进制 SHA-256、两个空格和路径，以 LF 结尾。
 - 校验和只用于损坏检测，不证明作者、可信来源或文件新旧。
 
-候选布局：
+首版布局：
 
 ```text
 manifest.json
@@ -44,8 +44,8 @@ Manifest 声明实际存在的条目；没有对应事实时不要求空领域�
   "generated_at": "2026-10-23T12:00:00+00:00",
   "generator": {
     "app": "FurinaChronicle",
-    "app_version": "0.8.9.170",
-    "phase": "8C.0",
+    "app_version": "0.8.10.180",
+    "phase": "8C.1",
     "commit": "0000000",
     "source_platform": "windows"
   },
@@ -230,7 +230,7 @@ Validate requested scope
 
 ## 首版安全上限
 
-候选默认值：
+默认值：
 
 | 资源 | 上限 |
 |---|---:|
@@ -258,16 +258,16 @@ Validate requested scope
 
 ## 8C.0／8C.1 支持范围
 
-| 能力 | 8C.0 | 8C.1 目标 |
+| 能力 | 8C.0 | 8C.1 实际结果 |
 |---|---|---|
 | 保真矩阵／ADR／示例 | Accepted | 与实现同步维护 |
-| Services 逻辑 DTO／端口 | 未实现 | 实现 |
-| Archive Writer／Reader／Validator | 未实现 | 实现 |
-| 一致快照导出 | 未实现 | 实现 |
+| Services 逻辑 DTO／端口 | 未实现 | 已实现 |
+| Archive Writer／Reader／Validator | 未实现 | 已实现；正式 Reader 回读导出结果 |
+| 一致快照导出 | 未实现 | 已实现；SQLite Online Backup 私有快照 |
 | Preview／RestorePlan | 仅接口设计 | 8C.2 |
 | 生产 Merge | 不实现 | 8C.3 |
 | Replace | 不实现 | 8C.4 |
-| 正式 UI／跨端设备恢复 | 不实现 | 8C.5～8C.6 |
+| 正式 UI／跨端设备恢复 | 不实现 | 未实现；8C.5～8C.6 |
 
 ## 外部标准核对
 

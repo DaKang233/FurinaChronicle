@@ -1,8 +1,8 @@
-# Archive v1 提案示例
+# Archive v1 内部契约示例
 
-状态：8C.0 review fixture；不是可导入生产库的已发布样本
+状态：Accepted review fixture；不是可导入生产库的已发布样本
 
-这些示例固定审查语义，不固定 ZIP 字节顺序。维护者接受 ADR 0021 后，8C.1 必须由正式 Writer 生成机器 fixture，并由正式 Reader 重新读取；不得手工维护与实现分叉的“黄金 ZIP”。
+这些示例固定审查语义，不固定 ZIP 字节顺序。8C.1 自动化由正式 Writer 在测试期间生成机器 fixture，并由正式 Reader 重新读取；仓库不手工维护可能与实现分叉的“黄金 ZIP”。
 
 ## M01：最小完整逻辑 Archive
 
@@ -18,6 +18,7 @@
 ```text
 manifest.json
 datasets/catalog.v1.json
+datasets/gacha/history.v1.ndjson
 settings/portable.v1.json
 checksums.sha256
 ```
