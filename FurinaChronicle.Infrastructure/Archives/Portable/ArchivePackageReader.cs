@@ -444,10 +444,31 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
                     break;
                 case "nonstandard_current" when value.Record is not null &&
                     value.Extension is null && value.Revision is null:
+                    ValidateGachaFactReference(
+                        value.Record,
+                        value.AccountReference,
+                        value.ExternalRecordId,
+                        entry.FullName);
                     facts++;
                     break;
                 case "revision" when value.Revision is not null &&
                     value.Record is null && value.Extension is null:
+                    if (value.Revision.Before is not null)
+                    {
+                        ValidateGachaFactReference(
+                            value.Revision.Before,
+                            value.AccountReference,
+                            value.ExternalRecordId,
+                            entry.FullName);
+                    }
+                    if (value.Revision.After is not null)
+                    {
+                        ValidateGachaFactReference(
+                            value.Revision.After,
+                            value.AccountReference,
+                            value.ExternalRecordId,
+                            entry.FullName);
+                    }
                     revisions++;
                     break;
                 default:
@@ -456,10 +477,22 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
                         entry.FullName);
             }
         }
-        return new GachaHistoryValidation(
-            facts,
-            revisions,
-            standardKeys.ToDictionary(pair => pair.Key, pair => pair.Value.Complete()));
+        try
+        {
+            return new GachaHistoryValidation(
+                facts,
+                revisions,
+                standardKeys.ToDictionary(
+                    pair => pair.Key,
+                    pair => pair.Value.Complete()));
+        }
+        finally
+        {
+            foreach (SequenceAccumulator accumulator in standardKeys.Values)
+            {
+                accumulator.Dispose();
+            }
+        }
     }
 
     private async Task<UigfValidation> ValidateUigfAsync(
@@ -662,10 +695,10 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
                     item.ManualAcquisitions.Any(fact =>
                         fact.Acquisition.GameAccountId != item.AccountReference) ||
                     item.ManualRevisions.Any(revision =>
-                        revision.Before?.GameAccountId != item.AccountReference &&
-                        revision.Before is not null ||
-                        revision.After?.GameAccountId != item.AccountReference &&
-                        revision.After is not null)))
+                        (revision.Before is not null &&
+                            revision.Before.GameAccountId != item.AccountReference) ||
+                        (revision.After is not null &&
+                            revision.After.GameAccountId != item.AccountReference))))
             {
                 throw Error(ArchivePackageErrorCode.InvalidReference,
                     "The character/weapon dataset contains an invalid account reference.",
@@ -804,11 +837,23 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
         return result;
     }
 
-    private static SequenceSummary CreateSequenceSummary(IEnumerable<string> keys)
+    private static void ValidateGachaFactReference(
+        FurinaChronicle.Core.Gacha.GachaRecord record,
+        Guid accountReference,
+        string externalRecordId,
+        string path)
     {
-        using var accumulator = new SequenceAccumulator();
-        foreach (string key in keys) accumulator.Append(key);
-        return accumulator.Complete();
+        if (record.GameAccountId != accountReference ||
+            !string.Equals(
+                record.ExternalRecordId,
+                externalRecordId,
+                StringComparison.Ordinal))
+        {
+            throw Error(
+                ArchivePackageErrorCode.InvalidReference,
+                "A Gacha history payload conflicts with its account or fact reference.",
+                path);
+        }
     }
 
     private static void ValidateStandardOneToOne(
@@ -886,9 +931,18 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
         {
             if (completed) throw new InvalidOperationException();
             completed = true;
-            return new SequenceSummary(Count, hash.GetHashAndReset());
+            byte[] result = hash.GetHashAndReset();
+            hash.Dispose();
+            return new SequenceSummary(Count, result);
         }
 
-        public void Dispose() => hash.Dispose();
+        public void Dispose()
+        {
+            if (!completed)
+            {
+                hash.Dispose();
+                completed = true;
+            }
+        }
     }
 }
