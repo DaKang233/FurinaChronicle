@@ -1,6 +1,6 @@
 # Phase 8C 实施计划与首轮记录
 
-状态：8C.0 contract accepted；8C.1 export foundation completed
+状态：8C.0 contract accepted；8C.1 export foundation completed；8C.2 in progress
 
 启动日期：2026-10-23（Asia/Shanghai）
 
@@ -145,6 +145,24 @@ IArchiveAtomicRestorer       // 8C.3 实现
 3. 8C.3 提取现有事务内 mutation helper，在一个 SQLite 事务中提交父对象、三个领域、Revision、目标 ChangeSet／Receipt 和必要设置。
 4. 任一领域、Revision 或 Receipt 故障都整体回滚；提交后 UI／Chronicle 刷新失败只作为展示错误。
 5. Merge 完成并通过故障注入前，不开始 Replace。
+
+## 8C.2 实施边界
+
+8C.2 只实现 `Inspect → Validate → Stage → Plan → Preview`，不执行 Apply：
+
+- 系统文件流先复制到 app-private 临时文件并计算包 SHA-256；正式 Reader 完成版本、路径、长度、哈希、记录数和跨文件引用验证后，才形成私有索引。
+- staging 使用内部 SQLite 作为有界索引实现，但不是公开格式、不是生产数据库镜像，也不能直接替换主库。
+- 统一 RestorePlan 同时覆盖档案、账号、Gacha、角色／武器、挑战、Revision、空父对象和白名单设置；不得顺序拼接三个独立 Portable Plan 冒充统一预览。
+- Plan 绑定包指纹、目标一致快照令牌、Schema、映射、Merge 模式、设置选择和全部确认。目标记录数相同不表示 Plan 仍有效。
+- 档案名称继续 Ordinal 精确匹配；相似名称只提示并要求选择。多个精确同名目标必须手工映射。计划创建的同名档案按稳定编号重命名并报告。
+- 已解析账号按规范自然身份映射；同 GUID 不同自然身份、同稳定事实／Revision ID 不同内容报告冲突。不同档案中的同一角色仍是独立业务副本。
+- Unresolved 账号不按 UID、名称或占位字段猜测目标：新档案中可创建；映射到已有档案时如存在可能候选，必须显式选择创建或映射。
+- 目标活动 Tombstone 对当前事实和会泄露已 purge 内容的 Revision 均产生绑定 marker/version 的确认项；8C.2 不停用 Tombstone。
+- 未知可选 Dataset 只有在请求显式接受 partial restore 时才能形成可执行计划；未知必需 Dataset 和 future Archive major 仍由 Reader 拒绝。
+- 默认保留目标设置；新档案采用来源 UndoLimit。用户选择应用来源设置时，唯一名称冲突必须在 Apply 前解决。
+- 只要创建父对象／身份别名、携带来源 Revision、应用设置或需要 Tombstone 重引入，整个恢复不承诺普通 Undo。只有向既有父对象纯新增事实且可完整捕获材料时才可标记为可撤销候选。
+
+完整契约见 [Archive RestorePlan v1](../specifications/ARCHIVE_RESTORE_PLAN_V1.md)。8C.2 不增加正式 UI，不访问真实生产库，不写 Receipt，也不修改 Schema 7。
 
 ## 明确不做
 
