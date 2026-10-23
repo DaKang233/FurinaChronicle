@@ -215,17 +215,6 @@ public sealed class SqliteArchiveExportSnapshotFactory(
             .Select(item => item.AccountReference)
             .ToHashSet();
         private bool disposed;
-        private readonly Dictionary<Guid, IReadOnlyDictionary<Guid,
-            ArchiveIndexedFact<GachaRevisionItem>>> gachaRevisionCache = [];
-        private readonly Dictionary<Guid, IReadOnlyDictionary<ItemObservationId,
-            ArchiveIndexedFact<ItemStateObservation>>> itemCache = [];
-        private readonly Dictionary<Guid, IReadOnlyDictionary<ManualAcquisitionId,
-            ArchiveIndexedFact<ManualAcquisitionState>>> manualCache = [];
-        private readonly Dictionary<Guid, IReadOnlyDictionary<Guid,
-            ArchiveIndexedFact<ManualAcquisitionRevisionItem>>> manualRevisionCache = [];
-        private readonly Dictionary<Guid, IReadOnlyDictionary<ChallengeObservationId,
-            ArchiveIndexedFact<ChallengeObservation>>> challengeCache = [];
-
         public DateTimeOffset GeneratedAt { get; } = generatedAt;
         public ArchiveExportScope Scope { get; } = scope;
         public ArchiveCatalog Catalog { get; } = catalog;
@@ -374,19 +363,15 @@ public sealed class SqliteArchiveExportSnapshotFactory(
                 CancellationToken cancellationToken = default)
         {
             EnsureAccount(accountReference);
-            if (!gachaRevisionCache.TryGetValue(accountReference, out var values))
-            {
-                values = (await history.GetRevisionsByAccountAsync(
-                        accountReference,
-                        cancellationToken))
-                    .ToDictionary(
-                        item => item.RevisionId,
-                        item => new ArchiveIndexedFact<GachaRevisionItem>(
-                            item,
-                            ArchiveRestoreSemanticDigest.ForGachaRevision(item)));
-                gachaRevisionCache.Add(accountReference, values);
-            }
-            return values.GetValueOrDefault(revisionId);
+            GachaRevisionItem? value = await history.FindRevisionAsync(
+                accountReference,
+                revisionId,
+                cancellationToken);
+            return value is null
+                ? null
+                : new ArchiveIndexedFact<GachaRevisionItem>(
+                    value,
+                    ArchiveRestoreSemanticDigest.ForGachaRevision(value));
         }
 
         public async Task<ArchiveIndexedFact<ItemStateObservation>?>
@@ -396,19 +381,16 @@ public sealed class SqliteArchiveExportSnapshotFactory(
                 CancellationToken cancellationToken = default)
         {
             EnsureAccount(accountReference);
-            if (!itemCache.TryGetValue(accountReference, out var values))
-            {
-                values = (await history.GetItemObservationsAsync(
-                        accountReference,
-                        cancellationToken: cancellationToken))
-                    .ToDictionary(
-                        item => item.ObservationId,
-                        item => new ArchiveIndexedFact<ItemStateObservation>(
-                            item,
-                            ArchiveRestoreSemanticDigest.ForItemObservation(item)));
-                itemCache.Add(accountReference, values);
-            }
-            return values.GetValueOrDefault(observationId);
+            ItemStateObservation? value =
+                await history.FindItemObservationAsync(
+                    accountReference,
+                    observationId,
+                    cancellationToken);
+            return value is null
+                ? null
+                : new ArchiveIndexedFact<ItemStateObservation>(
+                    value,
+                    ArchiveRestoreSemanticDigest.ForItemObservation(value));
         }
 
         public async Task<ArchiveIndexedFact<ManualAcquisitionState>?>
@@ -418,19 +400,16 @@ public sealed class SqliteArchiveExportSnapshotFactory(
                 CancellationToken cancellationToken = default)
         {
             EnsureAccount(accountReference);
-            if (!manualCache.TryGetValue(accountReference, out var values))
-            {
-                values = (await history.GetManualAcquisitionsAsync(
-                        accountReference,
-                        cancellationToken: cancellationToken))
-                    .ToDictionary(
-                        item => item.Acquisition.AcquisitionId,
-                        item => new ArchiveIndexedFact<ManualAcquisitionState>(
-                            item,
-                            ArchiveRestoreSemanticDigest.ForManualAcquisition(item)));
-                manualCache.Add(accountReference, values);
-            }
-            return values.GetValueOrDefault(acquisitionId);
+            ManualAcquisitionState? value =
+                await history.FindManualAcquisitionAsync(
+                    accountReference,
+                    acquisitionId,
+                    cancellationToken);
+            return value is null
+                ? null
+                : new ArchiveIndexedFact<ManualAcquisitionState>(
+                    value,
+                    ArchiveRestoreSemanticDigest.ForManualAcquisition(value));
         }
 
         public async Task<ArchiveIndexedFact<ManualAcquisitionRevisionItem>?>
@@ -440,19 +419,16 @@ public sealed class SqliteArchiveExportSnapshotFactory(
                 CancellationToken cancellationToken = default)
         {
             EnsureAccount(accountReference);
-            if (!manualRevisionCache.TryGetValue(accountReference, out var values))
-            {
-                values = (await history.GetManualAcquisitionRevisionsAsync(
-                        accountReference,
-                        cancellationToken))
-                    .ToDictionary(
-                        item => item.RevisionId,
-                        item => new ArchiveIndexedFact<ManualAcquisitionRevisionItem>(
-                            item,
-                            ArchiveRestoreSemanticDigest.ForManualRevision(item)));
-                manualRevisionCache.Add(accountReference, values);
-            }
-            return values.GetValueOrDefault(revisionId);
+            ManualAcquisitionRevisionItem? value =
+                await history.FindManualAcquisitionRevisionAsync(
+                    accountReference,
+                    revisionId,
+                    cancellationToken);
+            return value is null
+                ? null
+                : new ArchiveIndexedFact<ManualAcquisitionRevisionItem>(
+                    value,
+                    ArchiveRestoreSemanticDigest.ForManualRevision(value));
         }
 
         public async Task<ArchiveIndexedFact<ChallengeObservation>?>
@@ -462,19 +438,16 @@ public sealed class SqliteArchiveExportSnapshotFactory(
                 CancellationToken cancellationToken = default)
         {
             EnsureAccount(accountReference);
-            if (!challengeCache.TryGetValue(accountReference, out var values))
-            {
-                values = (await history.GetChallengeObservationsAsync(
-                        accountReference,
-                        cancellationToken: cancellationToken))
-                    .ToDictionary(
-                        item => item.ObservationId,
-                        item => new ArchiveIndexedFact<ChallengeObservation>(
-                            item,
-                            ArchiveRestoreSemanticDigest.ForChallenge(item)));
-                challengeCache.Add(accountReference, values);
-            }
-            return values.GetValueOrDefault(observationId);
+            ChallengeObservation? value =
+                await history.FindChallengeObservationAsync(
+                    accountReference,
+                    observationId,
+                    cancellationToken);
+            return value is null
+                ? null
+                : new ArchiveIndexedFact<ChallengeObservation>(
+                    value,
+                    ArchiveRestoreSemanticDigest.ForChallenge(value));
         }
 
         public async Task<IReadOnlyList<ArchiveRestoreActiveTombstone>>

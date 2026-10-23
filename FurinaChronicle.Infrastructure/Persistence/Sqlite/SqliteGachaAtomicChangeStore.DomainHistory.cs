@@ -568,6 +568,117 @@ public sealed partial class SqliteGachaAtomicChangeStore
             .ToArray();
     }
 
+    internal async Task<ItemStateObservation?> FindItemObservationAsync(
+        Guid gameAccountId,
+        ItemObservationId observationId,
+        CancellationToken cancellationToken = default)
+    {
+        ArchiveDomainFactRow? row = await FindDomainFactAsync(
+            gameAccountId,
+            ItemObservationEntityKind,
+            observationId.ToString(),
+            cancellationToken);
+        return row is null
+            ? null
+            : DeserializeItemObservation(row.SnapshotJson);
+    }
+
+    internal async Task<ManualAcquisitionState?> FindManualAcquisitionAsync(
+        Guid gameAccountId,
+        ManualAcquisitionId acquisitionId,
+        CancellationToken cancellationToken = default)
+    {
+        ArchiveDomainFactRow? row = await FindDomainFactAsync(
+            gameAccountId,
+            ManualAcquisitionEntityKind,
+            acquisitionId.ToString(),
+            cancellationToken);
+        return row is null
+            ? null
+            : new ManualAcquisitionState(
+                DeserializeManualAcquisition(row.SnapshotJson),
+                new FactVersion(row.Version),
+                ParseRequiredGuid(row.ArchiveId, "archive"));
+    }
+
+    internal async Task<ChallengeObservation?> FindChallengeObservationAsync(
+        Guid gameAccountId,
+        ChallengeObservationId observationId,
+        CancellationToken cancellationToken = default)
+    {
+        ArchiveDomainFactRow? row = await FindDomainFactAsync(
+            gameAccountId,
+            ChallengeObservationEntityKind,
+            observationId.ToString(),
+            cancellationToken);
+        return row is null
+            ? null
+            : DeserializeChallengeObservation(row.SnapshotJson);
+    }
+
+    internal async Task<ManualAcquisitionRevisionItem?>
+        FindManualAcquisitionRevisionAsync(
+            Guid gameAccountId,
+            Guid revisionId,
+            CancellationToken cancellationToken = default)
+    {
+        ValidateAccountId(gameAccountId);
+        if (revisionId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "Revision ID cannot be empty.",
+                nameof(revisionId));
+        }
+        await database.InitializeAsync(cancellationToken);
+        ArchiveDomainRevisionRow? row = (await database.Connection
+                .QueryAsync<ArchiveDomainRevisionRow>(
+                    """
+                    SELECT * FROM ArchiveDomainRevisions
+                    WHERE GameAccountId = ? AND DomainKind = ?
+                          AND RevisionId = ?;
+                    """,
+                    gameAccountId.ToString("D"),
+                    ManualAcquisitionEntityKind,
+                    revisionId.ToString("D")))
+            .SingleOrDefault();
+        return row is null
+            ? null
+            : new ManualAcquisitionRevisionItem(
+                ParseRequiredGuid(row.RevisionId, "revision"),
+                ParseRequiredGuid(row.ChangeSetId, "change set"),
+                (EntityChangeKind)row.ChangeKind,
+                row.BeforeVersion is null
+                    ? null
+                    : new FactVersion(row.BeforeVersion.Value),
+                row.AfterVersion is null
+                    ? null
+                    : new FactVersion(row.AfterVersion.Value),
+                DeserializeAcquisitionFromDomainSnapshot(
+                    row.BeforeSnapshotJson),
+                DeserializeAcquisitionFromDomainSnapshot(
+                    row.AfterSnapshotJson),
+                new DateTimeOffset(row.CreatedAtUtcTicks, TimeSpan.Zero));
+    }
+
+    private async Task<ArchiveDomainFactRow?> FindDomainFactAsync(
+        Guid gameAccountId,
+        string domainKind,
+        string entityId,
+        CancellationToken cancellationToken)
+    {
+        ValidateAccountId(gameAccountId);
+        await database.InitializeAsync(cancellationToken);
+        return (await database.Connection.QueryAsync<ArchiveDomainFactRow>(
+                """
+                SELECT * FROM ArchiveDomainFacts
+                WHERE GameAccountId = ? AND DomainKind = ? AND EntityId = ?;
+                """,
+                gameAccountId.ToString("D"),
+                domainKind,
+                entityId))
+            .SingleOrDefault();
+    }
+
     private static void ValidatePageQuery(
         Guid accountId,
         int offset,

@@ -2124,6 +2124,58 @@ public sealed partial class SqliteGachaAtomicChangeStore
             .ToArray();
     }
 
+    internal async Task<GachaRevisionItem?> FindRevisionAsync(
+        Guid gameAccountId,
+        Guid revisionId,
+        CancellationToken cancellationToken = default)
+    {
+        if (gameAccountId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "Game account ID cannot be empty.",
+                nameof(gameAccountId));
+        }
+        if (revisionId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "Revision ID cannot be empty.",
+                nameof(revisionId));
+        }
+        await database.InitializeAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        GachaRevisionReadRow? row = (await database.Connection
+                .QueryAsync<GachaRevisionReadRow>(
+                    """
+                    SELECT RevisionId, ChangeSetId, GameAccountId,
+                           ExternalRecordId, ChangeKind, BeforeVersion,
+                           AfterVersion, BeforeSnapshotJson, AfterSnapshotJson,
+                           CreatedAtUtcTicks
+                    FROM GachaRevisions
+                    WHERE GameAccountId = ? AND RevisionId = ?;
+                    """,
+                    gameAccountId.ToString("D"),
+                    revisionId.ToString("D")))
+            .SingleOrDefault();
+        return row is null
+            ? null
+            : new GachaRevisionItem(
+                ParseRequiredGuid(row.RevisionId, "revision"),
+                ParseRequiredGuid(row.ChangeSetId, "change set"),
+                new GachaFactReference(
+                    ParseRequiredGuid(row.GameAccountId, "game account"),
+                    row.ExternalRecordId),
+                (EntityChangeKind)row.ChangeKind,
+                row.BeforeVersion is long before
+                    ? new FactVersion(before)
+                    : null,
+                row.AfterVersion is long after
+                    ? new FactVersion(after)
+                    : null,
+                DeserializeSnapshot(row.BeforeSnapshotJson)?.ToDomain(),
+                DeserializeSnapshot(row.AfterSnapshotJson)?.ToDomain(),
+                new DateTimeOffset(row.CreatedAtUtcTicks, TimeSpan.Zero));
+    }
+
     private static IndexedPortablePreparation PrepareIndexedPortableApply(
         SQLiteConnection connection,
         GachaPortableIndexedApplyRequest request,
