@@ -24,12 +24,25 @@ internal static class ArchiveServiceCollectionExtensions
             Path.Combine(
                 FileSystem.CacheDirectory,
                 "archive-export-snapshots")));
+        services.AddSingleton(new ArchiveRestoreStorageOptions(
+            Path.Combine(
+                FileSystem.CacheDirectory,
+                "archive-restore-sessions")));
         services.AddSingleton<IArchivePackageWriter, ArchivePackageWriter>();
-        services.AddSingleton<IArchivePackageReader, ArchivePackageReader>();
-        services.AddSingleton<
-            IArchiveExportSnapshotFactory,
-            SqliteArchiveExportSnapshotFactory>();
+        services.AddSingleton<ArchivePackageReader>();
+        services.AddSingleton<IArchivePackageReader>(provider =>
+            provider.GetRequiredService<ArchivePackageReader>());
+        services.AddSingleton<SqliteArchiveExportSnapshotFactory>();
+        services.AddSingleton<IArchiveExportSnapshotFactory>(provider =>
+            provider.GetRequiredService<SqliteArchiveExportSnapshotFactory>());
         services.AddTransient<IArchiveLogicalExporter, ArchiveLogicalExporter>();
+        services.AddTransient<
+            IArchiveRestoreInputStager,
+            SqliteArchiveRestoreInputStager>();
+        services.AddTransient<
+            IArchiveRestoreTargetSnapshotFactory,
+            SqliteArchiveRestoreTargetSnapshotFactory>();
+        services.AddTransient<IArchiveRestorePlanner, PlanArchiveRestore>();
 
         services.AddTransient<CreatePlayerArchive>();
         services.AddTransient<GetPlayerArchives>();
