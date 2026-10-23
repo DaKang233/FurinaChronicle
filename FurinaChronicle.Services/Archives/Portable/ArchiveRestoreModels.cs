@@ -5,7 +5,9 @@ using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Challenges;
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.Inventory;
+using FurinaChronicle.Core.History;
 using FurinaChronicle.Services.Gacha.History;
+using FurinaChronicle.Services.History;
 using FurinaChronicle.Services.HistoryDomains;
 
 namespace FurinaChronicle.Services.Archives.Portable;
@@ -265,6 +267,45 @@ public sealed record ArchiveRestorePlanFreshness(
     string ActualTargetStateToken,
     int ExpectedSchemaVersion,
     int ActualSchemaVersion);
+
+public sealed record ArchiveRestoreApplyRequest(
+    IArchiveRestoreStagedPackage Package,
+    ArchiveRestorePlan Plan,
+    OperationId OperationId,
+    DateTimeOffset StartedAt,
+    DateTimeOffset CommittedAt,
+    string Summary = "Restore Furina Archive",
+    Guid? CleanupConfirmationId = null);
+
+public sealed record ArchiveRestoreReceiptArchiveMapping(
+    Guid SourceArchiveReference,
+    Guid TargetArchiveId);
+
+public sealed record ArchiveRestoreReceiptAccountMapping(
+    Guid SourceArchiveReference,
+    Guid SourceAccountReference,
+    Guid TargetArchiveId,
+    Guid TargetAccountId,
+    Guid? TargetRoleIdentityId);
+
+public sealed record ArchiveRestoreReceipt(
+    Guid ReceiptId,
+    OperationId OperationId,
+    Guid? ChangeSetId,
+    string PackageFingerprint,
+    string PlanFingerprint,
+    ChangeExecutionStatus Status,
+    DateTimeOffset ReceivedAt,
+    int AffectedRecordCount,
+    int FactCount,
+    IReadOnlyList<ArchiveRestoreReceiptArchiveMapping> Archives,
+    IReadOnlyList<ArchiveRestoreReceiptAccountMapping> Accounts);
+
+public sealed record ArchiveRestoreApplyResult(
+    ChangeExecutionStatus Status,
+    ArchiveRestoreReceipt? Receipt = null,
+    string? ConflictReason = null,
+    HistoryCleanupPlan? CleanupPlan = null);
 
 public sealed record ArchiveIndexedFact<T>(
     T Value,

@@ -1,9 +1,6 @@
 // Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
-using System.Security.Cryptography;
-using System.Text.Json;
-
 namespace FurinaChronicle.Services.Archives.Portable;
 
 public sealed partial class PlanArchiveRestore
@@ -54,31 +51,19 @@ public sealed partial class PlanArchiveRestore
         ArchiveRestoreUndoAssessment undo,
         ArchiveRestoreResourceEstimate resources)
     {
-        byte[] payload = JsonSerializer.SerializeToUtf8Bytes(new
-        {
+        return ArchiveRestorePlanFingerprint.Compute(
             request.Package.PackageFingerprint,
             request.Package.Summary.Manifest.FormatVersion,
             target.StateToken,
             target.SchemaVersion,
             request.Mode,
-            Archives = archives.OrderBy(item => item.SourceArchiveReference),
-            Accounts = accounts.OrderBy(item => item.SourceAccountReference),
-            Facts = facts.OrderBy(item => item.SourceArchiveReference)
-                .ThenBy(item => item.SourceAccountReference)
-                .ThenBy(item => item.Kind)
-                .ThenBy(item => item.StableReference, StringComparer.Ordinal),
-            Tombstones = tombstones.OrderBy(
-                item => item.TombstoneKey,
-                StringComparer.Ordinal),
+            archives,
+            accounts,
+            facts,
+            tombstones,
             settings,
-            Confirmations = confirmations.OrderBy(item => item.Kind)
-                .ThenBy(item => item.Reference, StringComparer.Ordinal),
+            confirmations,
             undo,
-            resources,
-        }, new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        });
-        return Convert.ToHexString(SHA256.HashData(payload)).ToLowerInvariant();
+            resources);
     }
 }

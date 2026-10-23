@@ -30,6 +30,7 @@ public sealed partial class SqliteGachaAtomicChangeStore
 
     private readonly FurinaDatabase database;
     private readonly IHistoryStorageCapacityProvider capacityProvider;
+    private readonly IArchiveRestoreFailureInjector archiveRestoreFailureInjector;
 
     public SqliteGachaAtomicChangeStore(FurinaDatabase database)
         : this(database, UnknownStorageCapacityProvider.Instance)
@@ -39,12 +40,26 @@ public sealed partial class SqliteGachaAtomicChangeStore
     public SqliteGachaAtomicChangeStore(
         FurinaDatabase database,
         IHistoryStorageCapacityProvider capacityProvider)
+        : this(
+            database,
+            capacityProvider,
+            NoArchiveRestoreFailureInjector.Instance)
+    {
+    }
+
+    internal SqliteGachaAtomicChangeStore(
+        FurinaDatabase database,
+        IHistoryStorageCapacityProvider capacityProvider,
+        IArchiveRestoreFailureInjector archiveRestoreFailureInjector)
     {
         this.database =
             database ?? throw new ArgumentNullException(nameof(database));
         this.capacityProvider =
             capacityProvider ??
             throw new ArgumentNullException(nameof(capacityProvider));
+        this.archiveRestoreFailureInjector =
+            archiveRestoreFailureInjector ??
+            throw new ArgumentNullException(nameof(archiveRestoreFailureInjector));
     }
 
     public async Task<GachaFactState?> GetCurrentAsync(

@@ -4,6 +4,7 @@
 using FurinaChronicle.Core.Challenges;
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.Inventory;
+using FurinaChronicle.Core.History;
 using FurinaChronicle.Services.Gacha.History;
 using FurinaChronicle.Services.HistoryDomains;
 
@@ -103,4 +104,11 @@ public interface IArchiveRestorePlanner
 
 public interface IArchiveAtomicRestorer
 {
+    Task<ArchiveRestoreApplyResult> ApplyAsync(
+        ArchiveRestoreApplyRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<ArchiveRestoreReceipt?> FindReceiptAsync(
+        OperationId operationId,
+        CancellationToken cancellationToken = default);
 }
