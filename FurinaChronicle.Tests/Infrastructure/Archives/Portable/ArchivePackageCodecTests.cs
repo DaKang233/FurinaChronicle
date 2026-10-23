@@ -3,6 +3,7 @@
 
 using System.Runtime.CompilerServices;
 using System.IO.Compression;
+using System.Text;
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Challenges;
 using FurinaChronicle.Core.Gacha;
@@ -210,6 +211,22 @@ public sealed class ArchivePackageCodecTests
         using var stream = new MemoryStream();
 
         await new ArchivePackageWriter().WriteAsync(stream, snapshot, Generator());
+        stream.Position = 0;
+        using (var zip = new ZipArchive(stream, ZipArchiveMode.Read, true))
+        {
+            ZipArchiveEntry domainEntry = zip.Entries.Single(entry =>
+                entry.FullName.EndsWith(
+                    "/character-weapon-history.v1.json",
+                    StringComparison.Ordinal));
+            await using Stream payload = domainEntry.Open();
+            using var reader = new StreamReader(payload, Encoding.UTF8);
+            string json = await reader.ReadToEndAsync();
+            Assert.DoesNotContain("change_set_id", json, StringComparison.Ordinal);
+            Assert.Contains(
+                acquisitionRevision.RevisionId.ToString("D"),
+                json,
+                StringComparison.OrdinalIgnoreCase);
+        }
         stream.Position = 0;
         ArchivePackageSummary read = await new ArchivePackageReader()
             .ReadAndValidateAsync(stream);

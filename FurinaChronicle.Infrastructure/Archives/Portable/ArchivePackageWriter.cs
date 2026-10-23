@@ -12,6 +12,7 @@ using FurinaChronicle.Infrastructure.Gacha.Portable;
 using FurinaChronicle.Services.Archives.Portable;
 using FurinaChronicle.Services.Gacha.History;
 using FurinaChronicle.Services.HistoryDomains;
+using FurinaChronicle.Services.HistoryDomains.Portable;
 
 namespace FurinaChronicle.Infrastructure.Archives.Portable;
 
@@ -396,7 +397,7 @@ public sealed class ArchivePackageWriter(ArchivePortableLimits? limits = null)
                 account.AccountReference,
                 observations,
                 acquisitions,
-                accountRevisions));
+                accountRevisions.Select(ToPortableRevision).ToArray()));
         }
         if (accounts.Count == 0)
         {
@@ -411,6 +412,16 @@ public sealed class ArchivePackageWriter(ArchivePortableLimits? limits = null)
             cancellationToken);
         return new DomainWriteResult(entry, facts, revisions);
     }
+
+    private static PortableManualAcquisitionRevision ToPortableRevision(
+        ManualAcquisitionRevisionItem revision) => new(
+        revision.RevisionId,
+        revision.ChangeKind,
+        revision.BeforeVersion,
+        revision.AfterVersion,
+        revision.Before,
+        revision.After,
+        revision.CreatedAt);
 
     private async Task<DomainWriteResult> WriteChallengesAsync(
         ZipArchive zip,

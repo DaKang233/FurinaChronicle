@@ -8,6 +8,7 @@ using FurinaChronicle.Core.Inventory;
 using FurinaChronicle.Core.Records;
 using FurinaChronicle.Services.Archives.Portable;
 using FurinaChronicle.Services.HistoryDomains;
+using FurinaChronicle.Services.HistoryDomains.Portable;
 
 namespace FurinaChronicle.Infrastructure.Archives.Portable;
 
@@ -63,7 +64,7 @@ internal sealed record ArchiveCharacterWeaponAccount(
     Guid AccountReference,
     IReadOnlyList<ItemStateObservation> ItemObservations,
     IReadOnlyList<ManualAcquisitionState> ManualAcquisitions,
-    IReadOnlyList<ManualAcquisitionRevisionItem> ManualRevisions);
+    IReadOnlyList<PortableManualAcquisitionRevision> ManualRevisions);
 
 internal sealed record ArchiveChallengeDataset(
     string Format,
