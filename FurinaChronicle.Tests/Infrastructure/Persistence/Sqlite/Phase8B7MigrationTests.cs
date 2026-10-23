@@ -38,7 +38,7 @@ public sealed class Phase8B7MigrationTests
 
         using (SQLiteConnection raw = fixture.OpenRawConnection())
         {
-            Assert.Equal(7, raw.ExecuteScalar<int>("PRAGMA user_version;"));
+            Assert.Equal(8, raw.ExecuteScalar<int>("PRAGMA user_version;"));
             Assert.Equal(
                 ApplicationId,
                 raw.ExecuteScalar<int>("PRAGMA application_id;"));
@@ -558,6 +558,10 @@ public sealed class Phase8B7MigrationTests
             raw.Execute("DROP TABLE ChronicleEntries;");
             raw.Execute("DROP TABLE ChronicleGenerations;");
             raw.Execute("DROP TABLE ChronicleScopeStates;");
+            raw.Execute("DROP TABLE ArchiveRestoreReceiptAccounts;");
+            raw.Execute("DROP TABLE ArchiveRestoreReceiptArchives;");
+            raw.Execute("DROP TABLE ArchiveRestoreReceipts;");
+            raw.Execute("DROP TABLE PortableApplicationSettings;");
             raw.Execute("PRAGMA user_version = 6;");
         }
 

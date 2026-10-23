@@ -8,7 +8,8 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite;
 
 public sealed class FurinaDatabase : IAsyncDisposable
 {
-    private const int CurrentSchemaVersion = 7;
+    private const int CurrentSchemaVersion = 8;
+    private const int ArchiveRestoreSchemaVersion = 8;
     private const int ChronicleSchemaVersion = 7;
     private const int ArchiveDomainSchemaVersion = 6;
     private const int AtomicHistorySchemaVersion = 5;
@@ -116,6 +117,11 @@ public sealed class FurinaDatabase : IAsyncDisposable
             {
                 await MigrateVersionSixToCurrentAsync(cancellationToken);
             }
+            else if (applicationId == CurrentApplicationId &&
+                     schemaVersion == ChronicleSchemaVersion)
+            {
+                await MigrateVersionSevenToCurrentAsync(cancellationToken);
+            }
             else if (applicationId == 0 &&
                      schemaVersion == 0 &&
                      await IsEmptyDatabaseAsync(cancellationToken))
@@ -164,6 +170,7 @@ public sealed class FurinaDatabase : IAsyncDisposable
             MigrateVersionFourToVersionFive(connection);
             MigrateVersionFiveToVersionSix(connection);
             MigrateVersionSixToVersionSeven(connection);
+            MigrateVersionSevenToVersionEight(connection);
             SetCurrentSchemaVersion(connection);
         });
     }
@@ -181,6 +188,7 @@ public sealed class FurinaDatabase : IAsyncDisposable
             MigrateVersionFourToVersionFive(connection);
             MigrateVersionFiveToVersionSix(connection);
             MigrateVersionSixToVersionSeven(connection);
+            MigrateVersionSevenToVersionEight(connection);
             SetCurrentSchemaVersion(connection);
         });
     }
@@ -197,6 +205,7 @@ public sealed class FurinaDatabase : IAsyncDisposable
             MigrateVersionFourToVersionFive(connection);
             MigrateVersionFiveToVersionSix(connection);
             MigrateVersionSixToVersionSeven(connection);
+            MigrateVersionSevenToVersionEight(connection);
             SetCurrentSchemaVersion(connection);
         });
     }
@@ -212,6 +221,7 @@ public sealed class FurinaDatabase : IAsyncDisposable
             MigrateVersionFourToVersionFive(connection);
             MigrateVersionFiveToVersionSix(connection);
             MigrateVersionSixToVersionSeven(connection);
+            MigrateVersionSevenToVersionEight(connection);
             SetCurrentSchemaVersion(connection);
         });
     }
@@ -225,6 +235,7 @@ public sealed class FurinaDatabase : IAsyncDisposable
             cancellationToken.ThrowIfCancellationRequested();
             MigrateVersionFiveToVersionSix(connection);
             MigrateVersionSixToVersionSeven(connection);
+            MigrateVersionSevenToVersionEight(connection);
             SetCurrentSchemaVersion(connection);
         });
     }
@@ -237,6 +248,19 @@ public sealed class FurinaDatabase : IAsyncDisposable
         {
             cancellationToken.ThrowIfCancellationRequested();
             MigrateVersionSixToVersionSeven(connection);
+            MigrateVersionSevenToVersionEight(connection);
+            SetCurrentSchemaVersion(connection);
+        });
+    }
+
+    private async Task MigrateVersionSevenToCurrentAsync(
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await Connection.RunInTransactionAsync(connection =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            MigrateVersionSevenToVersionEight(connection);
             SetCurrentSchemaVersion(connection);
         });
     }
@@ -363,6 +387,10 @@ public sealed class FurinaDatabase : IAsyncDisposable
     private static void MigrateVersionSixToVersionSeven(
         SQLiteConnection connection) =>
         CreateChronicleProjectionTables(connection);
+
+    private static void MigrateVersionSevenToVersionEight(
+        SQLiteConnection connection) =>
+        CreateArchiveRestoreTables(connection);
 
     private static void SetCurrentSchemaVersion(SQLiteConnection connection)
     {
@@ -644,6 +672,32 @@ public sealed class FurinaDatabase : IAsyncDisposable
                 "ItemId", "PayloadJson",
             ],
             cancellationToken);
+        await ValidateTableColumnsAsync(
+            "PortableApplicationSettings",
+            ["Id", "RequireUniqueArchiveNames"],
+            cancellationToken);
+        await ValidateTableColumnsAsync(
+            "ArchiveRestoreReceipts",
+            [
+                "ReceiptId", "OperationId", "ChangeSetId",
+                "PackageFingerprint", "PlanFingerprint", "Status",
+                "ReceivedAtUtcTicks", "ReceivedAtOffsetMinutes",
+                "AffectedRecordCount", "ArchiveCount", "AccountCount",
+                "FactCount",
+            ],
+            cancellationToken);
+        await ValidateTableColumnsAsync(
+            "ArchiveRestoreReceiptArchives",
+            ["ReceiptId", "SourceArchiveReference", "TargetArchiveId"],
+            cancellationToken);
+        await ValidateTableColumnsAsync(
+            "ArchiveRestoreReceiptAccounts",
+            [
+                "ReceiptId", "SourceArchiveReference",
+                "SourceAccountReference", "TargetArchiveId",
+                "TargetAccountId", "TargetRoleIdentityId",
+            ],
+            cancellationToken);
 
         List<ForeignKeyViolationRow> violations =
             await Connection.QueryAsync<ForeignKeyViolationRow>(
@@ -783,6 +837,7 @@ public sealed class FurinaDatabase : IAsyncDisposable
             CreateHistoryTables(connection);
             CreateArchiveDomainHistoryTables(connection);
             CreateChronicleProjectionTables(connection);
+            CreateArchiveRestoreTables(connection);
 
             connection.Execute(
                 """
@@ -1252,6 +1307,89 @@ public sealed class FurinaDatabase : IAsyncDisposable
                 WHERE GenerationId IN
                     (SELECT GenerationId FROM ChronicleGenerations WHERE IsInvalidated = 1);
             END;
+            """);
+    }
+
+    private static void CreateArchiveRestoreTables(SQLiteConnection connection)
+    {
+        connection.Execute(
+            """
+            CREATE TABLE PortableApplicationSettings
+            (
+                Id INTEGER PRIMARY KEY NOT NULL CHECK (Id = 1),
+                RequireUniqueArchiveNames INTEGER NOT NULL
+            );
+            """);
+        connection.Execute(
+            """
+            INSERT INTO PortableApplicationSettings
+                (Id, RequireUniqueArchiveNames)
+            VALUES (1, 1);
+            """);
+        connection.Execute(
+            """
+            CREATE TABLE ArchiveRestoreReceipts
+            (
+                ReceiptId TEXT PRIMARY KEY NOT NULL,
+                OperationId TEXT NOT NULL UNIQUE,
+                ChangeSetId TEXT UNIQUE,
+                PackageFingerprint TEXT NOT NULL,
+                PlanFingerprint TEXT NOT NULL,
+                Status INTEGER NOT NULL,
+                ReceivedAtUtcTicks INTEGER NOT NULL,
+                ReceivedAtOffsetMinutes INTEGER NOT NULL,
+                AffectedRecordCount INTEGER NOT NULL,
+                ArchiveCount INTEGER NOT NULL,
+                AccountCount INTEGER NOT NULL,
+                FactCount INTEGER NOT NULL,
+                FOREIGN KEY (ChangeSetId)
+                    REFERENCES DataChangeSets(ChangeSetId)
+            );
+            """);
+        connection.Execute(
+            """
+            CREATE TABLE ArchiveRestoreReceiptArchives
+            (
+                ReceiptId TEXT NOT NULL,
+                SourceArchiveReference TEXT NOT NULL,
+                TargetArchiveId TEXT NOT NULL,
+                PRIMARY KEY (ReceiptId, SourceArchiveReference),
+                FOREIGN KEY (ReceiptId)
+                    REFERENCES ArchiveRestoreReceipts(ReceiptId)
+                    ON DELETE CASCADE,
+                FOREIGN KEY (TargetArchiveId)
+                    REFERENCES PlayerArchives(Id)
+            );
+            """);
+        connection.Execute(
+            """
+            CREATE TABLE ArchiveRestoreReceiptAccounts
+            (
+                ReceiptId TEXT NOT NULL,
+                SourceArchiveReference TEXT NOT NULL,
+                SourceAccountReference TEXT NOT NULL,
+                TargetArchiveId TEXT NOT NULL,
+                TargetAccountId TEXT NOT NULL,
+                TargetRoleIdentityId TEXT,
+                PRIMARY KEY (
+                    ReceiptId,
+                    SourceArchiveReference,
+                    SourceAccountReference),
+                FOREIGN KEY (ReceiptId)
+                    REFERENCES ArchiveRestoreReceipts(ReceiptId)
+                    ON DELETE CASCADE,
+                FOREIGN KEY (TargetArchiveId)
+                    REFERENCES PlayerArchives(Id),
+                FOREIGN KEY (TargetAccountId)
+                    REFERENCES GameAccounts(Id),
+                FOREIGN KEY (TargetRoleIdentityId)
+                    REFERENCES GameRoleIdentities(Id)
+            );
+            """);
+        connection.Execute(
+            """
+            CREATE INDEX IX_ArchiveRestoreReceipts_Package_Plan
+            ON ArchiveRestoreReceipts(PackageFingerprint, PlanFingerprint);
             """);
     }
 

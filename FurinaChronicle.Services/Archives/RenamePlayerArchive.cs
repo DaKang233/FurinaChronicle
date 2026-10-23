@@ -9,8 +9,24 @@ using FurinaChronicle.Services.Abstractions;
 
 namespace FurinaChronicle.Services.Archives;
 
-public sealed class RenamePlayerArchive(IPlayerArchiveRepository repository)
+public sealed class RenamePlayerArchive
 {
+    private readonly IPlayerArchiveRepository repository;
+    private readonly IPortableApplicationSettingsStore settings;
+
+    public RenamePlayerArchive(IPlayerArchiveRepository repository)
+        : this(repository, AlwaysUniqueSettingsStore.Instance)
+    {
+    }
+
+    public RenamePlayerArchive(
+        IPlayerArchiveRepository repository,
+        IPortableApplicationSettingsStore settings)
+    {
+        this.repository = repository;
+        this.settings = settings;
+    }
+
     public async Task<PlayerArchive> ExecuteAsync(Guid archiveId, string name, CancellationToken cancellationToken = default)
     {
         if (archiveId == Guid.Empty)
@@ -25,7 +41,8 @@ public sealed class RenamePlayerArchive(IPlayerArchiveRepository repository)
         PlayerArchive? archive = await repository.GetByIdAsync(archiveId, cancellationToken) ?? throw new KeyNotFoundException("要重命名的玩家档案不存在。");
         IReadOnlyList<PlayerArchive> existing =
             await repository.GetAllAsync(cancellationToken);
-        if (existing.Any(candidate =>
+        if (await settings.GetRequireUniqueArchiveNamesAsync(cancellationToken) &&
+            existing.Any(candidate =>
                 candidate.Id != archiveId &&
                 string.Equals(candidate.Name, name, StringComparison.Ordinal)))
         {
@@ -41,5 +58,20 @@ public sealed class RenamePlayerArchive(IPlayerArchiveRepository repository)
         await repository.UpdateAsync(updated, cancellationToken);
 
         return updated;
+    }
+
+    private sealed class AlwaysUniqueSettingsStore
+        : IPortableApplicationSettingsStore
+    {
+        public static AlwaysUniqueSettingsStore Instance { get; } = new();
+
+        public Task<bool> GetRequireUniqueArchiveNamesAsync(
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(true);
+
+        public Task SetRequireUniqueArchiveNamesAsync(
+            bool value,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 }

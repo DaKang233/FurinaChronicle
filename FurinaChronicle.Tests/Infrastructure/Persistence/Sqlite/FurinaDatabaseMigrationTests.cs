@@ -10,10 +10,10 @@ namespace FurinaChronicle.Tests.Infrastructure.Persistence.Sqlite;
 public sealed class FurinaDatabaseMigrationTests
 {
     private const int CurrentApplicationId = 0x46554348;
-    private const int CurrentSchemaVersion = 7;
+    private const int CurrentSchemaVersion = 8;
 
     [Fact]
-    public async Task InitializeAsync_NewDatabase_CreatesCurrentVersionSevenSchema()
+    public async Task InitializeAsync_NewDatabase_CreatesCurrentVersionEightSchema()
     {
         await using var fixture = MigrationFixture.Create();
 
@@ -41,6 +41,10 @@ public sealed class FurinaDatabaseMigrationTests
         Assert.Contains("ImportedAtOffsetMinutes", gachaColumns);
         Assert.Contains("AcquisitionBatchId", gachaColumns);
         Assert.Contains("Version", gachaColumns);
+        Assert.Equal(
+            1,
+            connection.ExecuteScalar<int>(
+                "SELECT RequireUniqueArchiveNames FROM PortableApplicationSettings WHERE Id = 1;"));
 
         string[] indexes = connection.Query<NameRow>(
                 """
@@ -106,6 +110,37 @@ public sealed class FurinaDatabaseMigrationTests
             "old-gacha",
             connection.ExecuteScalar<string>(
                 "SELECT ExternalRecordId FROM GachaRecords LIMIT 1;"));
+    }
+
+    [Fact]
+    public async Task InitializeAsync_VersionSevenDatabase_MigratesToVersionEight()
+    {
+        await using var fixture = MigrationFixture.Create();
+        await using (FurinaDatabase database = fixture.OpenDatabase())
+        {
+            await database.InitializeAsync();
+        }
+
+        using (SQLiteConnection legacy = fixture.OpenRawConnection())
+        {
+            legacy.Execute("DROP TABLE ArchiveRestoreReceiptAccounts;");
+            legacy.Execute("DROP TABLE ArchiveRestoreReceiptArchives;");
+            legacy.Execute("DROP TABLE ArchiveRestoreReceipts;");
+            legacy.Execute("DROP TABLE PortableApplicationSettings;");
+            legacy.Execute("PRAGMA user_version = 7;");
+        }
+
+        await using (FurinaDatabase database = fixture.OpenDatabase())
+        {
+            await database.InitializeAsync();
+        }
+
+        using SQLiteConnection connection = fixture.OpenRawConnection();
+        AssertCurrentSchema(connection);
+        Assert.Equal(
+            1,
+            connection.ExecuteScalar<int>(
+                "SELECT RequireUniqueArchiveNames FROM PortableApplicationSettings WHERE Id = 1;"));
     }
 
     [Fact]
@@ -371,6 +406,10 @@ public sealed class FurinaDatabaseMigrationTests
         }
         using (SQLiteConnection legacy = fixture.OpenRawConnection())
         {
+            legacy.Execute("DROP TABLE ArchiveRestoreReceiptAccounts;");
+            legacy.Execute("DROP TABLE ArchiveRestoreReceiptArchives;");
+            legacy.Execute("DROP TABLE ArchiveRestoreReceipts;");
+            legacy.Execute("DROP TABLE PortableApplicationSettings;");
             foreach (string trigger in legacy.Query<NameRow>(
                          "SELECT name FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'TR_Chronicle_%';")
                      .Select(row => row.Name))
@@ -631,6 +670,9 @@ public sealed class FurinaDatabaseMigrationTests
             [
                 "ArchiveDomainFacts",
                 "ArchiveDomainRevisions",
+                "ArchiveRestoreReceiptAccounts",
+                "ArchiveRestoreReceiptArchives",
+                "ArchiveRestoreReceipts",
                 "ArchiveUndoSettings",
                 "ChronicleEntries",
                 "ChronicleGenerations",
@@ -647,6 +689,7 @@ public sealed class FurinaDatabaseMigrationTests
                 "OperationCommitResults",
                 "OperationHistory",
                 "PlayerArchives",
+                "PortableApplicationSettings",
                 "PortableImportReceiptAccounts",
                 "PortableImportReceipts",
                 "RoleIdentityAliases",

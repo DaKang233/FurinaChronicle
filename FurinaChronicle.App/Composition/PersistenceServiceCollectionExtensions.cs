@@ -53,6 +53,9 @@ internal static class PersistenceServiceCollectionExtensions
             IHistoryStorageCapacityProvider,
             PlatformDatabaseStorageCapacityProvider>();
         services.AddSingleton<IGachaRecordRepository, SqliteGachaRecordRepository>();
+        services.AddSingleton<
+            IPortableApplicationSettingsStore,
+            SqlitePortableApplicationSettingsStore>();
         services.AddSingleton<SqliteGachaAtomicChangeStore>();
         services.AddSingleton<IGachaAtomicChangeStore>(
             provider => provider.GetRequiredService<

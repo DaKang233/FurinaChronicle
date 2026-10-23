@@ -63,6 +63,8 @@ public sealed class SqliteArchiveExportSnapshotFactory(
             var accounts = new SqliteGameAccountRepository(snapshotDatabase);
             var gacha = new SqliteGachaRecordRepository(snapshotDatabase);
             var history = new SqliteGachaAtomicChangeStore(snapshotDatabase);
+            var portableSettings =
+                new SqlitePortableApplicationSettingsStore(snapshotDatabase);
             IReadOnlyList<PlayerArchive> selected = SelectArchives(
                 await archives.GetAllAsync(cancellationToken),
                 scope);
@@ -127,7 +129,10 @@ public sealed class SqliteArchiveExportSnapshotFactory(
                         .OrderBy(item => item.RoleIdentityReference)
                         .ToArray(),
                     catalogArchives),
-                new ArchivePortableSettings(true, settings),
+                new ArchivePortableSettings(
+                    await portableSettings.GetRequireUniqueArchiveNamesAsync(
+                        cancellationToken),
+                    settings),
                 gacha,
                 history,
                 stateToken,
@@ -219,7 +224,7 @@ public sealed class SqliteArchiveExportSnapshotFactory(
         public ArchiveExportScope Scope { get; } = scope;
         public ArchiveCatalog Catalog { get; } = catalog;
         public ArchivePortableSettings Settings { get; } = settings;
-        public int SchemaVersion { get; } = 7;
+        public int SchemaVersion { get; } = 8;
         public string StateToken { get; } = stateToken;
         public long SnapshotLength { get; } = snapshotLength;
 
