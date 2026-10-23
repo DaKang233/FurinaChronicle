@@ -1,6 +1,6 @@
 # Phase 8C 实施计划与首轮记录
 
-状态：8C.0 contract accepted；8C.1 export foundation completed；8C.2 in progress
+状态：8C.0 contract accepted；8C.1 export foundation completed；8C.2 restore planning completed
 
 启动日期：2026-10-23（Asia/Shanghai）
 
@@ -163,6 +163,27 @@ IArchiveAtomicRestorer       // 8C.3 实现
 - 只要创建父对象／身份别名、携带来源 Revision、应用设置或需要 Tombstone 重引入，整个恢复不承诺普通 Undo。只有向既有父对象纯新增事实且可完整捕获材料时才可标记为可撤销候选。
 
 完整契约见 [Archive RestorePlan v1](../specifications/ARCHIVE_RESTORE_PLAN_V1.md)。8C.2 不增加正式 UI，不访问真实生产库，不写 Receipt，也不修改 Schema 7。
+
+## 8C.2 完成记录
+
+- 版本为 `0.8.11 / 8C.2`；数据库仍为 Schema 7，没有生产数据库迁移。
+- 输入由系统文件流复制到 app-private session，计算 Archive SHA-256，经正式 Reader 完整验证后写入私有 SQLite staging；失败、取消和释放 session 均清理私有材料。
+- 目标状态来自 SQLite Online Backup 一致副本；Plan 绑定完整目标数据库内容令牌和 Schema，而不是仅绑定记录数。
+- 单一 RestorePlan 同时覆盖档案、账号、Gacha 当前事实及 Revision、角色／武器观察、手工获取及 Revision、挑战观察、Tombstone、白名单设置、空间估算、确认项和整体 Undo 资格。
+- 档案名称、共享身份、Unresolved、同 ID 异内容、相似名称、多个同名、Tombstone marker/version 和 partial restore 均按 Accepted 契约生成确定性映射、冲突或确认，不写目标库。
+- 目标事实查询按“账号 + 稳定 ID”执行，不因目标档案规模把全部历史缓存进规划器内存。
+- Release 全量测试为 559/559；MAUI Windows、独立 WinUI、Android（`E:\AndroidSDK`）适用构建均为 0 警告、0 错误。
+- CI、Windows／Android 文件选择器交互、真实生产数据库 Preview、Apply 和跨端恢复均为 `Not run`；8C.2 没有正式 UI，也没有写库恢复实现。
+
+详细文件、契约落地、验证结果和 8C.3 交接见 [8C.2 实施记录](PHASE_8C2_IMPLEMENTATION.md)。
+
+## 8C.3 最短交接
+
+1. 以 8C.2 的 staging、Plan 指纹、目标状态令牌、映射、确认和 Tombstone marker/version 作为 Apply 前置条件；Apply 前必须重新验证目标新鲜度与实际空间。
+2. 提取现有 Store 的事务内 mutation helper，在一个 SQLite 事务中提交父对象、三个领域、Revision、目标 ChangeSet／Receipt、Tombstone 重引入和必要设置。
+3. 禁止依次调用三个 Portable Apply；任一事实、Revision、设置、Tombstone 或 Receipt 故障必须整体回滚。
+4. 普通 Merge 成功、幂等、空间不足、取消和故障注入全部成立后，才讨论 Replace；8C.3 不自动扩大为完整 UI 重构。
+5. Windows／Android 的真实文件 Preview／Apply 和跨端往返证据必须在入口存在后单独验收，不继承 8B.7 或 8C.1 的设备证据。
 
 ## 明确不做
 
