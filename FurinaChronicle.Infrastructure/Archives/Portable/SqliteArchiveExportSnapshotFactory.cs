@@ -487,7 +487,6 @@ public sealed class SqliteArchiveExportSnapshotFactory(
             foreach (ArchiveRestoreTombstoneProbe probe in probes.Distinct())
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                EnsureAccount(probe.TargetAccountId);
                 string[] keys = CreateTombstoneKeys(probe).ToArray();
                 string placeholders = string.Join(", ", keys.Select(_ => "?"));
                 List<object> arguments = [.. keys.Cast<object>()];

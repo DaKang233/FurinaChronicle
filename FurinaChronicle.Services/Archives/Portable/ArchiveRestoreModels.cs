@@ -124,6 +124,26 @@ public enum ArchiveRestoreFactKind
     ChallengeObservation = 6,
 }
 
+public enum ArchiveRestoreFactAction
+{
+    Add = 1,
+    Skip = 2,
+    Conflict = 3,
+    Reintroduce = 4,
+}
+
+public sealed record ArchiveRestoreFactPlan(
+    Guid SourceArchiveReference,
+    Guid SourceAccountReference,
+    Guid TargetArchiveId,
+    Guid TargetAccountId,
+    ArchiveRestoreFactKind Kind,
+    string StableReference,
+    string TombstoneReference,
+    string SourceSemanticDigest,
+    string? TargetSemanticDigest,
+    ArchiveRestoreFactAction Action);
+
 public enum ArchiveRestoreConflictCode
 {
     ArchiveMapping = 1,
@@ -218,6 +238,7 @@ public sealed record ArchiveRestorePlan(
     ArchiveRestoreMode Mode,
     IReadOnlyList<ArchiveRestoreArchiveMapping> Archives,
     IReadOnlyList<ArchiveRestoreAccountMapping> Accounts,
+    IReadOnlyList<ArchiveRestoreFactPlan> Facts,
     ArchiveRestorePreview Preview,
     IReadOnlyList<ArchiveRestoreConflict> Conflicts,
     IReadOnlyList<ArchiveRestoreTombstoneHit> Tombstones,

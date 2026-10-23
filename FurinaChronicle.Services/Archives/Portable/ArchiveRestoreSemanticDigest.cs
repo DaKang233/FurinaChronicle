@@ -10,9 +10,9 @@ using FurinaChronicle.Core.Inventory;
 using FurinaChronicle.Services.Gacha.History;
 using FurinaChronicle.Services.HistoryDomains;
 
-namespace FurinaChronicle.Infrastructure.Archives.Portable;
+namespace FurinaChronicle.Services.Archives.Portable;
 
-internal static class ArchiveRestoreSemanticDigest
+public static class ArchiveRestoreSemanticDigest
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

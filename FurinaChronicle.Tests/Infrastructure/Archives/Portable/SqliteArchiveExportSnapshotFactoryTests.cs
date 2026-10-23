@@ -17,6 +17,41 @@ namespace FurinaChronicle.Tests.Infrastructure.Archives.Portable;
 public sealed class SqliteArchiveExportSnapshotFactoryTests
 {
     [Fact]
+    public async Task RestoreTargetStateTokenIsStableWithoutProductionChanges()
+    {
+        await using SqliteRepositoryTestContext context =
+            SqliteRepositoryTestContext.Create();
+        var archive = SqliteRepositoryTestContext.CreateArchive("Stable target");
+        await context.Archives.AddAsync(archive);
+        string root = Path.Combine(
+            Path.GetTempPath(),
+            "FurinaChronicleTests",
+            Guid.NewGuid().ToString("N"));
+        var factory = new SqliteArchiveRestoreTargetSnapshotFactory(
+            new SqliteArchiveExportSnapshotFactory(
+                context.Database,
+                TimeProvider.System,
+                new ArchiveSnapshotStorageOptions(root)));
+
+        string first;
+        await using (IArchiveRestoreTargetSnapshot snapshot =
+            await factory.OpenAsync())
+        {
+            first = snapshot.StateToken;
+        }
+        await using (IArchiveRestoreTargetSnapshot snapshot =
+            await factory.OpenAsync())
+        {
+            Assert.Equal(first, snapshot.StateToken);
+        }
+
+        Assert.True(
+            !Directory.Exists(root) ||
+            !Directory.EnumerateFileSystemEntries(root).Any());
+        if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+    }
+
+    [Fact]
     public async Task RestoreTargetSnapshotBindsStateAndReadsActiveTombstone()
     {
         await using SqliteRepositoryTestContext context =
