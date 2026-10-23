@@ -16,6 +16,12 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
 
     public async Task<ArchivePackageSummary> ReadAndValidateAsync(
         Stream source,
+        CancellationToken cancellationToken = default) =>
+        await ReadAndValidateAsync(source, null, cancellationToken);
+
+    internal async Task<ArchivePackageSummary> ReadAndValidateAsync(
+        Stream source,
+        IArchivePackageContentSink? contentSink,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(source);
@@ -93,6 +99,7 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
         }
         ArchivePortableSettings settings = settingsWire.ToModel();
         ValidateSettings(settings, catalog);
+        contentSink?.SetMetadata(catalog, settings);
 
         HashSet<Guid> accountReferences = catalog.Archives
             .SelectMany(item => item.Accounts)
@@ -101,6 +108,7 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
         GachaHistoryValidation gachaHistory = await ValidateGachaHistoryAsync(
             Require(entries, ArchivePackageWriter.GachaHistoryPath),
             accountReferences,
+            contentSink,
             cancellationToken);
         long uigfFacts = 0;
         var uigfSequences = new Dictionary<Guid, SequenceSummary>();
@@ -113,6 +121,7 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
                     Require(entries, path),
                     path,
                     catalog,
+                    contentSink,
                     cancellationToken);
                 uigfFacts += validated.Sequence.Count;
                 if (!uigfSequences.TryAdd(validated.AccountReference, validated.Sequence))
@@ -135,6 +144,7 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
                     Require(entries, path),
                     dataset.Kind,
                     catalog,
+                    contentSink,
                     cancellationToken);
                 domainFacts += counts.Facts;
                 domainRevisions += counts.Revisions;
@@ -392,6 +402,7 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
     private async Task<GachaHistoryValidation> ValidateGachaHistoryAsync(
         ZipArchiveEntry entry,
         IReadOnlySet<Guid> accountReferences,
+        IArchivePackageContentSink? contentSink,
         CancellationToken cancellationToken)
     {
         long facts = 0;
@@ -446,6 +457,10 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
                         standardKeys[value.AccountReference] = keys;
                     }
                     keys.Append(value.ExternalRecordId);
+                    contentSink?.AddStandardExtension(
+                        value.AccountReference,
+                        value.ExternalRecordId,
+                        value.Extension);
                     facts++;
                     break;
                 case "nonstandard_current" when value.Record is not null &&
@@ -455,6 +470,7 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
                         value.AccountReference,
                         value.ExternalRecordId,
                         entry.FullName);
+                    contentSink?.AddGachaRecord(value.Record);
                     facts++;
                     break;
                 case "revision" when value.Revision is not null &&
@@ -475,6 +491,10 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
                             value.ExternalRecordId,
                             entry.FullName);
                     }
+                    contentSink?.AddGachaRevision(
+                        value.AccountReference,
+                        value.ExternalRecordId,
+                        value.Revision);
                     revisions++;
                     break;
                 default:
@@ -505,6 +525,7 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
         ZipArchiveEntry entry,
         string path,
         ArchiveCatalog catalog,
+        IArchivePackageContentSink? contentSink,
         CancellationToken cancellationToken)
     {
         Guid accountReference = ParseAccountReferenceFromUigfPath(path);
@@ -530,6 +551,13 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
         string? uid = null;
         string? recordId = null;
         string? itemId = null;
+        string? uigfGachaType = null;
+        string? gachaType = null;
+        string? count = null;
+        string? time = null;
+        string? name = null;
+        string? itemType = null;
+        string? rankType = null;
         int infoDepth = -1;
         int hk4eDepth = -1;
         int accountDepth = -1;
@@ -573,6 +601,13 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
                                 recordDepth = reader.CurrentDepth;
                                 recordId = null;
                                 itemId = null;
+                                uigfGachaType = null;
+                                gachaType = null;
+                                count = null;
+                                time = null;
+                                name = null;
+                                itemType = null;
+                                rankType = null;
                             }
                             pendingProperty = null;
                             break;
@@ -591,6 +626,20 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
                             {
                                 if (pendingProperty == "id") recordId = reader.GetString();
                                 else if (pendingProperty == "item_id") itemId = reader.GetString();
+                                else if (pendingProperty == "uigf_gacha_type")
+                                    uigfGachaType = reader.GetString();
+                                else if (pendingProperty == "gacha_type")
+                                    gachaType = reader.GetString();
+                                else if (pendingProperty == "count")
+                                    count = reader.GetString();
+                                else if (pendingProperty == "time")
+                                    time = reader.GetString();
+                                else if (pendingProperty == "name")
+                                    name = reader.GetString();
+                                else if (pendingProperty == "item_type")
+                                    itemType = reader.GetString();
+                                else if (pendingProperty == "rank_type")
+                                    rankType = reader.GetString();
                             }
                             else if (accountDepth >= 0 && pendingProperty == "uid")
                                 uid = reader.GetString();
@@ -608,6 +657,18 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
                                         "A UIGF record is missing id or item_id.");
                                 }
                                 sequence.Append(recordId);
+                                contentSink?.AddUigfRecord(
+                                    accountReference,
+                                    new ArchiveUigfRecord(
+                                        uigfGachaType ?? string.Empty,
+                                        gachaType ?? string.Empty,
+                                        itemId,
+                                        count ?? string.Empty,
+                                        time ?? string.Empty,
+                                        name ?? string.Empty,
+                                        itemType ?? string.Empty,
+                                        rankType ?? string.Empty,
+                                        recordId));
                                 if (sequence.Count > limits.MaximumGachaFactCount)
                                 {
                                     throw Error(
@@ -681,6 +742,7 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
         ZipArchiveEntry entry,
         string kind,
         ArchiveCatalog catalog,
+        IArchivePackageContentSink? contentSink,
         CancellationToken cancellationToken)
     {
         HashSet<Guid> accounts = catalog.Archives.SelectMany(item => item.Accounts)
@@ -710,6 +772,7 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
                     "The character/weapon dataset contains an invalid account reference.",
                     entry.FullName);
             }
+            contentSink?.AddCharacterWeaponDataset(value);
             return new DomainCounts(
                 value.Accounts.Sum(item =>
                     item.ItemObservations.Count + item.ManualAcquisitions.Count),
@@ -732,6 +795,7 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
                     "The challenge dataset contains an invalid account reference.",
                     entry.FullName);
             }
+            contentSink?.AddChallengeDataset(value);
             return new DomainCounts(
                 value.Accounts.Sum(item => item.ChallengeObservations.Count),
                 0);

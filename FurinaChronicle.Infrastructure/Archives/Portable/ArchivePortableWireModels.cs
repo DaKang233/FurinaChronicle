@@ -45,6 +45,17 @@ internal sealed record ArchiveGachaStandardExtension(
     int OccurredAtOffsetMinutes,
     RecordProvenance Provenance);
 
+internal sealed record ArchiveUigfRecord(
+    string UigfGachaType,
+    string GachaType,
+    string ItemId,
+    string Count,
+    string Time,
+    string Name,
+    string ItemType,
+    string RankType,
+    string Id);
+
 internal sealed record ArchiveGachaRevision(
     Guid RevisionReference,
     EntityChangeKind ChangeKind,
@@ -75,3 +86,26 @@ internal sealed record ArchiveChallengeDataset(
 internal sealed record ArchiveChallengeAccount(
     Guid AccountReference,
     IReadOnlyList<ChallengeObservation> ChallengeObservations);
+
+internal interface IArchivePackageContentSink
+{
+    void SetMetadata(ArchiveCatalog catalog, ArchivePortableSettings settings);
+
+    void AddStandardExtension(
+        Guid accountReference,
+        string externalRecordId,
+        ArchiveGachaStandardExtension extension);
+
+    void AddGachaRecord(GachaRecord record);
+
+    void AddGachaRevision(
+        Guid accountReference,
+        string externalRecordId,
+        ArchiveGachaRevision revision);
+
+    void AddUigfRecord(Guid accountReference, ArchiveUigfRecord record);
+
+    void AddCharacterWeaponDataset(ArchiveCharacterWeaponDataset dataset);
+
+    void AddChallengeDataset(ArchiveChallengeDataset dataset);
+}
