@@ -62,6 +62,14 @@
 - 大型 NDJSON 流式处理，不要求一次加载全部记录。
 - Windows 导出、Android 导入并重新导出后语义一致；反向同样成立。
 - 普通 Archive 不包含凭据、DeviceId、平台 URI 或游戏路径。
+- Archive Merge 在一个跨领域 SQLite 事务中提交父对象、事实、来源 Revision、目标
+  ChangeSet／Undo、Receipt、Tombstone 重引入和白名单设置；不得按领域依次 Apply。
+- Plan 后目标或 staging 内容变化、提交前取消、实时空间不足及任一领域／Revision／Receipt
+  故障均不得留下部分父对象、事实、历史或 Receipt。
+- 同 Operation 重启重试返回原 Receipt；同包重新规划的 NoOp 不新增空 ChangeSet。
+- 跨档案 Merge 只提交和撤销一次，但在每个相关档案的历史容量中计数。
+- 恢复当前事实后，受影响账号／档案的旧 Chronicle generation 和严格游标必须失效；
+  来源 generation、epoch 和游标不得导入。
 
 ## Chronicle 时间线
 

@@ -1,6 +1,6 @@
 # Phase 8C 实施计划与首轮记录
 
-状态：8C.0 contract accepted；8C.1 export foundation completed；8C.2 restore planning completed
+状态：8C.0～8C.3 completed；8C.4 Replace contract pending
 
 启动日期：2026-10-23（Asia/Shanghai）
 
@@ -177,17 +177,39 @@ IArchiveAtomicRestorer       // 8C.3 实现
 
 详细文件、契约落地、验证结果和 8C.3 交接见 [8C.2 实施记录](PHASE_8C2_IMPLEMENTATION.md)。
 
-## 8C.3 最短交接
+## 8C.3 完成记录
 
-1. 以 8C.2 的 staging、Plan 指纹、目标状态令牌、映射、确认和 Tombstone marker/version 作为 Apply 前置条件；Apply 前必须重新验证目标新鲜度与实际空间。
-2. 提取现有 Store 的事务内 mutation helper，在一个 SQLite 事务中提交父对象、三个领域、Revision、目标 ChangeSet／Receipt、Tombstone 重引入和必要设置。
-3. 禁止依次调用三个 Portable Apply；任一事实、Revision、设置、Tombstone 或 Receipt 故障必须整体回滚。
-4. 普通 Merge 成功、幂等、空间不足、取消和故障注入全部成立后，才讨论 Replace；8C.3 不自动扩大为完整 UI 重构。
-5. Windows／Android 的真实文件 Preview／Apply 和跨端往返证据必须在入口存在后单独验收，不继承 8B.7 或 8C.1 的设备证据。
+- 版本为 `0.8.12 / 8C.3`；Schema 8 增加应用设置权威值和 Archive Restore
+  Receipt／映射，不改变 Archive v1 容器版本。
+- `IArchiveAtomicRestorer` 使用单一 SQLite 事务提交父对象、全部当前事实、来源
+  Revision、Tombstone 重引入、白名单设置、一个跨档案 ChangeSet／Undo 和 Receipt。
+- Apply 在事务内重验 Plan、完整目标状态、映射、Tombstone 与实时容量；提交前取消、
+  staging 被替换、陈旧目标和空间不足均不留下部分状态。
+- 同 Operation 在重启后返回持久化 Receipt；同包重新规划得到 NoOp Receipt，不新增
+  事实、Revision 或空 ChangeSet。
+- 当前事实写入显式失效受影响 Chronicle generation；来源 generation、epoch、游标、
+  ChangeSet、Undo、Receipt 和 Tombstone 均不导入。
+- 第二／第三领域、来源 Revision、Receipt 前后和提交前故障注入均证明整体回滚；
+  Release 全量测试 `582/582`。
+- MAUI Windows、独立 WinUI 3 和 Android（`E:\AndroidSDK`）Release 构建均为
+  0 warning、0 error。CI、正式文件 UI、真实生产库 Apply、真机恢复和跨端往返为
+  `Not run`，不从 8B.7 或 8C.1 继承设备证据。
+
+详细边界、Schema、测试和提交见
+[8C.3 实施记录](PHASE_8C3_IMPLEMENTATION.md)。
+
+## 8C.4 最短交接
+
+1. 先冻结 Replace 的明确选择范围、删除语义、目标 Tombstone、旧跨档案 Undo 引用和
+   提交前一致恢复点生命周期。
+2. Replace 必须继续使用一个跨领域事务，不得把多个领域 Apply 和补偿删除拼成伪原子。
+3. 未选档案、共享身份下其他副本、失败后的原库、空间不足和进程终止／重开必须进入
+   自动化反例；8C.3 Receipt 不等于 Replace 恢复点。
+4. 产品 UI、Windows／Android 系统文件交互和跨端设备往返仍属于 8C.5～8C.6。
 
 ## 明确不做
 
-- 生产库 Restore、Replace 或主库文件切换；
+- Replace、主库文件切换或正式生产恢复入口；
 - 云同步、ChangeJournal、WebDAV、服务端账号、E2EE、社区统计；
 - 在线 Provider、UIAF 成就或未支持挑战模式；
 - 完整 UI-1 或把 WinUI UI-0 接入真实数据库；

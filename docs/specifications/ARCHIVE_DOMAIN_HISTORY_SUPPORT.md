@@ -7,7 +7,7 @@
 | 生产领域 | 角色状态、武器状态、手工获取 | 深境螺旋观察 |
 | 输入 | 有界内部 collector fixture；手工事实用例 | 有界内部 collector fixture |
 | 在线 Provider | Not implemented | Not implemented |
-| SQLite | 当前主库 Schema 7；领域事实仍为 `ArchiveDomainFacts` / `ArchiveDomainRevisions` | 同左 |
+| SQLite | 当前主库 Schema 8；领域事实仍为 `ArchiveDomainFacts` / `ArchiveDomainRevisions` | 同左 |
 | 查询 | 账号＋种类＋UTC 半开时间范围，最多 500/页 | 账号＋模式／期次＋UTC 半开时间范围，最多 500/页 |
 | 历史 | 全部不可变观察；手工事实稳定 ID＋修订链 | 全部观察＋当前最佳证据派生查询 |
 | 人类可读 | Markdown，含范围、来源、缺值、字段及派生变化 | Markdown，含周期、来源、层／间、星数和实际／未知时间 |

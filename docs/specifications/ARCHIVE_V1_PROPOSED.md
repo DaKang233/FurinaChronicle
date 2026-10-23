@@ -265,7 +265,7 @@ Validate requested scope
 | Archive Writer／Reader／Validator | 未实现 | 已实现；正式 Reader 回读导出结果 |
 | 一致快照导出 | 未实现 | 已实现；SQLite Online Backup 私有快照 |
 | Preview／RestorePlan | 仅接口设计 | 8C.2 |
-| 生产 Merge | 不实现 | 8C.3 |
+| 内部原子 Merge | 不实现 | 8C.3 已实现；无正式产品入口 |
 | Replace | 不实现 | 8C.4 |
 | 正式 UI／跨端设备恢复 | 不实现 | 未实现；8C.5～8C.6 |
 

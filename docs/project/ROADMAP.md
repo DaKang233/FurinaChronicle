@@ -27,7 +27,7 @@
 - Furina 全量 Archive。
 - 将 8B 领域导出形成可直接使用的产品流程，完善抽卡 Markdown 报告；不把可读导出首次验证推迟到本阶段。
 - Windows 与 Android 双向往返验证。
-- 当前状态：8C.0 契约已完成并接受；8C.1 逻辑载荷、Reader／Validator 与一致快照导出基础已完成。下一步为 8C.2 RestorePlan 与 8C.3 单事务 Merge；尚未实现生产恢复、Replace、正式 UI 或跨端恢复闭环。
+- 当前状态：8C.0～8C.3 已完成。Archive v1 逻辑载荷、Reader／Validator、一致快照导出、统一 RestorePlan 和 Schema 8 单事务跨领域 Merge 已有自动化与三宿主编译证据；下一步为 8C.4 明确范围 Replace。正式恢复 UI、真实生产库 Apply、真机文件流程和跨端恢复闭环尚未验收。
 
 ## Phase 9：统一采集框架
 
