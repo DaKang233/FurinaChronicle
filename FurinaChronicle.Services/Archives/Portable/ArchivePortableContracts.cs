@@ -77,8 +77,28 @@ public interface IArchiveLogicalExporter
         CancellationToken cancellationToken = default);
 }
 
+public interface IArchiveRestoreInputStager
+{
+    Task<IArchiveRestoreStagedPackage> StageAsync(
+        Stream source,
+        CancellationToken cancellationToken = default);
+}
+
+public interface IArchiveRestoreTargetSnapshotFactory
+{
+    Task<IArchiveRestoreTargetSnapshot> OpenAsync(
+        CancellationToken cancellationToken = default);
+}
+
 public interface IArchiveRestorePlanner
 {
+    Task<ArchiveRestorePlan> PlanAsync(
+        ArchiveRestorePlanRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<ArchiveRestorePlanFreshness> CheckFreshnessAsync(
+        ArchiveRestorePlan plan,
+        CancellationToken cancellationToken = default);
 }
 
 public interface IArchiveAtomicRestorer
