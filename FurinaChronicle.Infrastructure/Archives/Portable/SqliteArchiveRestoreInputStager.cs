@@ -476,45 +476,55 @@ public sealed class SqliteArchiveRestoreInputStager(
                 cancellationToken);
 
         public Task<ArchiveIndexedFact<GachaRevisionItem>?> FindGachaRevisionAsync(
+            Guid accountReference,
             Guid revisionId,
             CancellationToken cancellationToken = default) =>
             FindOneAsync<GachaRevisionItem>(
                 ArchiveRestoreFactKind.GachaRevision,
+                accountReference,
                 revisionId.ToString("D"),
                 cancellationToken);
 
         public Task<ArchiveIndexedFact<ItemStateObservation>?> FindItemObservationAsync(
+            Guid accountReference,
             ItemObservationId observationId,
             CancellationToken cancellationToken = default) =>
             FindOneAsync<ItemStateObservation>(
                 ArchiveRestoreFactKind.ItemObservation,
+                accountReference,
                 observationId.ToString(),
                 cancellationToken);
 
         public Task<ArchiveIndexedFact<ManualAcquisitionState>?>
             FindManualAcquisitionAsync(
+                Guid accountReference,
                 ManualAcquisitionId acquisitionId,
                 CancellationToken cancellationToken = default) =>
             FindOneAsync<ManualAcquisitionState>(
                 ArchiveRestoreFactKind.ManualAcquisition,
+                accountReference,
                 acquisitionId.ToString(),
                 cancellationToken);
 
         public Task<ArchiveIndexedFact<ManualAcquisitionRevisionItem>?>
             FindManualAcquisitionRevisionAsync(
+                Guid accountReference,
                 Guid revisionId,
                 CancellationToken cancellationToken = default) =>
             FindOneAsync<ManualAcquisitionRevisionItem>(
                 ArchiveRestoreFactKind.ManualAcquisitionRevision,
+                accountReference,
                 revisionId.ToString("D"),
                 cancellationToken);
 
         public Task<ArchiveIndexedFact<ChallengeObservation>?>
             FindChallengeObservationAsync(
+                Guid accountReference,
                 ChallengeObservationId observationId,
                 CancellationToken cancellationToken = default) =>
             FindOneAsync<ChallengeObservation>(
                 ArchiveRestoreFactKind.ChallengeObservation,
+                accountReference,
                 observationId.ToString(),
                 cancellationToken);
 
@@ -573,13 +583,16 @@ public sealed class SqliteArchiveRestoreInputStager(
 
         private Task<ArchiveIndexedFact<T>?> FindOneAsync<T>(
             ArchiveRestoreFactKind kind,
+            Guid accountReference,
             string stableReference,
             CancellationToken cancellationToken)
         {
+            EnsureAccount(accountReference);
             cancellationToken.ThrowIfCancellationRequested();
             StagedFactRow? row = connection.FindWithQuery<StagedFactRow>(
-                "SELECT * FROM StagedFactRow WHERE Kind = ? AND StableReference = ? LIMIT 1;",
+                "SELECT * FROM StagedFactRow WHERE Kind = ? AND AccountReference = ? AND StableReference = ? LIMIT 1;",
                 (int)kind,
+                accountReference.ToString("D"),
                 stableReference);
             ArchiveIndexedFact<T>? result = row is null
                 ? null

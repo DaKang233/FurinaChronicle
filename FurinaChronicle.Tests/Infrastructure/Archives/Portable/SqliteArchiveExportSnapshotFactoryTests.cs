@@ -10,11 +10,74 @@ using FurinaChronicle.Tests.Infrastructure.Persistence.Sqlite;
 using FurinaChronicle.Services.Archives.Portable;
 using FurinaChronicle.Services.History;
 using FurinaChronicle.Services.HistoryDomains;
+using FurinaChronicle.Services.Gacha.History;
 
 namespace FurinaChronicle.Tests.Infrastructure.Archives.Portable;
 
 public sealed class SqliteArchiveExportSnapshotFactoryTests
 {
+    [Fact]
+    public async Task RestoreTargetSnapshotBindsStateAndReadsActiveTombstone()
+    {
+        await using SqliteRepositoryTestContext context =
+            SqliteRepositoryTestContext.Create();
+        var archive = SqliteRepositoryTestContext.CreateArchive("Restore target");
+        var account = SqliteRepositoryTestContext.CreateAccount(archive.Id);
+        await context.Archives.AddAsync(archive);
+        await context.Accounts.AddAsync(account);
+        await context.Gacha.SaveBatchAsync([Record(account.Id, "deleted")]);
+        GachaFactState state = Assert.IsType<GachaFactState>(
+            await context.AtomicGacha.GetCurrentAsync(
+                new GachaFactReference(account.Id, "deleted")));
+        DateTimeOffset now = DateTimeOffset.Parse("2026-10-23T12:00:00+00:00");
+        await context.AtomicGacha.IrreversiblyDeleteAsync(
+            new GachaIrreversibleDeleteRequest(
+                OperationId.New(),
+                state.Record is GachaRecord record
+                    ? new GachaFactReference(
+                        record.GameAccountId,
+                        record.ExternalRecordId)
+                    : throw new InvalidOperationException(),
+                state.Version,
+                now,
+                now));
+        string root = Path.Combine(
+            Path.GetTempPath(),
+            "FurinaChronicleTests",
+            Guid.NewGuid().ToString("N"));
+        var exportFactory = new SqliteArchiveExportSnapshotFactory(
+            context.Database,
+            TimeProvider.System,
+            new ArchiveSnapshotStorageOptions(root));
+        var targetFactory = new SqliteArchiveRestoreTargetSnapshotFactory(
+            exportFactory);
+
+        await using IArchiveRestoreTargetSnapshot target =
+            await targetFactory.OpenAsync();
+        await context.Gacha.SaveBatchAsync([Record(account.Id, "later")]);
+
+        Assert.Equal(7, target.SchemaVersion);
+        Assert.Equal(64, target.StateToken.Length);
+        Assert.True(target.SnapshotLength > 0);
+        Assert.Empty(await target.FindGachaRecordsAsync(account.Id, ["later"]));
+        ArchiveRestoreActiveTombstone hit = Assert.Single(
+            await target.FindActiveTombstonesAsync(
+                [new ArchiveRestoreTombstoneProbe(
+                    ArchiveRestoreFactKind.GachaCurrent,
+                    archive.Id,
+                    account.Id,
+                    account.RoleIdentity?.Id.Value,
+                    "deleted")]));
+        Assert.Equal(64, hit.TombstoneKey.Length);
+        Assert.True(hit.TombstoneVersion > 0);
+
+        await target.DisposeAsync();
+        Assert.True(
+            !Directory.Exists(root) ||
+            !Directory.EnumerateFileSystemEntries(root).Any());
+        if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+    }
+
     [Fact]
     public async Task OnlineBackupSnapshotExcludesLaterProductionWrite()
     {

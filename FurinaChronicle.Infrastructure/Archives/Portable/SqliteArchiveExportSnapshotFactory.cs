@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
+using System.Text;
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Challenges;
 using FurinaChronicle.Core.Gacha;
@@ -50,6 +52,10 @@ public sealed class SqliteArchiveExportSnapshotFactory(
         {
             await database.Connection.BackupAsync(snapshotPath, "main");
             cancellationToken.ThrowIfCancellationRequested();
+            string stateToken = await ComputeFileSha256Async(
+                snapshotPath,
+                cancellationToken);
+            long snapshotLength = new FileInfo(snapshotPath).Length;
             snapshotDatabase = new FurinaDatabase(new SqliteDatabaseOptions(snapshotPath));
             await snapshotDatabase.InitializeAsync(cancellationToken);
 
@@ -123,7 +129,9 @@ public sealed class SqliteArchiveExportSnapshotFactory(
                     catalogArchives),
                 new ArchivePortableSettings(true, settings),
                 gacha,
-                history);
+                history,
+                stateToken,
+                snapshotLength);
         }
         catch
         {
@@ -134,6 +142,21 @@ public sealed class SqliteArchiveExportSnapshotFactory(
             DeleteSessionDirectory(root, sessionDirectory);
             throw;
         }
+    }
+
+    private static async Task<string> ComputeFileSha256Async(
+        string path,
+        CancellationToken cancellationToken)
+    {
+        await using var stream = new FileStream(
+            path,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            64 * 1024,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+        byte[] hash = await SHA256.HashDataAsync(stream, cancellationToken);
+        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
     private static IReadOnlyList<PlayerArchive> SelectArchives(
@@ -181,8 +204,10 @@ public sealed class SqliteArchiveExportSnapshotFactory(
         ArchiveCatalog catalog,
         ArchivePortableSettings settings,
         IGachaRecordRepository gacha,
-        SqliteGachaAtomicChangeStore history)
-        : IArchiveExportSnapshot
+        SqliteGachaAtomicChangeStore history,
+        string stateToken,
+        long snapshotLength)
+        : IArchiveRestoreTargetSnapshot
     {
         private const int PageSize = 500;
         private readonly HashSet<Guid> accountReferences = catalog.Archives
@@ -190,11 +215,24 @@ public sealed class SqliteArchiveExportSnapshotFactory(
             .Select(item => item.AccountReference)
             .ToHashSet();
         private bool disposed;
+        private readonly Dictionary<Guid, IReadOnlyDictionary<Guid,
+            ArchiveIndexedFact<GachaRevisionItem>>> gachaRevisionCache = [];
+        private readonly Dictionary<Guid, IReadOnlyDictionary<ItemObservationId,
+            ArchiveIndexedFact<ItemStateObservation>>> itemCache = [];
+        private readonly Dictionary<Guid, IReadOnlyDictionary<ManualAcquisitionId,
+            ArchiveIndexedFact<ManualAcquisitionState>>> manualCache = [];
+        private readonly Dictionary<Guid, IReadOnlyDictionary<Guid,
+            ArchiveIndexedFact<ManualAcquisitionRevisionItem>>> manualRevisionCache = [];
+        private readonly Dictionary<Guid, IReadOnlyDictionary<ChallengeObservationId,
+            ArchiveIndexedFact<ChallengeObservation>>> challengeCache = [];
 
         public DateTimeOffset GeneratedAt { get; } = generatedAt;
         public ArchiveExportScope Scope { get; } = scope;
         public ArchiveCatalog Catalog { get; } = catalog;
         public ArchivePortableSettings Settings { get; } = settings;
+        public int SchemaVersion { get; } = 7;
+        public string StateToken { get; } = stateToken;
+        public long SnapshotLength { get; } = snapshotLength;
 
         public async IAsyncEnumerable<GachaRecord> ReadGachaRecordsAsync(
             Guid accountReference,
@@ -309,6 +347,200 @@ public sealed class SqliteArchiveExportSnapshotFactory(
             }
         }
 
+        public async Task<IReadOnlyDictionary<string, ArchiveIndexedFact<GachaRecord>>>
+            FindGachaRecordsAsync(
+                Guid accountReference,
+                IReadOnlyCollection<string> externalRecordIds,
+                CancellationToken cancellationToken = default)
+        {
+            EnsureAccount(accountReference);
+            IReadOnlyList<GachaRecord> records = await gacha
+                .GetByExternalRecordIdsAsync(
+                    accountReference,
+                    externalRecordIds,
+                    cancellationToken);
+            return records.ToDictionary(
+                item => item.ExternalRecordId,
+                item => new ArchiveIndexedFact<GachaRecord>(
+                    item,
+                    ArchiveRestoreSemanticDigest.ForGacha(item)),
+                StringComparer.Ordinal);
+        }
+
+        public async Task<ArchiveIndexedFact<GachaRevisionItem>?>
+            FindGachaRevisionAsync(
+                Guid accountReference,
+                Guid revisionId,
+                CancellationToken cancellationToken = default)
+        {
+            EnsureAccount(accountReference);
+            if (!gachaRevisionCache.TryGetValue(accountReference, out var values))
+            {
+                values = (await history.GetRevisionsByAccountAsync(
+                        accountReference,
+                        cancellationToken))
+                    .ToDictionary(
+                        item => item.RevisionId,
+                        item => new ArchiveIndexedFact<GachaRevisionItem>(
+                            item,
+                            ArchiveRestoreSemanticDigest.ForGachaRevision(item)));
+                gachaRevisionCache.Add(accountReference, values);
+            }
+            return values.GetValueOrDefault(revisionId);
+        }
+
+        public async Task<ArchiveIndexedFact<ItemStateObservation>?>
+            FindItemObservationAsync(
+                Guid accountReference,
+                ItemObservationId observationId,
+                CancellationToken cancellationToken = default)
+        {
+            EnsureAccount(accountReference);
+            if (!itemCache.TryGetValue(accountReference, out var values))
+            {
+                values = (await history.GetItemObservationsAsync(
+                        accountReference,
+                        cancellationToken: cancellationToken))
+                    .ToDictionary(
+                        item => item.ObservationId,
+                        item => new ArchiveIndexedFact<ItemStateObservation>(
+                            item,
+                            ArchiveRestoreSemanticDigest.ForItemObservation(item)));
+                itemCache.Add(accountReference, values);
+            }
+            return values.GetValueOrDefault(observationId);
+        }
+
+        public async Task<ArchiveIndexedFact<ManualAcquisitionState>?>
+            FindManualAcquisitionAsync(
+                Guid accountReference,
+                ManualAcquisitionId acquisitionId,
+                CancellationToken cancellationToken = default)
+        {
+            EnsureAccount(accountReference);
+            if (!manualCache.TryGetValue(accountReference, out var values))
+            {
+                values = (await history.GetManualAcquisitionsAsync(
+                        accountReference,
+                        cancellationToken: cancellationToken))
+                    .ToDictionary(
+                        item => item.Acquisition.AcquisitionId,
+                        item => new ArchiveIndexedFact<ManualAcquisitionState>(
+                            item,
+                            ArchiveRestoreSemanticDigest.ForManualAcquisition(item)));
+                manualCache.Add(accountReference, values);
+            }
+            return values.GetValueOrDefault(acquisitionId);
+        }
+
+        public async Task<ArchiveIndexedFact<ManualAcquisitionRevisionItem>?>
+            FindManualAcquisitionRevisionAsync(
+                Guid accountReference,
+                Guid revisionId,
+                CancellationToken cancellationToken = default)
+        {
+            EnsureAccount(accountReference);
+            if (!manualRevisionCache.TryGetValue(accountReference, out var values))
+            {
+                values = (await history.GetManualAcquisitionRevisionsAsync(
+                        accountReference,
+                        cancellationToken))
+                    .ToDictionary(
+                        item => item.RevisionId,
+                        item => new ArchiveIndexedFact<ManualAcquisitionRevisionItem>(
+                            item,
+                            ArchiveRestoreSemanticDigest.ForManualRevision(item)));
+                manualRevisionCache.Add(accountReference, values);
+            }
+            return values.GetValueOrDefault(revisionId);
+        }
+
+        public async Task<ArchiveIndexedFact<ChallengeObservation>?>
+            FindChallengeObservationAsync(
+                Guid accountReference,
+                ChallengeObservationId observationId,
+                CancellationToken cancellationToken = default)
+        {
+            EnsureAccount(accountReference);
+            if (!challengeCache.TryGetValue(accountReference, out var values))
+            {
+                values = (await history.GetChallengeObservationsAsync(
+                        accountReference,
+                        cancellationToken: cancellationToken))
+                    .ToDictionary(
+                        item => item.ObservationId,
+                        item => new ArchiveIndexedFact<ChallengeObservation>(
+                            item,
+                            ArchiveRestoreSemanticDigest.ForChallenge(item)));
+                challengeCache.Add(accountReference, values);
+            }
+            return values.GetValueOrDefault(observationId);
+        }
+
+        public async Task<IReadOnlyList<ArchiveRestoreActiveTombstone>>
+            FindActiveTombstonesAsync(
+                IReadOnlyCollection<ArchiveRestoreTombstoneProbe> probes,
+                CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(probes);
+            var result = new List<ArchiveRestoreActiveTombstone>();
+            foreach (ArchiveRestoreTombstoneProbe probe in probes.Distinct())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                EnsureAccount(probe.TargetAccountId);
+                string[] keys = CreateTombstoneKeys(probe).ToArray();
+                string placeholders = string.Join(", ", keys.Select(_ => "?"));
+                List<object> arguments = [.. keys.Cast<object>()];
+                TombstoneLookupRow? row = (await database.Connection
+                        .QueryAsync<TombstoneLookupRow>(
+                            $"SELECT TombstoneKey, TombstoneVersion FROM LocalOnlyTombstones WHERE IsActive = 1 AND TombstoneKey IN ({placeholders}) ORDER BY TombstoneVersion DESC LIMIT 1;",
+                            arguments.ToArray()))
+                    .SingleOrDefault();
+                if (row is not null)
+                {
+                    result.Add(new ArchiveRestoreActiveTombstone(
+                        probe,
+                        row.TombstoneKey,
+                        row.TombstoneVersion));
+                }
+            }
+            return result;
+        }
+
+        private static IEnumerable<string> CreateTombstoneKeys(
+            ArchiveRestoreTombstoneProbe probe)
+        {
+            if (probe.Kind is ArchiveRestoreFactKind.GachaCurrent or
+                ArchiveRestoreFactKind.GachaRevision)
+            {
+                if (probe.TargetRoleIdentityId is Guid identityId)
+                {
+                    yield return HashTombstone(
+                        $"gacha|{probe.TargetArchiveId:D}|{identityId:D}|{probe.StableReference}");
+                }
+                yield return HashTombstone(
+                    $"gacha|{probe.TargetArchiveId:D}|local-account|{probe.TargetAccountId:D}|{probe.StableReference}");
+                yield break;
+            }
+            string domainKind = probe.Kind switch
+            {
+                ArchiveRestoreFactKind.ItemObservation => "item_observation",
+                ArchiveRestoreFactKind.ManualAcquisition or
+                    ArchiveRestoreFactKind.ManualAcquisitionRevision =>
+                    "manual_acquisition",
+                ArchiveRestoreFactKind.ChallengeObservation =>
+                    "challenge_observation",
+                _ => throw new ArgumentOutOfRangeException(nameof(probe)),
+            };
+            yield return probe.TargetRoleIdentityId is Guid roleId
+                ? $"domain-role|{probe.TargetArchiveId:D}|{roleId:D}|{domainKind}|{probe.StableReference}"
+                : $"domain-account|{probe.TargetArchiveId:D}|{probe.TargetAccountId:D}|{domainKind}|{probe.StableReference}";
+        }
+
+        private static string HashTombstone(string canonical) =>
+            Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)))
+                .ToLowerInvariant();
+
         private void EnsureAccount(Guid accountReference)
         {
             ObjectDisposedException.ThrowIf(disposed, this);
@@ -330,5 +562,27 @@ public sealed class SqliteArchiveExportSnapshotFactory(
                     "The Archive snapshot session has no configured root.");
             DeleteSessionDirectory(root, sessionDirectory);
         }
+
+        private sealed class TombstoneLookupRow
+        {
+            public string TombstoneKey { get; set; } = string.Empty;
+            public long TombstoneVersion { get; set; }
+        }
+    }
+}
+
+public sealed class SqliteArchiveRestoreTargetSnapshotFactory(
+    SqliteArchiveExportSnapshotFactory exportSnapshotFactory)
+    : IArchiveRestoreTargetSnapshotFactory
+{
+    public async Task<IArchiveRestoreTargetSnapshot> OpenAsync(
+        CancellationToken cancellationToken = default)
+    {
+        IArchiveExportSnapshot snapshot = await exportSnapshotFactory.OpenAsync(
+            ArchiveExportScope.All(),
+            cancellationToken);
+        return snapshot as IArchiveRestoreTargetSnapshot ??
+            throw new InvalidOperationException(
+                "The SQLite Archive snapshot does not expose restore planning metadata.");
     }
 }

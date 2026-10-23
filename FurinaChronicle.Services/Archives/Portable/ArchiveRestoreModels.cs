@@ -258,23 +258,28 @@ public interface IArchiveRestoreDataSource : IArchiveExportSnapshot
             CancellationToken cancellationToken = default);
 
     Task<ArchiveIndexedFact<GachaRevisionItem>?> FindGachaRevisionAsync(
+        Guid accountReference,
         Guid revisionId,
         CancellationToken cancellationToken = default);
 
     Task<ArchiveIndexedFact<ItemStateObservation>?> FindItemObservationAsync(
+        Guid accountReference,
         ItemObservationId observationId,
         CancellationToken cancellationToken = default);
 
     Task<ArchiveIndexedFact<ManualAcquisitionState>?> FindManualAcquisitionAsync(
+        Guid accountReference,
         ManualAcquisitionId acquisitionId,
         CancellationToken cancellationToken = default);
 
     Task<ArchiveIndexedFact<ManualAcquisitionRevisionItem>?>
         FindManualAcquisitionRevisionAsync(
+            Guid accountReference,
             Guid revisionId,
             CancellationToken cancellationToken = default);
 
     Task<ArchiveIndexedFact<ChallengeObservation>?> FindChallengeObservationAsync(
+        Guid accountReference,
         ChallengeObservationId observationId,
         CancellationToken cancellationToken = default);
 }
