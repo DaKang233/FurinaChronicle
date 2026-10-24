@@ -1,6 +1,6 @@
 # Phase 8C 实施计划与首轮记录
 
-状态：8C.0～8C.3 completed；8C.4 Replace contract accepted，implementation started
+状态：8C.0～8C.4 implementation completed；8C.5 product flow pending
 
 启动日期：2026-10-23（Asia/Shanghai）
 
@@ -198,24 +198,27 @@ IArchiveAtomicRestorer       // 8C.3 实现
 详细边界、Schema、测试和提交见
 [8C.3 实施记录](PHASE_8C3_IMPLEMENTATION.md)。
 
-## 8C.4 最短交接
+## 8C.4 完成记录
 
-1. 先冻结 Replace 的明确选择范围、删除语义、目标 Tombstone、旧跨档案 Undo 引用和
-   提交前一致恢复点生命周期。
-2. Replace 必须继续使用一个跨领域事务，不得把多个领域 Apply 和补偿删除拼成伪原子。
-3. 未选档案、共享身份下其他副本、失败后的原库、空间不足和进程终止／重开必须进入
-   自动化反例；8C.3 Receipt 不等于 Replace 恢复点。
-4. 产品 UI、Windows／Android 系统文件交互和跨端设备往返仍属于 8C.5～8C.6。
+- 版本为 `0.8.13 / 8C.4`；Schema 9 增加 Replace 模式 Receipt、历史账号映射和每库
+  单一当前恢复点。
+- Archive／Account／Domain 分层选择、完整性检查、目标独有事实／Revision／账号删除、
+  旧 Undo 整体失效及破坏性 Preview 已实现。
+- Replace 继续使用 8C.3 单写者和单 SQLite 事务；失败候选不会改变业务事实或 Receipt，
+  下一次成功提交后才淘汰旧恢复点。
+- 恢复点通过长度、SHA-256、application ID、Schema 和 `quick_check` 校验；只支持创建、
+  查询、验证和孤儿清理，不执行打开连接状态下的主库回切。
+- Release 全量测试 `594/594`，Restore 定向测试 `39/39`；空档案清空、缺失 Dataset、
+  范围隔离、旧 Undo、空间不足、恢复点轮换、故障回滚和数据库重开均有自动化。
+- 操作系统级强制终止、真实生产库 Replace、正式文件 UI 和真机跨端往返为 `Not run`，
+  不由事务故障注入替代。
 
-8C.4 已于 2026-10-24 开始契约工作。Accepted
-[ADR 0023](../decisions/0023-scoped-archive-replace-and-recovery-point.md) 和
-[Archive Scoped Replace v1](../specifications/ARCHIVE_SCOPED_REPLACE_V1.md) 已给出分层范围、
-父实体删除、旧跨档案 Undo 失效、单恢复点生命周期及中断反例。维护者于 2026-10-25
-接受全部推荐决定，允许继续内部 Replace 实现。
+详细边界、Schema、测试和 8C.5 交接见
+[8C.4 实施记录](PHASE_8C4_IMPLEMENTATION.md)。
 
 ## 明确不做
 
-- Replace、主库文件切换或正式生产恢复入口；
+- 主库恢复点文件切换或正式生产恢复入口；
 - 云同步、ChangeJournal、WebDAV、服务端账号、E2EE、社区统计；
 - 在线 Provider、UIAF 成就或未支持挑战模式；
 - 完整 UI-1 或把 WinUI UI-0 接入真实数据库；

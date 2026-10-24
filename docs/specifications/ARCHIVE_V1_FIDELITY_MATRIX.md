@@ -2,7 +2,7 @@
 
 状态：Accepted 8C.0 fidelity baseline；依赖 Accepted ADR 0021
 
-本矩阵从 8C.0 冻结时的 Schema 7 持久化对象出发，说明逻辑 Archive 应保留的语义、目标端处理方式和排除原因。表名只用于审查当前覆盖面，不进入公开格式；Archive DTO 不得镜像 SQLite Row。8C.3 已将主库推进到 Schema 8；新增对象的处理见后文增量表。
+本矩阵从 8C.0 冻结时的 Schema 7 持久化对象出发，说明逻辑 Archive 应保留的语义、目标端处理方式和排除原因。表名只用于审查当前覆盖面，不进入公开格式；Archive DTO 不得镜像 SQLite Row。8C.3／8C.4 已将主库推进到 Schema 9；新增对象的处理见后文增量表。
 
 ## 结论
 
@@ -48,18 +48,28 @@ Archive v1 的“完整”限定为：
 | 25 | `ArchiveRestoreReceiptArchives` | Receipt 的来源→目标档案映射 | 排除 | 属于目标本地操作结果，不是来源档案事实 |
 | 26 | `ArchiveRestoreReceiptAccounts` | Receipt 的来源→目标账号映射 | 排除 | 属于目标本地操作结果，不是来源账号事实 |
 
+## Schema 9 增量：1 张表及 Receipt 演进
+
+| # | 当前持久化对象 | 语义角色 | Archive v1 处理 | 目标端解释 |
+|---|---|---|---|---|
+| 27 | `ArchiveReplaceRecoveryPoints` | 当前设备 Replace 前的一致恢复点元数据 | 排除 | 设备本地安全状态；文件与元数据都不进入 Archive |
+
+Schema 9 还为 `ArchiveRestoreReceipts` 增加恢复模式和 RecoveryPointId，并使
+`ArchiveRestoreReceiptAccounts` 在目标独有账号被 Replace 删除后仍能保留历史映射。
+这些都是目标设备的提交／审计状态，不迁移到另一个设备。
+
 ## 非表状态
 
 | 对象 | 当前事实 | Archive v1 处理 |
 |---|---|---|
-| `RequireUniqueArchiveNames` | Accepted 默认启用；Schema 8 已有 `PortableApplicationSettings` 权威 Store | v1 字段保留；导出读取权威值，Merge 仅按确认后的白名单设置写入 |
+| `RequireUniqueArchiveNames` | Accepted 默认启用；Schema 9 已有 `PortableApplicationSettings` 权威 Store | v1 字段保留；导出读取权威值，恢复仅按确认后的白名单设置写入 |
 | 当前页面选择 | MAUI Preferences 保存档案／账号选择 | 排除；它是页面本地状态，不改变业务事实 |
 | Passport 账号和凭据 | SecureStorage／平台账户服务 | 排除；普通 Archive 不携带 Cookie、SToken、验证码、密钥 |
 | 元数据和图标 | 内置卡池基线与可清理图标缓存 | 排除缓存；版本化公共元数据由应用提供，不作为私人 Archive 事实 |
 | Android URI／Windows 路径 | 平台文件和窗口状态 | 排除 |
 | 临时导入 staging | 应用私有会话文件 | 排除并在会话结束清理 |
 | SQLite 主库／WAL／SHM | 当前存储实现 | 不作为公开载荷；仅允许内部一致快照读取 |
-| 原始来源响应／附件 | 当前 Schema 8 没有通用 RawSnapshot／附件持久化 | v1 不编造；未来首次持久化前新增独立 Dataset 和保留策略 |
+| 原始来源响应／附件 | 当前 Schema 9 没有通用 RawSnapshot／附件持久化 | v1 不编造；未来首次持久化前新增独立 Dataset 和保留策略 |
 
 ## 领域路径
 
@@ -112,5 +122,5 @@ Archive v1 的“完整”限定为：
 
 - UIGF 官方当前列出的 Current 版本为 4.2；现有 Gacha Portable v1 继续固定输出 UIGF 4.2。
 - Furina Archive v1、Gacha history Dataset 和容器布局已作为内部实施契约接受，但仍不是公开发布格式。
-- Schema 7 基线足以完成只读逻辑导出；Schema 8 只增加目标权威设置和恢复本地状态，不扩大 Archive v1 的来源事实范围。8C.3 已实现无正式产品入口的内部原子 Merge。
+- Schema 7 基线足以完成只读逻辑导出；Schema 8～9 只增加目标权威设置、恢复提交和设备本地安全状态，不扩大 Archive v1 的来源事实范围。8C.3／8C.4 已实现无正式产品入口的内部原子 Merge／Scoped Replace。
 - 现有角色／武器及挑战 Portable 虽已通过双端文件验收，仍为 internal / unpublished。

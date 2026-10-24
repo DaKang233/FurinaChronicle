@@ -14,7 +14,7 @@ checksums.sha256
 
 Manifest 至少记录格式版本、应用版本、导出时间、来源平台、数据集版本、路径、记录数量、哈希和可选加密信息。
 
-8C.0 的 [ADR 0021 提案](../decisions/0021-logical-archive-v1-fidelity.md) 为避免两份哈希真相，建议由 `checksums.sha256` 统一保存条目哈希，而 Manifest 保存路径、版本、数量和长度。该细化在 ADR 接受前仍是 Proposed，本 Target 段落不表示实现已经完成。
+Accepted [ADR 0021](../decisions/0021-logical-archive-v1-fidelity.md) 为避免两份哈希真相，规定由 `checksums.sha256` 统一保存条目哈希，而 Manifest 保存路径、版本、数量和长度。Archive v1 仍为 internal / unpublished。
 
 全量备份使用逻辑数据，不把 SQLite 文件作为跨平台公开契约。可重建缓存和设备设置默认不进入备份。
 
@@ -33,7 +33,17 @@ Manifest 至少记录格式版本、应用版本、导出时间、来源平台�
 - `Merge`：按档案和账号映射合并，不因缺失删除目标数据。
 - `Replace`：明确选择后，用备份重建所选范围。
 
-两种模式都必须先生成恢复预览。恢复过程在临时模型或临时数据库中完成验证，正式提交使用原子事务或等价安全切换。
+两种模式都必须先生成恢复预览。当前 Merge 与 Replace 都复用统一 RestorePlan，并在一个跨领域 SQLite 事务中提交，不顺序调用多个领域 Apply。
+
+Replace 只作用于用户明确选择的 Archive、Account 或 Domain。它会删除所选范围内来源
+不存在的当前事实和 Revision；Archive 范围还可删除目标独有账号，但不删除共享角色身份
+或其他档案副本。Replace 不进入普通 Undo，且会使命中范围的旧可撤销 ChangeSet 整体
+失去 Undo 材料。
+
+每次实际 Replace 在首次业务写入前创建设备本地一致恢复点。每库只保留一个当前点，
+候选通过长度、SHA-256、application ID、Schema 和 `quick_check` 校验，下一次成功
+Replace 后才淘汰旧点。恢复点不进入 Archive，也不是公开交换格式。当前仅实现创建、
+查询、验证和孤儿清理；关闭连接、处理 WAL／SHM 并把恢复点切换回主库尚未实现。
 
 ## 完整性与真实性
 
@@ -47,5 +57,6 @@ Manifest 至少记录格式版本、应用版本、导出时间、来源平台�
 - 重复 Merge 幂等。
 - Replace 前后记录数量和引用完整。
 - 恢复中断可安全重试。
+- Replace 失败不覆盖上一有效恢复点；提交后的 Receipt 和恢复点可在重开数据库后查询。
 - Windows 导出可由 Android 恢复，反向同样成立。
 - 默认备份不包含秘密和设备专用路径。
