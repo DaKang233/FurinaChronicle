@@ -17,5 +17,6 @@
 - [Archive v1 内部实施规范](ARCHIVE_V1_PROPOSED.md)：8C.0／8C.1 的容器、版本、资源限制和状态机契约；当前未发布。
 - [Archive RestorePlan v1](ARCHIVE_RESTORE_PLAN_V1.md)：8C.2 的映射、冲突、确认、资源和新鲜度契约。
 - [Archive Atomic Merge v1](ARCHIVE_ATOMIC_MERGE_V1.md)：8C.3 的单事务、Receipt、Undo、Tombstone、取消与 Chronicle 失效契约。
+- [Archive Scoped Replace v1](ARCHIVE_SCOPED_REPLACE_V1.md)：8C.4 Proposed 分层范围、删除、旧 Undo 失效和本机恢复点契约；等待维护者确认。
 
 领域独立的标准、Furina 机器可读载荷和人类可读出口见 [Portable/Export](../architecture/PORTABLE_DATASET.md)。规范化事实不依赖 Chronicle 草案字段，也不以 Contributor 为成立条件。

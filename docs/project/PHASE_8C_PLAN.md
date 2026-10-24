@@ -1,6 +1,6 @@
 # Phase 8C 实施计划与首轮记录
 
-状态：8C.0～8C.3 completed；8C.4 Replace contract pending
+状态：8C.0～8C.3 completed；8C.4 Replace contract proposed
 
 启动日期：2026-10-23（Asia/Shanghai）
 
@@ -206,6 +206,12 @@ IArchiveAtomicRestorer       // 8C.3 实现
 3. 未选档案、共享身份下其他副本、失败后的原库、空间不足和进程终止／重开必须进入
    自动化反例；8C.3 Receipt 不等于 Replace 恢复点。
 4. 产品 UI、Windows／Android 系统文件交互和跨端设备往返仍属于 8C.5～8C.6。
+
+8C.4 已于 2026-10-24 开始契约工作。Proposed
+[ADR 0023](../decisions/0023-scoped-archive-replace-and-recovery-point.md) 和
+[Archive Scoped Replace v1](../specifications/ARCHIVE_SCOPED_REPLACE_V1.md) 已给出分层范围、
+父实体删除、旧跨档案 Undo 失效、单恢复点生命周期及中断反例。生产 Replace 写入必须等待
+维护者确认这些不可逆语义。
 
 ## 明确不做
 

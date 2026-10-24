@@ -41,7 +41,7 @@
 | 挑战完成 | 8B.6 | ADR 0019 已接受：首版生产仅深境螺旋，版本化目标末关为正面证据，完成与满星分离，缺证据保持 Unknown |
 | 获取序号和五星间隔 | 8B.6 | ADR 0018 已接受：必须标明 Known／Unknown／Ambiguous 与适用范围；无覆盖证明不宣称真实首次、满命或 ExactPity |
 | Chronicle 子系统 | 8B.6 | ADR 0018 已接受：本地稳定 EntryId、Undated、有界 generation、严格游标绑定，以及纠正／Undo／删除后的显式失效 |
-| 完整 Archive | 8C | ADR 0021 的逻辑范围和 ADR 0022 的 Merge／Receipt／设置语义已接受；8C.1～8C.3 已完成导出、规划和内部原子 Merge，Replace 与正式产品／设备闭环留在 8C.4～8C.6 |
+| 完整 Archive | 8C | ADR 0021 的逻辑范围和 ADR 0022 的 Merge／Receipt／设置语义已接受；8C.1～8C.3 已完成。8C.4 的分层 Replace、父实体删除、旧 Undo 失效和单恢复点生命周期由 Proposed ADR 0023 等待维护者确认 |
 | 重要成就元数据 | 成就及其 Chronicle 节点实施前 | 版本、分类键、来源及实际目录；8B 仅需虚构过滤 fixture |
 
 Week 已由 ADR 0016 固定为周一 UTC+8 `[start,end)`；Chronicle 分页失效、获取证据退化和首批深境螺旋完成条件已由 ADR 0018／0019 闭合。未实施挑战模式、真实重要成就目录和完整 Archive 仍按各自实施时点冻结。
