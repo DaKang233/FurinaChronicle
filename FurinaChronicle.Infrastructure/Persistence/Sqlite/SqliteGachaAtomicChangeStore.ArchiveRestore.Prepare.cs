@@ -30,6 +30,15 @@ public sealed partial class SqliteGachaAtomicChangeStore
         var manuals = new List<PreparedDomainMutation>();
         var challenges = new List<PreparedDomainMutation>();
         var revisions = new List<MaterializedArchiveFact>();
+        var revisionRemovals = request.Plan.Removals
+            .Where(item => item.Kind is
+                ArchiveRestoreFactKind.GachaRevision or
+                ArchiveRestoreFactKind.ManualAcquisitionRevision)
+            .Select(item => new PreparedArchiveRevisionRemoval(
+                item.Kind,
+                item.TargetAccountId,
+                item.StableReference))
+            .ToList();
         HashSet<(Guid, string)> sourceGachaRevisionFacts = materialized
             .Where(item => item.Plan.Kind ==
                 ArchiveRestoreFactKind.GachaRevision)
@@ -69,7 +78,9 @@ public sealed partial class SqliteGachaAtomicChangeStore
                         gacha);
                     break;
                 case ArchiveRestoreFactKind.ItemObservation:
-                    items.Add(PreparedDomainMutation.Insert(
+                    items.Add(PrepareArchiveDomainFact(
+                        connection,
+                        item,
                         targetArchiveId,
                         CreateArchiveItemRow(
                             connection,
@@ -90,7 +101,9 @@ public sealed partial class SqliteGachaAtomicChangeStore
                         manuals);
                     break;
                 case ArchiveRestoreFactKind.ChallengeObservation:
-                    challenges.Add(PreparedDomainMutation.Insert(
+                    challenges.Add(PrepareArchiveDomainFact(
+                        connection,
+                        item,
                         targetArchiveId,
                         CreateArchiveChallengeRow(
                             connection,
@@ -102,11 +115,33 @@ public sealed partial class SqliteGachaAtomicChangeStore
                 case ArchiveRestoreFactKind.GachaRevision:
                 case ArchiveRestoreFactKind.ManualAcquisitionRevision:
                     revisions.Add(item);
+                    if (item.Plan.Action == ArchiveRestoreFactAction.Replace)
+                    {
+                        revisionRemovals.Add(
+                            new PreparedArchiveRevisionRemoval(
+                                item.Plan.Kind,
+                                targetAccountId,
+                                item.Plan.StableReference));
+                    }
                     break;
                 default:
                     throw new ArgumentOutOfRangeException();
             }
         }
+        foreach (ArchiveRestoreTargetFactRemoval removal in
+                 request.Plan.Removals.Where(item => item.Kind is not
+                     ArchiveRestoreFactKind.GachaRevision and not
+                     ArchiveRestoreFactKind.ManualAcquisitionRevision))
+        {
+            PrepareArchiveTargetRemoval(
+                connection,
+                removal,
+                gacha,
+                items,
+                manuals,
+                challenges);
+        }
+        ValidateArchiveRevisionRemovals(connection, revisionRemovals);
         ValidateArchiveSourceRevisions(connection, revisions);
         ArchiveRestoreTombstoneHit[] tombstones = request.Plan.Tombstones
             .DistinctBy(item => (item.TombstoneKey, item.TombstoneVersion))
@@ -128,16 +163,19 @@ public sealed partial class SqliteGachaAtomicChangeStore
             parents.NewArchiveUndoSettings.Count == 0 &&
             affectedArchives.All(id => ReadUndoLimit(connection, id) > 0);
         int factCount = gacha.Count + items.Count + manuals.Count +
-            challenges.Count + revisions.Count;
+            challenges.Count + revisions.Count + revisionRemovals.Count;
         int infrastructureCount = parents.ArchivesToInsert.Count +
             parents.AccountsToInsert.Count +
             parents.IdentitiesToInsert.Count +
             parents.AliasesToInsert.Count + tombstones.Length +
+            request.Plan.AccountRemovals.Count +
             (settingsChange ? 1 : 0);
-        long snapshotBytes = gacha.Sum(item => ArchiveUtf8Bytes(
-                SerializeSnapshot(item.After))) +
+        long snapshotBytes = gacha.Sum(item =>
+                ArchiveUtf8Bytes(SerializeSnapshot(item.Before)) +
+                ArchiveUtf8Bytes(SerializeSnapshot(item.After))) +
             items.Concat(manuals).Concat(challenges)
-                .Sum(item => ArchiveUtf8Bytes(item.AfterSnapshotJson)) +
+                .Sum(item => ArchiveUtf8Bytes(item.BeforeSnapshotJson) +
+                    ArchiveUtf8Bytes(item.AfterSnapshotJson)) +
             revisions.Sum(item => EstimateArchiveRevisionBytes(item.Value));
 
         return new PreparedArchiveRestore(
@@ -155,6 +193,8 @@ public sealed partial class SqliteGachaAtomicChangeStore
             manuals,
             challenges,
             revisions,
+            revisionRemovals.Distinct().ToArray(),
+            request.Plan.AccountRemovals,
             mappedGachaRevisionFacts,
             mappedManualRevisionFacts,
             tombstones,
@@ -183,7 +223,20 @@ public sealed partial class SqliteGachaAtomicChangeStore
         var reference = new GachaFactReference(
             targetAccountId,
             mapped.ExternalRecordId);
-        if (ReadCurrent(connection, reference) is not null)
+        GachaRecordRow? existing = ReadCurrent(connection, reference);
+        if (item.Plan.Action == ArchiveRestoreFactAction.Replace)
+        {
+            if (existing is null ||
+                !string.Equals(
+                    ArchiveRestoreSemanticDigest.ForGacha(existing.ToDomain()),
+                    item.Plan.TargetSemanticDigest,
+                    StringComparison.Ordinal))
+            {
+                throw new ArchiveRestoreApplyConflictException(
+                    "A planned Gacha replacement target changed.");
+            }
+        }
+        else if (existing is not null)
         {
             throw new ArchiveRestoreApplyConflictException(
                 "A planned Gacha fact now exists in the target.");
@@ -196,12 +249,21 @@ public sealed partial class SqliteGachaAtomicChangeStore
             targetRoleId is null
                 ? null
                 : new GameRoleIdentityId(targetRoleId.Value));
+        if (existing is not null)
+        {
+            row.Id = existing.Id;
+            row.Version = Math.Max(
+                row.Version,
+                checked(existing.Version + 1));
+        }
         mutations.Add(new PreparedMutation(
             targetArchiveId,
-            Before: null,
+            existing,
             row,
             GachaRecordChangeKind.Substantive,
-            EntityChangeKind.Insert));
+            existing is null
+                ? EntityChangeKind.Insert
+                : EntityChangeKind.Update));
         if (sourceRevisionFacts.Contains((
                 item.Plan.SourceAccountReference,
                 item.Plan.StableReference)))
@@ -226,22 +288,21 @@ public sealed partial class SqliteGachaAtomicChangeStore
             ((ManualAcquisitionState)item.Value).Acquisition,
             targetAccountId);
         string entityId = mapped.AcquisitionId.ToString();
-        EnsureArchiveDomainFactAbsent(
-            connection,
-            ManualAcquisitionEntityKind,
-            entityId);
-        mutations.Add(PreparedDomainMutation.Insert(
+        ArchiveDomainFactRow after = CreatePortableAcquisitionRow(
+            mapped,
             targetArchiveId,
-            CreatePortableAcquisitionRow(
-                mapped,
+            NextArchiveDomainFactVersion(
+                connection,
                 targetArchiveId,
-                NextArchiveDomainFactVersion(
-                    connection,
-                    targetArchiveId,
-                    targetAccountId,
-                    targetRoleId,
-                    ManualAcquisitionEntityKind,
-                    entityId))));
+                targetAccountId,
+                targetRoleId,
+                ManualAcquisitionEntityKind,
+                entityId));
+        mutations.Add(PrepareArchiveDomainFact(
+            connection,
+            item,
+            targetArchiveId,
+            after));
         if (sourceRevisionFacts.Contains((
                 item.Plan.SourceAccountReference,
                 item.Plan.StableReference)))
@@ -268,10 +329,6 @@ public sealed partial class SqliteGachaAtomicChangeStore
             ItemObservationPayload.FromDomain(mapped),
             DomainJsonOptions);
         string entityId = mapped.ObservationId.ToString();
-        EnsureArchiveDomainFactAbsent(
-            connection,
-            ItemObservationEntityKind,
-            entityId);
         return new ArchiveDomainFactRow
         {
             DomainKind = ItemObservationEntityKind,
@@ -316,10 +373,6 @@ public sealed partial class SqliteGachaAtomicChangeStore
             ChallengeObservationPayload.FromDomain(mapped),
             DomainJsonOptions);
         string entityId = mapped.ObservationId.ToString();
-        EnsureArchiveDomainFactAbsent(
-            connection,
-            ChallengeObservationEntityKind,
-            entityId);
         return new ArchiveDomainFactRow
         {
             DomainKind = ChallengeObservationEntityKind,
@@ -342,15 +395,144 @@ public sealed partial class SqliteGachaAtomicChangeStore
         };
     }
 
-    private static void EnsureArchiveDomainFactAbsent(
+    private static PreparedDomainMutation PrepareArchiveDomainFact(
         SQLiteConnection connection,
-        string domainKind,
-        string entityId)
+        MaterializedArchiveFact item,
+        Guid archiveId,
+        ArchiveDomainFactRow after)
     {
-        if (ReadDomainCurrent(connection, domainKind, entityId) is not null)
+        ArchiveDomainFactRow? existing = ReadDomainCurrent(
+            connection,
+            after.DomainKind,
+            after.EntityId);
+        if (item.Plan.Action == ArchiveRestoreFactAction.Replace)
+        {
+            if (existing is null ||
+                !string.Equals(
+                    ComputeArchiveDomainDigest(item.Plan.Kind, existing),
+                    item.Plan.TargetSemanticDigest,
+                    StringComparison.Ordinal))
+            {
+                throw new ArchiveRestoreApplyConflictException(
+                    "A planned domain replacement target changed.");
+            }
+            return PreparedDomainMutation.Update(archiveId, existing, after);
+        }
+        if (existing is not null)
         {
             throw new ArchiveRestoreApplyConflictException(
                 "A planned domain fact now exists in the target.");
+        }
+        return PreparedDomainMutation.Insert(archiveId, after);
+    }
+
+    private static string ComputeArchiveDomainDigest(
+        ArchiveRestoreFactKind kind,
+        ArchiveDomainFactRow row) => kind switch
+        {
+            ArchiveRestoreFactKind.ItemObservation =>
+                ArchiveRestoreSemanticDigest.ForItemObservation(
+                    DeserializeItemObservation(row.SnapshotJson)),
+            ArchiveRestoreFactKind.ManualAcquisition =>
+                ArchiveRestoreSemanticDigest.ForManualAcquisition(
+                    new ManualAcquisitionState(
+                        DeserializeManualAcquisition(row.SnapshotJson),
+                        new FactVersion(row.Version),
+                        ParseRequiredGuid(row.ArchiveId, "archive"))),
+            ArchiveRestoreFactKind.ChallengeObservation =>
+                ArchiveRestoreSemanticDigest.ForChallenge(
+                    DeserializeChallengeObservation(row.SnapshotJson)),
+            _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+        };
+
+    private static void PrepareArchiveTargetRemoval(
+        SQLiteConnection connection,
+        ArchiveRestoreTargetFactRemoval removal,
+        ICollection<PreparedMutation> gacha,
+        ICollection<PreparedDomainMutation> items,
+        ICollection<PreparedDomainMutation> manuals,
+        ICollection<PreparedDomainMutation> challenges)
+    {
+        if (removal.Kind == ArchiveRestoreFactKind.GachaCurrent)
+        {
+            var reference = new GachaFactReference(
+                removal.TargetAccountId,
+                removal.StableReference);
+            GachaRecordRow? existing = ReadCurrent(connection, reference);
+            if (existing is null ||
+                !string.Equals(
+                    ArchiveRestoreSemanticDigest.ForGacha(existing.ToDomain()),
+                    removal.TargetSemanticDigest,
+                    StringComparison.Ordinal))
+            {
+                throw new ArchiveRestoreApplyConflictException(
+                    "A planned Gacha removal target changed.");
+            }
+            gacha.Add(new PreparedMutation(
+                removal.TargetArchiveId,
+                existing,
+                After: null,
+                GachaRecordChangeKind.Substantive,
+                EntityChangeKind.Delete));
+            return;
+        }
+        string domainKind = removal.Kind switch
+        {
+            ArchiveRestoreFactKind.ItemObservation =>
+                ItemObservationEntityKind,
+            ArchiveRestoreFactKind.ManualAcquisition =>
+                ManualAcquisitionEntityKind,
+            ArchiveRestoreFactKind.ChallengeObservation =>
+                ChallengeObservationEntityKind,
+            _ => throw new ArgumentOutOfRangeException(nameof(removal)),
+        };
+        ArchiveDomainFactRow? row = ReadDomainCurrent(
+            connection,
+            domainKind,
+            removal.StableReference);
+        if (row is null ||
+            ParseRequiredGuid(row.GameAccountId, "game account") !=
+                removal.TargetAccountId ||
+            !string.Equals(
+                ComputeArchiveDomainDigest(removal.Kind, row),
+                removal.TargetSemanticDigest,
+                StringComparison.Ordinal))
+        {
+            throw new ArchiveRestoreApplyConflictException(
+                "A planned domain removal target changed.");
+        }
+        PreparedDomainMutation mutation = PreparedDomainMutation.Delete(
+            removal.TargetArchiveId,
+            row);
+        ICollection<PreparedDomainMutation> destination = removal.Kind switch
+        {
+            ArchiveRestoreFactKind.ItemObservation => items,
+            ArchiveRestoreFactKind.ManualAcquisition => manuals,
+            ArchiveRestoreFactKind.ChallengeObservation => challenges,
+            _ => throw new ArgumentOutOfRangeException(nameof(removal)),
+        };
+        destination.Add(mutation);
+    }
+
+    private static void ValidateArchiveRevisionRemovals(
+        SQLiteConnection connection,
+        IEnumerable<PreparedArchiveRevisionRemoval> removals)
+    {
+        foreach (PreparedArchiveRevisionRemoval removal in removals.Distinct())
+        {
+            string table = removal.Kind ==
+                ArchiveRestoreFactKind.GachaRevision
+                    ? "GachaRevisions"
+                    : "ArchiveDomainRevisions";
+            if (connection.ExecuteScalar<int>(
+                    $"SELECT COUNT(*) FROM {table} " +
+                    "WHERE RevisionId = ? AND GameAccountId = ?;",
+                    removal.StableReference,
+                    removal.TargetAccountId.ToString("D")) != 1)
+            {
+                throw new ArchiveRestoreApplyConflictException(
+                    "A planned source Revision removal target changed.");
+            }
         }
     }
 
@@ -392,12 +574,20 @@ public sealed partial class SqliteGachaAtomicChangeStore
                 ArchiveRestoreFactKind.GachaRevision
                     ? "GachaRevisions"
                     : "ArchiveDomainRevisions";
-            if (connection.ExecuteScalar<int>(
+            int existing = connection.ExecuteScalar<int>(
                     $"SELECT COUNT(*) FROM {table} WHERE RevisionId = ?;",
-                    revision.Plan.StableReference) != 0)
+                    revision.Plan.StableReference);
+            if (existing != 0 &&
+                revision.Plan.Action != ArchiveRestoreFactAction.Replace)
             {
                 throw new ArchiveRestoreApplyConflictException(
                     "A planned source Revision ID now exists in the target.");
+            }
+            if (revision.Plan.Action == ArchiveRestoreFactAction.Replace &&
+                existing != 1)
+            {
+                throw new ArchiveRestoreApplyConflictException(
+                    "A planned source Revision replacement target changed.");
             }
         }
     }

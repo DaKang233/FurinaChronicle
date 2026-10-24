@@ -206,25 +206,29 @@ public sealed partial class PlanArchiveRestore
         {
             return;
         }
-        foreach (ArchiveCatalogArchive archive in request.Package.Catalog.Archives)
-        foreach (ArchiveCatalogAccount account in archive.Accounts)
-        foreach (ArchiveReplaceDomain domain in GetSelectedDomains(
-                     request,
-                     archive.ArchiveReference,
-                     account.AccountReference))
+        foreach (IGrouping<Guid, ArchiveReplaceSelection> group in
+                 request.ReplaceSelections!.GroupBy(item =>
+                     item.SourceArchiveReference))
         {
-            if (IsReplaceDatasetDeclared(
-                    request,
-                    archive.ArchiveReference,
-                    domain))
+            IReadOnlySet<ArchiveReplaceDomain> domains = group.Any(item =>
+                item.Kind is ArchiveReplaceScopeKind.Archive or
+                    ArchiveReplaceScopeKind.Account)
+                ? AllReplaceDomains
+                : group.Select(item => item.Domain!.Value).ToHashSet();
+            foreach (ArchiveReplaceDomain domain in domains)
             {
-                continue;
+                if (IsReplaceDatasetDeclared(
+                        request,
+                        group.Key,
+                        domain))
+                {
+                    continue;
+                }
+                conflicts.Add(new ArchiveRestoreConflict(
+                    ArchiveRestoreConflictCode.UnsupportedPartialRestore,
+                    "The selected Replace domain is absent rather than explicitly complete and empty.",
+                    group.Key));
             }
-            conflicts.Add(new ArchiveRestoreConflict(
-                ArchiveRestoreConflictCode.UnsupportedPartialRestore,
-                "The selected Replace domain is absent rather than explicitly complete and empty.",
-                archive.ArchiveReference,
-                account.AccountReference));
         }
     }
 

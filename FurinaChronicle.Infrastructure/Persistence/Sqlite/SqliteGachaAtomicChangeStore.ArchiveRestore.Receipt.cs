@@ -30,7 +30,9 @@ public sealed partial class SqliteGachaAtomicChangeStore
             """,
             changeSetId.ToString("D"),
             request.OperationId.ToString(),
-            (int)DataChangeOperationKind.Import,
+            (int)(request.Plan.Mode == ArchiveRestoreMode.Replace
+                ? DataChangeOperationKind.ArchiveReplace
+                : DataChangeOperationKind.Import),
             request.StartedAt.UtcDateTime.Ticks,
             checked((int)request.StartedAt.Offset.TotalMinutes),
             request.CommittedAt.UtcDateTime.Ticks,

@@ -20,7 +20,8 @@ public sealed partial class SqliteGachaAtomicChangeStore
         var result = new List<MaterializedArchiveFact>();
         foreach (ArchiveRestoreFactPlan fact in request.Plan.Facts.Where(item =>
                      item.Action is ArchiveRestoreFactAction.Add or
-                         ArchiveRestoreFactAction.Reintroduce))
+                         ArchiveRestoreFactAction.Reintroduce or
+                         ArchiveRestoreFactAction.Replace))
         {
             cancellationToken.ThrowIfCancellationRequested();
             object? value = fact.Kind switch

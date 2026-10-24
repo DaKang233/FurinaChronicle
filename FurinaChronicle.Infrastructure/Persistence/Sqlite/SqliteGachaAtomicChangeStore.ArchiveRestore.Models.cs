@@ -32,6 +32,8 @@ public sealed partial class SqliteGachaAtomicChangeStore
         IReadOnlyList<PreparedDomainMutation> ManualMutations,
         IReadOnlyList<PreparedDomainMutation> ChallengeMutations,
         IReadOnlyList<MaterializedArchiveFact> SourceRevisions,
+        IReadOnlyList<PreparedArchiveRevisionRemoval> RevisionRemovals,
+        IReadOnlyList<ArchiveRestoreAccountRemoval> AccountRemovals,
         IReadOnlySet<(Guid AccountId, string ExternalRecordId)>
             GachaFactsWithSourceRevision,
         IReadOnlySet<(Guid AccountId, string EntityId)>
@@ -43,6 +45,11 @@ public sealed partial class SqliteGachaAtomicChangeStore
         int CapacityMutationCount,
         long SnapshotBytes,
         bool IsNoOp);
+
+    private sealed record PreparedArchiveRevisionRemoval(
+        ArchiveRestoreFactKind Kind,
+        Guid TargetAccountId,
+        string StableReference);
 
     private sealed record PreparedArchiveParents(
         IReadOnlyDictionary<Guid, Guid> TargetArchives,

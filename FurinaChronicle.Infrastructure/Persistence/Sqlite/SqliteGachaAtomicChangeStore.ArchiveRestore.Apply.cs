@@ -25,7 +25,8 @@ public sealed partial class SqliteGachaAtomicChangeStore : IArchiveAtomicRestore
         }
         ArgumentException.ThrowIfNullOrWhiteSpace(request.Summary);
         if (!request.Plan.CanApply ||
-            request.Plan.Mode != ArchiveRestoreMode.Merge ||
+            request.Plan.Mode is not ArchiveRestoreMode.Merge and
+                not ArchiveRestoreMode.Replace ||
             !string.Equals(
                 request.Package.PackageFingerprint,
                 request.Plan.PackageFingerprint,
@@ -57,10 +58,15 @@ public sealed partial class SqliteGachaAtomicChangeStore : IArchiveAtomicRestore
         cancellationToken.ThrowIfCancellationRequested();
 
         ArchiveRestoreApplyResult? result = null;
+        PreparedArchiveRecoveryPoint? recoveryPoint = null;
+        bool transactionCommitted = false;
+        await ArchiveRestoreWriterGate.WaitAsync(cancellationToken);
         try
         {
-            await database.Connection.RunInTransactionAsync(connection =>
+            try
             {
+                await database.Connection.RunInTransactionAsync(connection =>
+                {
                 ArchiveRestoreReceipt? committed = ReadArchiveRestoreReceipt(
                     connection,
                     request.OperationId);
@@ -108,7 +114,9 @@ public sealed partial class SqliteGachaAtomicChangeStore : IArchiveAtomicRestore
                     prepared.UndoCandidate,
                     prepared.ArchiveIds,
                     prepared.CapacityMutationCount,
-                    prepared.SnapshotBytes);
+                    checked(
+                        prepared.SnapshotBytes +
+                        request.Plan.Resources.EstimatedRecoveryPointBytes));
                 if (cleanupPlan is not null)
                 {
                     if (cleanupPlan.Candidates.Count == 0 ||
@@ -161,6 +169,14 @@ public sealed partial class SqliteGachaAtomicChangeStore : IArchiveAtomicRestore
                             item => item.ChangeSetId));
                 }
 
+                if (request.Plan.Mode == ArchiveRestoreMode.Replace)
+                {
+                    recoveryPoint = CreateArchiveRecoveryPoint(
+                        connection,
+                        request);
+                    InvalidateArchiveReplaceUndo(connection, request.Plan);
+                }
+
                 WriteArchiveRestoreParents(connection, prepared);
                 archiveRestoreFailureInjector.ThrowIfRequested(
                     ArchiveRestoreFailurePoint.AfterParents);
@@ -185,6 +201,9 @@ public sealed partial class SqliteGachaAtomicChangeStore : IArchiveAtomicRestore
                     connection,
                     changeSetId,
                     prepared.SourceRevisions);
+                DeleteArchiveRestoreAccounts(
+                    connection,
+                    prepared.AccountRemovals);
                 archiveRestoreFailureInjector.ThrowIfRequested(
                     ArchiveRestoreFailurePoint.AfterSourceRevisions);
                 ApplyArchiveRestoreTombstones(
@@ -217,7 +236,8 @@ public sealed partial class SqliteGachaAtomicChangeStore : IArchiveAtomicRestore
                     changeSetId,
                     ChangeExecutionStatus.Applied,
                     prepared.AppliedFactCount,
-                    prepared.AppliedFactCount);
+                    prepared.AppliedFactCount,
+                    recoveryPoint?.RecoveryPointId);
                 InsertArchiveRestoreCommitResult(
                     connection,
                     request,
@@ -232,15 +252,34 @@ public sealed partial class SqliteGachaAtomicChangeStore : IArchiveAtomicRestore
                 result = new ArchiveRestoreApplyResult(
                     ChangeExecutionStatus.Applied,
                     ReadArchiveRestoreReceipt(connection, request.OperationId));
-            });
-        }
-        catch (ArchiveRestoreApplyConflictException exception)
-        {
-            return ArchiveRestoreConflict(exception.Message);
-        }
+                });
+                transactionCommitted = true;
+            }
+            catch (ArchiveRestoreApplyConflictException exception)
+            {
+                TryDeleteRecoveryPoint(recoveryPoint?.Path);
+                return ArchiveRestoreConflict(exception.Message);
+            }
 
-        return result ?? throw new InvalidOperationException(
-            "The Archive restore transaction produced no result.");
+            if (recoveryPoint is not null)
+            {
+                DeleteSupersededRecoveryPointFiles(recoveryPoint);
+            }
+            return result ?? throw new InvalidOperationException(
+                "The Archive restore transaction produced no result.");
+        }
+        catch
+        {
+            if (!transactionCommitted)
+            {
+                TryDeleteRecoveryPoint(recoveryPoint?.Path);
+            }
+            throw;
+        }
+        finally
+        {
+            ArchiveRestoreWriterGate.Release();
+        }
     }
 
     public async Task<ArchiveRestoreReceipt?> FindReceiptAsync(

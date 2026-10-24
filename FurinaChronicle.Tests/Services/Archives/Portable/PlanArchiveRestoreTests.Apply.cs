@@ -4,6 +4,7 @@
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.History;
+using FurinaChronicle.Core.Inventory;
 using FurinaChronicle.Infrastructure.Archives.Portable;
 using FurinaChronicle.Infrastructure.Persistence.Sqlite;
 using FurinaChronicle.Services.Archives.Portable;
@@ -16,6 +17,493 @@ namespace FurinaChronicle.Tests.Services.Archives.Portable;
 
 public sealed partial class PlanArchiveRestoreTests
 {
+    [Fact]
+    public async Task ScopedReplaceIsAtomicAndKeepsOneVerifiedRecoveryPoint()
+    {
+        await using SqliteRepositoryTestContext context =
+            SqliteRepositoryTestContext.Create();
+        string root = CreateRestoreSnapshotRoot();
+        try
+        {
+            var archive = SqliteRepositoryTestContext.CreateArchive(
+                "Main",
+                TargetArchiveId);
+            var account = SqliteRepositoryTestContext.CreateAccount(
+                archive.Id,
+                Role.NaturalIdentity.Uid,
+                GameServerRegion.ChinaOfficial,
+                "Traveler",
+                TargetAccountId,
+                roleIdentity: Role);
+            await context.Archives.AddAsync(archive);
+            await context.Accounts.AddAsync(account);
+            await context.Gacha.SaveBatchAsync(
+                [Record(account.Id, "1", "Diluc"),
+                 Record(account.Id, "remove", "Neuvillette")]);
+            MemoryArchiveData source = SourceData(
+                "Main",
+                [Record(SourceAccountId, "1", "Furina")]);
+            ArchiveRestorePlan plan = await PlanReplaceForTargetAsync(
+                context,
+                root,
+                source,
+                [new ArchiveReplaceSelection(
+                    SourceArchiveId,
+                    ArchiveReplaceScopeKind.Domain,
+                    SourceAccountId,
+                    ArchiveReplaceDomain.Gacha)]);
+            var store = new SqliteGachaAtomicChangeStore(context.Database);
+            ArchiveRestoreApplyRequest request = Request(source, plan);
+
+            ArchiveRestoreApplyResult applied = await store.ApplyAsync(request);
+            ArchiveRestoreApplyResult retry = await store.ApplyAsync(request);
+
+            Assert.Equal(ChangeExecutionStatus.Applied, applied.Status);
+            Assert.Equal(ArchiveRestoreMode.Replace, applied.Receipt!.Mode);
+            Assert.NotNull(applied.Receipt.RecoveryPointId);
+            Assert.Equal(
+                ChangeExecutionStatus.AlreadyCommitted,
+                retry.Status);
+            GachaFactState kept = Assert.IsType<GachaFactState>(
+                await store.GetCurrentAsync(
+                    new GachaFactReference(account.Id, "1")));
+            Assert.Equal("Furina", kept.Record.ItemName);
+            Assert.Null(await store.GetCurrentAsync(
+                new GachaFactReference(account.Id, "remove")));
+            ArchiveReplaceRecoveryPoint recovery = Assert.IsType<
+                ArchiveReplaceRecoveryPoint>(
+                await store.FindCurrentRecoveryPointAsync());
+            Assert.True(recovery.IsCurrent);
+            Assert.True(recovery.IsValid);
+            Assert.Equal(
+                applied.Receipt.RecoveryPointId,
+                recovery.RecoveryPointId);
+            MemoryArchiveData secondSource = SourceData(
+                "Main",
+                [Record(SourceAccountId, "1", "Neuvillette")]);
+            ArchiveRestorePlan secondPlan = await PlanReplaceForTargetAsync(
+                context,
+                root,
+                secondSource,
+                [new ArchiveReplaceSelection(
+                    SourceArchiveId,
+                    ArchiveReplaceScopeKind.Domain,
+                    SourceAccountId,
+                    ArchiveReplaceDomain.Gacha)]);
+            ArchiveRestoreApplyResult second = await store.ApplyAsync(
+                Request(secondSource, secondPlan));
+            ArchiveReplaceRecoveryPoint latest = Assert.IsType<
+                ArchiveReplaceRecoveryPoint>(
+                await store.FindCurrentRecoveryPointAsync());
+            Assert.NotEqual(recovery.RecoveryPointId, latest.RecoveryPointId);
+            Assert.Equal(
+                second.Receipt!.RecoveryPointId,
+                latest.RecoveryPointId);
+            Assert.True(latest.IsValid);
+            Assert.Equal(
+                0,
+                await store.CleanupOrphanedRecoveryPointsAsync());
+            using SQLiteConnection connection = context.OpenRawConnection();
+            Assert.Equal(
+                (int)DataChangeOperationKind.ArchiveReplace,
+                connection.ExecuteScalar<int>(
+                    "SELECT OperationKind FROM DataChangeSets;"));
+            Assert.Equal(
+                0,
+                connection.ExecuteScalar<int>(
+                    "SELECT IsUndoEligible FROM OperationHistory;"));
+            Assert.Equal(
+                1,
+                connection.ExecuteScalar<int>(
+                    "SELECT COUNT(*) FROM ArchiveReplaceRecoveryPoints;"));
+        }
+        finally
+        {
+            DeleteRestoreSnapshotRoot(root);
+        }
+    }
+
+    [Fact]
+    public async Task ReplaceCapacityIncludesRecoveryPointBeforeAnyWrite()
+    {
+        await using SqliteRepositoryTestContext context =
+            SqliteRepositoryTestContext.Create();
+        string root = CreateRestoreSnapshotRoot();
+        try
+        {
+            var archive = SqliteRepositoryTestContext.CreateArchive(
+                "Main",
+                TargetArchiveId);
+            var account = SqliteRepositoryTestContext.CreateAccount(
+                archive.Id,
+                Role.NaturalIdentity.Uid,
+                GameServerRegion.ChinaOfficial,
+                "Traveler",
+                TargetAccountId,
+                roleIdentity: Role);
+            await context.Archives.AddAsync(archive);
+            await context.Accounts.AddAsync(account);
+            await context.Gacha.SaveBatchAsync(
+                [Record(account.Id, "1", "Diluc")]);
+            MemoryArchiveData source = SourceData(
+                "Main",
+                [Record(SourceAccountId, "1", "Furina")]);
+            ArchiveRestorePlan plan = await PlanReplaceForTargetAsync(
+                context,
+                root,
+                source,
+                [new ArchiveReplaceSelection(
+                    SourceArchiveId,
+                    ArchiveReplaceScopeKind.Domain,
+                    SourceAccountId,
+                    ArchiveReplaceDomain.Gacha)]);
+            var store = new SqliteGachaAtomicChangeStore(
+                context.Database,
+                new FixedCapacityProvider(0));
+
+            await Assert.ThrowsAsync<IOException>(() =>
+                store.ApplyAsync(Request(source, plan)));
+
+            GachaFactState current = Assert.IsType<GachaFactState>(
+                await store.GetCurrentAsync(
+                    new GachaFactReference(account.Id, "1")));
+            Assert.Equal("Diluc", current.Record.ItemName);
+            Assert.Null(await store.FindCurrentRecoveryPointAsync());
+            using SQLiteConnection connection = context.OpenRawConnection();
+            Assert.Equal(
+                0,
+                connection.ExecuteScalar<int>(
+                    "SELECT COUNT(*) FROM ArchiveRestoreReceipts;"));
+        }
+        finally
+        {
+            DeleteRestoreSnapshotRoot(root);
+        }
+    }
+
+    [Fact]
+    public async Task ReplaceInvalidatesOldUndoThatTouchesSelectedScope()
+    {
+        await using SqliteRepositoryTestContext context =
+            SqliteRepositoryTestContext.Create();
+        string root = CreateRestoreSnapshotRoot();
+        try
+        {
+            var archive = SqliteRepositoryTestContext.CreateArchive(
+                "Main",
+                TargetArchiveId);
+            var account = SqliteRepositoryTestContext.CreateAccount(
+                archive.Id,
+                Role.NaturalIdentity.Uid,
+                GameServerRegion.ChinaOfficial,
+                "Traveler",
+                TargetAccountId,
+                roleIdentity: Role);
+            await context.Archives.AddAsync(archive);
+            await context.Accounts.AddAsync(account);
+            var store = new SqliteGachaAtomicChangeStore(context.Database);
+            MemoryArchiveData mergeSource = SourceData(
+                "Main",
+                [Record(SourceAccountId, "old", "Furina")]);
+            ArchiveRestorePlan mergePlan = await PlanForTargetAsync(
+                context,
+                root,
+                mergeSource,
+                confirmNonUndoable: false);
+            ArchiveRestoreApplyResult merge = await store.ApplyAsync(
+                Request(mergeSource, mergePlan));
+            Assert.NotNull(merge.Receipt!.ChangeSetId);
+
+            MemoryArchiveData replaceSource = SourceData("Main", []);
+            ArchiveRestorePlan replacePlan = await PlanReplaceForTargetAsync(
+                context,
+                root,
+                replaceSource,
+                [new ArchiveReplaceSelection(
+                    SourceArchiveId,
+                    ArchiveReplaceScopeKind.Domain,
+                    SourceAccountId,
+                    ArchiveReplaceDomain.Gacha)]);
+            ArchiveRestoreApplyResult replace = await store.ApplyAsync(
+                Request(replaceSource, replacePlan));
+
+            Assert.Equal(ChangeExecutionStatus.Applied, replace.Status);
+            Assert.Null(await store.GetCurrentAsync(
+                new GachaFactReference(account.Id, "old")));
+            using SQLiteConnection connection = context.OpenRawConnection();
+            Assert.Equal(
+                0,
+                connection.ExecuteScalar<int>(
+                    "SELECT IsUndoEligible FROM OperationHistory WHERE ChangeSetId = ?;",
+                    merge.Receipt.ChangeSetId.Value.ToString("D")));
+            Assert.Equal(
+                (int)UndoIneligibilityReason.SupersededByArchiveReplace,
+                connection.ExecuteScalar<int>(
+                    "SELECT IneligibilityReason FROM OperationHistory WHERE ChangeSetId = ?;",
+                    merge.Receipt.ChangeSetId.Value.ToString("D")));
+            Assert.Equal(
+                0,
+                connection.ExecuteScalar<int>(
+                    "SELECT COUNT(*) FROM UndoMaterials WHERE ChangeSetId = ?;",
+                    merge.Receipt.ChangeSetId.Value.ToString("D")));
+        }
+        finally
+        {
+            DeleteRestoreSnapshotRoot(root);
+        }
+    }
+
+    [Fact]
+    public async Task ArchiveReplaceRemovesTargetOnlyAccountButKeepsSharedIdentityRows()
+    {
+        await using SqliteRepositoryTestContext context =
+            SqliteRepositoryTestContext.Create();
+        string root = CreateRestoreSnapshotRoot();
+        try
+        {
+            var archive = SqliteRepositoryTestContext.CreateArchive(
+                "Main",
+                TargetArchiveId);
+            var account = SqliteRepositoryTestContext.CreateAccount(
+                archive.Id,
+                Role.NaturalIdentity.Uid,
+                GameServerRegion.ChinaOfficial,
+                "Traveler",
+                TargetAccountId,
+                roleIdentity: Role);
+            GameRoleIdentity otherRole =
+                GenshinGameRoleIdentity.CreateIdentity(
+                    "100000002",
+                    GameServerRegion.ChinaOfficial);
+            Guid otherAccountId = Guid.Parse(
+                "20000000-0000-0000-0000-000000000099");
+            var otherAccount = SqliteRepositoryTestContext.CreateAccount(
+                archive.Id,
+                otherRole.NaturalIdentity.Uid,
+                GameServerRegion.ChinaOfficial,
+                "Other",
+                otherAccountId,
+                roleIdentity: otherRole);
+            await context.Archives.AddAsync(archive);
+            await context.Accounts.AddAsync(account);
+            await context.Accounts.AddAsync(otherAccount);
+            MemoryArchiveData source = SourceData("Main", []);
+            ArchiveRestorePlan plan = await PlanReplaceForTargetAsync(
+                context,
+                root,
+                source,
+                [new ArchiveReplaceSelection(
+                    SourceArchiveId,
+                    ArchiveReplaceScopeKind.Archive)]);
+            Assert.Equal(
+                otherAccountId,
+                Assert.Single(plan.AccountRemovals).TargetAccountId);
+            var store = new SqliteGachaAtomicChangeStore(context.Database);
+
+            ArchiveRestoreApplyResult applied = await store.ApplyAsync(
+                Request(source, plan));
+
+            Assert.Equal(ChangeExecutionStatus.Applied, applied.Status);
+            Assert.NotNull(await context.Accounts.GetByIdAsync(account.Id));
+            Assert.Null(await context.Accounts.GetByIdAsync(otherAccountId));
+            using SQLiteConnection connection = context.OpenRawConnection();
+            Assert.Equal(
+                2,
+                connection.ExecuteScalar<int>(
+                    "SELECT COUNT(*) FROM GameRoleIdentities;"));
+            Assert.Equal(
+                1,
+                connection.ExecuteScalar<int>(
+                    "SELECT COUNT(*) FROM GameAccounts;"));
+        }
+        finally
+        {
+            DeleteRestoreSnapshotRoot(root);
+        }
+    }
+
+    [Fact]
+    public async Task AccountReplaceUpdatesDomainFactAndRemovesAbsentHistory()
+    {
+        await using SqliteRepositoryTestContext context =
+            SqliteRepositoryTestContext.Create();
+        string root = CreateRestoreSnapshotRoot();
+        try
+        {
+            MemoryArchiveData firstSource = SourceData(
+                "Restored",
+                [Record(SourceAccountId, "1", "Furina")]);
+            firstSource.AddDomainFixture(SourceArchiveId, SourceAccountId);
+            var store = new SqliteGachaAtomicChangeStore(context.Database);
+            ArchiveRestorePlan mergePlan = await PlanForTargetAsync(
+                context,
+                root,
+                firstSource,
+                confirmNonUndoable: true);
+            ArchiveRestoreApplyResult merge = await store.ApplyAsync(
+                Request(firstSource, mergePlan));
+            Guid targetAccountId =
+                merge.Receipt!.Accounts.Single().TargetAccountId;
+
+            MemoryArchiveData secondSource = SourceData(
+                "Restored",
+                [Record(SourceAccountId, "1", "Furina")]);
+            secondSource.AddDomainFixture(SourceArchiveId, SourceAccountId);
+            ItemStateObservation original =
+                secondSource.Items[SourceAccountId].Single();
+            secondSource.Items[SourceAccountId] =
+            [new ItemStateObservation(
+                original.ObservationId,
+                original.GameAccountId,
+                original.Kind,
+                original.CollectionCompleteness,
+                original.Entries.Select(item => new InventoryStateEntry(
+                    item.Kind,
+                    item.TypeId,
+                    item.InstanceId,
+                    checked((item.Quantity ?? 0) + 1),
+                    item.Level,
+                    item.Progression,
+                    item.FieldCoverage,
+                    item.FieldCompleteness)).ToArray(),
+                original.Provenance)];
+            secondSource.Challenges[SourceAccountId] = [];
+            secondSource.ManualRevisions[SourceAccountId] = [];
+            ArchiveRestorePlan replacePlan = await PlanReplaceForTargetAsync(
+                context,
+                root,
+                secondSource,
+                [new ArchiveReplaceSelection(
+                    SourceArchiveId,
+                    ArchiveReplaceScopeKind.Account,
+                    SourceAccountId)]);
+
+            ArchiveRestoreApplyResult replace = await store.ApplyAsync(
+                Request(secondSource, replacePlan));
+
+            Assert.Equal(ChangeExecutionStatus.Applied, replace.Status);
+            using SQLiteConnection connection = context.OpenRawConnection();
+            Assert.Equal(
+                1,
+                connection.ExecuteScalar<int>(
+                    "SELECT COUNT(*) FROM ArchiveDomainFacts WHERE DomainKind = 'item_observation' AND GameAccountId = ?;",
+                    targetAccountId.ToString("D")));
+            Assert.Equal(
+                0,
+                connection.ExecuteScalar<int>(
+                    "SELECT COUNT(*) FROM ArchiveDomainFacts WHERE DomainKind = 'challenge_observation' AND GameAccountId = ?;",
+                    targetAccountId.ToString("D")));
+            Assert.Equal(
+                0,
+                connection.ExecuteScalar<int>(
+                    "SELECT COUNT(*) FROM ArchiveDomainRevisions WHERE RevisionId = ?;",
+                    "21000000-0000-0000-0000-000000000004"));
+            Assert.Equal(
+                2L,
+                connection.ExecuteScalar<long>(
+                    "SELECT Version FROM ArchiveDomainFacts WHERE DomainKind = 'item_observation' AND GameAccountId = ?;",
+                    targetAccountId.ToString("D")));
+        }
+        finally
+        {
+            DeleteRestoreSnapshotRoot(root);
+        }
+    }
+
+    [Fact]
+    public async Task ReplaceFailureRollsBackTargetAndCleansCandidateRecoveryPoint()
+    {
+        await using SqliteRepositoryTestContext context =
+            SqliteRepositoryTestContext.Create();
+        string root = CreateRestoreSnapshotRoot();
+        try
+        {
+            var archive = SqliteRepositoryTestContext.CreateArchive(
+                "Main",
+                TargetArchiveId);
+            var account = SqliteRepositoryTestContext.CreateAccount(
+                archive.Id,
+                Role.NaturalIdentity.Uid,
+                GameServerRegion.ChinaOfficial,
+                "Traveler",
+                TargetAccountId,
+                roleIdentity: Role);
+            await context.Archives.AddAsync(archive);
+            await context.Accounts.AddAsync(account);
+            await context.Gacha.SaveBatchAsync(
+                [Record(account.Id, "1", "Diluc")]);
+            MemoryArchiveData source = SourceData(
+                "Main",
+                [Record(SourceAccountId, "1", "Furina")]);
+            ArchiveRestorePlan plan = await PlanReplaceForTargetAsync(
+                context,
+                root,
+                source,
+                [new ArchiveReplaceSelection(
+                    SourceArchiveId,
+                    ArchiveReplaceScopeKind.Domain,
+                    SourceAccountId,
+                    ArchiveReplaceDomain.Gacha)]);
+            var initialStore = new SqliteGachaAtomicChangeStore(
+                context.Database);
+            ArchiveRestoreApplyResult first = await initialStore.ApplyAsync(
+                Request(source, plan));
+            ArchiveReplaceRecoveryPoint previous = Assert.IsType<
+                ArchiveReplaceRecoveryPoint>(
+                await initialStore.FindCurrentRecoveryPointAsync());
+            Assert.Equal(
+                first.Receipt!.RecoveryPointId,
+                previous.RecoveryPointId);
+
+            MemoryArchiveData failingSource = SourceData(
+                "Main",
+                [Record(SourceAccountId, "1", "Neuvillette")]);
+            ArchiveRestorePlan failingPlan = await PlanReplaceForTargetAsync(
+                context,
+                root,
+                failingSource,
+                [new ArchiveReplaceSelection(
+                    SourceArchiveId,
+                    ArchiveReplaceScopeKind.Domain,
+                    SourceAccountId,
+                    ArchiveReplaceDomain.Gacha)]);
+            var store = new SqliteGachaAtomicChangeStore(
+                context.Database,
+                new UnlimitedCapacityProvider(),
+                new ThrowingArchiveRestoreFailureInjector(
+                    ArchiveRestoreFailurePoint.AfterGacha));
+
+            await Assert.ThrowsAsync<InjectedArchiveRestoreException>(() =>
+                store.ApplyAsync(Request(failingSource, failingPlan)));
+
+            GachaFactState current = Assert.IsType<GachaFactState>(
+                await store.GetCurrentAsync(
+                    new GachaFactReference(account.Id, "1")));
+            Assert.Equal("Furina", current.Record.ItemName);
+            ArchiveReplaceRecoveryPoint retained = Assert.IsType<
+                ArchiveReplaceRecoveryPoint>(
+                await store.FindCurrentRecoveryPointAsync());
+            Assert.Equal(previous.RecoveryPointId, retained.RecoveryPointId);
+            Assert.True(retained.IsValid);
+            Assert.Equal(
+                0,
+                await store.CleanupOrphanedRecoveryPointsAsync());
+            using SQLiteConnection connection = context.OpenRawConnection();
+            Assert.Equal(
+                1,
+                connection.ExecuteScalar<int>(
+                    "SELECT COUNT(*) FROM ArchiveRestoreReceipts;"));
+            Assert.Equal(
+                1,
+                connection.ExecuteScalar<int>(
+                    "SELECT COUNT(*) FROM ArchiveReplaceRecoveryPoints;"));
+        }
+        finally
+        {
+            DeleteRestoreSnapshotRoot(root);
+        }
+    }
+
     [Fact]
     public async Task AtomicMergePersistsReceiptAndRetryIsIdempotent()
     {
@@ -832,6 +1320,39 @@ public sealed partial class PlanArchiveRestoreTests
             new ArchiveRestorePlanRequest(
                 source,
                 Confirmations: confirmations));
+        Assert.True(plan.CanApply);
+        Assert.Equal(9, plan.TargetSchemaVersion);
+        return plan;
+    }
+
+    private static async Task<ArchiveRestorePlan> PlanReplaceForTargetAsync(
+        SqliteRepositoryTestContext context,
+        string root,
+        MemoryArchiveData source,
+        IReadOnlyList<ArchiveReplaceSelection> selections)
+    {
+        var planner = new PlanArchiveRestore(
+            CreateTargetFactory(context, root),
+            TimeProvider.System);
+        ArchiveRestorePlan warning = await planner.PlanAsync(
+            new ArchiveRestorePlanRequest(
+                source,
+                Mode: ArchiveRestoreMode.Replace,
+                ReplaceSelections: selections));
+        ArchiveRestoreConfirmation[] confirmations = warning.Confirmations
+            .Where(item => !item.Satisfied)
+            .Select(item => new ArchiveRestoreConfirmation(
+                item.Kind,
+                item.Reference,
+                item.MarkerKey,
+                item.MarkerVersion))
+            .ToArray();
+        ArchiveRestorePlan plan = await planner.PlanAsync(
+            new ArchiveRestorePlanRequest(
+                source,
+                Confirmations: confirmations,
+                Mode: ArchiveRestoreMode.Replace,
+                ReplaceSelections: selections));
         Assert.True(plan.CanApply);
         Assert.Equal(9, plan.TargetSchemaVersion);
         return plan;

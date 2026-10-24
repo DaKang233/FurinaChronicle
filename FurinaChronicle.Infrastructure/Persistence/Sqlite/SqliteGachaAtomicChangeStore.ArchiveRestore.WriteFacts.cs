@@ -65,6 +65,7 @@ public sealed partial class SqliteGachaAtomicChangeStore
         Guid changeSetId)
     {
         long materialBytes = 0;
+        DeleteArchiveRestoreRevisions(connection, prepared.RevisionRemovals);
         foreach (PreparedMutation mutation in prepared.GachaMutations)
         {
             ApplyBusinessMutation(connection, mutation);
@@ -109,6 +110,45 @@ public sealed partial class SqliteGachaAtomicChangeStore
             prepared.UndoEligible,
             ArchiveRestoreFailurePoint.AfterChallenges);
         return materialBytes;
+    }
+
+    private static void DeleteArchiveRestoreRevisions(
+        SQLiteConnection connection,
+        IEnumerable<PreparedArchiveRevisionRemoval> removals)
+    {
+        foreach (PreparedArchiveRevisionRemoval removal in removals.Distinct())
+        {
+            string table = removal.Kind ==
+                ArchiveRestoreFactKind.GachaRevision
+                    ? "GachaRevisions"
+                    : "ArchiveDomainRevisions";
+            if (connection.Execute(
+                    $"DELETE FROM {table} WHERE RevisionId = ? " +
+                    "AND GameAccountId = ?;",
+                    removal.StableReference,
+                    removal.TargetAccountId.ToString("D")) != 1)
+            {
+                throw new ArchiveRestoreApplyConflictException(
+                    "A planned Revision removal target changed.");
+            }
+        }
+    }
+
+    private static void DeleteArchiveRestoreAccounts(
+        SQLiteConnection connection,
+        IEnumerable<ArchiveRestoreAccountRemoval> removals)
+    {
+        foreach (ArchiveRestoreAccountRemoval removal in removals.Distinct())
+        {
+            if (connection.Execute(
+                    "DELETE FROM GameAccounts WHERE Id = ? AND PlayerArchiveId = ?;",
+                    removal.TargetAccountId.ToString("D"),
+                    removal.TargetArchiveId.ToString("D")) != 1)
+            {
+                throw new ArchiveRestoreApplyConflictException(
+                    "A planned target account removal changed.");
+            }
+        }
     }
 
     private long WriteArchiveDomainFacts(
