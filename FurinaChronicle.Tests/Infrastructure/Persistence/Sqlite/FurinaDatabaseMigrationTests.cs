@@ -10,10 +10,10 @@ namespace FurinaChronicle.Tests.Infrastructure.Persistence.Sqlite;
 public sealed class FurinaDatabaseMigrationTests
 {
     private const int CurrentApplicationId = 0x46554348;
-    private const int CurrentSchemaVersion = 8;
+    private const int CurrentSchemaVersion = 9;
 
     [Fact]
-    public async Task InitializeAsync_NewDatabase_CreatesCurrentVersionEightSchema()
+    public async Task InitializeAsync_NewDatabase_CreatesCurrentVersionNineSchema()
     {
         await using var fixture = MigrationFixture.Create();
 
@@ -113,7 +113,7 @@ public sealed class FurinaDatabaseMigrationTests
     }
 
     [Fact]
-    public async Task InitializeAsync_VersionSevenDatabase_MigratesToVersionEight()
+    public async Task InitializeAsync_VersionSevenDatabase_MigratesToVersionNine()
     {
         await using var fixture = MigrationFixture.Create();
         await using (FurinaDatabase database = fixture.OpenDatabase())
@@ -123,6 +123,7 @@ public sealed class FurinaDatabaseMigrationTests
 
         using (SQLiteConnection legacy = fixture.OpenRawConnection())
         {
+            legacy.Execute("DROP TABLE ArchiveReplaceRecoveryPoints;");
             legacy.Execute("DROP TABLE ArchiveRestoreReceiptAccounts;");
             legacy.Execute("DROP TABLE ArchiveRestoreReceiptArchives;");
             legacy.Execute("DROP TABLE ArchiveRestoreReceipts;");
@@ -141,6 +142,166 @@ public sealed class FurinaDatabaseMigrationTests
             1,
             connection.ExecuteScalar<int>(
                 "SELECT RequireUniqueArchiveNames FROM PortableApplicationSettings WHERE Id = 1;"));
+    }
+
+    [Fact]
+    public async Task InitializeAsync_VersionEightDatabase_MigratesReceiptAndPreservesMappings()
+    {
+        await using var fixture = MigrationFixture.Create();
+        await using (FurinaDatabase database = fixture.OpenDatabase())
+        {
+            await database.InitializeAsync();
+        }
+
+        Guid archiveId = Guid.NewGuid();
+        Guid accountId = Guid.NewGuid();
+        Guid receiptId = Guid.NewGuid();
+        Guid operationId = Guid.NewGuid();
+        Guid sourceArchiveId = Guid.NewGuid();
+        Guid sourceAccountId = Guid.NewGuid();
+        using (SQLiteConnection legacy = fixture.OpenRawConnection())
+        {
+            legacy.Execute("PRAGMA foreign_keys = OFF;");
+            legacy.Execute("DROP TABLE ArchiveRestoreReceiptAccounts;");
+            legacy.Execute("DROP TABLE ArchiveRestoreReceiptArchives;");
+            legacy.Execute(
+                "ALTER TABLE ArchiveRestoreReceipts RENAME TO ArchiveRestoreReceiptsV9;");
+            legacy.Execute(
+                """
+                CREATE TABLE ArchiveRestoreReceipts
+                (
+                    ReceiptId TEXT PRIMARY KEY NOT NULL,
+                    OperationId TEXT NOT NULL UNIQUE,
+                    ChangeSetId TEXT UNIQUE,
+                    PackageFingerprint TEXT NOT NULL,
+                    PlanFingerprint TEXT NOT NULL,
+                    Status INTEGER NOT NULL,
+                    ReceivedAtUtcTicks INTEGER NOT NULL,
+                    ReceivedAtOffsetMinutes INTEGER NOT NULL,
+                    AffectedRecordCount INTEGER NOT NULL,
+                    ArchiveCount INTEGER NOT NULL,
+                    AccountCount INTEGER NOT NULL,
+                    FactCount INTEGER NOT NULL,
+                    FOREIGN KEY (ChangeSetId)
+                        REFERENCES DataChangeSets(ChangeSetId)
+                );
+                """);
+            legacy.Execute("DROP TABLE ArchiveRestoreReceiptsV9;");
+            legacy.Execute(
+                """
+                CREATE TABLE ArchiveRestoreReceiptArchives
+                (
+                    ReceiptId TEXT NOT NULL,
+                    SourceArchiveReference TEXT NOT NULL,
+                    TargetArchiveId TEXT NOT NULL,
+                    PRIMARY KEY (ReceiptId, SourceArchiveReference),
+                    FOREIGN KEY (ReceiptId)
+                        REFERENCES ArchiveRestoreReceipts(ReceiptId)
+                        ON DELETE CASCADE,
+                    FOREIGN KEY (TargetArchiveId)
+                        REFERENCES PlayerArchives(Id)
+                );
+                """);
+            legacy.Execute(
+                """
+                CREATE TABLE ArchiveRestoreReceiptAccounts
+                (
+                    ReceiptId TEXT NOT NULL,
+                    SourceArchiveReference TEXT NOT NULL,
+                    SourceAccountReference TEXT NOT NULL,
+                    TargetArchiveId TEXT NOT NULL,
+                    TargetAccountId TEXT NOT NULL,
+                    TargetRoleIdentityId TEXT,
+                    PRIMARY KEY (
+                        ReceiptId,
+                        SourceArchiveReference,
+                        SourceAccountReference),
+                    FOREIGN KEY (ReceiptId)
+                        REFERENCES ArchiveRestoreReceipts(ReceiptId)
+                        ON DELETE CASCADE,
+                    FOREIGN KEY (TargetArchiveId)
+                        REFERENCES PlayerArchives(Id),
+                    FOREIGN KEY (TargetAccountId)
+                        REFERENCES GameAccounts(Id),
+                    FOREIGN KEY (TargetRoleIdentityId)
+                        REFERENCES GameRoleIdentities(Id)
+                );
+                """);
+            legacy.Execute("DROP TABLE ArchiveReplaceRecoveryPoints;");
+            legacy.Execute(
+                """
+                INSERT INTO PlayerArchives
+                    (Id, Name, CreatedAtUtcTicks, UpdatedAtUtcTicks)
+                VALUES (?, 'v8', 1, 1);
+                """,
+                archiveId.ToString("D"));
+            legacy.Execute(
+                """
+                INSERT INTO GameAccounts
+                    (Id, PlayerArchiveId, GameRoleIdentityId, Uid,
+                     ServerRegion, DisplayName, IsPlaceholder,
+                     CreatedAtUtcTicks, UpdatedAtUtcTicks)
+                VALUES (?, ?, NULL, 'legacy', 0, NULL, 1, 1, 1);
+                """,
+                accountId.ToString("D"),
+                archiveId.ToString("D"));
+            legacy.Execute(
+                """
+                INSERT INTO ArchiveRestoreReceipts
+                    (ReceiptId, OperationId, ChangeSetId,
+                     PackageFingerprint, PlanFingerprint, Status,
+                     ReceivedAtUtcTicks, ReceivedAtOffsetMinutes,
+                     AffectedRecordCount, ArchiveCount, AccountCount, FactCount)
+                VALUES (?, ?, NULL, 'package', 'plan', 2, 1, 0, 0, 1, 1, 0);
+                """,
+                receiptId.ToString("D"),
+                operationId.ToString("D"));
+            legacy.Execute(
+                """
+                INSERT INTO ArchiveRestoreReceiptArchives
+                    (ReceiptId, SourceArchiveReference, TargetArchiveId)
+                VALUES (?, ?, ?);
+                """,
+                receiptId.ToString("D"),
+                sourceArchiveId.ToString("D"),
+                archiveId.ToString("D"));
+            legacy.Execute(
+                """
+                INSERT INTO ArchiveRestoreReceiptAccounts
+                    (ReceiptId, SourceArchiveReference,
+                     SourceAccountReference, TargetArchiveId,
+                     TargetAccountId, TargetRoleIdentityId)
+                VALUES (?, ?, ?, ?, ?, NULL);
+                """,
+                receiptId.ToString("D"),
+                sourceArchiveId.ToString("D"),
+                sourceAccountId.ToString("D"),
+                archiveId.ToString("D"),
+                accountId.ToString("D"));
+            legacy.Execute("PRAGMA user_version = 8;");
+        }
+
+        await using (FurinaDatabase database = fixture.OpenDatabase())
+        {
+            await database.InitializeAsync();
+        }
+
+        using SQLiteConnection connection = fixture.OpenRawConnection();
+        AssertCurrentSchema(connection);
+        Assert.Equal(
+            1,
+            connection.ExecuteScalar<int>(
+                "SELECT Mode FROM ArchiveRestoreReceipts WHERE ReceiptId = ?;",
+                receiptId.ToString("D")));
+        Assert.Null(
+            connection.ExecuteScalar<string?>(
+                "SELECT RecoveryPointId FROM ArchiveRestoreReceipts WHERE ReceiptId = ?;",
+                receiptId.ToString("D")));
+        Assert.Equal(
+            accountId.ToString("D"),
+            connection.ExecuteScalar<string>(
+                "SELECT TargetAccountId FROM ArchiveRestoreReceiptAccounts WHERE ReceiptId = ?;",
+                receiptId.ToString("D")));
     }
 
     [Fact]
@@ -406,6 +567,7 @@ public sealed class FurinaDatabaseMigrationTests
         }
         using (SQLiteConnection legacy = fixture.OpenRawConnection())
         {
+            legacy.Execute("DROP TABLE ArchiveReplaceRecoveryPoints;");
             legacy.Execute("DROP TABLE ArchiveRestoreReceiptAccounts;");
             legacy.Execute("DROP TABLE ArchiveRestoreReceiptArchives;");
             legacy.Execute("DROP TABLE ArchiveRestoreReceipts;");
@@ -670,6 +832,7 @@ public sealed class FurinaDatabaseMigrationTests
             [
                 "ArchiveDomainFacts",
                 "ArchiveDomainRevisions",
+                "ArchiveReplaceRecoveryPoints",
                 "ArchiveRestoreReceiptAccounts",
                 "ArchiveRestoreReceiptArchives",
                 "ArchiveRestoreReceipts",
@@ -718,6 +881,11 @@ public sealed class FurinaDatabaseMigrationTests
                 "PRAGMA foreign_key_list(GachaRecords);"));
         Assert.Equal("GameAccounts", gachaForeignKey.Table);
         Assert.Equal("CASCADE", gachaForeignKey.OnDelete);
+
+        Assert.DoesNotContain(
+            connection.Query<ForeignKeyDefinitionRow>(
+                "PRAGMA foreign_key_list(ArchiveRestoreReceiptAccounts);"),
+            foreignKey => foreignKey.Table == "GameAccounts");
     }
 
     private static void AssertLegacyGachaProvenanceIsUnknown(

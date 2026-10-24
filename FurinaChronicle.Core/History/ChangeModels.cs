@@ -13,6 +13,7 @@ public enum DataChangeOperationKind
     Delete = 4,
     Undo = 5,
     IrreversibleDelete = 6,
+    ArchiveReplace = 7,
 }
 
 public enum EntityChangeKind
@@ -42,6 +43,7 @@ public enum UndoIneligibilityReason
     IrreversibleDeletion = 5,
     MissingMaterial = 6,
     InverseOperation = 7,
+    SupersededByArchiveReplace = 8,
 }
 
 public readonly record struct FactVersion
