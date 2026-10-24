@@ -15,7 +15,29 @@ namespace FurinaChronicle.Services.Archives.Portable;
 public enum ArchiveRestoreMode
 {
     Merge = 1,
+    Replace = 2,
 }
+
+public enum ArchiveReplaceScopeKind
+{
+    Archive = 1,
+    Account = 2,
+    Domain = 3,
+}
+
+public enum ArchiveReplaceDomain
+{
+    Gacha = 1,
+    ItemObservation = 2,
+    ManualAcquisition = 3,
+    ChallengeObservation = 4,
+}
+
+public sealed record ArchiveReplaceSelection(
+    Guid SourceArchiveReference,
+    ArchiveReplaceScopeKind Kind,
+    Guid? SourceAccountReference = null,
+    ArchiveReplaceDomain? Domain = null);
 
 public enum ArchiveRestoreArchiveDecisionKind
 {
@@ -48,6 +70,7 @@ public enum ArchiveRestoreConfirmationKind
     TombstoneReintroduction = 4,
     ApplyPortableSettings = 5,
     NonUndoableOperation = 6,
+    DestructiveReplace = 7,
 }
 
 public sealed record ArchiveRestoreConfirmation(
@@ -62,7 +85,8 @@ public sealed record ArchiveRestorePlanRequest(
     IReadOnlyList<ArchiveRestoreAccountDecision>? AccountDecisions = null,
     IReadOnlyList<ArchiveRestoreConfirmation>? Confirmations = null,
     bool ApplyPortableSettings = false,
-    ArchiveRestoreMode Mode = ArchiveRestoreMode.Merge);
+    ArchiveRestoreMode Mode = ArchiveRestoreMode.Merge,
+    IReadOnlyList<ArchiveReplaceSelection>? ReplaceSelections = null);
 
 public enum ArchiveRestoreArchiveMappingKind
 {
@@ -132,6 +156,7 @@ public enum ArchiveRestoreFactAction
     Skip = 2,
     Conflict = 3,
     Reintroduce = 4,
+    Replace = 5,
 }
 
 public sealed record ArchiveRestoreFactPlan(
@@ -145,6 +170,17 @@ public sealed record ArchiveRestoreFactPlan(
     string SourceSemanticDigest,
     string? TargetSemanticDigest,
     ArchiveRestoreFactAction Action);
+
+public sealed record ArchiveRestoreTargetFactRemoval(
+    Guid TargetArchiveId,
+    Guid TargetAccountId,
+    ArchiveRestoreFactKind Kind,
+    string StableReference,
+    string TargetSemanticDigest);
+
+public sealed record ArchiveRestoreAccountRemoval(
+    Guid TargetArchiveId,
+    Guid TargetAccountId);
 
 public enum ArchiveRestoreConflictCode
 {
@@ -171,7 +207,9 @@ public sealed record ArchiveRestoreDatasetPreview(
     long AddCount,
     long SkipCount,
     long ConflictCount,
-    long TombstoneCount);
+    long TombstoneCount,
+    long ReplaceCount,
+    long RemoveCount);
 
 public sealed record ArchiveRestoreTombstoneProbe(
     ArchiveRestoreFactKind Kind,
@@ -221,13 +259,15 @@ public sealed record ArchiveRestoreResourceEstimate(
     long ContainerBytes,
     long StagingBytes,
     long EstimatedAdditionalDatabaseBytes,
-    long EstimatedUndoBytes);
+    long EstimatedUndoBytes,
+    long EstimatedRecoveryPointBytes);
 
 public sealed record ArchiveRestorePreview(
     int ArchiveCreateCount,
     int ArchiveReuseCount,
     int AccountCreateCount,
     int AccountReuseCount,
+    int AccountRemoveCount,
     IReadOnlyList<ArchiveRestoreDatasetPreview> Datasets,
     long ConflictCount,
     long TombstoneCount);
@@ -241,6 +281,9 @@ public sealed record ArchiveRestorePlan(
     IReadOnlyList<ArchiveRestoreArchiveMapping> Archives,
     IReadOnlyList<ArchiveRestoreAccountMapping> Accounts,
     IReadOnlyList<ArchiveRestoreFactPlan> Facts,
+    IReadOnlyList<ArchiveReplaceSelection> ReplaceSelections,
+    IReadOnlyList<ArchiveRestoreTargetFactRemoval> Removals,
+    IReadOnlyList<ArchiveRestoreAccountRemoval> AccountRemovals,
     ArchiveRestorePreview Preview,
     IReadOnlyList<ArchiveRestoreConflict> Conflicts,
     IReadOnlyList<ArchiveRestoreTombstoneHit> Tombstones,
@@ -251,7 +294,7 @@ public sealed record ArchiveRestorePlan(
     string PlanFingerprint)
 {
     public bool CanApply =>
-        Mode == ArchiveRestoreMode.Merge &&
+        Mode is ArchiveRestoreMode.Merge or ArchiveRestoreMode.Replace &&
         Archives.All(item =>
             item.Kind != ArchiveRestoreArchiveMappingKind.RequiresSelection) &&
         Accounts.All(item =>
@@ -296,10 +339,27 @@ public sealed record ArchiveRestoreReceipt(
     string PlanFingerprint,
     ChangeExecutionStatus Status,
     DateTimeOffset ReceivedAt,
+    ArchiveRestoreMode Mode,
+    Guid? RecoveryPointId,
     int AffectedRecordCount,
     int FactCount,
     IReadOnlyList<ArchiveRestoreReceiptArchiveMapping> Archives,
     IReadOnlyList<ArchiveRestoreReceiptAccountMapping> Accounts);
+
+public sealed record ArchiveReplaceRecoveryPoint(
+    Guid RecoveryPointId,
+    OperationId OperationId,
+    string FileName,
+    string PackageFingerprint,
+    string PlanFingerprint,
+    int DatabaseApplicationId,
+    int DatabaseSchemaVersion,
+    long Length,
+    string Sha256,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset CommittedAt,
+    bool IsCurrent,
+    bool IsValid);
 
 public sealed record ArchiveRestoreApplyResult(
     ChangeExecutionStatus Status,

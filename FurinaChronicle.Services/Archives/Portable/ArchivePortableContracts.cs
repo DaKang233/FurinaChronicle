@@ -111,4 +111,10 @@ public interface IArchiveAtomicRestorer
     Task<ArchiveRestoreReceipt?> FindReceiptAsync(
         OperationId operationId,
         CancellationToken cancellationToken = default);
+
+    Task<ArchiveReplaceRecoveryPoint?> FindCurrentRecoveryPointAsync(
+        CancellationToken cancellationToken = default);
+
+    Task<int> CleanupOrphanedRecoveryPointsAsync(
+        CancellationToken cancellationToken = default);
 }

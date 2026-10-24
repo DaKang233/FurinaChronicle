@@ -180,7 +180,8 @@ public sealed partial class SqliteGachaAtomicChangeStore
         Guid? changeSetId,
         ChangeExecutionStatus status,
         int affectedRecordCount,
-        int factCount)
+        int factCount,
+        Guid? recoveryPointId = null)
     {
         connection.Execute(
             """
@@ -188,8 +189,8 @@ public sealed partial class SqliteGachaAtomicChangeStore
                 (ReceiptId, OperationId, ChangeSetId, PackageFingerprint,
                  PlanFingerprint, Status, ReceivedAtUtcTicks,
                  ReceivedAtOffsetMinutes, AffectedRecordCount,
-                 ArchiveCount, AccountCount, FactCount)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                 ArchiveCount, AccountCount, FactCount, Mode, RecoveryPointId)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """,
             receiptId.ToString("D"),
             request.OperationId.ToString(),
@@ -202,7 +203,9 @@ public sealed partial class SqliteGachaAtomicChangeStore
             affectedRecordCount,
             request.Plan.Archives.Count,
             request.Plan.Accounts.Count,
-            factCount);
+            factCount,
+            (int)request.Plan.Mode,
+            recoveryPointId?.ToString("D"));
         foreach (ArchiveRestoreArchiveMapping mapping in request.Plan.Archives)
         {
             Guid targetArchiveId = mapping.TargetArchiveId ??
@@ -275,7 +278,7 @@ public sealed partial class SqliteGachaAtomicChangeStore
                        PackageFingerprint, PlanFingerprint, Status,
                        ReceivedAtUtcTicks, ReceivedAtOffsetMinutes,
                        AffectedRecordCount, ArchiveCount, AccountCount,
-                       FactCount
+                       FactCount, Mode, RecoveryPointId
                 FROM ArchiveRestoreReceipts
                 WHERE OperationId = ?;
                 """,
@@ -338,6 +341,8 @@ public sealed partial class SqliteGachaAtomicChangeStore
             new DateTimeOffset(
                 new DateTime(row.ReceivedAtUtcTicks, DateTimeKind.Utc))
                 .ToOffset(TimeSpan.FromMinutes(row.ReceivedAtOffsetMinutes)),
+            (ArchiveRestoreMode)row.Mode,
+            ParseOptionalGuid(row.RecoveryPointId),
             row.AffectedRecordCount,
             row.FactCount,
             archives,

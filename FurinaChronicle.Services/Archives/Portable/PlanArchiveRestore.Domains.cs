@@ -12,6 +12,8 @@ public sealed partial class PlanArchiveRestore
     private static async Task PlanDomainAsync(
         IArchiveRestoreStagedPackage source,
         IArchiveRestoreTargetSnapshot target,
+        ArchiveRestoreMode mode,
+        IReadOnlySet<ArchiveReplaceDomain> domains,
         ArchiveRestoreAccountMapping account,
         Guid targetArchiveId,
         Guid targetAccountId,
@@ -21,6 +23,7 @@ public sealed partial class PlanArchiveRestore
         ICollection<ArchiveRestoreConflict> conflicts,
         CancellationToken cancellationToken)
     {
+        if (domains.Contains(ArchiveReplaceDomain.ItemObservation))
         await foreach (ItemStateObservation value in source.ReadItemObservationsAsync(
             account.SourceAccountReference,
             cancellationToken))
@@ -34,8 +37,9 @@ public sealed partial class PlanArchiveRestore
                 ArchiveRestoreFactKind.ItemObservation,
                 value.ObservationId.ToString(), value.ObservationId.ToString(),
                 ArchiveRestoreSemanticDigest.ForItemObservation(value),
-                existing?.SemanticDigest, facts, probes, conflicts);
+                existing?.SemanticDigest, mode, facts, probes, conflicts);
         }
+        if (domains.Contains(ArchiveReplaceDomain.ManualAcquisition))
         await foreach (ManualAcquisitionState value in source
             .ReadManualAcquisitionsAsync(
                 account.SourceAccountReference,
@@ -52,8 +56,9 @@ public sealed partial class PlanArchiveRestore
                 ArchiveRestoreFactKind.ManualAcquisition,
                 stable, stable,
                 ArchiveRestoreSemanticDigest.ForManualAcquisition(value),
-                existing?.SemanticDigest, facts, probes, conflicts);
+                existing?.SemanticDigest, mode, facts, probes, conflicts);
         }
+        if (domains.Contains(ArchiveReplaceDomain.ManualAcquisition))
         await foreach (ManualAcquisitionRevisionItem value in source
             .ReadManualAcquisitionRevisionsAsync(
                 account.SourceAccountReference,
@@ -83,8 +88,9 @@ public sealed partial class PlanArchiveRestore
                 ArchiveRestoreFactKind.ManualAcquisitionRevision,
                 value.RevisionId.ToString("D"), tombstoneReference,
                 ArchiveRestoreSemanticDigest.ForManualRevision(value),
-                existing?.SemanticDigest, facts, probes, conflicts);
+                existing?.SemanticDigest, mode, facts, probes, conflicts);
         }
+        if (domains.Contains(ArchiveReplaceDomain.ChallengeObservation))
         await foreach (ChallengeObservation value in source
             .ReadChallengeObservationsAsync(
                 account.SourceAccountReference,
@@ -100,7 +106,7 @@ public sealed partial class PlanArchiveRestore
                 ArchiveRestoreFactKind.ChallengeObservation,
                 stable, stable,
                 ArchiveRestoreSemanticDigest.ForChallenge(value),
-                existing?.SemanticDigest, facts, probes, conflicts);
+                existing?.SemanticDigest, mode, facts, probes, conflicts);
         }
     }
 
@@ -113,6 +119,7 @@ public sealed partial class PlanArchiveRestore
         string tombstoneReference,
         string sourceDigest,
         string? targetDigest,
+        ArchiveRestoreMode mode,
         ICollection<ArchiveRestoreFactPlan> facts,
         ICollection<ArchiveRestoreTombstoneProbe> probes,
         ICollection<ArchiveRestoreConflict> conflicts)
@@ -121,7 +128,9 @@ public sealed partial class PlanArchiveRestore
             ? ArchiveRestoreFactAction.Add
             : string.Equals(sourceDigest, targetDigest, StringComparison.Ordinal)
                 ? ArchiveRestoreFactAction.Skip
-                : ArchiveRestoreFactAction.Conflict;
+                : mode == ArchiveRestoreMode.Replace
+                    ? ArchiveRestoreFactAction.Replace
+                    : ArchiveRestoreFactAction.Conflict;
         facts.Add(new ArchiveRestoreFactPlan(
             account.SourceArchiveReference,
             account.SourceAccountReference,

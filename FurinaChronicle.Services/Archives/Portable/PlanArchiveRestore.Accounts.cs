@@ -40,6 +40,10 @@ public sealed partial class PlanArchiveRestore
                     item.ArchiveReference == targetId)
                 : null;
             foreach (ArchiveCatalogAccount sourceAccount in sourceArchive.Accounts
+                .Where(item => IsAccountIncluded(
+                    request,
+                    sourceArchive.ArchiveReference,
+                    item.AccountReference))
                 .OrderBy(item => item.AccountReference))
             {
                 if (archive.Kind == ArchiveRestoreArchiveMappingKind.RequiresSelection)

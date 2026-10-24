@@ -121,9 +121,12 @@ public sealed partial class PlanArchiveRestore
         IReadOnlyList<ArchiveRestoreFactPlan> facts,
         IReadOnlyList<ArchiveRestoreTombstoneHit> tombstones,
         ArchiveRestoreSettingsPlan settings,
-        bool completePackage)
+        bool completePackage,
+        ArchiveRestoreMode mode)
     {
         var reasons = new List<string>();
+        if (mode == ArchiveRestoreMode.Replace)
+            reasons.Add("Replace is never an ordinary Undo candidate.");
         if (archives.Any(item => item.Kind !=
                 ArchiveRestoreArchiveMappingKind.MapExisting) ||
             accounts.Any(item => item.Kind !=
@@ -203,6 +206,12 @@ public sealed partial class PlanArchiveRestore
             Add(ArchiveRestoreConfirmationKind.NonUndoableOperation,
                 request.Package.PackageFingerprint,
                 "This restore plan is not eligible for ordinary Undo.");
+        }
+        if (request.Mode == ArchiveRestoreMode.Replace)
+        {
+            Add(ArchiveRestoreConfirmationKind.DestructiveReplace,
+                request.Package.PackageFingerprint,
+                "The selected target scope will be replaced exactly and target-only data will be removed.");
         }
         return result;
 

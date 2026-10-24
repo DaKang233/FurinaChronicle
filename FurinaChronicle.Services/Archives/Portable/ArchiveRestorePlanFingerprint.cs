@@ -25,6 +25,9 @@ public static class ArchiveRestorePlanFingerprint
                 plan.Archives,
                 plan.Accounts,
                 plan.Facts,
+                plan.ReplaceSelections,
+                plan.Removals,
+                plan.AccountRemovals,
                 plan.Tombstones,
                 plan.Settings,
                 plan.Confirmations,
@@ -42,6 +45,9 @@ public static class ArchiveRestorePlanFingerprint
         IReadOnlyList<ArchiveRestoreArchiveMapping> archives,
         IReadOnlyList<ArchiveRestoreAccountMapping> accounts,
         IReadOnlyList<ArchiveRestoreFactPlan> facts,
+        IReadOnlyList<ArchiveReplaceSelection> replaceSelections,
+        IReadOnlyList<ArchiveRestoreTargetFactRemoval> removals,
+        IReadOnlyList<ArchiveRestoreAccountRemoval> accountRemovals,
         IReadOnlyList<ArchiveRestoreTombstoneHit> tombstones,
         ArchiveRestoreSettingsPlan settings,
         IReadOnlyList<ArchiveRestoreConfirmationRequirement> confirmations,
@@ -61,6 +67,19 @@ public static class ArchiveRestorePlanFingerprint
                 .ThenBy(item => item.SourceAccountReference)
                 .ThenBy(item => item.Kind)
                 .ThenBy(item => item.StableReference, StringComparer.Ordinal),
+            ReplaceSelections = replaceSelections
+                .OrderBy(item => item.SourceArchiveReference)
+                .ThenBy(item => item.SourceAccountReference)
+                .ThenBy(item => item.Kind)
+                .ThenBy(item => item.Domain),
+            Removals = removals
+                .OrderBy(item => item.TargetArchiveId)
+                .ThenBy(item => item.TargetAccountId)
+                .ThenBy(item => item.Kind)
+                .ThenBy(item => item.StableReference, StringComparer.Ordinal),
+            AccountRemovals = accountRemovals
+                .OrderBy(item => item.TargetArchiveId)
+                .ThenBy(item => item.TargetAccountId),
             Tombstones = tombstones.OrderBy(
                 item => item.TombstoneKey,
                 StringComparer.Ordinal),

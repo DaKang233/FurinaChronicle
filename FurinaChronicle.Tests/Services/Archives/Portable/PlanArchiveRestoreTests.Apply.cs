@@ -833,7 +833,7 @@ public sealed partial class PlanArchiveRestoreTests
                 source,
                 Confirmations: confirmations));
         Assert.True(plan.CanApply);
-        Assert.Equal(8, plan.TargetSchemaVersion);
+        Assert.Equal(9, plan.TargetSchemaVersion);
         return plan;
     }
 

@@ -55,7 +55,7 @@ public sealed partial class PlanArchiveRestoreTests
                     ArchiveExportScopeKind.AllArchives,
                     catalog.Archives.Select(item => item.ArchiveReference).ToArray(),
                     "supported_logical_scope"),
-                [],
+                CreateDatasets(catalog),
                 "settings/portable.v1.json",
                 "checksums.sha256");
             Summary = new ArchivePackageSummary(
@@ -93,10 +93,10 @@ public sealed partial class PlanArchiveRestoreTests
         public ArchiveCatalog Catalog { get; }
         public ArchivePortableSettings Settings { get; }
         public string PackageFingerprint { get; }
-        public ArchivePackageSummary Summary { get; }
+        public ArchivePackageSummary Summary { get; private set; }
         public long ContainerLength { get; } = 100;
         public long StagingLength { get; } = 200;
-        public int SchemaVersion { get; } = 7;
+        public int SchemaVersion { get; } = 9;
         public string StateToken { get; set; }
         public long SnapshotLength { get; } = 300;
         public Dictionary<Guid, IReadOnlyList<GachaRecord>> Gacha { get; } = [];
@@ -109,6 +109,21 @@ public sealed partial class PlanArchiveRestoreTests
         public Dictionary<Guid, IReadOnlyList<ChallengeObservation>> Challenges
             { get; } = [];
         public List<ArchiveRestoreActiveTombstone> Tombstones { get; } = [];
+
+        public void RemoveDataset(string datasetReference)
+        {
+            Summary = Summary with
+            {
+                Manifest = Summary.Manifest with
+                {
+                    Datasets = Summary.Manifest.Datasets.Where(item =>
+                        !string.Equals(
+                            item.DatasetReference,
+                            datasetReference,
+                            StringComparison.Ordinal)).ToArray(),
+                },
+            };
+        }
 
         public void AddDomainFixture(Guid archiveId, Guid accountId)
         {
@@ -337,5 +352,58 @@ public sealed partial class PlanArchiveRestoreTests
         }
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+
+        private static IReadOnlyList<ArchiveDatasetDescriptor> CreateDatasets(
+            ArchiveCatalog catalog)
+        {
+            var result = new List<ArchiveDatasetDescriptor>
+            {
+                new(
+                    "gacha-history",
+                    "gacha-history",
+                    "furina-archive-gacha-history",
+                    "1.0",
+                    true,
+                    ["datasets/gacha-history.v1.ndjson"],
+                    new Dictionary<string, long>
+                    {
+                        ["current_facts"] = 0,
+                        ["revisions"] = 0,
+                    },
+                    0),
+            };
+            foreach (ArchiveCatalogArchive archive in catalog.Archives)
+            {
+                result.Add(new ArchiveDatasetDescriptor(
+                    $"character-weapon-history-{archive.ArchiveReference:D}"
+                        .ToLowerInvariant(),
+                    "character-weapon-history",
+                    "furina-domain-history",
+                    "1.0",
+                    false,
+                    [$"domains/{archive.ArchiveReference:D}/character-weapon-history.v1.json"],
+                    new Dictionary<string, long>
+                    {
+                        ["facts"] = 0,
+                        ["revisions"] = 0,
+                    },
+                    0));
+                result.Add(new ArchiveDatasetDescriptor(
+                    $"challenge-history-{archive.ArchiveReference:D}"
+                        .ToLowerInvariant(),
+                    "challenge-history",
+                    "furina-domain-history",
+                    "1.0",
+                    false,
+                    [$"domains/{archive.ArchiveReference:D}/challenge-history.v1.json"],
+                    new Dictionary<string, long>
+                    {
+                        ["facts"] = 0,
+                        ["revisions"] = 0,
+                    },
+                    0));
+            }
+            return result;
+        }
     }
 }

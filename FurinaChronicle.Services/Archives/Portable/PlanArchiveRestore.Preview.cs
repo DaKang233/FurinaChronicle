@@ -9,6 +9,8 @@ public sealed partial class PlanArchiveRestore
         IReadOnlyList<ArchiveRestoreArchiveMapping> archives,
         IReadOnlyList<ArchiveRestoreAccountMapping> accounts,
         IReadOnlyList<ArchiveRestoreFactPlan> facts,
+        IReadOnlyList<ArchiveRestoreTargetFactRemoval> removals,
+        IReadOnlyList<ArchiveRestoreAccountRemoval> accountRemovals,
         IReadOnlyList<ArchiveRestoreConflict> conflicts,
         IReadOnlyList<ArchiveRestoreTombstoneHit> tombstones)
     {
@@ -23,7 +25,10 @@ public sealed partial class PlanArchiveRestore
                     item.Action == ArchiveRestoreFactAction.Skip),
                 facts.LongCount(item => item.Kind == kind &&
                     item.Action == ArchiveRestoreFactAction.Conflict),
-                tombstones.LongCount(item => item.FactKind == kind)))
+                tombstones.LongCount(item => item.FactKind == kind),
+                facts.LongCount(item => item.Kind == kind &&
+                    item.Action == ArchiveRestoreFactAction.Replace),
+                removals.LongCount(item => item.Kind == kind)))
             .ToArray();
         return new ArchiveRestorePreview(
             archives.Count(item => item.Kind ==
@@ -34,6 +39,7 @@ public sealed partial class PlanArchiveRestore
                 ArchiveRestoreAccountMappingKind.CreateNew),
             accounts.Count(item => item.Kind ==
                 ArchiveRestoreAccountMappingKind.MapExisting),
+            accountRemovals.Count,
             datasets,
             conflicts.Count,
             tombstones.Count);
@@ -45,6 +51,9 @@ public sealed partial class PlanArchiveRestore
         IReadOnlyList<ArchiveRestoreArchiveMapping> archives,
         IReadOnlyList<ArchiveRestoreAccountMapping> accounts,
         IReadOnlyList<ArchiveRestoreFactPlan> facts,
+        IReadOnlyList<ArchiveReplaceSelection> replaceSelections,
+        IReadOnlyList<ArchiveRestoreTargetFactRemoval> removals,
+        IReadOnlyList<ArchiveRestoreAccountRemoval> accountRemovals,
         IReadOnlyList<ArchiveRestoreTombstoneHit> tombstones,
         ArchiveRestoreSettingsPlan settings,
         IReadOnlyList<ArchiveRestoreConfirmationRequirement> confirmations,
@@ -60,6 +69,9 @@ public sealed partial class PlanArchiveRestore
             archives,
             accounts,
             facts,
+            replaceSelections,
+            removals,
+            accountRemovals,
             tombstones,
             settings,
             confirmations,

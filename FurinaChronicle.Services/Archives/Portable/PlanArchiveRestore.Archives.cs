@@ -22,6 +22,7 @@ public sealed partial class PlanArchiveRestore
             target.Catalog.Archives.Select(item => item.Name),
             StringComparer.Ordinal);
         foreach (ArchiveCatalogArchive source in request.Package.Catalog.Archives
+            .Where(item => IsArchiveIncluded(request, item.ArchiveReference))
             .OrderBy(item => item.ArchiveReference))
         {
             ArchiveCatalogArchive[] exact = target.Catalog.Archives

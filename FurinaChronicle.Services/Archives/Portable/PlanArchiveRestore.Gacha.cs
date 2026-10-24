@@ -13,6 +13,7 @@ public sealed partial class PlanArchiveRestore
     private static async Task PlanGachaAsync(
         IArchiveRestoreStagedPackage source,
         IArchiveRestoreTargetSnapshot target,
+        ArchiveRestoreMode mode,
         ArchiveRestoreAccountMapping account,
         Guid targetArchiveId,
         Guid targetAccountId,
@@ -57,6 +58,7 @@ public sealed partial class PlanArchiveRestore
                 revision.Reference.ExternalRecordId,
                 sourceDigest,
                 existing?.SemanticDigest,
+                mode,
                 facts,
                 probes,
                 conflicts);
@@ -85,6 +87,7 @@ public sealed partial class PlanArchiveRestore
                     record.ExternalRecordId,
                     sourceDigest,
                     targetFact?.SemanticDigest,
+                    mode,
                     facts,
                     probes,
                     conflicts);

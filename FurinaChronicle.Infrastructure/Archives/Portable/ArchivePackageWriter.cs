@@ -134,27 +134,21 @@ public sealed class ArchivePackageWriter(ArchivePortableLimits? limits = null)
             {
                 DomainWriteResult characterWeapon = await WriteCharacterWeaponAsync(
                     zip, snapshot, archive, cancellationToken);
-                if (characterWeapon.Entry is not null)
-                {
-                    AddEntry(entries, characterWeapon.Entry);
-                    domainFacts += characterWeapon.Facts;
-                    domainRevisions += characterWeapon.Revisions;
-                    datasets.Add(ToDomainDescriptor(
-                        archive.ArchiveReference,
-                        "character-weapon-history",
-                        characterWeapon));
-                }
+                AddEntry(entries, characterWeapon.Entry!);
+                domainFacts += characterWeapon.Facts;
+                domainRevisions += characterWeapon.Revisions;
+                datasets.Add(ToDomainDescriptor(
+                    archive.ArchiveReference,
+                    "character-weapon-history",
+                    characterWeapon));
                 DomainWriteResult challenges = await WriteChallengesAsync(
                     zip, snapshot, archive, cancellationToken);
-                if (challenges.Entry is not null)
-                {
-                    AddEntry(entries, challenges.Entry);
-                    domainFacts += challenges.Facts;
-                    datasets.Add(ToDomainDescriptor(
-                        archive.ArchiveReference,
-                        "challenge-history",
-                        challenges));
-                }
+                AddEntry(entries, challenges.Entry!);
+                domainFacts += challenges.Facts;
+                datasets.Add(ToDomainDescriptor(
+                    archive.ArchiveReference,
+                    "challenge-history",
+                    challenges));
             }
 
             EntryDescriptor settings = await WriteJsonEntryAsync(
@@ -399,10 +393,6 @@ public sealed class ArchivePackageWriter(ArchivePortableLimits? limits = null)
                 acquisitions,
                 accountRevisions.Select(ToPortableRevision).ToArray()));
         }
-        if (accounts.Count == 0)
-        {
-            return new DomainWriteResult(null, 0, 0);
-        }
         string path = GetDomainPath(archive.ArchiveReference, "character-weapon-history");
         EntryDescriptor entry = await WriteJsonEntryAsync(
             zip,
@@ -447,10 +437,6 @@ public sealed class ArchivePackageWriter(ArchivePortableLimits? limits = null)
             accounts.Add(new ArchiveChallengeAccount(
                 account.AccountReference,
                 observations));
-        }
-        if (accounts.Count == 0)
-        {
-            return new DomainWriteResult(null, 0, 0);
         }
         string path = GetDomainPath(archive.ArchiveReference, "challenge-history");
         EntryDescriptor entry = await WriteJsonEntryAsync(

@@ -7,7 +7,8 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite;
 
 public sealed partial class SqliteGachaAtomicChangeStore
 {
-    private const int ArchiveRestoreSchemaVersion = 8;
+    private const int ArchiveRestoreSchemaVersion = 9;
+    private static readonly SemaphoreSlim ArchiveRestoreWriterGate = new(1, 1);
 
     private sealed record MaterializedArchiveFact(
         ArchiveRestoreFactPlan Plan,
@@ -67,6 +68,26 @@ public sealed partial class SqliteGachaAtomicChangeStore
         public int ArchiveCount { get; set; }
         public int AccountCount { get; set; }
         public int FactCount { get; set; }
+        public int Mode { get; set; }
+        public string? RecoveryPointId { get; set; }
+    }
+
+    private sealed class ArchiveReplaceRecoveryPointRow
+    {
+        public string RecoveryPointId { get; set; } = string.Empty;
+        public string OperationId { get; set; } = string.Empty;
+        public string FileName { get; set; } = string.Empty;
+        public string PackageFingerprint { get; set; } = string.Empty;
+        public string PlanFingerprint { get; set; } = string.Empty;
+        public int DatabaseApplicationId { get; set; }
+        public int DatabaseSchemaVersion { get; set; }
+        public long Length { get; set; }
+        public string Sha256 { get; set; } = string.Empty;
+        public long CreatedAtUtcTicks { get; set; }
+        public int CreatedAtOffsetMinutes { get; set; }
+        public long CommittedAtUtcTicks { get; set; }
+        public int CommittedAtOffsetMinutes { get; set; }
+        public int IsCurrent { get; set; }
     }
 
     private sealed class ArchiveRestoreReceiptArchiveRow

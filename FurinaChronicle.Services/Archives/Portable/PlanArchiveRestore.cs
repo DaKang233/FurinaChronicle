@@ -25,6 +25,16 @@ public sealed partial class PlanArchiveRestore(
             PlanAccounts(request, target, archiveMappings, conflicts);
         var facts = new List<ArchiveRestoreFactPlan>();
         var probes = new List<ArchiveRestoreTombstoneProbe>();
+        IReadOnlyList<ArchiveReplaceSelection> selections =
+            request.Mode == ArchiveRestoreMode.Replace
+                ? request.ReplaceSelections!
+                    .OrderBy(item => item.SourceArchiveReference)
+                    .ThenBy(item => item.SourceAccountReference)
+                    .ThenBy(item => item.Kind)
+                    .ThenBy(item => item.Domain)
+                    .ToArray()
+                : [];
+        ValidateReplaceDatasets(request, conflicts);
 
         foreach (ArchiveRestoreAccountMapping account in accountMappings.Where(item =>
             item.Kind is ArchiveRestoreAccountMappingKind.MapExisting or
@@ -38,13 +48,39 @@ public sealed partial class PlanArchiveRestore(
                 account.ProposedAccountId!.Value;
             bool targetExists = account.Kind ==
                 ArchiveRestoreAccountMappingKind.MapExisting;
-            await PlanGachaAsync(
-                request.Package, target, account, targetArchiveId, targetAccountId,
-                targetExists, facts, probes, conflicts, cancellationToken);
+            IReadOnlySet<ArchiveReplaceDomain> domains = GetSelectedDomains(
+                request,
+                account.SourceArchiveReference,
+                account.SourceAccountReference);
+            if (domains.Contains(ArchiveReplaceDomain.Gacha) &&
+                IsReplaceDatasetDeclared(
+                    request,
+                    account.SourceArchiveReference,
+                    ArchiveReplaceDomain.Gacha))
+            {
+                await PlanGachaAsync(
+                    request.Package, target, request.Mode, account,
+                    targetArchiveId, targetAccountId, targetExists,
+                    facts, probes, conflicts, cancellationToken);
+            }
             await PlanDomainAsync(
-                request.Package, target, account, targetArchiveId, targetAccountId,
-                targetExists, facts, probes, conflicts, cancellationToken);
+                request.Package, target, request.Mode,
+                domains.Where(domain => IsReplaceDatasetDeclared(
+                        request, account.SourceArchiveReference, domain))
+                    .ToHashSet(),
+                account, targetArchiveId, targetAccountId, targetExists,
+                facts, probes, conflicts, cancellationToken);
         }
+
+        (IReadOnlyList<ArchiveRestoreTargetFactRemoval> removals,
+            IReadOnlyList<ArchiveRestoreAccountRemoval> accountRemovals) =
+            await PlanReplaceRemovalsAsync(
+                request,
+                target,
+                archiveMappings,
+                accountMappings,
+                facts,
+                cancellationToken);
 
         IReadOnlyList<ArchiveRestoreActiveTombstone> activeTombstones =
             await target.FindActiveTombstonesAsync(probes, cancellationToken);
@@ -55,12 +91,14 @@ public sealed partial class PlanArchiveRestore(
             request, target, archiveMappings);
         ArchiveRestoreUndoAssessment undo = AssessUndo(
             archiveMappings, accountMappings, facts, tombstones, settings,
-            request.Package.Summary.IsComplete);
+            request.Package.Summary.IsComplete,
+            request.Mode);
         IReadOnlyList<ArchiveRestoreConfirmationRequirement> confirmations =
             BuildConfirmationRequirements(
                 request, archiveMappings, accountMappings, tombstones, settings, undo);
         ArchiveRestorePreview preview = BuildPreview(
-            archiveMappings, accountMappings, facts, conflicts, tombstones);
+            archiveMappings, accountMappings, facts, removals, accountRemovals,
+            conflicts, tombstones);
         var resources = new ArchiveRestoreResourceEstimate(
             request.Package.ContainerLength,
             request.Package.StagingLength,
@@ -68,14 +106,20 @@ public sealed partial class PlanArchiveRestore(
                 request.Package.StagingLength,
                 facts.LongCount(item => item.Action is
                     ArchiveRestoreFactAction.Add or
-                    ArchiveRestoreFactAction.Reintroduce) * 512L),
+                    ArchiveRestoreFactAction.Reintroduce or
+                    ArchiveRestoreFactAction.Replace) * 512L +
+                removals.Count * 256L),
             undo.IsEligibleCandidate
                 ? facts.LongCount(item => item.Action == ArchiveRestoreFactAction.Add) *
                     512L
+                : 0,
+            request.Mode == ArchiveRestoreMode.Replace
+                ? target.SnapshotLength
                 : 0);
         string fingerprint = ComputePlanFingerprint(
-            request, target, archiveMappings, accountMappings, facts, tombstones,
-            settings, confirmations, undo, resources);
+            request, target, archiveMappings, accountMappings, facts, selections,
+            removals, accountRemovals, tombstones, settings, confirmations, undo,
+            resources);
         return new ArchiveRestorePlan(
             request.Package.PackageFingerprint,
             target.StateToken,
@@ -85,6 +129,9 @@ public sealed partial class PlanArchiveRestore(
             archiveMappings,
             accountMappings,
             facts,
+            selections,
+            removals,
+            accountRemovals,
             preview,
             conflicts,
             tombstones,
@@ -114,10 +161,11 @@ public sealed partial class PlanArchiveRestore(
 
     private static void ValidateDecisions(ArchiveRestorePlanRequest request)
     {
-        if (request.Mode != ArchiveRestoreMode.Merge)
+        if (request.Mode is not ArchiveRestoreMode.Merge and
+            not ArchiveRestoreMode.Replace)
         {
             throw new ArgumentOutOfRangeException(
-                nameof(request), "Archive v1 planning supports Merge only.");
+                nameof(request), "The Archive restore mode is unsupported.");
         }
         EnsureUnique(
             request.ArchiveDecisions?.Select(item => item.SourceArchiveReference) ?? [],
@@ -125,6 +173,7 @@ public sealed partial class PlanArchiveRestore(
         EnsureUnique(
             request.AccountDecisions?.Select(item => item.SourceAccountReference) ?? [],
             "account decision");
+        ValidateReplaceSelections(request);
     }
 
     private static void EnsureUnique(IEnumerable<Guid> values, string label)

@@ -298,6 +298,129 @@ public sealed partial class PlanArchiveRestoreTests
             freshness.ActualTargetStateToken);
     }
 
+    [Fact]
+    public async Task ReplacePlansChangedAndTargetOnlyFactsAfterExactConfirmations()
+    {
+        MemoryArchiveData source = SourceData(
+            "Main",
+            [Record(SourceAccountId, "1", "Furina")]);
+        MemoryArchiveData target = TargetData(
+            "Main",
+            [Record(TargetAccountId, "1", "Diluc"),
+             Record(TargetAccountId, "2", "Neuvillette")]);
+        ArchiveReplaceSelection selection = new(
+            SourceArchiveId,
+            ArchiveReplaceScopeKind.Domain,
+            SourceAccountId,
+            ArchiveReplaceDomain.Gacha);
+        var planner = Planner(target);
+
+        ArchiveRestorePlan warning = await planner.PlanAsync(
+            new ArchiveRestorePlanRequest(
+                source,
+                Mode: ArchiveRestoreMode.Replace,
+                ReplaceSelections: [selection]));
+
+        Assert.Equal(
+            ArchiveRestoreFactAction.Replace,
+            Assert.Single(warning.Facts).Action);
+        Assert.Equal("2", Assert.Single(warning.Removals).StableReference);
+        Assert.Equal(1, warning.Preview.Datasets.Single(item =>
+            item.Kind == ArchiveRestoreFactKind.GachaCurrent).ReplaceCount);
+        Assert.False(warning.Undo.IsEligibleCandidate);
+        Assert.False(warning.CanApply);
+
+        ArchiveRestorePlan confirmed = await planner.PlanAsync(
+            new ArchiveRestorePlanRequest(
+                source,
+                Confirmations:
+                [new ArchiveRestoreConfirmation(
+                    ArchiveRestoreConfirmationKind.NonUndoableOperation,
+                    source.PackageFingerprint),
+                 new ArchiveRestoreConfirmation(
+                    ArchiveRestoreConfirmationKind.DestructiveReplace,
+                    source.PackageFingerprint)],
+                Mode: ArchiveRestoreMode.Replace,
+                ReplaceSelections: [selection]));
+
+        Assert.True(confirmed.CanApply);
+        Assert.Equal(target.SnapshotLength,
+            confirmed.Resources.EstimatedRecoveryPointBytes);
+    }
+
+    [Fact]
+    public async Task DomainReplaceDoesNotRemoveUnselectedGacha()
+    {
+        MemoryArchiveData source = SourceData("Main", []);
+        MemoryArchiveData target = TargetData(
+            "Main",
+            [Record(TargetAccountId, "keep", "Furina")]);
+        ArchiveRestorePlan plan = await Planner(target).PlanAsync(
+            new ArchiveRestorePlanRequest(
+                source,
+                Confirmations:
+                [new ArchiveRestoreConfirmation(
+                    ArchiveRestoreConfirmationKind.NonUndoableOperation,
+                    source.PackageFingerprint),
+                 new ArchiveRestoreConfirmation(
+                    ArchiveRestoreConfirmationKind.DestructiveReplace,
+                    source.PackageFingerprint)],
+                Mode: ArchiveRestoreMode.Replace,
+                ReplaceSelections:
+                [new ArchiveReplaceSelection(
+                    SourceArchiveId,
+                    ArchiveReplaceScopeKind.Domain,
+                    SourceAccountId,
+                    ArchiveReplaceDomain.ItemObservation)]));
+
+        Assert.True(plan.CanApply);
+        Assert.DoesNotContain(plan.Removals, item =>
+            item.Kind == ArchiveRestoreFactKind.GachaCurrent);
+        Assert.Empty(plan.Facts);
+    }
+
+    [Fact]
+    public async Task ReplaceRejectsOverlappingScopesAndAbsentDataset()
+    {
+        MemoryArchiveData source = SourceData("Main", []);
+        MemoryArchiveData target = TargetData("Main", []);
+        var planner = Planner(target);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => planner.PlanAsync(
+            new ArchiveRestorePlanRequest(
+                source,
+                Mode: ArchiveRestoreMode.Replace,
+                ReplaceSelections:
+                [new ArchiveReplaceSelection(
+                    SourceArchiveId,
+                    ArchiveReplaceScopeKind.Account,
+                    SourceAccountId),
+                 new ArchiveReplaceSelection(
+                    SourceArchiveId,
+                    ArchiveReplaceScopeKind.Domain,
+                    SourceAccountId,
+                    ArchiveReplaceDomain.Gacha)])));
+
+        string descriptor =
+            $"challenge-history-{SourceArchiveId:D}".ToLowerInvariant();
+        source.RemoveDataset(descriptor);
+        ArchiveRestorePlan absent = await planner.PlanAsync(
+            new ArchiveRestorePlanRequest(
+                source,
+                Mode: ArchiveRestoreMode.Replace,
+                ReplaceSelections:
+                [new ArchiveReplaceSelection(
+                    SourceArchiveId,
+                    ArchiveReplaceScopeKind.Domain,
+                    SourceAccountId,
+                    ArchiveReplaceDomain.ChallengeObservation)]));
+
+        Assert.False(absent.CanApply);
+        Assert.Contains(absent.Conflicts, item =>
+            item.Code == ArchiveRestoreConflictCode.UnsupportedPartialRestore);
+        Assert.Empty(absent.Removals);
+    }
+
     private static PlanArchiveRestore Planner(MemoryArchiveData target) =>
         new(new QueueTargetFactory(target), TimeProvider.System);
 
