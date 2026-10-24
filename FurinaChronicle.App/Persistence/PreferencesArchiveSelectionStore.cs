@@ -1,4 +1,7 @@
-﻿using FurinaChronicle.Services.Abstractions;
+﻿// Copyright (c) 2026 DaKang233.
+// SPDX-License-Identifier: MIT
+
+using FurinaChronicle.Services.Abstractions;
 using FurinaChronicle.Services.Archives;
 using Microsoft.Maui.Storage;
 

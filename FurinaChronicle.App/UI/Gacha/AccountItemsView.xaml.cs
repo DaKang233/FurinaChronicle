@@ -1,0 +1,25 @@
+// Copyright (c) 2026 DaKang233.
+// SPDX-License-Identifier: MIT
+
+using FurinaChronicle.App.ViewModels;
+
+namespace FurinaChronicle.App.UI.Gacha;
+
+public partial class AccountItemsView : ContentView
+{
+    public AccountItemsView()
+    {
+        InitializeComponent();
+    }
+
+    private void OnToggleTimesClicked(object? sender, EventArgs e)
+    {
+        if (sender is Button
+            {
+                CommandParameter: GachaItemStatisticsDisplayItem item
+            })
+        {
+            item.IsExpanded = !item.IsExpanded;
+        }
+    }
+}

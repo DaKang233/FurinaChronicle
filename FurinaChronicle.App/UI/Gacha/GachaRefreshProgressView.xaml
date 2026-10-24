@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  Copyright (c) 2026 DaKang233.
+  SPDX-License-Identifier: MIT
+-->
+
+<ContentView
+    x:Class="FurinaChronicle.App.UI.Gacha.GachaRefreshProgressView"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:gacha="clr-namespace:FurinaChronicle.App.UI.Gacha"
+    xmlns:viewModels="clr-namespace:FurinaChronicle.App.ViewModels"
+    x:DataType="viewModels:GachaPageViewModel">
+
+    <Grid RowDefinitions="Auto,Auto,*" RowSpacing="12">
+        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+            <ActivityIndicator
+                HeightRequest="28"
+                IsRunning="{Binding IsRefreshRunning}"
+                VerticalOptions="Center"
+                WidthRequest="28" />
+            <VerticalStackLayout Grid.Column="1" Spacing="2">
+                <Label
+                    FontAttributes="Bold"
+                    FontSize="20"
+                    Text="{Binding RefreshProgressTitle}" />
+                <Label
+                    FontAttributes="Bold"
+                    FontSize="14"
+                    Text="{Binding RefreshCurrentPool}" />
+                <Label
+                    FontSize="12"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding RefreshProgressDetail}" />
+            </VerticalStackLayout>
+        </Grid>
+
+        <Label
+            Grid.Row="1"
+            FontAttributes="Bold"
+            FontSize="14"
+            Text="本次刷新获取到的物品" />
+
+        <CollectionView
+            Grid.Row="2"
+            EmptyView="尚未获取到新记录…"
+            ItemsSource="{Binding RefreshItems}"
+            VerticalScrollBarVisibility="Always">
+            <CollectionView.ItemsLayout>
+                <GridItemsLayout
+                    HorizontalItemSpacing="8"
+                    Orientation="Vertical"
+                    Span="{OnPlatform Android=4, WinUI=6, Default=4}"
+                    VerticalItemSpacing="10" />
+            </CollectionView.ItemsLayout>
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="viewModels:GachaRefreshItemDisplayItem">
+                    <gacha:GachaItemIconView
+                        CardWidth="80"
+                        CountText="{Binding CountText}"
+                        DetailText=""
+                        IconSize="60"
+                        IconSource="{Binding IconSource}"
+                        ItemName="{Binding ItemName}"
+                        RankType="{Binding RankType}"
+                        ShowDetailText="False"
+                        ShowItemName="True" />
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+    </Grid>
+</ContentView>

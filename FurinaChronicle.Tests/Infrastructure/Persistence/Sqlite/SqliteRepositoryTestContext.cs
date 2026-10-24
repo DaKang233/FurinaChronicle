@@ -1,19 +1,26 @@
+// Copyright (c) 2026 DaKang233.
+// SPDX-License-Identifier: MIT
+
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Infrastructure.Persistence.Sqlite;
+using SQLite;
 
 namespace FurinaChronicle.Tests.Infrastructure.Persistence.Sqlite;
 
 internal sealed class SqliteRepositoryTestContext : IAsyncDisposable
 {
     private readonly string directory;
+    private readonly string databasePath;
 
     private SqliteRepositoryTestContext(string directory, FurinaDatabase database)
     {
         this.directory = directory;
+        databasePath = Path.Combine(directory, "test.db3");
         Database = database;
         Archives = new SqlitePlayerArchiveRepository(database);
         Accounts = new SqliteGameAccountRepository(database);
-        Wishes = new SqliteWishRecordRepository(database);
+        Gacha = new SqliteGachaRecordRepository(database);
+        AtomicGacha = new SqliteGachaAtomicChangeStore(database);
     }
 
     public FurinaDatabase Database { get; }
@@ -22,7 +29,17 @@ internal sealed class SqliteRepositoryTestContext : IAsyncDisposable
 
     public SqliteGameAccountRepository Accounts { get; }
 
-    public SqliteWishRecordRepository Wishes { get; }
+    public SqliteGachaRecordRepository Gacha { get; }
+
+    public SqliteGachaAtomicChangeStore AtomicGacha { get; }
+
+    public SQLiteConnection OpenRawConnection() =>
+        new(
+            databasePath,
+            SQLiteOpenFlags.ReadWrite |
+            SQLiteOpenFlags.Create |
+            SQLiteOpenFlags.FullMutex,
+            storeDateTimeAsTicks: true);
 
     public static SqliteRepositoryTestContext Create()
     {
@@ -54,14 +71,26 @@ internal sealed class SqliteRepositoryTestContext : IAsyncDisposable
 
     public static GameAccount CreateAccount(
         Guid archiveId,
-        string uid = "123456789",
+        string uid = "800000001",
         GameServerRegion region = GameServerRegion.Asia,
         string? displayName = "测试账号",
         Guid? id = null,
         bool isPlaceholder = false,
-        DateTimeOffset? updatedAt = null)
+        DateTimeOffset? updatedAt = null,
+        GameRoleIdentity? roleIdentity = null)
     {
         DateTimeOffset createdAt = new(2026, 7, 16, 10, 0, 0, TimeSpan.Zero);
+        if (roleIdentity is null &&
+            !isPlaceholder &&
+            GenshinGameRoleIdentity.TryCreate(
+                uid,
+                region,
+                out GameRoleNaturalIdentity? naturalIdentity))
+        {
+            roleIdentity = new GameRoleIdentity(
+                GameRoleIdentityId.FromNaturalIdentity(naturalIdentity),
+                naturalIdentity);
+        }
 
         return new GameAccount(
             id ?? Guid.NewGuid(),
@@ -71,7 +100,8 @@ internal sealed class SqliteRepositoryTestContext : IAsyncDisposable
             displayName,
             isPlaceholder,
             createdAt,
-            updatedAt ?? createdAt);
+            updatedAt ?? createdAt,
+            roleIdentity);
     }
 
     public async ValueTask DisposeAsync()

@@ -1,12 +1,19 @@
+// Copyright (c) 2026 DaKang233.
+// SPDX-License-Identifier: MIT
+
 using System.Text;
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.Gacha.Metadata;
-using FurinaChronicle.Core.Wishes;
+using FurinaChronicle.Core.Records;
 using FurinaChronicle.Infrastructure.Gacha.Uigf.V4_2;
 using FurinaChronicle.Infrastructure.Persistence;
+using FurinaChronicle.Tests.Infrastructure.Persistence.Sqlite;
 using FurinaChronicle.Services.Gacha.Abstractions;
+using FurinaChronicle.Services.Gacha;
 using FurinaChronicle.Services.Gacha.Importing;
+using FurinaChronicle.Services.Gacha.Writing;
+using FurinaChronicle.Tests.Services.Gacha;
 using FurinaChronicle.Tests.Infrastructure.Gacha.Uigf.V4_2;
 using FurinaChronicle.Tests.TestDoubles;
 
@@ -19,7 +26,7 @@ public sealed class ImportUigfGachaRecordsTests
     {
         var archives = new InMemoryPlayerArchiveRepository();
         var accounts = new InMemoryGameAccountRepository();
-        var records = new InMemoryWishRecordRepository(Array.Empty<WishRecord>());
+        var records = new InMemoryGachaRecordRepository(Array.Empty<GachaRecord>());
         PlayerArchive archive = ArchiveTestData.Archive();
         await archives.AddAsync(archive);
 
@@ -38,11 +45,11 @@ public sealed class ImportUigfGachaRecordsTests
 
         GameAccount asiaAccount =
             Assert.Single(storedAccounts, account => account.Uid == "800000001");
-        IReadOnlyList<WishRecord> asiaRecords =
+        IReadOnlyList<GachaRecord> asiaRecords =
             await records.GetRecentAsync(asiaAccount.Id, 20);
         Assert.Equal(2, asiaRecords.Count);
 
-        WishRecord enriched = Assert.Single(
+        GachaRecord enriched = Assert.Single(
             asiaRecords,
             record => record.ItemId == "10000089");
         Assert.Equal("Furina", enriched.ItemName);
@@ -50,6 +57,141 @@ public sealed class ImportUigfGachaRecordsTests
         Assert.Equal(5, enriched.RankType);
         Assert.Equal("301", enriched.GachaType);
         Assert.Equal("301", enriched.UigfGachaType);
+        Assert.All(
+            asiaRecords,
+            record =>
+            {
+                Assert.Equal(
+                    DataOrigin.StandardImport,
+                    record.Provenance.Origin);
+                Assert.NotNull(record.Provenance.Timestamps.ImportedAt);
+                Assert.Null(record.Provenance.Timestamps.FetchedAt);
+                Assert.NotNull(record.Provenance.AcquisitionBatchId);
+            });
+        Assert.Single(
+            asiaRecords
+                .Select(record => record.Provenance.AcquisitionBatchId)
+                .Distinct());
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_UigfImport_PersistsProvenanceThroughSqliteRepository()
+    {
+        await using var context = SqliteRepositoryTestContext.Create();
+        PlayerArchive archive = SqliteRepositoryTestContext.CreateArchive();
+        await context.Archives.AddAsync(archive);
+        var service = new ImportUigfGachaRecords(
+            new UigfV42GachaReader(),
+            new TestMetadataProvider(),
+            context.Archives,
+            context.Accounts,
+            new CommitGachaRecords(context.AtomicGacha));
+
+        GachaImportResult result = await ExecuteAsync(
+            service,
+            TestUigfJson.Create(TestUigfJson.Record("1", "10000089")),
+            archive.Id);
+
+        Assert.Equal(1, result.ImportedCount);
+        GameAccount account = Assert.Single(
+            await context.Accounts.GetByArchiveIdAsync(archive.Id));
+        GachaRecord stored = Assert.Single(
+            await context.Gacha.GetRecentAsync(account.Id, 10));
+        Assert.Equal(DataOrigin.StandardImport, stored.Provenance.Origin);
+        Assert.NotNull(stored.Provenance.Timestamps.ImportedAt);
+        Assert.Null(stored.Provenance.Timestamps.FetchedAt);
+        Assert.NotNull(stored.Provenance.AcquisitionBatchId);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_FullMode_ReplacesMatchingFactWithoutDeletingOthers()
+    {
+        var archives = new InMemoryPlayerArchiveRepository();
+        var accounts = new InMemoryGameAccountRepository();
+        var records = new InMemoryGachaRecordRepository([]);
+        PlayerArchive archive = ArchiveTestData.Archive();
+        await archives.AddAsync(archive);
+        ImportUigfGachaRecords service = CreateService(
+            archives,
+            accounts,
+            records);
+
+        await ExecuteAsync(
+            service,
+            TestUigfJson.Create(
+                TestUigfJson.Record("1", "10000089"),
+                TestUigfJson.Record("2", "10000089")),
+            archive.Id);
+        await using var replacement = new MemoryStream(Encoding.UTF8.GetBytes(
+            TestUigfJson.Create(TestUigfJson.Record("1", "11401"))));
+
+        GachaImportResult result = await service.ExecuteAsync(
+            replacement,
+            archive.Id,
+            targetGameAccountId: null,
+            mode: GachaImportMode.Full);
+
+        Assert.Equal(0, result.ImportedCount);
+        Assert.Equal(1, result.UpdatedCount);
+        GameAccount account = Assert.Single(
+            await accounts.GetByArchiveIdAsync(archive.Id));
+        IReadOnlyList<GachaRecord> stored =
+            await records.GetRecentAsync(account.Id, 10);
+        Assert.Equal(2, stored.Count);
+        Assert.Equal(
+            "Favonius Sword",
+            Assert.Single(stored, record => record.ExternalRecordId == "1")
+                .ItemName);
+        Assert.Contains(stored, record => record.ExternalRecordId == "2");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ProposedArchiveCreatesParentsAndFactsAtomically()
+    {
+        await using var context = SqliteRepositoryTestContext.Create();
+        PlayerArchive archive =
+            SqliteRepositoryTestContext.CreateArchive("导入新档案");
+        var service = new ImportUigfGachaRecords(
+            new UigfV42GachaReader(),
+            new TestMetadataProvider(),
+            context.Archives,
+            context.Accounts,
+            new CommitGachaRecords(context.AtomicGacha));
+        await using var stream = new MemoryStream(Encoding.UTF8.GetBytes(
+            TestUigfJson.Create(
+                TestUigfJson.Record("1", "10000089"))));
+
+        GachaImportResult result = await service.ExecuteAsync(stream, archive);
+
+        Assert.Equal(1, result.ImportedCount);
+        Assert.Equal(1, result.CreatedAccountCount);
+        Assert.Equal(archive, await context.Archives.GetByIdAsync(archive.Id));
+        GameAccount account = Assert.Single(
+            await context.Accounts.GetByArchiveIdAsync(archive.Id));
+        Assert.Single(await context.Gacha.GetRecentAsync(account.Id, 10));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ProposedArchiveWithNoValidFactsLeavesNoParents()
+    {
+        await using var context = SqliteRepositoryTestContext.Create();
+        PlayerArchive archive =
+            SqliteRepositoryTestContext.CreateArchive("不应创建的档案");
+        var service = new ImportUigfGachaRecords(
+            new UigfV42GachaReader(),
+            new TestMetadataProvider(),
+            context.Archives,
+            context.Accounts,
+            new CommitGachaRecords(context.AtomicGacha));
+        string invalid = TestUigfJson.Create(
+            """{"uigf_gacha_type":"301","gacha_type":"301","item_id":"10000089","time":"2026-08-24 12:31:00","id":""}""");
+        await using var stream = new MemoryStream(Encoding.UTF8.GetBytes(invalid));
+
+        GachaImportResult result = await service.ExecuteAsync(stream, archive);
+
+        Assert.Equal(0, result.ImportedCount);
+        Assert.Null(await context.Archives.GetByIdAsync(archive.Id));
+        Assert.Empty(await context.Accounts.GetByArchiveIdAsync(archive.Id));
     }
 
     [Fact]
@@ -57,7 +199,7 @@ public sealed class ImportUigfGachaRecordsTests
     {
         var archives = new InMemoryPlayerArchiveRepository();
         var accounts = new InMemoryGameAccountRepository();
-        var records = new InMemoryWishRecordRepository(Array.Empty<WishRecord>());
+        var records = new InMemoryGachaRecordRepository(Array.Empty<GachaRecord>());
         PlayerArchive archive = ArchiveTestData.Archive();
         GameAccount target = ArchiveTestData.Account(
             archive.Id,
@@ -86,7 +228,7 @@ public sealed class ImportUigfGachaRecordsTests
     {
         var archives = new InMemoryPlayerArchiveRepository();
         var accounts = new InMemoryGameAccountRepository();
-        var records = new InMemoryWishRecordRepository(Array.Empty<WishRecord>());
+        var records = new InMemoryGachaRecordRepository(Array.Empty<GachaRecord>());
         PlayerArchive archive = ArchiveTestData.Archive();
         await archives.AddAsync(archive);
 
@@ -110,7 +252,7 @@ public sealed class ImportUigfGachaRecordsTests
     {
         var archives = new InMemoryPlayerArchiveRepository();
         var accounts = new InMemoryGameAccountRepository();
-        var records = new InMemoryWishRecordRepository(Array.Empty<WishRecord>());
+        var records = new InMemoryGachaRecordRepository(Array.Empty<GachaRecord>());
         PlayerArchive archive = ArchiveTestData.Archive();
         GameAccount target = ArchiveTestData.Account(
             archive.Id,
@@ -138,7 +280,7 @@ public sealed class ImportUigfGachaRecordsTests
     {
         var archives = new InMemoryPlayerArchiveRepository();
         var accounts = new InMemoryGameAccountRepository();
-        var records = new InMemoryWishRecordRepository(Array.Empty<WishRecord>());
+        var records = new InMemoryGachaRecordRepository(Array.Empty<GachaRecord>());
         PlayerArchive archive = ArchiveTestData.Archive();
         await archives.AddAsync(archive);
 
@@ -158,7 +300,7 @@ public sealed class ImportUigfGachaRecordsTests
     {
         var archives = new InMemoryPlayerArchiveRepository();
         var accounts = new InMemoryGameAccountRepository();
-        var records = new InMemoryWishRecordRepository(Array.Empty<WishRecord>());
+        var records = new InMemoryGachaRecordRepository(Array.Empty<GachaRecord>());
         var archive = ArchiveTestData.Archive();
         await archives.AddAsync(archive);
         var service = CreateService(archives, accounts, records);
@@ -186,7 +328,7 @@ public sealed class ImportUigfGachaRecordsTests
     {
         var archives = new InMemoryPlayerArchiveRepository();
         var accounts = new InMemoryGameAccountRepository();
-        var records = new InMemoryWishRecordRepository(Array.Empty<WishRecord>());
+        var records = new InMemoryGachaRecordRepository(Array.Empty<GachaRecord>());
         var archive = ArchiveTestData.Archive();
         await archives.AddAsync(archive);
         var service = CreateService(archives, accounts, records);
@@ -214,7 +356,7 @@ public sealed class ImportUigfGachaRecordsTests
     {
         var archives = new InMemoryPlayerArchiveRepository();
         var accounts = new InMemoryGameAccountRepository();
-        var records = new InMemoryWishRecordRepository(Array.Empty<WishRecord>());
+        var records = new InMemoryGachaRecordRepository(Array.Empty<GachaRecord>());
         var archive = ArchiveTestData.Archive();
         await archives.AddAsync(archive);
         var service = CreateService(archives, accounts, records);
@@ -238,24 +380,29 @@ public sealed class ImportUigfGachaRecordsTests
     private static ImportUigfGachaRecords CreateService(
         InMemoryPlayerArchiveRepository archives,
         InMemoryGameAccountRepository accounts,
-        InMemoryWishRecordRepository records)
+        InMemoryGachaRecordRepository records)
     {
         return new ImportUigfGachaRecords(
             new UigfV42GachaReader(),
             new TestMetadataProvider(),
             archives,
             accounts,
-            records);
+            new RepositoryGachaCommitter(records, accounts));
     }
 
     private static async Task<GachaImportResult> ExecuteAsync(
         ImportUigfGachaRecords service,
         string json,
         Guid archiveId,
-        Guid? accountId = null)
+        Guid? accountId = null,
+        GachaImportMode mode = GachaImportMode.Incremental)
     {
         await using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
-        return await service.ExecuteAsync(stream, archiveId, accountId);
+        return await service.ExecuteAsync(
+            stream,
+            archiveId,
+            accountId,
+            mode);
     }
 
     private sealed class TestMetadataProvider : IGachaItemMetadataProvider

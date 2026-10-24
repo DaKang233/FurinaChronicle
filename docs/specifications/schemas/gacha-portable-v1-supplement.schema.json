@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://www.dakang233.com/schemas/furina-gacha-portable/1/supplement-line.schema.json",
+  "title": "Furina Gacha Portable v1 supplement line",
+  "type": "object",
+  "required": [
+    "account_ref",
+    "external_record_id",
+    "occurred_at_utc_ticks",
+    "occurred_at_offset_minutes",
+    "origin"
+  ],
+  "properties": {
+    "account_ref": { "$ref": "#/$defs/guid" },
+    "external_record_id": { "type": "string", "minLength": 1 },
+    "occurred_at_utc_ticks": { "type": "integer", "minimum": 0 },
+    "occurred_at_offset_minutes": { "type": "integer", "minimum": -840, "maximum": 840 },
+    "origin": {
+      "enum": [
+        "unknown",
+        "official_api",
+        "standard_import",
+        "furina_import",
+        "local_observation",
+        "local_collector",
+        "user_entered",
+        "derived"
+      ]
+    },
+    "fetched_at": { "type": ["string", "null"], "format": "date-time" },
+    "imported_at": { "type": ["string", "null"], "format": "date-time" },
+    "acquisition_batch_id": {
+      "oneOf": [
+        { "$ref": "#/$defs/guid" },
+        { "type": "null" }
+      ]
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "guid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    }
+  }
+}

@@ -1,6 +1,9 @@
+// Copyright (c) 2026 DaKang233.
+// SPDX-License-Identifier: MIT
+
 using System.Globalization;
 using System.Text.Json;
-using FurinaChronicle.Core.Wishes;
+using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Infrastructure.Gacha.Exporting;
 using FurinaChronicle.Services.Gacha.Abstractions;
 using FurinaChronicle.Services.Gacha.Exporting;
@@ -100,7 +103,7 @@ public sealed class UigfV42GachaWriter(
 
         writer.WritePropertyName("list");
         writer.WriteStartArray();
-        foreach (WishRecord record in account.Records)
+        foreach (GachaRecord record in account.Records)
         {
             cancellationToken.ThrowIfCancellationRequested();
             await WriteRecordAsync(
@@ -119,7 +122,7 @@ public sealed class UigfV42GachaWriter(
         Utf8JsonWriter writer,
         GachaExportValueResolver resolver,
         int timezone,
-        WishRecord record,
+        GachaRecord record,
         UigfV42ExportOptions options,
         CancellationToken cancellationToken)
     {
@@ -128,7 +131,9 @@ public sealed class UigfV42GachaWriter(
             record.UigfGachaType,
             record,
             "uigf_gacha_type");
-        string itemId = Required(record.ItemId, record, "item_id");
+        string itemId = await resolver.GetItemIdAsync(
+            record,
+            cancellationToken);
 
         writer.WriteStartObject();
         writer.WriteString("gacha_type", gachaType);
@@ -176,7 +181,7 @@ public sealed class UigfV42GachaWriter(
 
     private static string Required(
         string? value,
-        WishRecord record,
+        GachaRecord record,
         string field)
     {
         return !string.IsNullOrWhiteSpace(value)

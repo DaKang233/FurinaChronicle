@@ -1,4 +1,7 @@
-﻿using System;
+﻿// Copyright (c) 2026 DaKang233.
+// SPDX-License-Identifier: MIT
+
+using System;
 using System.Collections.Generic;
 using System.Text;
 
@@ -11,5 +14,14 @@ namespace FurinaChronicle.Core.Archives
         string? DisplayName, 
         bool IsPlaceholder, 
         DateTimeOffset CreatedAt, 
-        DateTimeOffset UpdatedAt);
+        DateTimeOffset UpdatedAt,
+        GameRoleIdentity? RoleIdentity = null)
+    {
+        public GameRoleIdentityId? GameRoleIdentityId => RoleIdentity?.Id;
+
+        public GameRoleIdentityResolutionState IdentityResolutionState =>
+            RoleIdentity is null
+                ? GameRoleIdentityResolutionState.Unresolved
+                : GameRoleIdentityResolutionState.Resolved;
+    }
 }

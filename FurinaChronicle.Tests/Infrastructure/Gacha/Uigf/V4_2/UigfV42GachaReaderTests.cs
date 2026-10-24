@@ -1,3 +1,6 @@
+// Copyright (c) 2026 DaKang233.
+// SPDX-License-Identifier: MIT
+
 using System.Text;
 using FurinaChronicle.Infrastructure.Gacha.Uigf.V4_2;
 using FurinaChronicle.Services.Gacha.Importing;

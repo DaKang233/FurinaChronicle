@@ -1,4 +1,10 @@
+<!--
+  Copyright (c) 2026 DaKang233.
+  SPDX-License-Identifier: MIT
+-->
+
 <Project Sdk="Microsoft.NET.Sdk">
+	<Import Project="..\Version.props" />
 
 	<PropertyGroup>
 		<TargetFrameworks>net10.0-android</TargetFrameworks>
@@ -10,6 +16,8 @@
 		<SingleProject>true</SingleProject>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
+		<Phase8BValidationMode Condition="'$(Phase8BValidationMode)' == ''">false</Phase8BValidationMode>
+		<DefineConstants Condition="'$(Phase8BValidationMode)' == 'true'">$(DefineConstants);PHASE8B_VALIDATION</DefineConstants>
 
 		<!-- Enable XAML source generation for faster build times and improved performance.
 		     This generates C# code from XAML at compile time instead of runtime inflation.
@@ -20,14 +28,11 @@
 		<MauiXamlInflator>SourceGen</MauiXamlInflator>
 
 		<!-- Display name -->
-		<ApplicationTitle>FurinaChronicle.App</ApplicationTitle>
+		<ApplicationTitle Condition="'$(Phase8BValidationMode)' != 'true'">FurinaChronicle.App</ApplicationTitle>
+		<ApplicationTitle Condition="'$(Phase8BValidationMode)' == 'true'">FurinaChronicle 8B.7 Validation</ApplicationTitle>
 
 		<!-- App Identifier -->
 		<ApplicationId>com.companyname.furinachronicle.app</ApplicationId>
-
-		<!-- Versions -->
-		<ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
-		<ApplicationVersion>1</ApplicationVersion>
 
 		<!-- To develop, package, and publish an app to the Microsoft Store, see: https://aka.ms/MauiTemplateUnpackaged -->
 		<WindowsPackageType>None</WindowsPackageType>
@@ -69,9 +74,32 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <MauiXaml Update="UI\StartupPage.xaml">
+	  <Compile Update="Properties\Resources.Designer.cs">
+	    <DesignTime>True</DesignTime>
+	    <AutoGen>True</AutoGen>
+	    <DependentUpon>Resources.resx</DependentUpon>
+	  </Compile>
+	  <Compile Update="UI\Pages\GachaPage.xaml.cs">
+	    <DependentUpon>GachaPage.xaml</DependentUpon>
+	  </Compile>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <EmbeddedResource Update="Properties\Resources.resx">
+	    <Generator>ResXFileCodeGenerator</Generator>
+	    <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+	  </EmbeddedResource>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <MauiXaml Update="UI\Pages\ArchivePage.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </MauiXaml>
+	  <MauiXaml Update="UI\Pages\StartupPage.xaml">
 	    <Generator>MSBuild:Compile</Generator>
 	  </MauiXaml>
 	</ItemGroup>
+
+	<Import Project="..\build\FurinaVersion.targets" />
 
 </Project>

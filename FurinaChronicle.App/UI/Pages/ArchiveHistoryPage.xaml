@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  Copyright (c) 2026 DaKang233.
+  SPDX-License-Identifier: MIT
+-->
+<ContentPage
+    x:Class="FurinaChronicle.App.UI.Pages.ArchiveHistoryPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:controls="clr-namespace:FurinaChronicle.App.UI.Controls"
+    xmlns:viewModels="clr-namespace:FurinaChronicle.App.ViewModels"
+    x:DataType="viewModels:ArchiveHistoryPageViewModel"
+    Title="档案修改历史">
+
+    <Shell.TitleView>
+        <controls:PassportAvatarButton
+            IsVisible="{OnPlatform Android=True, WinUI=False}" />
+    </Shell.TitleView>
+
+    <Grid Padding="16" RowDefinitions="Auto,Auto,Auto,*,Auto,*" RowSpacing="10">
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <VerticalStackLayout Spacing="2">
+                <Label FontAttributes="Bold" FontSize="24" Text="档案修改历史" />
+                <Label
+                    FontSize="12"
+                    Opacity="0.7"
+                    Text="查看档案中的修改操作与事实修订，并管理有限撤销。" />
+            </VerticalStackLayout>
+            <Button
+                Grid.Column="1"
+                Command="{Binding ReloadCommand}"
+                IsEnabled="{Binding IsNotBusy}"
+                Text="重新加载" />
+        </Grid>
+
+        <Border Grid.Row="1" Padding="12">
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8">
+                <Picker
+                    Title="选择档案"
+                    IsEnabled="{Binding IsNotBusy}"
+                    ItemsSource="{Binding Archives}"
+                    ItemDisplayBinding="{Binding Name}"
+                    SelectedIndexChanged="OnArchiveSelectionChanged"
+                    SelectedItem="{Binding SelectedArchive, Mode=TwoWay}" />
+                <Entry
+                    Grid.Column="1"
+                    Keyboard="Numeric"
+                    MaximumWidthRequest="80"
+                    Text="{Binding UndoLimit}"
+                    WidthRequest="70" />
+                <Button
+                    Grid.Column="2"
+                    Clicked="OnSetUndoLimitClicked"
+                    IsEnabled="{Binding IsNotBusy}"
+                    Text="保存保留次数" />
+                <Button
+                    Grid.Column="3"
+                    Clicked="OnUndoLatestClicked"
+                    IsEnabled="{Binding IsNotBusy}"
+                    Text="撤销最新可撤销操作" />
+            </Grid>
+        </Border>
+
+        <VerticalStackLayout Grid.Row="2" Spacing="2">
+            <Label FontSize="11" Text="{Binding StatusMessage}" />
+            <Label FontSize="10" Text="保留次数范围 0～1000；0 表示关闭未来操作的撤销材料，不删除修订历史。" />
+            <Label FontSize="11" TextColor="Red" Text="{Binding ErrorMessage}" />
+        </VerticalStackLayout>
+
+        <Border Grid.Row="3" Padding="8">
+            <Grid RowDefinitions="Auto,*" RowSpacing="6">
+                <Label FontAttributes="Bold" Text="操作历史" />
+                <CollectionView
+                    Grid.Row="1"
+                    ItemsSource="{Binding OperationHistory}"
+                    SelectedItem="{Binding SelectedOperation, Mode=TwoWay}"
+                    SelectionMode="Single"
+                    VerticalScrollBarVisibility="Always">
+                    <CollectionView.EmptyView>
+                        <Label Padding="12" HorizontalTextAlignment="Center" Text="没有可显示的修改操作。" />
+                    </CollectionView.EmptyView>
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate x:DataType="viewModels:GachaOperationHistoryDisplayItem">
+                            <Grid Padding="8" ColumnDefinitions="90,150,*,70,90" ColumnSpacing="5">
+                                <Label FontAttributes="Bold" Text="{Binding Operation}" />
+                                <Label Grid.Column="1" FontSize="10" Text="{Binding CommittedAt}" />
+                                <Label Grid.Column="2" FontSize="10" LineBreakMode="TailTruncation" Text="{Binding Summary}" />
+                                <Label Grid.Column="3" FontSize="10" Text="{Binding Affected}" />
+                                <Label Grid.Column="4" FontSize="10" Text="{Binding UndoState}" />
+                            </Grid>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                </CollectionView>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="4" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <VerticalStackLayout Spacing="1">
+                <Label FontAttributes="Bold" Text="操作修订" />
+                <Label FontSize="10" Text="{Binding RevisionStatus}" />
+            </VerticalStackLayout>
+            <Button
+                Grid.Column="1"
+                Clicked="OnLoadRevisionsClicked"
+                IsEnabled="{Binding IsNotBusy}"
+                Text="查看所选操作修订" />
+        </Grid>
+
+        <Border Grid.Row="5" Padding="8">
+            <CollectionView
+                ItemsSource="{Binding SelectedOperationRevisions}"
+                VerticalScrollBarVisibility="Always">
+                <CollectionView.EmptyView>
+                    <Label Padding="12" HorizontalTextAlignment="Center" Text="尚未加载修订内容。" />
+                </CollectionView.EmptyView>
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="viewModels:GachaRevisionDisplayItem">
+                        <VerticalStackLayout Padding="8" Spacing="2">
+                            <HorizontalStackLayout Spacing="4">
+                                <Label FontAttributes="Bold" Text="{Binding Change}" />
+                                <Label FontSize="10" Text="{Binding Record, StringFormat='记录 {0}'}" VerticalTextAlignment="Center" />
+                            </HorizontalStackLayout>
+                            <Label FontSize="10" Text="{Binding Before, StringFormat='之前：{0}'}" />
+                            <Label FontSize="10" Text="{Binding After, StringFormat='之后：{0}'}" />
+                        </VerticalStackLayout>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+        </Border>
+    </Grid>
+</ContentPage>

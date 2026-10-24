@@ -1,5 +1,9 @@
+// Copyright (c) 2026 DaKang233.
+// SPDX-License-Identifier: MIT
+
 using FurinaChronicle.Core.Archives;
-using FurinaChronicle.Core.Wishes;
+using FurinaChronicle.Core.Gacha;
+using FurinaChronicle.Core.Records;
 
 namespace FurinaChronicle.Services.Gacha.Refreshing;
 
@@ -10,19 +14,15 @@ public enum GachaRefreshSource
     ManualUrl = 3
 }
 
-public enum GachaRefreshMode
-{
-    Incremental = 0,
-    Full = 1
-}
-
 public sealed record GachaRefreshRequest(
     GameAccount GameAccount,
     GachaRefreshSource Source,
-    GachaRefreshMode Mode = GachaRefreshMode.Incremental,
+    GachaImportMode Mode = GachaImportMode.Incremental,
     Guid? PassportAccountId = null,
     string? ManualUrl = null,
-    string? GameInstallationPath = null);
+    string? GameInstallationPath = null,
+    PlayerArchive? ArchiveToCreate = null,
+    GameAccount? AccountToCreate = null);
 
 public sealed record GachaRefreshDiscoveryRequest(
     GachaRefreshSource Source,
@@ -37,9 +37,11 @@ public sealed record GachaRefreshIdentity(
 public sealed record GachaRefreshResult(
     int FetchedCount,
     int InsertedCount,
+    int UpdatedCount,
     int DuplicateCount,
     int PageCount,
-    int ReachedLocalBoundaryCount);
+    int ReachedLocalBoundaryCount,
+    int SuppressedCount = 0);
 
 public sealed record GachaRemoteRecord(
     string Uid,
@@ -52,9 +54,11 @@ public sealed record GachaRemoteRecord(
     DateTimeOffset Time,
     int Count = 1)
 {
-    public WishRecord ToDomain(Guid gameAccountId)
+    public GachaRecord ToDomain(
+        Guid gameAccountId,
+        RecordProvenance? provenance = null)
     {
-        return new WishRecord(
+        return new GachaRecord(
             gameAccountId,
             ExternalRecordId,
             ItemName,
@@ -65,7 +69,8 @@ public sealed record GachaRemoteRecord(
             ItemType = ItemType,
             GachaType = GachaType,
             UigfGachaType = GachaType == "400" ? "301" : GachaType,
-            Count = Count
+            Count = Count,
+            Provenance = provenance ?? RecordProvenance.Unknown
         };
     }
 }
@@ -74,7 +79,15 @@ public sealed record GachaRemotePage(
     IReadOnlyList<GachaRemoteRecord> Records,
     string? NextEndId);
 
+public enum GachaRefreshProgressStage
+{
+    RequestingPage = 0,
+    PageReceived = 1
+}
+
 public sealed record GachaRefreshProgress(
     string GachaType,
     int Page,
-    int FetchedCount);
+    int FetchedCount,
+    GachaRefreshProgressStage Stage,
+    IReadOnlyList<GachaRemoteRecord> Records);

@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  Copyright (c) 2026 DaKang233.
+  SPDX-License-Identifier: MIT
+-->
+
+<!--
+  Copyright (c) 2026 DaKang233.
+  SPDX-License-Identifier: MIT
+-->
+
+<ContentView
+    x:Class="FurinaChronicle.App.UI.Gacha.ArchiveOverviewView"
+    x:Name="OverviewRoot"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:ui="clr-namespace:FurinaChronicle.App.UI.Gacha"
+    xmlns:viewModels="clr-namespace:FurinaChronicle.App.ViewModels"
+    SizeChanged="OnOverviewSizeChanged"
+    x:DataType="viewModels:GachaAnalysisViewModel">
+
+    <Grid RowDefinitions="Auto,*" RowSpacing="8">
+        <Label
+            x:Name="OverviewHeader"
+            FontAttributes="Bold"
+            FontSize="20"
+            SizeChanged="OnOverviewSizeChanged"
+            Text="档案数据总览" />
+
+        <CollectionView
+            x:Name="OverviewCollection"
+            Grid.Row="1"
+            ItemsSource="{Binding PoolCards}"
+            SelectionMode="None">
+            <CollectionView.ItemsLayout>
+                <LinearItemsLayout
+                    ItemSpacing="10"
+                    Orientation="Vertical" />
+            </CollectionView.ItemsLayout>
+            <CollectionView.EmptyView>
+                <Label Padding="16" HorizontalTextAlignment="Center" Text="当前档案范围暂无可统计的抽卡记录。" />
+            </CollectionView.EmptyView>
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="viewModels:GachaPoolStatisticsDisplayItem">
+                    <Border
+                        Padding="14"
+                        HeightRequest="{Binding Source={x:Reference OverviewRoot}, Path=OverviewCardHeight}"
+                        VerticalOptions="Fill"
+                        WidthRequest="{OnPlatform WinUI=380, Default=-1}">
+                        <Grid RowDefinitions="Auto,Auto,*" RowSpacing="7">
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                <Label FontAttributes="Bold" FontSize="19" Text="{Binding PoolName}" />
+                                <Button
+                                    Grid.Column="1"
+                                    Command="{Binding ToggleStatisticsCommand}"
+                                    FontSize="11"
+                                    Padding="8,4"
+                                    Text="{Binding StatisticsToggleText}" />
+                            </Grid>
+
+                            <VerticalStackLayout
+                                Grid.Row="1"
+                                IsVisible="{Binding IsStatisticsExpanded}"
+                                Spacing="7">
+                                <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="5">
+                                    <Label Text="{Binding Total}" />
+                                    <Label Grid.Column="1" Text="{Binding AverageFiveStar}" />
+                                    <Label Grid.Row="1" Text="{Binding Extremes}" />
+                                    <Label Grid.Row="1" Grid.Column="1" Text="{Binding CurrentPity}" />
+                                    <Label Grid.Row="2" Grid.ColumnSpan="2" FontSize="12" Text="{Binding RankDistribution}" />
+                                </Grid>
+                                <Label FontSize="12" Text="{Binding Period}" />
+                                <Label FontSize="12" Text="{Binding AverageUp}" TextColor="{AppThemeBinding Light=#666666, Dark=#BBBBBB}" />
+                            </VerticalStackLayout>
+
+                            <ScrollView Grid.Row="2" Orientation="Vertical">
+                                <VerticalStackLayout Spacing="7">
+                                    <FlexLayout
+                                        AlignItems="Start"
+                                        BindableLayout.ItemsSource="{Binding VisibleArchiveFiveStarItems}"
+                                        Direction="Row"
+                                        JustifyContent="Start"
+                                        Wrap="Wrap">
+                                        <BindableLayout.ItemTemplate>
+                                            <DataTemplate x:DataType="viewModels:GachaPoolItemCountDisplayItem">
+                                                <ui:GachaItemIconView
+                                                    CardWidth="76"
+                                                    CountText="{Binding Count}"
+                                                    IconSize="56"
+                                                    IconSource="{Binding IconUrl}"
+                                                    ItemName="{Binding ItemName}"
+                                                    Margin="3"
+                                                    RankType="{Binding RankType}"
+                                                    ShowDetailText="False" />
+                                            </DataTemplate>
+                                        </BindableLayout.ItemTemplate>
+                                    </FlexLayout>
+                                    <ActivityIndicator
+                                        IsRunning="{Binding IsLoadingArchiveFiveStars}"
+                                        IsVisible="{Binding IsLoadingArchiveFiveStars}" />
+                                    <Button
+                                        Command="{Binding LoadMoreArchiveFiveStarsCommand}"
+                                        IsEnabled="{Binding IsNotLoadingArchiveFiveStars}"
+                                        IsVisible="{Binding CanLoadMoreArchiveFiveStars}"
+                                        Text="{Binding LoadMoreArchiveFiveStarsText}" />
+                                    <Label
+                                        FontSize="11"
+                                        IsVisible="{Binding HasArchiveFiveStarLoadError}"
+                                        Text="{Binding ArchiveFiveStarLoadError}"
+                                        TextColor="Red" />
+                                </VerticalStackLayout>
+                            </ScrollView>
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+    </Grid>
+</ContentView>

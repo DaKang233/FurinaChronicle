@@ -1,4 +1,7 @@
-﻿using FurinaChronicle.Core.Archives;
+﻿// Copyright (c) 2026 DaKang233.
+// SPDX-License-Identifier: MIT
+
+using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Services.Abstractions;
 using System;
 using System.Collections.Generic;
@@ -64,29 +67,6 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
 			{
 				cancellationToken.ThrowIfCancellationRequested();
 				connection.Insert(PlayerArchiveRow.FromDomain(playerArchive));
-			});
-		}
-
-		public async Task DeleteAsync(Guid archiveId, CancellationToken cancellationToken = default)
-		{
-			if (archiveId == Guid.Empty)
-			{
-				throw new ArgumentException("存档 ID 不能为空。", nameof(archiveId));
-			}
-			await database.InitializeAsync(cancellationToken);
-			cancellationToken.ThrowIfCancellationRequested();
-			await database.Connection.RunInTransactionAsync((connection) =>
-			{
-				cancellationToken.ThrowIfCancellationRequested();
-				int affected = connection.Execute($"""
-					DELETE FROM {PlayerArchiveRow.TableName}
-					WHERE Id = ?
-					""", archiveId.ToString("D"));
-				if (affected == 0)
-				{
-					throw new KeyNotFoundException("要删除的玩家档案不存在。");
-				}
-				else Console.WriteLine($"Deleted {affected} rows from PlayerArchiveRow.");
 			});
 		}
 

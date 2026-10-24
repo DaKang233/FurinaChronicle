@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  Copyright (c) 2026 DaKang233.
+  SPDX-License-Identifier: MIT
+-->
+
+<ContentView
+    x:Class="FurinaChronicle.App.UI.Gacha.AccountItemsView"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:gacha="clr-namespace:FurinaChronicle.App.UI.Gacha"
+    xmlns:viewModels="clr-namespace:FurinaChronicle.App.ViewModels"
+    x:DataType="viewModels:GachaAnalysisViewModel">
+
+    <Grid RowDefinitions="Auto,*" RowSpacing="8">
+        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+            <Label FontAttributes="Bold" FontSize="20" Text="账号物品" />
+            <Button Grid.Column="1" Command="{Binding UseItemGridCommand}" Text="图标网格" />
+            <Button Grid.Column="2" Command="{Binding UseItemListCommand}" Text="列表与时间" />
+        </Grid>
+
+        <CollectionView
+            Grid.Row="1"
+            IsVisible="{Binding IsItemGridMode}"
+            ItemsSource="{Binding ItemGridRows}"
+            SelectionMode="None">
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="viewModels:GachaItemGridDisplayRow">
+                    <Grid>
+                        <Label
+                            Margin="0,8,0,4"
+                            FontAttributes="Bold"
+                            FontSize="17"
+                            IsVisible="{Binding IsHeader}"
+                            Text="{Binding GroupName}" />
+                        <FlexLayout
+                            AlignItems="Start"
+                            BindableLayout.ItemsSource="{Binding Items}"
+                            Direction="Row"
+                            IsVisible="{Binding IsItemRow}"
+                            JustifyContent="Start"
+                            Wrap="Wrap">
+                            <BindableLayout.ItemTemplate>
+                                <DataTemplate x:DataType="viewModels:GachaItemStatisticsDisplayItem">
+                                    <gacha:GachaItemIconView
+                                        CardWidth="90"
+                                        CountText="{Binding Count}"
+                                        IconSize="90"
+                                        IconSource="{Binding IconUrl}"
+                                        ItemName="{Binding ItemName}"
+                                        Margin="4"
+                                        RankType="{Binding RankType}" />
+                                </DataTemplate>
+                            </BindableLayout.ItemTemplate>
+                        </FlexLayout>
+                    </Grid>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+
+        <CollectionView Grid.Row="1" IsVisible="{Binding IsItemListMode}" ItemsSource="{Binding ItemStatistics}">
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="viewModels:GachaItemStatisticsDisplayItem">
+                    <Border Margin="0,0,0,8" Padding="10">
+                        <Grid ColumnDefinitions="68,*" RowDefinitions="Auto,Auto" ColumnSpacing="10">
+                            <gacha:GachaItemIconView
+                                Grid.RowSpan="2"
+                                CardWidth="64"
+                                CountText="{Binding Count}"
+                                IconSize="56"
+                                IconSource="{Binding IconUrl}"
+                                ItemName="{Binding ItemName}"
+                                RankType="{Binding RankType}"
+                                ShowDetailText="False"
+                                ShowItemName="False" />
+                            <VerticalStackLayout Grid.Column="1">
+                                <Label FontAttributes="Bold" Text="{Binding ItemName}" />
+                                <Label FontSize="11" Text="{Binding Rank}" />
+                            </VerticalStackLayout>
+                            <VerticalStackLayout Grid.Row="1" Grid.Column="1">
+                                <Button
+                                    Clicked="OnToggleTimesClicked"
+                                    CommandParameter="{Binding .}"
+                                    IsVisible="{Binding CanExpandTimes}"
+                                    Text="展开/折叠四星获取时间" />
+                                <Label FontSize="11" IsVisible="{Binding IsTimesVisible}" Text="{Binding Times}" />
+                            </VerticalStackLayout>
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+    </Grid>
+</ContentView>

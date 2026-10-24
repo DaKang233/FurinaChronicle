@@ -1,0 +1,362 @@
+// Copyright (c) 2026 DaKang233.
+// SPDX-License-Identifier: MIT
+
+using FurinaChronicle.Core.Gacha;
+using FurinaChronicle.Core.History;
+using FurinaChronicle.Core.Records;
+using FurinaChronicle.Core.Archives;
+using FurinaChronicle.Services.History;
+
+namespace FurinaChronicle.Services.Gacha.History;
+
+public sealed record GachaFactState(
+    GachaRecord Record,
+    FactVersion Version,
+    Guid ArchiveId);
+
+public sealed record GachaFactMutation(
+    GachaFactReference Reference,
+    GachaRecord? ProposedRecord,
+    FactVersion? ExpectedVersion = null)
+{
+    public bool IsDelete => ProposedRecord is null;
+}
+
+public sealed class GachaAtomicChangeRequest
+{
+    public GachaAtomicChangeRequest(
+        OperationId operationId,
+        DataChangeOperationKind operationKind,
+        DataOrigin origin,
+        string summary,
+        DateTimeOffset startedAt,
+        DateTimeOffset committedAt,
+        IEnumerable<GachaFactMutation> mutations,
+        bool captureUndo = true,
+        Guid? undoOfChangeSetId = null,
+        Guid? cleanupConfirmationId = null,
+        IEnumerable<TombstoneReintroductionConfirmation>?
+            reintroductionConfirmations = null,
+        PlayerArchive? archiveToCreate = null,
+        IEnumerable<GameAccount>? accountsToCreate = null)
+    {
+        if (!Enum.IsDefined(operationKind))
+        {
+            throw new ArgumentOutOfRangeException(nameof(operationKind));
+        }
+        if (!Enum.IsDefined(origin))
+        {
+            throw new ArgumentOutOfRangeException(nameof(origin));
+        }
+        ArgumentException.ThrowIfNullOrWhiteSpace(summary);
+        if (committedAt < startedAt)
+        {
+            throw new ArgumentException(
+                "Commit time cannot be earlier than start time.",
+                nameof(committedAt));
+        }
+
+        GachaFactMutation[] normalized = mutations.ToArray();
+        if (normalized.Length == 0)
+        {
+            throw new ArgumentException(
+                "At least one Gacha mutation is required.",
+                nameof(mutations));
+        }
+        if (normalized.Select(mutation => mutation.Reference)
+            .Distinct()
+            .Count() != normalized.Length)
+        {
+            throw new ArgumentException(
+                "A request cannot mutate the same Gacha fact twice.",
+                nameof(mutations));
+        }
+        foreach (GachaFactMutation mutation in normalized)
+        {
+            if (mutation.ProposedRecord is not null &&
+                new GachaFactReference(
+                    mutation.ProposedRecord.GameAccountId,
+                    mutation.ProposedRecord.ExternalRecordId) !=
+                mutation.Reference)
+            {
+                throw new ArgumentException(
+                    "A proposed record must match its stable fact reference.",
+                    nameof(mutations));
+            }
+        }
+        GameAccount[] normalizedAccounts = accountsToCreate?.ToArray() ?? [];
+        if (normalizedAccounts.Select(account => account.Id).Distinct().Count() !=
+            normalizedAccounts.Length)
+        {
+            throw new ArgumentException(
+                "A request cannot create the same game account twice.",
+                nameof(accountsToCreate));
+        }
+        if (normalizedAccounts.Any(account =>
+                account.Id == Guid.Empty ||
+                account.PlayerArchiveId == Guid.Empty ||
+                account.RoleIdentity is null))
+        {
+            throw new ArgumentException(
+                "Every proposed Gacha account must have a resolved identity and non-empty IDs.",
+                nameof(accountsToCreate));
+        }
+        if (archiveToCreate is not null &&
+            (archiveToCreate.Id == Guid.Empty ||
+             string.IsNullOrEmpty(archiveToCreate.Name)))
+        {
+            throw new ArgumentException(
+                "A proposed archive must have a non-empty ID and exact name.",
+                nameof(archiveToCreate));
+        }
+        if (archiveToCreate is not null && normalizedAccounts.Length == 0)
+        {
+            throw new ArgumentException(
+                "A proposed archive requires at least one proposed game account.",
+                nameof(accountsToCreate));
+        }
+        if (archiveToCreate is not null &&
+            normalizedAccounts.Any(account =>
+                account.PlayerArchiveId != archiveToCreate.Id))
+        {
+            throw new ArgumentException(
+                "Every proposed account must belong to the proposed archive.",
+                nameof(accountsToCreate));
+        }
+        if ((archiveToCreate is not null || normalizedAccounts.Length > 0) &&
+            captureUndo)
+        {
+            throw new ArgumentException(
+                "Changes that create parent entities cannot be marked undoable in Phase 8B.4.",
+                nameof(captureUndo));
+        }
+        if (operationKind == DataChangeOperationKind.Undo &&
+            undoOfChangeSetId is null)
+        {
+            throw new ArgumentException(
+                "Undo requests must identify the original change set.",
+                nameof(undoOfChangeSetId));
+        }
+        if (operationKind is DataChangeOperationKind.Undo or
+            DataChangeOperationKind.IrreversibleDelete)
+        {
+            throw new ArgumentException(
+                "Undo and irreversible deletion must use their dedicated commands.",
+                nameof(operationKind));
+        }
+
+        OperationId = operationId;
+        OperationKind = operationKind;
+        Origin = origin;
+        Summary = summary;
+        StartedAt = startedAt;
+        CommittedAt = committedAt;
+        Mutations = normalized;
+        CaptureUndo = captureUndo;
+        UndoOfChangeSetId = undoOfChangeSetId;
+        CleanupConfirmationId = cleanupConfirmationId;
+        ReintroductionConfirmations =
+            reintroductionConfirmations?.ToArray() ?? [];
+        ArchiveToCreate = archiveToCreate;
+        AccountsToCreate = normalizedAccounts;
+    }
+
+    public OperationId OperationId { get; }
+
+    public DataChangeOperationKind OperationKind { get; }
+
+    public DataOrigin Origin { get; }
+
+    public string Summary { get; }
+
+    public DateTimeOffset StartedAt { get; }
+
+    public DateTimeOffset CommittedAt { get; }
+
+    public IReadOnlyList<GachaFactMutation> Mutations { get; }
+
+    public bool CaptureUndo { get; }
+
+    public Guid? UndoOfChangeSetId { get; }
+
+    public Guid? CleanupConfirmationId { get; }
+
+    public IReadOnlyList<TombstoneReintroductionConfirmation>
+        ReintroductionConfirmations { get; }
+
+    public PlayerArchive? ArchiveToCreate { get; }
+
+    public IReadOnlyList<GameAccount> AccountsToCreate { get; }
+}
+
+public sealed record GachaAtomicChangeResult(
+    ChangeExecutionStatus Status,
+    Guid? ChangeSetId,
+    int AffectedRecordCount,
+    string? ConflictReason = null,
+    ChangeExecutionStatus? OriginalStatus = null,
+    HistoryCleanupPlan? CleanupPlan = null,
+    TombstoneReintroductionWarning? ReintroductionWarning = null);
+
+public sealed record TombstoneReintroductionConfirmation(
+    string TombstoneKey,
+    long TombstoneVersion,
+    GachaFactReference Reference);
+
+public sealed record TombstoneReintroductionWarning(
+    string TombstoneKey,
+    long TombstoneVersion,
+    GachaFactReference Reference,
+    Guid ArchiveId);
+
+public sealed class GachaIrreversibleDeleteRequest
+{
+    public GachaIrreversibleDeleteRequest(
+        OperationId operationId,
+        GachaFactReference reference,
+        FactVersion expectedVersion,
+        DateTimeOffset startedAt,
+        DateTimeOffset committedAt,
+        string summary = "Irreversibly delete local Gacha fact")
+    {
+        if (committedAt < startedAt)
+        {
+            throw new ArgumentException(
+                "Commit time cannot be earlier than start time.",
+                nameof(committedAt));
+        }
+        ArgumentException.ThrowIfNullOrWhiteSpace(summary);
+
+        OperationId = operationId;
+        Reference = reference;
+        ExpectedVersion = expectedVersion;
+        StartedAt = startedAt;
+        CommittedAt = committedAt;
+        Summary = summary;
+    }
+
+    public OperationId OperationId { get; }
+
+    public GachaFactReference Reference { get; }
+
+    public FactVersion ExpectedVersion { get; }
+
+    public DateTimeOffset StartedAt { get; }
+
+    public DateTimeOffset CommittedAt { get; }
+
+    public string Summary { get; }
+}
+
+public sealed record GachaScopePurgeRequest(
+    OperationId OperationId,
+    Guid ScopeId,
+    DateTimeOffset StartedAt,
+    DateTimeOffset CommittedAt,
+    string Summary);
+
+public sealed record GachaRevisionItem(
+    Guid RevisionId,
+    Guid ChangeSetId,
+    GachaFactReference Reference,
+    EntityChangeKind ChangeKind,
+    FactVersion? BeforeVersion,
+    FactVersion? AfterVersion,
+    GachaRecord? Before,
+    GachaRecord? After,
+    DateTimeOffset CreatedAt);
+
+public sealed class GachaUndoRequest
+{
+    public GachaUndoRequest(
+        OperationId operationId,
+        Guid archiveId,
+        DateTimeOffset startedAt,
+        DateTimeOffset committedAt,
+        string summary = "Undo latest Gacha change")
+    {
+        if (archiveId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "Archive ID cannot be empty.",
+                nameof(archiveId));
+        }
+        if (committedAt < startedAt)
+        {
+            throw new ArgumentException(
+                "Commit time cannot be earlier than start time.",
+                nameof(committedAt));
+        }
+        ArgumentException.ThrowIfNullOrWhiteSpace(summary);
+
+        OperationId = operationId;
+        ArchiveId = archiveId;
+        StartedAt = startedAt;
+        CommittedAt = committedAt;
+        Summary = summary;
+    }
+
+    public OperationId OperationId { get; }
+
+    public Guid ArchiveId { get; }
+
+    public DateTimeOffset StartedAt { get; }
+
+    public DateTimeOffset CommittedAt { get; }
+
+    public string Summary { get; }
+}
+
+public interface IGachaAtomicChangeStore
+{
+    Task<GachaFactState?> GetCurrentAsync(
+        GachaFactReference reference,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<TombstoneReintroductionWarning>>
+        FindActiveTombstonesAsync(
+            IReadOnlyCollection<GachaFactReference> references,
+            CancellationToken cancellationToken = default);
+
+    Task<GachaAtomicChangeResult> CommitAsync(
+        GachaAtomicChangeRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<GachaAtomicChangeResult> UndoLatestAsync(
+        GachaUndoRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<GachaAtomicChangeResult> IrreversiblyDeleteAsync(
+        GachaIrreversibleDeleteRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<GachaAtomicChangeResult> PurgeAccountAsync(
+        GachaScopePurgeRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<GachaAtomicChangeResult> PurgeArchiveAsync(
+        GachaScopePurgeRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<int> GetUndoLimitAsync(
+        Guid archiveId,
+        CancellationToken cancellationToken = default);
+
+    Task<UndoLimitChangeResult> SetUndoLimitAsync(
+        Guid archiveId,
+        int undoLimit,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<OperationHistoryItem>> GetHistoryAsync(
+        Guid archiveId,
+        int count,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<GachaRevisionItem>> GetRevisionsAsync(
+        Guid changeSetId,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<GachaRevisionItem>> GetRevisionsByAccountAsync(
+        Guid gameAccountId,
+        CancellationToken cancellationToken = default);
+}

@@ -1,4 +1,7 @@
-﻿using FurinaChronicle.Core.Archives;
+﻿// Copyright (c) 2026 DaKang233.
+// SPDX-License-Identifier: MIT
+
+using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Services.Abstractions;
 using System;
 using System.Collections.Generic;

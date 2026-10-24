@@ -1,3 +1,6 @@
+// Copyright (c) 2026 DaKang233.
+// SPDX-License-Identifier: MIT
+
 using FurinaChronicle.Core.Gacha;
 using SQLite;
 
@@ -110,6 +113,27 @@ public sealed class GachaMetadataDatabase : IAsyncDisposable
     }
 
     internal async Task<(
+        string Version,
+        IReadOnlyList<GachaMetadataItemRow> Items)> ReadLocalSnapshotAsync(
+        GachaGame game,
+        CancellationToken cancellationToken)
+    {
+        await InitializeAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        List<GachaMetadataItemRow> items =
+            await Connection.QueryAsync<GachaMetadataItemRow>(
+                """
+                SELECT GameId, ItemId, ItemType, RankType, IconUrl
+                FROM GachaMetadataItems
+                WHERE GameId = ?
+                ORDER BY ItemId;
+                """,
+                (int)game);
+        GachaMetadataStateRow? state = await GetStateAsync(game, cancellationToken);
+        return (state?.ContentSha256 ?? "local-empty-v1", items);
+    }
+
+    internal async Task<(
         GachaMetadataItemRow? Item,
         IReadOnlyList<GachaMetadataNameRow> Names)> FindAsync(
         GachaGame game,
@@ -156,6 +180,41 @@ public sealed class GachaMetadataDatabase : IAsyncDisposable
                 itemId);
 
         return (item, names);
+    }
+
+    internal async Task<(
+        GachaMetadataItemRow? Item,
+        IReadOnlyList<GachaMetadataNameRow> Names)> FindByNameAsync(
+        GachaGame game,
+        string itemName,
+        CancellationToken cancellationToken)
+    {
+        await InitializeAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        List<GachaMetadataNameRow> matches =
+            await Connection.QueryAsync<GachaMetadataNameRow>(
+                """
+                SELECT
+                    GameId,
+                    ItemId,
+                    Language,
+                    Name
+                FROM GachaMetadataNames
+                WHERE GameId = ? AND Name = ? COLLATE NOCASE;
+                """,
+                (int)game,
+                itemName);
+        string[] itemIds = matches
+            .Select(match => match.ItemId)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (itemIds.Length != 1)
+        {
+            return (null, []);
+        }
+
+        return await FindAsync(game, itemIds[0], cancellationToken);
     }
 
     internal async Task ReplaceSnapshotAsync(

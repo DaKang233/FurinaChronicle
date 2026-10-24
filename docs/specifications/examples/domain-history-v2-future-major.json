@@ -1,0 +1,13 @@
+{
+  "format": "furina-domain-history",
+  "package": {
+    "dataset_kind": 1,
+    "format_major": 2,
+    "format_minor": 0,
+    "package_fingerprint": "f5c77ba46b72e3f0a701f9bc230cd112122d865131d1806ce27c50126ca7c9cb",
+    "source_archive_id": "11111111-1111-4111-8111-111111111111",
+    "source_archive_name": "示例档案",
+    "exported_at": "2026-10-18T10:00:00+08:00",
+    "accounts": []
+  }
+}

@@ -1,0 +1,251 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  Copyright (c) 2026 DaKang233.
+  SPDX-License-Identifier: MIT
+-->
+
+<ContentPage
+    x:Class="FurinaChronicle.App.UI.Pages.GachaPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:controls="clr-namespace:FurinaChronicle.App.UI.Controls"
+    xmlns:gacha="clr-namespace:FurinaChronicle.App.UI.Gacha"
+    xmlns:viewModels="clr-namespace:FurinaChronicle.App.ViewModels"
+    x:DataType="viewModels:GachaPageViewModel"
+    Title="抽卡记录">
+
+    <Shell.TitleView>
+        <controls:PassportAvatarButton
+            IsVisible="{OnPlatform Android=True, WinUI=False}" />
+    </Shell.TitleView>
+
+    <Grid>
+        <ScrollView
+            HorizontalScrollBarVisibility="Never"
+            Orientation="Vertical"
+            VerticalScrollBarVisibility="Always">
+        <Grid Padding="16" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="10">
+            <Border Padding="14">
+                <VerticalStackLayout Spacing="8">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <VerticalStackLayout Spacing="2">
+                            <Label FontAttributes="Bold" FontSize="24" Text="抽卡记录" />
+                            <Label FontSize="12" Text="{Binding StatusMessage}" />
+                        </VerticalStackLayout>
+                        <Button
+                            Grid.Column="1"
+                            Command="{Binding ReloadArchivesCommand}"
+                            IsEnabled="{Binding IsNotBusy}"
+                            Text="重新加载" />
+                    </Grid>
+
+                    <Grid
+                        ColumnDefinitions="*,*"
+                        ColumnSpacing="10">
+                        <Picker
+                            Title="选择档案"
+                            IsEnabled="{Binding IsNotBusy}"
+                            ItemsSource="{Binding Archives}"
+                            ItemDisplayBinding="{Binding Name}"
+                            SelectedIndexChanged="OnArchiveSelectionChanged"
+                            SelectedItem="{Binding SelectedArchive, Mode=TwoWay}" />
+                        <Picker
+                            Grid.Column="1"
+                            Title="选择档案中的游戏账号"
+                            IsEnabled="{Binding IsNotBusy}"
+                            ItemsSource="{Binding Accounts}"
+                            ItemDisplayBinding="{Binding DisplayName}"
+                            SelectedIndexChanged="OnAccountSelectionChanged"
+                            SelectedItem="{Binding SelectedAccount, Mode=TwoWay}" />
+                    </Grid>
+                </VerticalStackLayout>
+            </Border>
+
+            <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,*" ColumnSpacing="20">
+                <Grid RowDefinitions="Auto,2">
+                    <Button
+                        Padding="12,6"
+                        BackgroundColor="Transparent"
+                        Command="{Binding Analysis.ShowAccountScopeCommand}"
+                        IsEnabled="{Binding Analysis.IsNotBusy}"
+                        Text="账号"
+                        TextColor="{AppThemeBinding Light=#B69DF8, Dark=#512BD4}" />
+                    <BoxView
+                        Grid.Row="1"
+                        BackgroundColor="{AppThemeBinding Light=#512BD4, Dark=#B69DF8}"
+                        HeightRequest="2"
+                        IsVisible="{Binding Analysis.IsAccountMode}" />
+                </Grid>
+                <Grid Grid.Column="1" RowDefinitions="Auto,2">
+                    <Button
+                        Padding="12,6"
+                        BackgroundColor="Transparent"
+                        Command="{Binding Analysis.ShowArchiveScopeCommand}"
+                        IsEnabled="{Binding Analysis.IsNotBusy}"
+                        Text="档案"
+                        TextColor="{AppThemeBinding Light=#B69DF8, Dark=#512BD4}" />
+                    <BoxView
+                        Grid.Row="1"
+                        BackgroundColor="{AppThemeBinding Light=#512BD4, Dark=#B69DF8}"
+                        HeightRequest="2"
+                        IsVisible="{Binding Analysis.IsArchiveMode}" />
+                </Grid>
+            </Grid>
+
+            <Border Grid.Row="2" Padding="10">
+                <VerticalStackLayout Spacing="8">
+                    <Label FontAttributes="Bold" FontSize="16" Text="抽卡数据操作" />
+                    <ScrollView HorizontalScrollBarVisibility="Default" Orientation="Horizontal">
+                        <HorizontalStackLayout Spacing="8">
+                            <Button
+                                Clicked="OnSTokenRefreshClicked"
+                                IsEnabled="{Binding IsNotBusy}"
+                                Text="SToken 刷新" />
+                            <Button
+                                Clicked="OnWebCacheRefreshClicked"
+                                IsEnabled="{Binding IsNotBusy}"
+                                IsVisible="{OnPlatform WinUI=True, Android=False}"
+                                Text="网页缓存刷新（仅 Windows）" />
+                            <Button
+                                Clicked="OnManualUrlRefreshClicked"
+                                IsEnabled="{Binding IsNotBusy}"
+                                Text="输入 URL 刷新" />
+                            <HorizontalStackLayout Spacing="4" VerticalOptions="Center">
+                                <CheckBox IsChecked="{Binding IsFullImportMode}" IsEnabled="{Binding IsNotBusy}" />
+                                <Label Text="全量导入模式（覆盖相同记录）" VerticalTextAlignment="Center" />
+                            </HorizontalStackLayout>
+                            <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}" />
+                        </HorizontalStackLayout>
+                    </ScrollView>
+
+                    <ScrollView HorizontalScrollBarVisibility="Default" Orientation="Horizontal">
+                        <HorizontalStackLayout Spacing="8">
+                            <Button
+                                Clicked="OnImportIntoArchiveClicked"
+                                IsEnabled="{Binding IsNotBusy}"
+                                Text="导入 UIGF 到档案" />
+                            <Button
+                                Clicked="OnImportIntoSelectedAccountClicked"
+                                IsEnabled="{Binding IsNotBusy}"
+                                Text="导入 UIGF 到账号" />
+                            <Button
+                                Clicked="OnTeyvatHelperImportClicked"
+                                IsEnabled="{Binding IsNotBusy}"
+                                Text="从提瓦特小助手导入" />
+                            <Button
+                                Clicked="OnExportArchiveUigfClicked"
+                                IsEnabled="{Binding IsNotBusy}"
+                                Text="导出档案 UIGF" />
+                            <Button
+                                Clicked="OnExportAccountUigfClicked"
+                                IsEnabled="{Binding IsNotBusy}"
+                                Text="导出账号 UIGF" />
+                            <Button
+                                Clicked="OnExportArchiveTableClicked"
+                                IsEnabled="{Binding IsNotBusy}"
+                                Text="导出档案表格" />
+                            <Button
+                                Clicked="OnExportAccountTableClicked"
+                                IsEnabled="{Binding IsNotBusy}"
+                                Text="导出账号表格" />
+                            <Button
+                                Clicked="OnImportPortableClicked"
+                                IsEnabled="{Binding IsNotBusy}"
+                                Text="导入 Furina Portable" />
+                            <Button
+                                Clicked="OnExportPortableClicked"
+                                IsEnabled="{Binding IsNotBusy}"
+                                Text="导出档案 Portable" />
+                            <Button
+                                Command="{Binding Analysis.ClearIconCacheCommand}"
+                                IsEnabled="{Binding Analysis.IsNotBusy}"
+                                Text="清除图标缓存" />
+                        </HorizontalStackLayout>
+                    </ScrollView>
+                </VerticalStackLayout>
+            </Border>
+
+            <ContentView
+                x:Name="GachaScopePageHost"
+                Grid.Row="3"
+                HeightRequest="560"
+                MinimumHeightRequest="360" />
+
+            <Grid Grid.Row="4" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <VerticalStackLayout Spacing="2">
+                    <Label FontSize="11" Text="{Binding Analysis.Summary}" />
+                    <Label FontSize="11" Text="{Binding RefreshSummary}" />
+                    <Label FontSize="11" Text="{Binding ImportSummary}" />
+                    <Label FontSize="11" Text="{Binding ExportSummary}" />
+                    <Label FontSize="11" Text="{Binding PortableSummary}" />
+                    <Label FontSize="11" Text="{Binding ErrorMessage}" TextColor="Red" />
+                    <Label FontSize="11" Text="{Binding Analysis.ErrorMessage}" TextColor="Red" />
+                </VerticalStackLayout>
+                <ActivityIndicator
+                    Grid.Column="1"
+                    IsRunning="{Binding Analysis.IsBusy}"
+                    IsVisible="{Binding Analysis.IsBusy}" />
+            </Grid>
+        </Grid>
+        </ScrollView>
+
+        <Grid
+            x:Name="RefreshProgressOverlay"
+            BackgroundColor="#99000000"
+            IsVisible="False"
+            ZIndex="1000">
+            <Border
+                BackgroundColor="{AppThemeBinding Light=#FFFFFFFF, Dark=#FF202020}"
+                HeightRequest="560"
+                HorizontalOptions="Center"
+                Margin="24"
+                MaximumHeightRequest="680"
+                MaximumWidthRequest="760"
+                Padding="20"
+                Stroke="{AppThemeBinding Light=#406B7280, Dark=#40D1D5DB}"
+                StrokeShape="RoundRectangle 12"
+                VerticalOptions="Center"
+                WidthRequest="680">
+                <gacha:GachaRefreshProgressView />
+            </Border>
+        </Grid>
+
+        <Grid
+            BackgroundColor="#99000000"
+            IsVisible="{Binding IsPortableImportRunning}"
+            InputTransparent="False"
+            ZIndex="1100">
+            <Border
+                BackgroundColor="{AppThemeBinding Light=#FFFFFFFF, Dark=#FF202020}"
+                HorizontalOptions="Center"
+                Margin="24"
+                MaximumWidthRequest="640"
+                Padding="24"
+                Stroke="{AppThemeBinding Light=#406B7280, Dark=#40D1D5DB}"
+                StrokeShape="RoundRectangle 12"
+                VerticalOptions="Center">
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
+                    <ActivityIndicator
+                        HeightRequest="32"
+                        IsRunning="{Binding IsPortableImportRunning}"
+                        VerticalOptions="Start"
+                        WidthRequest="32" />
+                    <VerticalStackLayout Grid.Column="1" Spacing="6">
+                        <Label
+                            FontAttributes="Bold"
+                            FontSize="20"
+                            Text="{Binding PortableProgressTitle}" />
+                        <Label
+                            FontSize="13"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding PortableProgressDetail}" />
+                        <Label
+                            FontSize="11"
+                            Opacity="0.72"
+                            Text="导入期间已暂停本页其他操作。请勿关闭应用。" />
+                    </VerticalStackLayout>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</ContentPage>

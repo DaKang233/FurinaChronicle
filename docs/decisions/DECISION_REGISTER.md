@@ -1,0 +1,45 @@
+# 决策登记
+
+状态：Accepted baseline
+
+| ID | 决定 | 状态 | 来源 |
+|---|---|---|---|
+| D01 | 当前产品范围是本地优先的原神个人历史档案工具；共享身份、可移植性和领域基础允许按需扩展其他游戏，但不预先统一未实施游戏的全部领域模型 | Accepted | ADR 0001、0011 |
+| D02 | 档案包含一个或多个独立游戏账号副本 | Accepted | 默认方案 |
+| D03 | 同一角色可以存在于不同档案，数据完全独立 | Accepted | 维护者决定 |
+| D04 | 档案内副本使用本地 GUID；共享身份 GUID 跨档案和设备尽量稳定；自然身份为 GameBiz、区域和 UID | Accepted | 维护者决定 |
+| D05 | 手工纠正和覆盖形成 Revision，不抹除原证据 | Accepted | 默认方案 |
+| D06 | 不设全局来源优先级，各数据域使用自己的 Merge Policy | Accepted | 默认方案 |
+| D07 | 普通导入不静默删除；撤销按档案计数，默认 3 次，可关闭，最大 1000 次 | Accepted | 维护者决定 |
+| D08 | 应用内可信全量刷新可以纠正相同记录，并记录被替代版本 | Accepted | 默认方案 |
+| D09 | 原始响应分级保留，高频数据去重、降采样或短期保留 | Accepted | 默认方案 |
+| D10 | 凭据默认不进入备份；未来只以独立显式加密保险库提供 | Accepted | 默认方案 |
+| D11 | Furina 专用格式公开规范、Schema 和示例 | Accepted | 默认方案 |
+| D12 | 默认导出最新格式；旧版导入明确列出；未知 major 拒绝 | Accepted | 默认方案 |
+| D13 | 当前正式目标平台为 Windows 和 Android | Accepted | 默认方案 |
+| D14 | Yae 等第三方采集器为可选适配器，不进入 Core | Accepted | 默认方案 |
+| D15 | 社区统计保留扩展空间，默认关闭并独立授权 | Accepted | 维护者补充及默认方案 |
+| D16 | 档案名称精确匹配；默认启用唯一名称约束；模糊匹配仅提示；异常重复在阻塞式修复后重启 | Accepted | 维护者决定 |
+| D17 | 提供不可逆本地删除，不提供“隐私删除”；保留最小本地 Tombstone，不影响外部副本 | Accepted | 维护者决定 |
+| D18 | 版本化卡池事件元数据内置为离线基线；横幅图只作可清理缓存；在线更新为可选公共元数据能力 | Accepted | ADR 0008 |
+| D19 | Chronicle 使用可重建的跨域派生投影；游戏历程与档案操作历史分离 | Accepted | ADR 0009，维护者确认 |
+| D20 | Chronicle 使用多个经过筛选的时间线 Profile；主时间线只呈现重要节点，领域时间线可提高颗粒度 | Accepted | ADR 0010，维护者确认 |
+| D21 | 领域自治、数据优先、开放导出、Chronicle 派生；8B.0 只冻结当前解释/身份/兼容/数据安全所需最小契约，领域先独立成立，Chronicle 后消费 | Accepted | ADR 0011，维护者确认 |
+| D22 | 自然身份使用规范官方代码；本地新建和 v2 迁移使用固定命名空间 UUID v5；无法形成完整自然身份的旧账号保留为 `Unresolved` | Accepted | ADR 0002，维护者确认 |
+| D23 | `Completeness` 是共享枚举，但完整范围由每个领域或数据类型定义；低层级 `Complete` 不得推导更高层级完整性 | Accepted | ADR 0011，维护者确认 |
+| D24 | 原神区服在 UID 可可靠推导时以 UID 为准；手工区服仅作无法判断时的保险。已解析自然身份变更在专门纠正流程前拒绝 | Accepted | ADR 0002，维护者确认 |
+| D25 | 首个 Furina 领域格式为单源档案、多已解析账号副本的 Gacha Portable v1 ZIP；标准事实使用 UIGF 4.2，补充载荷保存身份、时间表示与来源；8B.2 不绕过 DataChangeSet 执行生产写入 | Accepted | ADR 0012，维护者确认 |
+| D26 | 变更集与业务事实原子提交；Gacha 使用稳定事实引用和本地版本令牌；撤销仅限最新安全操作，反向操作不可再次撤销；跨档案资格整体生效 | Accepted | ADR 0013，维护者确认 |
+| D27 | 纯抓取时间或批次刷新不产生业务 Revision；不可逆删除使用不含事实内容的本地 Tombstone 哈希，显式重引入通过版本化确认停用抑制 | Accepted | ADR 0013，维护者确认 |
+| D28 | 8B.4 的刷新 Tombstone 采用抑制命中并继续其余记录；UIGF 补空生成 Revision、非空差异冲突；父实体删除按本地副本范围 purge；显式重引入的 Undo 恢复原活动 Tombstone | Accepted | ADR 0014，维护者确认 |
+| D29 | 抽卡页统一全量导入模式作用于刷新、UIGF／小助手、兼容 JSON 和 Portable；只覆盖来源明确包含的同记录，不删除来源缺失记录，且覆盖必须保留 Revision／Undo 与既有 Tombstone 安全语义 | Accepted | ADR 0015，维护者确认 |
+
+| D30 | 角色／武器观察分别声明集合与字段完整度；无实例 ID 武器保存类型汇总；手工 Week 为周一 UTC+8 `[start,end)`；Portable 携带观察与事实修订但不迁移本机 Undo/Tombstone | Accepted | ADR 0016，维护者确认 |
+| D31 | 挑战观察使用稳定引用和相邻内容判重；可信顺序保留 A→B→A；迟到不倒退当前视图；同刻冲突不按导入顺序覆盖 | Accepted | ADR 0017，维护者确认 |
+| D32 | Chronicle 使用有界不可变 generation；新增事实不污染旧快照，纠正／删除／Undo／purge 使旧游标显式失效；全无时间事实进入 Undated | Accepted | ADR 0018，维护者确认 |
+| D33 | 深境螺旋首版以版本化目标末关 12-3 的规范化 Chamber 结果作为完成证据；完成与满星分离，每期主时间线最多一个完成节点 | Accepted | ADR 0019，维护者确认 |
+| D34 | Archive v1 作为跨端逻辑档案，保留已支持事实、历史观察、已保留事实 Revision、空父对象和白名单设置；不迁移源 Undo／操作历史／Receipt／LocalOnlyTombstone／Chronicle，并用独立 Gacha history 承载 UIGF 无法表达的内容 | Accepted | ADR 0021，维护者确认 |
+| D35 | Archive Merge 使用目标本地持久化 Receipt 绑定 OperationId、包、Plan 与目标映射；全局唯一档案名策略成为 Schema 8 权威设置，默认 `true`，不迁移来源本机操作身份 | Accepted | ADR 0022，ADR 0006／0021 的实施映射 |
+| D36 | Archive Replace 使用明确且不可重叠的 Archive／Account／Domain 范围，整体失效命中范围的旧 Undo，并在提交前建立有界本机一致恢复点 | Proposed | ADR 0023，等待维护者确认 |
+
+当前工作包契约和后期服务决策集中记录在 [OPEN_QUESTIONS.md](../project/OPEN_QUESTIONS.md)，按实施时点闭合，不得由 Agent 静默改变语义。D19、D20 的核心决定及既有产品行为继续 Accepted；D21 收敛依赖关系，不冻结 Chronicle Draft 的字段或未来同步协议。

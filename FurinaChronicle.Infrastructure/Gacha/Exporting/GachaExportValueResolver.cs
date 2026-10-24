@@ -1,6 +1,8 @@
+// Copyright (c) 2026 DaKang233.
+// SPDX-License-Identifier: MIT
+
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.Gacha.Metadata;
-using FurinaChronicle.Core.Wishes;
 using FurinaChronicle.Services.Gacha.Abstractions;
 using FurinaChronicle.Services.Gacha.Exporting;
 
@@ -11,9 +13,27 @@ internal sealed class GachaExportValueResolver(
 {
     private readonly Dictionary<string, GachaItemMetadata?> metadataCache =
         new(StringComparer.Ordinal);
+    private readonly Dictionary<string, GachaItemMetadata?> metadataByName =
+        new(StringComparer.Ordinal);
+
+    public async ValueTask<string> GetItemIdAsync(
+        GachaRecord record,
+        CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(record.ItemId))
+        {
+            return record.ItemId.Trim();
+        }
+
+        GachaItemMetadata? metadata =
+            await GetMetadataAsync(record, cancellationToken);
+        return !string.IsNullOrWhiteSpace(metadata?.ItemId)
+            ? metadata.ItemId
+            : throw MissingValue(record, "item_id");
+    }
 
     public async ValueTask<string> GetItemNameAsync(
-        WishRecord record,
+        GachaRecord record,
         string language,
         CancellationToken cancellationToken)
     {
@@ -41,7 +61,7 @@ internal sealed class GachaExportValueResolver(
     }
 
     public async ValueTask<string> GetItemTypeAsync(
-        WishRecord record,
+        GachaRecord record,
         string language,
         CancellationToken cancellationToken)
     {
@@ -75,7 +95,7 @@ internal sealed class GachaExportValueResolver(
     }
 
     public async ValueTask<int> GetRankTypeAsync(
-        WishRecord record,
+        GachaRecord record,
         CancellationToken cancellationToken)
     {
         GachaItemMetadata? metadata =
@@ -84,8 +104,54 @@ internal sealed class GachaExportValueResolver(
             ?? throw MissingValue(record, "rank_type");
     }
 
+    public async ValueTask<string> GetReadableItemNameAsync(
+        GachaRecord record,
+        string language,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await GetItemNameAsync(record, language, cancellationToken);
+        }
+        catch (InvalidDataException)
+        {
+            return !string.IsNullOrWhiteSpace(record.ItemId)
+                ? $"Unknown ({record.ItemId})"
+                : "Unknown";
+        }
+    }
+
+    public async ValueTask<string> GetReadableItemTypeAsync(
+        GachaRecord record,
+        string language,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await GetItemTypeAsync(record, language, cancellationToken);
+        }
+        catch (InvalidDataException)
+        {
+            return "Unknown";
+        }
+    }
+
+    public async ValueTask<int?> GetReadableRankTypeAsync(
+        GachaRecord record,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await GetRankTypeAsync(record, cancellationToken);
+        }
+        catch (InvalidDataException)
+        {
+            return null;
+        }
+    }
+
     public static string GetPoolName(
-        WishRecord record,
+        GachaRecord record,
         string language)
     {
         string type = record.UigfGachaType ??
@@ -105,12 +171,12 @@ internal sealed class GachaExportValueResolver(
             },
             GachaExportLanguages.English => type switch
             {
-                "100" => "Beginners' Wish",
+                "100" => "Beginners' Gacha",
                 "200" => "Wanderlust Invocation",
-                "301" => "Character Event Wish",
-                "302" => "Weapon Event Wish",
-                "500" => "Chronicled Wish",
-                _ => $"Unknown Wish ({type})"
+                "301" => "Character Event Gacha",
+                "302" => "Weapon Event Gacha",
+                "500" => "Chronicled Gacha",
+                _ => $"Unknown Gacha ({type})"
             },
             _ => type switch
             {
@@ -125,28 +191,52 @@ internal sealed class GachaExportValueResolver(
     }
 
     private async ValueTask<GachaItemMetadata?> GetMetadataAsync(
-        WishRecord record,
+        GachaRecord record,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(record.ItemId))
         {
-            return null;
+            if (string.IsNullOrWhiteSpace(record.ItemName))
+            {
+                return null;
+            }
+
+            string itemName = record.ItemName.Trim();
+            if (!metadataByName.TryGetValue(
+                itemName,
+                out GachaItemMetadata? nameMetadata))
+            {
+                nameMetadata = await metadataProvider.FindByNameAsync(
+                    GachaGame.GenshinImpact,
+                    itemName,
+                    cancellationToken);
+                metadataByName.Add(itemName, nameMetadata);
+                if (nameMetadata is not null)
+                {
+                    metadataCache.TryAdd(
+                        nameMetadata.ItemId,
+                        nameMetadata);
+                }
+            }
+
+            return nameMetadata;
         }
 
-        if (!metadataCache.TryGetValue(record.ItemId, out GachaItemMetadata? metadata))
+        string itemId = record.ItemId.Trim();
+        if (!metadataCache.TryGetValue(itemId, out GachaItemMetadata? metadata))
         {
             metadata = await metadataProvider.FindByIdAsync(
                 GachaGame.GenshinImpact,
-                record.ItemId,
+                itemId,
                 cancellationToken);
-            metadataCache.Add(record.ItemId, metadata);
+            metadataCache.Add(itemId, metadata);
         }
 
         return metadata;
     }
 
     private static InvalidDataException MissingValue(
-        WishRecord record,
+        GachaRecord record,
         string field)
     {
         return new InvalidDataException(

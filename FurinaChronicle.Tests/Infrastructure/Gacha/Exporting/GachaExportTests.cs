@@ -1,10 +1,13 @@
+// Copyright (c) 2026 DaKang233.
+// SPDX-License-Identifier: MIT
+
 using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.Gacha.Metadata;
-using FurinaChronicle.Core.Wishes;
+using FurinaChronicle.Core.Records;
 using FurinaChronicle.Infrastructure.Gacha.Exporting;
 using FurinaChronicle.Infrastructure.Gacha.Metadata;
 using FurinaChronicle.Infrastructure.Gacha.Uigf.V4_2;
@@ -12,6 +15,7 @@ using FurinaChronicle.Infrastructure.Persistence;
 using FurinaChronicle.Services.Gacha.Exporting;
 using FurinaChronicle.Services.Gacha.Abstractions;
 using FurinaChronicle.Services.Gacha.Importing;
+using FurinaChronicle.Tests.Services.Gacha;
 using FurinaChronicle.Tests.TestDoubles;
 
 namespace FurinaChronicle.Tests.Infrastructure.Gacha.Exporting;
@@ -87,6 +91,46 @@ public sealed class GachaExportTests
     }
 
     [Fact]
+    public async Task UigfWriter_MissingItemId_ResolvesItFromItemName()
+    {
+        GachaExportDocument source = CreateDocument();
+        GachaExportAccount sourceAccount = source.Accounts[0];
+        GachaRecord sourceRecord = sourceAccount.Records[0];
+        GachaExportDocument document = source with
+        {
+            Accounts =
+            [
+                sourceAccount with
+                {
+                    Records = [sourceRecord with { ItemId = null }]
+                }
+            ]
+        };
+        var metadata = new GachaItemMetadata(
+            GachaGame.GenshinImpact,
+            sourceRecord.ItemId!,
+            sourceRecord.ItemName!,
+            sourceRecord.ItemType!,
+            sourceRecord.RankType);
+        var writer = new UigfV42GachaWriter(
+            new FixedMetadataProvider(metadata));
+        await using var stream = new MemoryStream();
+
+        await writer.WriteAsync(
+            stream,
+            document,
+            UigfV42ExportOptions.Minimal);
+
+        stream.Position = 0;
+        using JsonDocument json = await JsonDocument.ParseAsync(stream);
+        JsonElement record =
+            json.RootElement.GetProperty("hk4e")[0].GetProperty("list")[0];
+        Assert.Equal(
+            metadata.ItemId,
+            record.GetProperty("item_id").GetString());
+    }
+
+    [Fact]
     public async Task ExportThenImport_ExistingDatabase_ReportsAllDuplicates()
     {
         var archives = new InMemoryPlayerArchiveRepository();
@@ -97,13 +141,13 @@ public sealed class GachaExportTests
         {
             PlayerArchiveId = archive.Id
         };
-        WishRecord[] existingRecords = source.Accounts[0].Records
+        GachaRecord[] existingRecords = source.Accounts[0].Records
             .Select(record => record with
             {
                 GameAccountId = account.Id
             })
             .ToArray();
-        var records = new InMemoryWishRecordRepository(existingRecords);
+        var records = new InMemoryGachaRecordRepository(existingRecords);
         await archives.AddAsync(archive);
         await accounts.AddAsync(account);
 
@@ -129,7 +173,7 @@ public sealed class GachaExportTests
             new EmptyGachaItemMetadataProvider(),
             archives,
             accounts,
-            records);
+            new RepositoryGachaCommitter(records));
         GachaImportResult imported = await importService.ExecuteAsync(
             stream,
             archive.Id);
@@ -163,16 +207,20 @@ public sealed class GachaExportTests
                 StringSplitOptions.RemoveEmptyEntries);
 
         Assert.Equal(5, lines.Length);
-        Assert.Contains("保底内计数", lines[0]);
+        Assert.Contains("所选范围保底内计数", lines[0]);
+        Assert.Contains("数据来源", lines[0]);
+        Assert.Contains("完整性声明", lines[0]);
         Assert.StartsWith("800000001,", lines[1]);
-        Assert.Contains(",+08:00,", lines[1]);
-        Assert.EndsWith(",1,1", lines[1]);
+        Assert.Contains(",'+08:00,", lines[1]);
+        Assert.Contains(",1,1,", lines[1]);
         Assert.StartsWith("800000001,", lines[2]);
-        Assert.EndsWith(",2,2", lines[2]);
+        Assert.Contains(",2,2,", lines[2]);
         Assert.StartsWith("800000001,", lines[3]);
-        Assert.EndsWith(",3,1", lines[3]);
+        Assert.Contains(",3,1,", lines[3]);
         Assert.StartsWith("600000001,", lines[4]);
-        Assert.EndsWith(",1,1", lines[4]);
+        Assert.Contains(",1,1,", lines[4]);
+        Assert.Contains(",OfficialApi,", lines[1]);
+        Assert.EndsWith(",none", lines[1]);
     }
 
     [Fact]
@@ -180,9 +228,9 @@ public sealed class GachaExportTests
     {
         GachaExportDocument source = CreateDocument();
         GachaExportAccount account = source.Accounts[0];
-        WishRecord template = account.Records[0];
+        GachaRecord template = account.Records[0];
         string[] dangerousNames = ["=1+1", "+1+1", "-1+1", "@SUM", "  =1+1"];
-        WishRecord[] records = dangerousNames
+        GachaRecord[] records = dangerousNames
             .Select((name, index) => template with
             {
                 ExternalRecordId = $"danger-{index}",
@@ -221,7 +269,7 @@ public sealed class GachaExportTests
     {
         GachaExportDocument source = CreateDocument();
         GachaExportAccount account = source.Accounts[0];
-        WishRecord record = account.Records[1] with
+        GachaRecord record = account.Records[1] with
         {
             ItemType = "キャラクター"
         };
@@ -248,15 +296,15 @@ public sealed class GachaExportTests
 
         string text = Encoding.UTF8.GetString(stream.ToArray());
         Assert.Contains($",{expectedType},", text);
-        Assert.DoesNotContain("キャラクター", text);
+        Assert.Contains("キャラクター", text);
     }
 
     [Fact]
-    public async Task TableWriter_MissingRankAndMetadata_RejectsExport()
+    public async Task TableWriter_MissingRankAndMetadata_StillProducesReadableExport()
     {
         GachaExportDocument source = CreateDocument();
         GachaExportAccount account = source.Accounts[0];
-        WishRecord record = account.Records[0] with
+        GachaRecord record = account.Records[0] with
         {
             ItemId = "999999",
             RankType = null
@@ -269,13 +317,17 @@ public sealed class GachaExportTests
             new EmptyGachaItemMetadataProvider());
         await using var stream = new MemoryStream();
 
-        await Assert.ThrowsAsync<InvalidDataException>(() =>
-            writer.WriteAsync(
-                stream,
-                document,
-                new GachaTableExportOptions(
-                    GachaTableFormat.Csv,
-                    GachaExportLanguages.SimplifiedChinese)));
+        await writer.WriteAsync(
+            stream,
+            document,
+            new GachaTableExportOptions(
+                GachaTableFormat.Csv,
+                GachaExportLanguages.SimplifiedChinese));
+
+        string text = Encoding.UTF8.GetString(stream.ToArray());
+        Assert.Contains("鸦羽弓", text);
+        Assert.Contains(",999999,", text);
+        Assert.Contains(",none", text);
     }
 
     [Fact]
@@ -303,7 +355,7 @@ public sealed class GachaExportTests
         string xml = await reader.ReadToEndAsync();
 
         Assert.Contains("Timezone Offset", xml);
-        Assert.Contains("Character Event Wish", xml);
+        Assert.Contains("Character Event Gacha", xml);
         Assert.Contains("800000001", xml);
         Assert.Contains("600000001", xml);
     }
@@ -313,7 +365,7 @@ public sealed class GachaExportTests
     {
         GachaExportDocument source = CreateDocument();
         GachaExportAccount account = source.Accounts[0];
-        WishRecord record = account.Records[0] with
+        GachaRecord record = account.Records[0] with
         {
             ItemId = "999999",
             ItemName = "Furina\u0001😀"
@@ -363,7 +415,7 @@ public sealed class GachaExportTests
         var loader = new LoadGachaExportData(
             archives,
             accounts,
-            new InMemoryWishRecordRepository(Array.Empty<WishRecord>()),
+            new InMemoryGachaRecordRepository(Array.Empty<GachaRecord>()),
             TimeProvider.System);
 
         await Assert.ThrowsAsync<InvalidOperationException>(
@@ -388,6 +440,24 @@ public sealed class GachaExportTests
                     : null;
             return ValueTask.FromResult(result);
         }
+
+        public ValueTask<GachaItemMetadata?> FindByNameAsync(
+            GachaGame game,
+            string itemName,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            bool matchesName =
+                string.Equals(itemName, metadata.Name, StringComparison.Ordinal) ||
+                metadata.LocalizedNames?.Values.Contains(
+                    itemName,
+                    StringComparer.Ordinal) == true;
+            GachaItemMetadata? result =
+                game == metadata.Game && matchesName
+                    ? metadata
+                    : null;
+            return ValueTask.FromResult(result);
+        }
     }
 
     private static GachaExportDocument CreateDocument()
@@ -402,7 +472,7 @@ public sealed class GachaExportTests
             uid: "600000001",
             region: GameServerRegion.America);
 
-        WishRecord[] asiaRecords =
+        GachaRecord[] asiaRecords =
         [
             Record(
                 asia.Id,
@@ -432,7 +502,7 @@ public sealed class GachaExportTests
                 new DateTimeOffset(
                     2026, 1, 1, 10, 2, 0, TimeSpan.FromHours(8)))
         ];
-        WishRecord[] americaRecords =
+        GachaRecord[] americaRecords =
         [
             Record(
                 america.Id,
@@ -450,10 +520,18 @@ public sealed class GachaExportTests
             [
                 new GachaExportAccount(asia, 8, asiaRecords),
                 new GachaExportAccount(america, -5, americaRecords)
-            ]);
+            ])
+        {
+            SourceArchive = new PlayerArchive(
+                archiveId,
+                "Export Archive",
+                DateTimeOffset.FromUnixTimeSeconds(1),
+                DateTimeOffset.FromUnixTimeSeconds(2)),
+            CompletenessAssertion = "none",
+        };
     }
 
-    private static WishRecord Record(
+    private static GachaRecord Record(
         Guid accountId,
         string externalId,
         string itemId,
@@ -462,7 +540,7 @@ public sealed class GachaExportTests
         int rankType,
         DateTimeOffset time)
     {
-        return new WishRecord(
+        return new GachaRecord(
             accountId,
             externalId,
             name,
@@ -473,7 +551,18 @@ public sealed class GachaExportTests
             ItemType = itemType,
             GachaType = "301",
             UigfGachaType = "301",
-            Count = 1
+            Count = 1,
+            Provenance = new RecordProvenance(
+                DataOrigin.OfficialApi,
+                new RecordTimestamps(
+                    FetchedAt: new DateTimeOffset(
+                        2026,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        TimeSpan.FromHours(8))))
         };
     }
 }

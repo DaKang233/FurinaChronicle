@@ -1,3 +1,6 @@
+// Copyright (c) 2026 DaKang233.
+// SPDX-License-Identifier: MIT
+
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.Gacha.Metadata;
 using FurinaChronicle.Infrastructure.Gacha.Metadata;
@@ -34,6 +37,22 @@ public sealed class SqliteGachaItemMetadataProviderTests
         Assert.Equal("Furina", first.LocalizedNames["en"]);
         Assert.Equal(first.ItemId, second!.ItemId);
         Assert.Equal(first.RankType, second.RankType);
+        Assert.Equal(1, context.RemoteSource.CallCount);
+    }
+
+    [Fact]
+    public async Task FindByNameAsync_LocalizedNameReturnsCanonicalMetadata()
+    {
+        await using MetadataTestContext context = MetadataTestContext.Create();
+
+        GachaItemMetadata? item = await context.Provider.FindByNameAsync(
+            GachaGame.GenshinImpact,
+            "芙宁娜");
+
+        Assert.NotNull(item);
+        Assert.Equal("10000089", item.ItemId);
+        Assert.Equal("Furina", item.Name);
+        Assert.Equal("https://example.test/furina.png", item.IconUrl);
         Assert.Equal(1, context.RemoteSource.CallCount);
     }
 

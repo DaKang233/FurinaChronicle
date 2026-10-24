@@ -1,0 +1,28 @@
+# 架构决策记录
+
+本目录只记录会影响产品边界、数据语义、公开格式、安全或长期兼容性的决定。项目由单人主维护，不要求普通内部重构撰写 ADR。
+
+状态包括 `Proposed`、`Accepted`、`Superseded` 和 `Rejected`。新增 ADR 应包含背景、选项、决定、原因、后果、迁移影响和测试要求。
+
+- [0001：本地优先的个人历史数据库](0001-local-first-history-database.md)
+- [0002：档案内账号副本与共享角色身份](0002-archive-account-copy-identity.md)
+- [0003：Portable Model 独立于 SQLite](0003-portable-model.md)
+- [0004：分类导入、修订和有限撤销](0004-import-revision-undo.md)
+- [0005：可选服务端能力分离](0005-optional-server-capabilities.md)
+- [0006：档案名称和唯一性策略](0006-archive-name-policy.md)
+- [0007：不可逆本地删除](0007-local-irreversible-deletion.md)
+- [0008：离线优先的卡池事件元数据](0008-offline-gacha-event-metadata.md)
+- [0009：Chronicle 作为派生投影](0009-chronicle-as-derived-projection.md)
+- [0010：经过筛选的多时间线产品模型](0010-curated-multiple-chronicle-timelines.md)
+- [0011：领域优先的产品定位与 Phase 8B 范围](0011-domain-first-product-scope.md)
+- [0012：Gacha Portable v1 使用标准载荷与 Furina 补充载荷](0012-gacha-portable-v1.md)
+- [0013：原子变更集、修订与有限撤销](0013-atomic-revisions-and-bounded-undo.md)
+- [0014：Phase 8B.4 Gacha 生产写入、删除与重引入语义](0014-phase-8b4-gacha-production-semantics.md)
+- [0015：统一 Gacha 全量导入模式](0015-unified-full-gacha-import-mode.md)
+- [0016：角色／武器状态观察与手工获取事实](0016-character-weapon-observations-and-acquisitions.md)
+- [0017：挑战观察身份、回返与乱序历史](0017-challenge-observation-history.md)
+- [0018：Chronicle generation、游标与证据退化](0018-chronicle-generation-and-evidence.md)
+- [0019：深境螺旋 Chronicle 完成证据](0019-spiral-abyss-chronicle-completion.md)
+- [0020：平台专属 UI 宿主与最小展示边界](0020-platform-specific-ui-hosts.md)
+- [0021：跨端逻辑 Archive v1 的保真与本地状态边界](0021-logical-archive-v1-fidelity.md)
+- [0022：Archive Merge 的本地回执与设置状态](0022-archive-merge-receipt-and-settings.md)
