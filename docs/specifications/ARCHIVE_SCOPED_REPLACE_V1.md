@@ -1,15 +1,15 @@
 # Archive Scoped Replace v1
 
-状态：Proposed 8C.4 implementation contract；未公开发布
+状态：Accepted internal 8C.4 implementation contract；未公开发布
 
-依赖：Accepted ADR 0021；Proposed ADR 0023
+依赖：Accepted ADR 0021；Accepted ADR 0023
 
 ## 目的
 
 Replace 将用户明确选择的目标逻辑范围重建为 Archive 来源状态。它不是 Merge 的覆盖开关、
 父实体 purge、普通 Undo 或主库文件恢复。
 
-在 ADR 0023 被维护者接受前，本规范不能授权生产 Replace 写入。
+本规范授权 8C.4 的内部 Replace 实现；正式产品入口和设备恢复证据仍属于后续工作包。
 
 ## 范围模型
 

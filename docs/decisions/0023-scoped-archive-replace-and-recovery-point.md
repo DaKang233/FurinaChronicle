@@ -1,8 +1,10 @@
 # ADR 0023：Archive 明确范围 Replace 与内部恢复点
 
-状态：Proposed
+状态：Accepted
 
 提议日期：2026-10-24
+
+接受日期：2026-10-25
 
 ## 背景
 
@@ -127,7 +129,7 @@ Replace 继续使用单一 SQLite 事务，不采用热 `File.Move` 或主库文
 
 ## 数据库影响
 
-若本 ADR 被接受，8C.4 建议使用 Schema 9：
+8C.4 使用 Schema 9：
 
 - 新增 `ArchiveReplaceRecoveryPoints`；
 - Archive Restore Receipt 增加模式／RecoveryPoint 关联，或以 OperationId 与恢复点关联；
@@ -138,13 +140,8 @@ Replace 继续使用单一 SQLite 事务，不采用热 `File.Move` 或主库文
 迁移必须保留 Schema 8 所有 Receipt、映射、设置和事实，不推断历史恢复点。未来 Schema、
 错误 application id、损坏库和迁移失败继续保留原库并拒绝写入。
 
-## 需要维护者确认
+## 维护者确认
 
-1. 是否接受三层且不可重叠的 Replace 范围。
-2. 是否接受 Archive 范围删除来源不存在的目标独有账号，而 Account／Domain 范围保留父
-   实体。
-3. 是否接受 Replace 精确替换已选当前事实和来源 Revision，但保留目标 Tombstone，并将
-   设置作为独立选择。
-4. 是否接受命中范围的旧跨档案 ChangeSet 整体失去 Undo 资格。
-5. 是否接受每个数据库只保留一个最近成功 Replace 恢复点，以及先保新后删旧的峰值策略。
-6. 是否接受 8C.4 不提供热主库回切，只完成恢复点创建、验证、查询和清理。
+维护者于 2026-10-25 接受全部六项推荐决定：三层不可重叠范围、Archive 范围目标独有账号
+删除、事实／Revision 精确替换、目标 Tombstone 与设置独立、旧跨档案 Undo 整体失效、
+每库单恢复点及 8C.4 不提供热主库回切。
