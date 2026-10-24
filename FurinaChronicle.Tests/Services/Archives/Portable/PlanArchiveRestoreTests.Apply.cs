@@ -124,6 +124,76 @@ public sealed partial class PlanArchiveRestoreTests
     }
 
     [Fact]
+    public async Task ReopenedDatabaseFindsCommittedReplaceReceiptAndRecoveryPoint()
+    {
+        await using SqliteRepositoryTestContext context =
+            SqliteRepositoryTestContext.Create();
+        string root = CreateRestoreSnapshotRoot();
+        try
+        {
+            var archive = SqliteRepositoryTestContext.CreateArchive(
+                "Main",
+                TargetArchiveId);
+            var account = SqliteRepositoryTestContext.CreateAccount(
+                archive.Id,
+                Role.NaturalIdentity.Uid,
+                GameServerRegion.ChinaOfficial,
+                "Traveler",
+                TargetAccountId,
+                roleIdentity: Role);
+            await context.Archives.AddAsync(archive);
+            await context.Accounts.AddAsync(account);
+            await context.Gacha.SaveBatchAsync(
+                [Record(account.Id, "1", "Diluc")]);
+            MemoryArchiveData source = SourceData(
+                "Main",
+                [Record(SourceAccountId, "1", "Furina")]);
+            ArchiveRestorePlan plan = await PlanReplaceForTargetAsync(
+                context,
+                root,
+                source,
+                [new ArchiveReplaceSelection(
+                    SourceArchiveId,
+                    ArchiveReplaceScopeKind.Domain,
+                    SourceAccountId,
+                    ArchiveReplaceDomain.Gacha)]);
+            OperationId operationId = OperationId.New();
+            DateTimeOffset now =
+                DateTimeOffset.Parse("2026-10-23T16:00:00+08:00");
+            var store = new SqliteGachaAtomicChangeStore(context.Database);
+
+            ArchiveRestoreApplyResult applied = await store.ApplyAsync(
+                new ArchiveRestoreApplyRequest(
+                    source,
+                    plan,
+                    operationId,
+                    now,
+                    now));
+
+            await using var reopenedDatabase = new FurinaDatabase(
+                new SqliteDatabaseOptions(context.DatabasePath));
+            await reopenedDatabase.InitializeAsync();
+            var reopenedStore =
+                new SqliteGachaAtomicChangeStore(reopenedDatabase);
+            ArchiveRestoreReceipt receipt = Assert.IsType<ArchiveRestoreReceipt>(
+                await reopenedStore.FindReceiptAsync(operationId));
+            ArchiveReplaceRecoveryPoint recovery = Assert.IsType<
+                ArchiveReplaceRecoveryPoint>(
+                await reopenedStore.FindCurrentRecoveryPointAsync());
+
+            Assert.Equal(applied.Receipt!.OperationId, receipt.OperationId);
+            Assert.Equal(ArchiveRestoreMode.Replace, receipt.Mode);
+            Assert.Equal(receipt.RecoveryPointId, recovery.RecoveryPointId);
+            Assert.True(recovery.IsCurrent);
+            Assert.True(recovery.IsValid);
+        }
+        finally
+        {
+            DeleteRestoreSnapshotRoot(root);
+        }
+    }
+
+    [Fact]
     public async Task ReplaceCapacityIncludesRecoveryPointBeforeAnyWrite()
     {
         await using SqliteRepositoryTestContext context =
@@ -315,6 +385,75 @@ public sealed partial class PlanArchiveRestoreTests
                 1,
                 connection.ExecuteScalar<int>(
                     "SELECT COUNT(*) FROM GameAccounts;"));
+        }
+        finally
+        {
+            DeleteRestoreSnapshotRoot(root);
+        }
+    }
+
+    [Fact]
+    public async Task CompleteEmptyArchiveReplaceRemovesAllTargetAccounts()
+    {
+        await using SqliteRepositoryTestContext context =
+            SqliteRepositoryTestContext.Create();
+        string root = CreateRestoreSnapshotRoot();
+        try
+        {
+            var archive = SqliteRepositoryTestContext.CreateArchive(
+                "Empty Source",
+                TargetArchiveId);
+            var account = SqliteRepositoryTestContext.CreateAccount(
+                archive.Id,
+                Role.NaturalIdentity.Uid,
+                GameServerRegion.ChinaOfficial,
+                "Target only",
+                TargetAccountId,
+                roleIdentity: Role);
+            await context.Archives.AddAsync(archive);
+            await context.Accounts.AddAsync(account);
+            await context.Gacha.SaveBatchAsync(
+                [Record(account.Id, "target-only", "Diluc")]);
+            var sourceCatalog = new ArchiveCatalog(
+                [],
+                [new ArchiveCatalogArchive(
+                    SourceArchiveId,
+                    "Empty Source",
+                    DateTimeOffset.Parse("2026-10-23T00:00:00Z"),
+                    DateTimeOffset.Parse("2026-10-23T00:00:00Z"),
+                    [])]);
+            MemoryArchiveData source = MemoryArchiveData.Source(
+                sourceCatalog,
+                new ArchivePortableSettings(
+                    true,
+                    [new ArchivePortableArchiveSetting(SourceArchiveId, 3)]));
+            ArchiveRestorePlan plan = await PlanReplaceForTargetAsync(
+                context,
+                root,
+                source,
+                [new ArchiveReplaceSelection(
+                    SourceArchiveId,
+                    ArchiveReplaceScopeKind.Archive)]);
+            Assert.Equal(
+                TargetAccountId,
+                Assert.Single(plan.AccountRemovals).TargetAccountId);
+            var store = new SqliteGachaAtomicChangeStore(context.Database);
+
+            ArchiveRestoreApplyResult applied = await store.ApplyAsync(
+                Request(source, plan));
+
+            Assert.Equal(ChangeExecutionStatus.Applied, applied.Status);
+            Assert.NotNull(await context.Archives.GetByIdAsync(TargetArchiveId));
+            Assert.Null(await context.Accounts.GetByIdAsync(TargetAccountId));
+            using SQLiteConnection connection = context.OpenRawConnection();
+            Assert.Equal(
+                0,
+                connection.ExecuteScalar<int>(
+                    "SELECT COUNT(*) FROM GameAccounts;"));
+            Assert.Equal(
+                0,
+                connection.ExecuteScalar<int>(
+                    "SELECT COUNT(*) FROM GachaRecords;"));
         }
         finally
         {

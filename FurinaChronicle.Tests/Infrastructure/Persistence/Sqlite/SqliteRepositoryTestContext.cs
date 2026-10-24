@@ -25,6 +25,8 @@ internal sealed class SqliteRepositoryTestContext : IAsyncDisposable
 
     public FurinaDatabase Database { get; }
 
+    public string DatabasePath => databasePath;
+
     public SqlitePlayerArchiveRepository Archives { get; }
 
     public SqliteGameAccountRepository Accounts { get; }
