@@ -14,6 +14,7 @@
 - [Phase 8C 输入清单](project/PHASE_8C_INPUTS.md)
 - [Phase 8C 实施计划](project/PHASE_8C_PLAN.md)
 - [Phase 8C.5 产品流程实施记录](project/PHASE_8C5_IMPLEMENTATION.md)
+- [Phase 8C.6 双向往返验收规范](specifications/PHASE_8C6_ROUNDTRIP_ACCEPTANCE.md)
 - [术语表](project/GLOSSARY.md)
 - [待确认事项](project/OPEN_QUESTIONS.md)
 

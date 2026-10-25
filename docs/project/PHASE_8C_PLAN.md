@@ -1,6 +1,6 @@
 # Phase 8C 实施计划与首轮记录
 
-状态：8C.0～8C.5 implementation completed；8C.5 awaiting device evidence；8C.6 pending
+状态：8C.0～8C.5 implementation completed；8C.6 in progress
 
 启动日期：2026-10-23（Asia/Shanghai）
 
