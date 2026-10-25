@@ -18,6 +18,8 @@
 		<Nullable>enable</Nullable>
 		<Phase8BValidationMode Condition="'$(Phase8BValidationMode)' == ''">false</Phase8BValidationMode>
 		<DefineConstants Condition="'$(Phase8BValidationMode)' == 'true'">$(DefineConstants);PHASE8B_VALIDATION</DefineConstants>
+		<Phase8CValidationMode Condition="'$(Phase8CValidationMode)' == ''">false</Phase8CValidationMode>
+		<DefineConstants Condition="'$(Phase8CValidationMode)' == 'true'">$(DefineConstants);PHASE8C_VALIDATION</DefineConstants>
 
 		<!-- Enable XAML source generation for faster build times and improved performance.
 		     This generates C# code from XAML at compile time instead of runtime inflation.
@@ -28,11 +30,13 @@
 		<MauiXamlInflator>SourceGen</MauiXamlInflator>
 
 		<!-- Display name -->
-		<ApplicationTitle Condition="'$(Phase8BValidationMode)' != 'true'">FurinaChronicle.App</ApplicationTitle>
+		<ApplicationTitle Condition="'$(Phase8BValidationMode)' != 'true' and '$(Phase8CValidationMode)' != 'true'">FurinaChronicle.App</ApplicationTitle>
 		<ApplicationTitle Condition="'$(Phase8BValidationMode)' == 'true'">FurinaChronicle 8B.7 Validation</ApplicationTitle>
+		<ApplicationTitle Condition="'$(Phase8CValidationMode)' == 'true'">FurinaChronicle 8C.6 Validation</ApplicationTitle>
 
 		<!-- App Identifier -->
-		<ApplicationId>com.companyname.furinachronicle.app</ApplicationId>
+		<ApplicationId Condition="'$(Phase8CValidationMode)' != 'true'">com.companyname.furinachronicle.app</ApplicationId>
+		<ApplicationId Condition="'$(Phase8CValidationMode)' == 'true'">com.companyname.furinachronicle.validation.phase8c6</ApplicationId>
 
 		<!-- To develop, package, and publish an app to the Microsoft Store, see: https://aka.ms/MauiTemplateUnpackaged -->
 		<WindowsPackageType>None</WindowsPackageType>
@@ -101,5 +105,11 @@
 	</ItemGroup>
 
 	<Import Project="..\build\FurinaVersion.targets" />
+
+	<Target Name="ValidateAcceptanceBuildMode" BeforeTargets="PrepareForBuild">
+		<Error
+			Condition="'$(Phase8BValidationMode)' == 'true' and '$(Phase8CValidationMode)' == 'true'"
+			Text="Phase8BValidationMode and Phase8CValidationMode cannot both be enabled." />
+	</Target>
 
 </Project>

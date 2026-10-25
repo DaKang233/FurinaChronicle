@@ -25,7 +25,23 @@ internal static class PersistenceServiceCollectionExtensions
         this IServiceCollection services)
     {
         string databasePath;
-#if PHASE8B_VALIDATION
+#if PHASE8C_VALIDATION
+        string? validationDirectory = Environment.GetEnvironmentVariable(
+            "FURINA_PHASE8C6_DIRECTORY");
+        if (!string.IsNullOrWhiteSpace(validationDirectory) &&
+            !Path.IsPathFullyQualified(validationDirectory))
+        {
+            throw new InvalidOperationException(
+                "FURINA_PHASE8C6_DIRECTORY must be an absolute path.");
+        }
+        databasePath = Path.Combine(
+            string.IsNullOrWhiteSpace(validationDirectory)
+                ? Path.Combine(
+                    FileSystem.AppDataDirectory,
+                    "phase8c6-validation")
+                : Path.GetFullPath(validationDirectory),
+            "furinachronicle-phase8c6-validation.db3");
+#elif PHASE8B_VALIDATION
         string? validationDirectory = Environment.GetEnvironmentVariable(
             "FURINA_PHASE8B7_DIRECTORY");
         if (!string.IsNullOrWhiteSpace(validationDirectory) &&

@@ -17,6 +17,7 @@
 - 两个重开的真实临时 SQLite 数据库之间的双次恢复／再导出往返；
 - Archive 保真缺口修复和 Schema 10 迁移；
 - 只读宿主验证工具、独立起点样本和资源指标；
+- 复用正式 8C.5 页面、但隔离应用标识与数据库的验收构建模式；
 - 全量自动化与 Windows／WinUI／Android 适用构建。
 
 尚未完成实际 Windows↔Android 系统文件往返、Android 真机交互、受控 Scoped Replace
@@ -115,9 +116,24 @@ Schema 10 增加：
 | MAUI Windows x64 Release | `net10.0-windows10.0.19041.0`、unpackaged 参数 | 0 warning，0 error |
 | 独立 WinUI 3 UI-0 x64 Release | `FurinaChronicle.Windows` | 0 warning，0 error |
 | Android Release APK | `net10.0-android`、`E:\AndroidSDK`、程序集内嵌 | 0 warning，0 error；约 2m56s |
+| 8C.6 Windows 隔离验收构建 | `Phase8CValidationMode=true`、正式 UI | 0 warning，0 error |
+| 8C.6 Android 隔离验收 APK | 独立 package、正式 UI | 0 warning，0 error；约 2m38s |
 | CI | 未推送 | Not run |
 
 构建成功不等于 Windows 可见交互、Android 安装启动或真机文件往返通过。
+
+`Phase8CValidationMode` 不启用旧的 8B.7 专用页面。它保留正式 8C.5 导出、Reader、
+Preview、Merge／Scoped Replace 和结果页面，只改变：
+
+- 标题为 `FurinaChronicle 8C.6 Validation`；
+- Android package 为
+  `com.companyname.furinachronicle.validation.phase8c6`，可与主应用并存；
+- 数据库为 app-private `phase8c6-validation/furinachronicle-phase8c6-validation.db3`；
+- Windows 可用 `FURINA_PHASE8C6_DIRECTORY` 指向明确的绝对验收目录。
+
+8B.7 与 8C.6 两个验收模式同时启用时构建明确失败。APK badging 已确认独立包名、标题、
+`versionName 0.8.15` 和 Git 派生整数 versionCode。当前没有 ADB 设备连接，未安装或
+启动该 APK，仍不产生真机证据。
 
 ## 验证工具
 

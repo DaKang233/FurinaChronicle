@@ -38,3 +38,26 @@ Generated samples and reports are engineering artifacts, not device evidence.
 The Windows and Android product flows must still perform Preview, confirmed
 Merge, reopen, repeated NoOp, cancel/refuse, export, and the return comparison.
 Replace must use an explicitly selected, disposable validation scope.
+
+Build the product UI against an isolated database:
+
+```powershell
+dotnet build .\FurinaChronicle.App\FurinaChronicle.App.csproj `
+  --framework net10.0-windows10.0.19041.0 `
+  --configuration Release `
+  -p:Phase8CValidationMode=true
+
+dotnet build .\FurinaChronicle.App\FurinaChronicle.App.csproj `
+  --framework net10.0-android `
+  --configuration Release `
+  -p:AndroidSdkDirectory=E:\AndroidSDK `
+  -p:AndroidPackageFormats=apk `
+  -p:EmbedAssembliesIntoApk=true `
+  -p:Phase8CValidationMode=true
+```
+
+`Phase8CValidationMode` keeps the normal 8C.5 pages and services but changes
+the title, Android application ID, and database directory. Its Android package
+is `com.companyname.furinachronicle.validation.phase8c6`, so it can be installed
+beside the main application. The two validation-mode properties are mutually
+exclusive.
