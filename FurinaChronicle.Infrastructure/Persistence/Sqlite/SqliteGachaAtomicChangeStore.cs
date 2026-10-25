@@ -3394,7 +3394,12 @@ public sealed partial class SqliteGachaAtomicChangeStore
             reference.ToString());
         Guid archiveId = knownArchiveId ??
             ReadArchiveId(connection, reference.GameAccountId);
-        IEnumerable<string> tombstoneKeys = knownArchiveId is not null
+        bool accountExists = connection.ExecuteScalar<int>(
+            "SELECT COUNT(*) FROM GameAccounts WHERE Id = ?;",
+            reference.GameAccountId.ToString("D")) > 0;
+        IEnumerable<string> tombstoneKeys =
+            knownArchiveId is not null &&
+            (knownIdentityId is not null || !accountExists)
             ? knownIdentityId is not null
                 ?
                 [

@@ -8,7 +8,7 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite;
 
 public sealed class FurinaDatabase : IAsyncDisposable
 {
-    private const int CurrentSchemaVersion = 10;
+    internal const int CurrentSchemaVersion = 10;
     private const int ArchiveReplaceSchemaVersion = 9;
     private const int ArchiveRestoreSchemaVersion = 8;
     private const int ChronicleSchemaVersion = 7;
