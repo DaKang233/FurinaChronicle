@@ -224,7 +224,7 @@ public sealed class SqliteArchiveExportSnapshotFactory(
         public ArchiveExportScope Scope { get; } = scope;
         public ArchiveCatalog Catalog { get; } = catalog;
         public ArchivePortableSettings Settings { get; } = settings;
-        public int SchemaVersion { get; } = 9;
+        public int SchemaVersion { get; } = 10;
         public string StateToken { get; } = stateToken;
         public long SnapshotLength { get; } = snapshotLength;
 

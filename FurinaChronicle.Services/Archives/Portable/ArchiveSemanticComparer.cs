@@ -68,6 +68,11 @@ public sealed class ArchiveSemanticComparer
             SemanticEntry entry =
                 expectedEntries.Entries.GetValueOrDefault(key) ??
                 actualEntries.Entries[key];
+            if (expectedCount == 0 && actualCount > 0 &&
+                IsReceivingOperationRevision(entry.Path))
+            {
+                continue;
+            }
             differences.Add(new ArchiveSemanticDifference(
                 entry.Path,
                 expectedCount,
@@ -80,6 +85,10 @@ public sealed class ArchiveSemanticComparer
             actualEntries.Digest,
             differences);
     }
+
+    private static bool IsReceivingOperationRevision(string path) =>
+        path.Contains("/gacha_revision/", StringComparison.Ordinal) ||
+        path.Contains("/manual_revision/", StringComparison.Ordinal);
 
     private static async Task<SemanticEntrySet> BuildAsync(
         IArchiveRestoreDataSource source,

@@ -8,7 +8,8 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite;
 
 public sealed class FurinaDatabase : IAsyncDisposable
 {
-    private const int CurrentSchemaVersion = 9;
+    private const int CurrentSchemaVersion = 10;
+    private const int ArchiveReplaceSchemaVersion = 9;
     private const int ArchiveRestoreSchemaVersion = 8;
     private const int ChronicleSchemaVersion = 7;
     private const int ArchiveDomainSchemaVersion = 6;
@@ -129,6 +130,11 @@ public sealed class FurinaDatabase : IAsyncDisposable
                      schemaVersion == ArchiveRestoreSchemaVersion)
             {
                 await MigrateVersionEightToCurrentAsync(cancellationToken);
+            }
+            else if (applicationId == CurrentApplicationId &&
+                     schemaVersion == ArchiveReplaceSchemaVersion)
+            {
+                await MigrateVersionNineToCurrentAsync(cancellationToken);
             }
             else if (applicationId == 0 &&
                      schemaVersion == 0 &&
@@ -288,6 +294,17 @@ public sealed class FurinaDatabase : IAsyncDisposable
         {
             cancellationToken.ThrowIfCancellationRequested();
             MigrateVersionEightToVersionNine(connection);
+            SetCurrentSchemaVersion(connection);
+        });
+    }
+
+    private async Task MigrateVersionNineToCurrentAsync(
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await Connection.RunInTransactionAsync(connection =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
             SetCurrentSchemaVersion(connection);
         });
     }
@@ -466,8 +483,88 @@ public sealed class FurinaDatabase : IAsyncDisposable
 
     private static void SetCurrentSchemaVersion(SQLiteConnection connection)
     {
+        MigrateVersionNineToVersionTen(connection);
         connection.Execute(
             $"PRAGMA user_version = {CurrentSchemaVersion};");
+    }
+
+    private static void MigrateVersionNineToVersionTen(
+        SQLiteConnection connection)
+    {
+        AddColumnIfMissing(
+            connection,
+            "GachaRecords",
+            "ObservedAtUtcTicks",
+            "INTEGER");
+        AddColumnIfMissing(
+            connection,
+            "GachaRecords",
+            "ObservedAtOffsetMinutes",
+            "INTEGER");
+        AddColumnIfMissing(
+            connection,
+            "GachaRecords",
+            "SourceProvider",
+            "TEXT");
+        AddColumnIfMissing(
+            connection,
+            "GachaRecords",
+            "SourceRecordId",
+            "TEXT");
+        AddColumnIfMissing(
+            connection,
+            "GachaRecords",
+            "SourceSnapshotId",
+            "TEXT");
+        AddColumnIfMissing(
+            connection,
+            "GachaRevisions",
+            "CreatedAtOffsetMinutes",
+            "INTEGER");
+        AddColumnIfMissing(
+            connection,
+            "ArchiveDomainRevisions",
+            "CreatedAtOffsetMinutes",
+            "INTEGER");
+        AddColumnIfMissing(
+            connection,
+            "PlayerArchives",
+            "CreatedAtOffsetMinutes",
+            "INTEGER");
+        AddColumnIfMissing(
+            connection,
+            "PlayerArchives",
+            "UpdatedAtOffsetMinutes",
+            "INTEGER");
+        AddColumnIfMissing(
+            connection,
+            "GameAccounts",
+            "CreatedAtOffsetMinutes",
+            "INTEGER");
+        AddColumnIfMissing(
+            connection,
+            "GameAccounts",
+            "UpdatedAtOffsetMinutes",
+            "INTEGER");
+    }
+
+    private static void AddColumnIfMissing(
+        SQLiteConnection connection,
+        string table,
+        string column,
+        string declaration)
+    {
+        bool exists = connection.Query<SchemaColumnRow>(
+                $"PRAGMA table_info({table});")
+            .Any(value => string.Equals(
+                value.Name,
+                column,
+                StringComparison.Ordinal));
+        if (!exists)
+        {
+            connection.Execute(
+                $"ALTER TABLE {table} ADD COLUMN {column} {declaration};");
+        }
     }
 
     private async Task<bool> IsEmptyDatabaseAsync(
@@ -501,7 +598,14 @@ public sealed class FurinaDatabase : IAsyncDisposable
 
         await ValidateTableColumnsAsync(
             "PlayerArchives",
-            ["Id", "Name", "CreatedAtUtcTicks", "UpdatedAtUtcTicks"],
+            [
+                "Id",
+                "Name",
+                "CreatedAtUtcTicks",
+                "CreatedAtOffsetMinutes",
+                "UpdatedAtUtcTicks",
+                "UpdatedAtOffsetMinutes",
+            ],
             cancellationToken);
         await ValidateTableColumnsAsync(
             "GameRoleIdentities",
@@ -518,7 +622,9 @@ public sealed class FurinaDatabase : IAsyncDisposable
                 "DisplayName",
                 "IsPlaceholder",
                 "CreatedAtUtcTicks",
+                "CreatedAtOffsetMinutes",
                 "UpdatedAtUtcTicks",
+                "UpdatedAtOffsetMinutes",
             ],
             cancellationToken);
         await ValidateTableColumnsAsync(
@@ -537,11 +643,16 @@ public sealed class FurinaDatabase : IAsyncDisposable
                 "TimeUtcTicks",
                 "TimeOffsetMinutes",
                 "Origin",
+                "ObservedAtUtcTicks",
+                "ObservedAtOffsetMinutes",
                 "FetchedAtUtcTicks",
                 "FetchedAtOffsetMinutes",
                 "ImportedAtUtcTicks",
                 "ImportedAtOffsetMinutes",
                 "AcquisitionBatchId",
+                "SourceProvider",
+                "SourceRecordId",
+                "SourceSnapshotId",
                 "Version",
             ],
             cancellationToken);
@@ -591,6 +702,7 @@ public sealed class FurinaDatabase : IAsyncDisposable
                 "BeforeSnapshotJson",
                 "AfterSnapshotJson",
                 "CreatedAtUtcTicks",
+                "CreatedAtOffsetMinutes",
             ],
             cancellationToken);
         await ValidateTableColumnsAsync(
@@ -707,6 +819,7 @@ public sealed class FurinaDatabase : IAsyncDisposable
                 "BeforeSnapshotJson",
                 "AfterSnapshotJson",
                 "CreatedAtUtcTicks",
+                "CreatedAtOffsetMinutes",
             ],
             cancellationToken);
         await ValidateTableColumnsAsync(
@@ -861,7 +974,9 @@ public sealed class FurinaDatabase : IAsyncDisposable
                     Id TEXT PRIMARY KEY NOT NULL,
                     Name TEXT NOT NULL,
                     CreatedAtUtcTicks INTEGER NOT NULL,
-                    UpdatedAtUtcTicks INTEGER NOT NULL
+                    CreatedAtOffsetMinutes INTEGER,
+                    UpdatedAtUtcTicks INTEGER NOT NULL,
+                    UpdatedAtOffsetMinutes INTEGER
                 );
                 """);
 
@@ -879,7 +994,9 @@ public sealed class FurinaDatabase : IAsyncDisposable
                     DisplayName TEXT,
                     IsPlaceholder INTEGER NOT NULL,
                     CreatedAtUtcTicks INTEGER NOT NULL,
+                    CreatedAtOffsetMinutes INTEGER,
                     UpdatedAtUtcTicks INTEGER NOT NULL,
+                    UpdatedAtOffsetMinutes INTEGER,
                     FOREIGN KEY (PlayerArchiveId)
                         REFERENCES PlayerArchives(Id)
                         ON DELETE CASCADE,
@@ -905,11 +1022,16 @@ public sealed class FurinaDatabase : IAsyncDisposable
                     TimeUtcTicks INTEGER NOT NULL,
                     TimeOffsetMinutes INTEGER NOT NULL,
                     Origin INTEGER NOT NULL,
+                    ObservedAtUtcTicks INTEGER,
+                    ObservedAtOffsetMinutes INTEGER,
                     FetchedAtUtcTicks INTEGER,
                     FetchedAtOffsetMinutes INTEGER,
                     ImportedAtUtcTicks INTEGER,
                     ImportedAtOffsetMinutes INTEGER,
                     AcquisitionBatchId TEXT,
+                    SourceProvider TEXT,
+                    SourceRecordId TEXT,
+                    SourceSnapshotId TEXT,
                     Version INTEGER NOT NULL DEFAULT 1,
                     FOREIGN KEY (GameAccountId)
                         REFERENCES GameAccounts(Id)
@@ -1007,6 +1129,7 @@ public sealed class FurinaDatabase : IAsyncDisposable
                 BeforeSnapshotJson TEXT,
                 AfterSnapshotJson TEXT,
                 CreatedAtUtcTicks INTEGER NOT NULL,
+                CreatedAtOffsetMinutes INTEGER,
                 FOREIGN KEY (ChangeSetId)
                     REFERENCES DataChangeSets(ChangeSetId)
                     ON DELETE CASCADE
@@ -1213,6 +1336,7 @@ public sealed class FurinaDatabase : IAsyncDisposable
                 BeforeSnapshotJson TEXT,
                 AfterSnapshotJson TEXT,
                 CreatedAtUtcTicks INTEGER NOT NULL,
+                CreatedAtOffsetMinutes INTEGER,
                 FOREIGN KEY (ChangeSetId)
                     REFERENCES DataChangeSets(ChangeSetId)
                     ON DELETE CASCADE

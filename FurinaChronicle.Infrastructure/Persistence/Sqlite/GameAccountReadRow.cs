@@ -23,7 +23,11 @@ internal sealed class GameAccountReadRow
 
     public long CreatedAtUtcTicks { get; set; }
 
+    public int? CreatedAtOffsetMinutes { get; set; }
+
     public long UpdatedAtUtcTicks { get; set; }
+
+    public int? UpdatedAtOffsetMinutes { get; set; }
 
     public string? IdentityGameBiz { get; set; }
 
@@ -42,10 +46,14 @@ internal sealed class GameAccountReadRow
             (GameServerRegion)ServerRegion,
             DisplayName,
             IsPlaceholder,
-            new DateTimeOffset(CreatedAtUtcTicks, TimeSpan.Zero),
-            new DateTimeOffset(UpdatedAtUtcTicks, TimeSpan.Zero),
+            ReadTimestamp(CreatedAtUtcTicks, CreatedAtOffsetMinutes),
+            ReadTimestamp(UpdatedAtUtcTicks, UpdatedAtOffsetMinutes),
             roleIdentity);
     }
+
+    private static DateTimeOffset ReadTimestamp(long utcTicks, int? offsetMinutes) =>
+        new DateTimeOffset(new DateTime(utcTicks, DateTimeKind.Utc))
+            .ToOffset(TimeSpan.FromMinutes(offsetMinutes ?? 0));
 
     private GameRoleIdentity? CreateRoleIdentity()
     {

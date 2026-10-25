@@ -91,7 +91,7 @@ public sealed class SqliteArchiveExportSnapshotFactoryTests
             await targetFactory.OpenAsync();
         await context.Gacha.SaveBatchAsync([Record(account.Id, "later")]);
 
-        Assert.Equal(9, target.SchemaVersion);
+        Assert.Equal(10, target.SchemaVersion);
         Assert.Equal(64, target.StateToken.Length);
         Assert.True(target.SnapshotLength > 0);
         Assert.Empty(await target.FindGachaRecordsAsync(account.Id, ["later"]));

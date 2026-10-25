@@ -217,8 +217,8 @@ public sealed partial class SqliteGachaAtomicChangeStore
                 (RevisionId, ChangeSetId, GameAccountId, ExternalRecordId,
                  ChangeKind, BeforeVersion, AfterVersion,
                  SnapshotFormatVersion, BeforeSnapshotJson, AfterSnapshotJson,
-                 CreatedAtUtcTicks)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                 CreatedAtUtcTicks, CreatedAtOffsetMinutes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """,
             Guid.NewGuid().ToString("D"),
             changeSetId.ToString("D"),
@@ -230,7 +230,8 @@ public sealed partial class SqliteGachaAtomicChangeStore
             SnapshotFormatVersion,
             SerializeSnapshot(mutation.Before),
             SerializeSnapshot(mutation.After),
-            committedAt.UtcDateTime.Ticks);
+            committedAt.UtcDateTime.Ticks,
+            checked((int)committedAt.Offset.TotalMinutes));
     }
 
     private static void InsertSourceRevisions(
@@ -280,8 +281,9 @@ public sealed partial class SqliteGachaAtomicChangeStore
                 (RevisionId, ChangeSetId, GameAccountId, ExternalRecordId,
                  ChangeKind, BeforeVersion, AfterVersion,
                  SnapshotFormatVersion, BeforeSnapshotJson,
-                 AfterSnapshotJson, CreatedAtUtcTicks)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                 AfterSnapshotJson, CreatedAtUtcTicks,
+                 CreatedAtOffsetMinutes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """,
             revision.RevisionId.ToString("D"),
             changeSetId.ToString("D"),
@@ -293,7 +295,8 @@ public sealed partial class SqliteGachaAtomicChangeStore
             SnapshotFormatVersion,
             SerializeSnapshot(before),
             SerializeSnapshot(after),
-            revision.CreatedAt.UtcDateTime.Ticks);
+            revision.CreatedAt.UtcDateTime.Ticks,
+            checked((int)revision.CreatedAt.Offset.TotalMinutes));
     }
 
     private static void InsertSourceManualRevision(
@@ -322,8 +325,9 @@ public sealed partial class SqliteGachaAtomicChangeStore
                 (RevisionId, ChangeSetId, DomainKind, EntityId,
                  GameAccountId, ChangeKind, BeforeVersion, AfterVersion,
                  SnapshotFormatVersion, BeforeSnapshotJson,
-                 AfterSnapshotJson, CreatedAtUtcTicks)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                 AfterSnapshotJson, CreatedAtUtcTicks,
+                 CreatedAtOffsetMinutes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """,
             revision.RevisionId.ToString("D"),
             changeSetId.ToString("D"),
@@ -336,7 +340,8 @@ public sealed partial class SqliteGachaAtomicChangeStore
             DomainSnapshotFormatVersion,
             before is null ? null : SerializeDomainSnapshot(before),
             after is null ? null : SerializeDomainSnapshot(after),
-            revision.CreatedAt.UtcDateTime.Ticks);
+            revision.CreatedAt.UtcDateTime.Ticks,
+            checked((int)revision.CreatedAt.Offset.TotalMinutes));
     }
 
     private static GachaRecordRow? MapGachaRevisionSnapshot(

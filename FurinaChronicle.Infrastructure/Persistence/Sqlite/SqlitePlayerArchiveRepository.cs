@@ -25,7 +25,9 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
 					Id,
 					Name,
 					CreatedAtUtcTicks,
-					UpdatedAtUtcTicks
+					CreatedAtOffsetMinutes,
+					UpdatedAtUtcTicks,
+					UpdatedAtOffsetMinutes
 				FROM {PlayerArchiveRow.TableName}
 				WHERE Id = ?
 				LIMIT 1
@@ -35,10 +37,7 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
 
 			var row = rows.FirstOrDefault();
 			if (row == null) { return null; }
-			var createdAtUtc = new DateTimeOffset(row.CreatedAtUtcTicks, TimeSpan.Zero);
-			var updatedAtUtc = new DateTimeOffset(row.UpdatedAtUtcTicks, TimeSpan.Zero);
-
-			return new PlayerArchive(archiveId, row.Name, createdAtUtc, updatedAtUtc);
+			return row.ToDomain();
 		}
 
 		public async Task UpdateAsync(PlayerArchive playerArchive, CancellationToken cancellationToken = default)
@@ -81,7 +80,9 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
 					Id,
 					Name,
 					CreatedAtUtcTicks,
-					UpdatedAtUtcTicks
+					CreatedAtOffsetMinutes,
+					UpdatedAtUtcTicks,
+					UpdatedAtOffsetMinutes
 				FROM {PlayerArchiveRow.TableName}
 				""");
 

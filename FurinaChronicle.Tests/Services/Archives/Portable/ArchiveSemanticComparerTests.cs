@@ -15,7 +15,7 @@ using FurinaChronicle.Tests.TestDoubles;
 
 namespace FurinaChronicle.Tests.Services.Archives.Portable;
 
-public sealed class ArchiveSemanticComparerTests
+public sealed partial class ArchiveSemanticComparerTests
 {
     [Fact]
     public async Task EquivalentLogicalArchivesIgnoreOnlyLocalReferencesAndExportTime()
@@ -91,6 +91,42 @@ public sealed class ArchiveSemanticComparerTests
                 Directory.Delete(root, recursive: true);
             }
         }
+    }
+
+    [Fact]
+    public async Task ReceivingSideOnlyRevisionsDoNotChangePortableSemantics()
+    {
+        await using MemoryArchiveRestoreDataSource expected =
+            Create(remapped: false);
+        await using MemoryArchiveRestoreDataSource actual =
+            Create(remapped: true);
+        (Guid accountId, List<GachaRecord> records) = actual.GachaRecords
+            .Single(value => value.Value.Any(record =>
+                record.ExternalRecordId == "8000000000000000001"));
+        GachaRecord current = Assert.Single(records);
+        actual.GachaRevisions[accountId].Add(new GachaRevisionItem(
+            Id(0x0701),
+            Id(0x0702),
+            new GachaFactReference(accountId, current.ExternalRecordId),
+            EntityChangeKind.Insert,
+            null,
+            new FactVersion(3),
+            null,
+            current,
+            new DateTimeOffset(
+                2026,
+                10,
+                25,
+                12,
+                0,
+                0,
+                TimeSpan.FromHours(8))));
+
+        ArchiveSemanticComparison comparison =
+            await new ArchiveSemanticComparer().CompareAsync(expected, actual);
+
+        Assert.True(comparison.IsEquivalent);
+        Assert.Empty(comparison.Differences);
     }
 
     [Theory]

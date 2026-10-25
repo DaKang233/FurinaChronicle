@@ -10,10 +10,10 @@ namespace FurinaChronicle.Tests.Infrastructure.Persistence.Sqlite;
 public sealed class FurinaDatabaseMigrationTests
 {
     private const int CurrentApplicationId = 0x46554348;
-    private const int CurrentSchemaVersion = 9;
+    private const int CurrentSchemaVersion = 10;
 
     [Fact]
-    public async Task InitializeAsync_NewDatabase_CreatesCurrentVersionNineSchema()
+    public async Task InitializeAsync_NewDatabase_CreatesCurrentVersionTenSchema()
     {
         await using var fixture = MigrationFixture.Create();
 
@@ -35,12 +35,39 @@ public sealed class FurinaDatabaseMigrationTests
         Assert.Contains("UigfGachaType", gachaColumns);
         Assert.Contains("Count", gachaColumns);
         Assert.Contains("Origin", gachaColumns);
+        Assert.Contains("ObservedAtUtcTicks", gachaColumns);
+        Assert.Contains("ObservedAtOffsetMinutes", gachaColumns);
         Assert.Contains("FetchedAtUtcTicks", gachaColumns);
         Assert.Contains("FetchedAtOffsetMinutes", gachaColumns);
         Assert.Contains("ImportedAtUtcTicks", gachaColumns);
         Assert.Contains("ImportedAtOffsetMinutes", gachaColumns);
         Assert.Contains("AcquisitionBatchId", gachaColumns);
+        Assert.Contains("SourceProvider", gachaColumns);
+        Assert.Contains("SourceRecordId", gachaColumns);
+        Assert.Contains("SourceSnapshotId", gachaColumns);
         Assert.Contains("Version", gachaColumns);
+        string[] archiveColumns = connection
+            .Query<NameRow>("PRAGMA table_info(PlayerArchives);")
+            .Select(row => row.Name)
+            .ToArray();
+        Assert.Contains("CreatedAtOffsetMinutes", archiveColumns);
+        Assert.Contains("UpdatedAtOffsetMinutes", archiveColumns);
+        string[] accountColumns = connection
+            .Query<NameRow>("PRAGMA table_info(GameAccounts);")
+            .Select(row => row.Name)
+            .ToArray();
+        Assert.Contains("CreatedAtOffsetMinutes", accountColumns);
+        Assert.Contains("UpdatedAtOffsetMinutes", accountColumns);
+        string[] revisionColumns = connection
+            .Query<NameRow>("PRAGMA table_info(GachaRevisions);")
+            .Select(row => row.Name)
+            .ToArray();
+        Assert.Contains("CreatedAtOffsetMinutes", revisionColumns);
+        string[] domainRevisionColumns = connection
+            .Query<NameRow>("PRAGMA table_info(ArchiveDomainRevisions);")
+            .Select(row => row.Name)
+            .ToArray();
+        Assert.Contains("CreatedAtOffsetMinutes", domainRevisionColumns);
         Assert.Equal(
             1,
             connection.ExecuteScalar<int>(
@@ -113,7 +140,7 @@ public sealed class FurinaDatabaseMigrationTests
     }
 
     [Fact]
-    public async Task InitializeAsync_VersionSevenDatabase_MigratesToVersionNine()
+    public async Task InitializeAsync_VersionSevenDatabase_MigratesToVersionTen()
     {
         await using var fixture = MigrationFixture.Create();
         await using (FurinaDatabase database = fixture.OpenDatabase())
@@ -128,6 +155,7 @@ public sealed class FurinaDatabaseMigrationTests
             legacy.Execute("DROP TABLE ArchiveRestoreReceiptArchives;");
             legacy.Execute("DROP TABLE ArchiveRestoreReceipts;");
             legacy.Execute("DROP TABLE PortableApplicationSettings;");
+            DropVersionTenGachaColumns(legacy);
             legacy.Execute("PRAGMA user_version = 7;");
         }
 
@@ -228,6 +256,7 @@ public sealed class FurinaDatabaseMigrationTests
                 );
                 """);
             legacy.Execute("DROP TABLE ArchiveReplaceRecoveryPoints;");
+            DropVersionTenGachaColumns(legacy);
             legacy.Execute(
                 """
                 INSERT INTO PlayerArchives
@@ -302,6 +331,60 @@ public sealed class FurinaDatabaseMigrationTests
             connection.ExecuteScalar<string>(
                 "SELECT TargetAccountId FROM ArchiveRestoreReceiptAccounts WHERE ReceiptId = ?;",
                 receiptId.ToString("D")));
+    }
+
+    [Fact]
+    public async Task InitializeAsync_VersionNineDatabase_AddsGachaFidelityColumns()
+    {
+        await using var fixture = MigrationFixture.Create();
+        await using (FurinaDatabase database = fixture.OpenDatabase())
+        {
+            await database.InitializeAsync();
+        }
+        using (SQLiteConnection legacy = fixture.OpenRawConnection())
+        {
+            DropVersionTenGachaColumns(legacy);
+            legacy.Execute("PRAGMA user_version = 9;");
+        }
+
+        await using (FurinaDatabase database = fixture.OpenDatabase())
+        {
+            await database.InitializeAsync();
+        }
+
+        using SQLiteConnection connection = fixture.OpenRawConnection();
+        AssertCurrentSchema(connection);
+        string[] columns = connection
+            .Query<NameRow>("PRAGMA table_info(GachaRecords);")
+            .Select(row => row.Name)
+            .ToArray();
+        Assert.Contains("ObservedAtUtcTicks", columns);
+        Assert.Contains("ObservedAtOffsetMinutes", columns);
+        Assert.Contains("SourceProvider", columns);
+        Assert.Contains("SourceRecordId", columns);
+        Assert.Contains("SourceSnapshotId", columns);
+        string[] revisionColumns = connection
+            .Query<NameRow>("PRAGMA table_info(GachaRevisions);")
+            .Select(row => row.Name)
+            .ToArray();
+        Assert.Contains("CreatedAtOffsetMinutes", revisionColumns);
+        string[] domainRevisionColumns = connection
+            .Query<NameRow>("PRAGMA table_info(ArchiveDomainRevisions);")
+            .Select(row => row.Name)
+            .ToArray();
+        Assert.Contains("CreatedAtOffsetMinutes", domainRevisionColumns);
+        string[] archiveColumns = connection
+            .Query<NameRow>("PRAGMA table_info(PlayerArchives);")
+            .Select(row => row.Name)
+            .ToArray();
+        Assert.Contains("CreatedAtOffsetMinutes", archiveColumns);
+        Assert.Contains("UpdatedAtOffsetMinutes", archiveColumns);
+        string[] accountColumns = connection
+            .Query<NameRow>("PRAGMA table_info(GameAccounts);")
+            .Select(row => row.Name)
+            .ToArray();
+        Assert.Contains("CreatedAtOffsetMinutes", accountColumns);
+        Assert.Contains("UpdatedAtOffsetMinutes", accountColumns);
     }
 
     [Fact]
@@ -809,6 +892,33 @@ public sealed class FurinaDatabaseMigrationTests
         Assert.Equal(
             0,
             connection.ExecuteScalar<int>("PRAGMA application_id;"));
+    }
+
+    private static void DropVersionTenGachaColumns(
+        SQLiteConnection connection)
+    {
+        connection.Execute(
+            "ALTER TABLE GachaRecords DROP COLUMN ObservedAtUtcTicks;");
+        connection.Execute(
+            "ALTER TABLE GachaRecords DROP COLUMN ObservedAtOffsetMinutes;");
+        connection.Execute(
+            "ALTER TABLE GachaRecords DROP COLUMN SourceProvider;");
+        connection.Execute(
+            "ALTER TABLE GachaRecords DROP COLUMN SourceRecordId;");
+        connection.Execute(
+            "ALTER TABLE GachaRecords DROP COLUMN SourceSnapshotId;");
+        connection.Execute(
+            "ALTER TABLE GachaRevisions DROP COLUMN CreatedAtOffsetMinutes;");
+        connection.Execute(
+            "ALTER TABLE ArchiveDomainRevisions DROP COLUMN CreatedAtOffsetMinutes;");
+        connection.Execute(
+            "ALTER TABLE PlayerArchives DROP COLUMN CreatedAtOffsetMinutes;");
+        connection.Execute(
+            "ALTER TABLE PlayerArchives DROP COLUMN UpdatedAtOffsetMinutes;");
+        connection.Execute(
+            "ALTER TABLE GameAccounts DROP COLUMN CreatedAtOffsetMinutes;");
+        connection.Execute(
+            "ALTER TABLE GameAccounts DROP COLUMN UpdatedAtOffsetMinutes;");
     }
 
     private static void AssertCurrentSchema(SQLiteConnection connection)

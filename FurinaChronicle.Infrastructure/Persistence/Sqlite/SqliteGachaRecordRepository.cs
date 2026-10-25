@@ -68,11 +68,16 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
                         TimeUtcTicks,
                         TimeOffsetMinutes,
                         Origin,
+                        ObservedAtUtcTicks,
+                        ObservedAtOffsetMinutes,
                         FetchedAtUtcTicks,
                         FetchedAtOffsetMinutes,
                         ImportedAtUtcTicks,
                         ImportedAtOffsetMinutes,
-                        AcquisitionBatchId
+                        AcquisitionBatchId,
+                        SourceProvider,
+                        SourceRecordId,
+                        SourceSnapshotId
                     FROM {GachaRecordRow.TableName}
                     WHERE GameAccountId = ?
                     ORDER BY
@@ -139,11 +144,16 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
                     TimeUtcTicks,
                     TimeOffsetMinutes,
                     Origin,
+                    ObservedAtUtcTicks,
+                    ObservedAtOffsetMinutes,
                     FetchedAtUtcTicks,
                     FetchedAtOffsetMinutes,
                     ImportedAtUtcTicks,
                     ImportedAtOffsetMinutes,
-                    AcquisitionBatchId
+                    AcquisitionBatchId,
+                    SourceProvider,
+                    SourceRecordId,
+                    SourceSnapshotId
                 FROM {GachaRecordRow.TableName}
                 WHERE {where}
                 ORDER BY
@@ -252,11 +262,16 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
                             TimeUtcTicks,
                             TimeOffsetMinutes,
                             Origin,
+                            ObservedAtUtcTicks,
+                            ObservedAtOffsetMinutes,
                             FetchedAtUtcTicks,
                             FetchedAtOffsetMinutes,
                             ImportedAtUtcTicks,
                             ImportedAtOffsetMinutes,
-                            AcquisitionBatchId
+                            AcquisitionBatchId,
+                            SourceProvider,
+                            SourceRecordId,
+                            SourceSnapshotId
                         FROM {GachaRecordRow.TableName}
                         WHERE GameAccountId = ?
                             AND ExternalRecordId IN ({placeholders});
@@ -343,11 +358,16 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
                                         TimeUtcTicks = ?,
                                         TimeOffsetMinutes = ?,
                                         Origin = ?,
+                                        ObservedAtUtcTicks = ?,
+                                        ObservedAtOffsetMinutes = ?,
                                         FetchedAtUtcTicks = ?,
                                         FetchedAtOffsetMinutes = ?,
                                         ImportedAtUtcTicks = ?,
                                         ImportedAtOffsetMinutes = ?,
                                         AcquisitionBatchId = ?,
+                                        SourceProvider = ?,
+                                        SourceRecordId = ?,
+                                        SourceSnapshotId = ?,
                                         Version = Version + 1
                                     WHERE GameAccountId = ? AND ExternalRecordId = ?;
                                     """,
@@ -361,11 +381,16 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
                                     merged.TimeUtcTicks,
                                     merged.TimeOffsetMinutes,
                                     merged.Origin,
+                                    merged.ObservedAtUtcTicks,
+                                    merged.ObservedAtOffsetMinutes,
                                     merged.FetchedAtUtcTicks,
                                     merged.FetchedAtOffsetMinutes,
                                     merged.ImportedAtUtcTicks,
                                     merged.ImportedAtOffsetMinutes,
                                     merged.AcquisitionBatchId,
+                                    merged.SourceProvider,
+                                    merged.SourceRecordId,
+                                    merged.SourceSnapshotId,
                                     row.GameAccountId,
                                     row.ExternalRecordId);
                             }
@@ -424,11 +449,16 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
                 TimeUtcTicks = incoming.TimeUtcTicks,
                 TimeOffsetMinutes = incoming.TimeOffsetMinutes,
                 Origin = incoming.Origin,
+                ObservedAtUtcTicks = incoming.ObservedAtUtcTicks,
+                ObservedAtOffsetMinutes = incoming.ObservedAtOffsetMinutes,
                 FetchedAtUtcTicks = incoming.FetchedAtUtcTicks,
                 FetchedAtOffsetMinutes = incoming.FetchedAtOffsetMinutes,
                 ImportedAtUtcTicks = incoming.ImportedAtUtcTicks,
                 ImportedAtOffsetMinutes = incoming.ImportedAtOffsetMinutes,
                 AcquisitionBatchId = incoming.AcquisitionBatchId,
+                SourceProvider = incoming.SourceProvider,
+                SourceRecordId = incoming.SourceRecordId,
+                SourceSnapshotId = incoming.SourceSnapshotId,
                 Version = current.Version
             };
         }
@@ -454,11 +484,16 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
                 TimeUtcTicks = current.TimeUtcTicks,
                 TimeOffsetMinutes = current.TimeOffsetMinutes,
                 Origin = current.Origin,
+                ObservedAtUtcTicks = current.ObservedAtUtcTicks,
+                ObservedAtOffsetMinutes = current.ObservedAtOffsetMinutes,
                 FetchedAtUtcTicks = current.FetchedAtUtcTicks,
                 FetchedAtOffsetMinutes = current.FetchedAtOffsetMinutes,
                 ImportedAtUtcTicks = current.ImportedAtUtcTicks,
                 ImportedAtOffsetMinutes = current.ImportedAtOffsetMinutes,
                 AcquisitionBatchId = current.AcquisitionBatchId,
+                SourceProvider = current.SourceProvider,
+                SourceRecordId = current.SourceRecordId,
+                SourceSnapshotId = current.SourceSnapshotId,
                 Version = current.Version
             };
         }

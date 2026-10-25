@@ -22,7 +22,11 @@ internal sealed class PlayerArchiveRow
 
     public long CreatedAtUtcTicks { get; set; }
 
+    public int? CreatedAtOffsetMinutes { get; set; }
+
     public long UpdatedAtUtcTicks { get; set; }
+
+    public int? UpdatedAtOffsetMinutes { get; set; }
 
     public static PlayerArchiveRow FromDomain(PlayerArchive archive)
     {
@@ -31,7 +35,11 @@ internal sealed class PlayerArchiveRow
             Id = archive.Id.ToString("D"),
             Name = archive.Name,
             CreatedAtUtcTicks = archive.CreatedAt.UtcDateTime.Ticks,
-            UpdatedAtUtcTicks = archive.UpdatedAt.UtcDateTime.Ticks
+            CreatedAtOffsetMinutes =
+                checked((int)archive.CreatedAt.Offset.TotalMinutes),
+            UpdatedAtUtcTicks = archive.UpdatedAt.UtcDateTime.Ticks,
+            UpdatedAtOffsetMinutes =
+                checked((int)archive.UpdatedAt.Offset.TotalMinutes),
         };
     }
 
@@ -40,7 +48,11 @@ internal sealed class PlayerArchiveRow
         return new PlayerArchive(
             Guid.Parse(Id),
             Name,
-            new DateTimeOffset(CreatedAtUtcTicks, TimeSpan.Zero),
-            new DateTimeOffset(UpdatedAtUtcTicks, TimeSpan.Zero));
+            ReadTimestamp(CreatedAtUtcTicks, CreatedAtOffsetMinutes),
+            ReadTimestamp(UpdatedAtUtcTicks, UpdatedAtOffsetMinutes));
     }
+
+    private static DateTimeOffset ReadTimestamp(long utcTicks, int? offsetMinutes) =>
+        new DateTimeOffset(new DateTime(utcTicks, DateTimeKind.Utc))
+            .ToOffset(TimeSpan.FromMinutes(offsetMinutes ?? 0));
 }

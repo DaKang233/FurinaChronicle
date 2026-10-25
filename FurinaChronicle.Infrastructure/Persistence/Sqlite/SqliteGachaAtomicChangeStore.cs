@@ -2068,7 +2068,7 @@ public sealed partial class SqliteGachaAtomicChangeStore
                 SELECT RevisionId, ChangeSetId, GameAccountId,
                        ExternalRecordId, ChangeKind, BeforeVersion,
                        AfterVersion, BeforeSnapshotJson, AfterSnapshotJson,
-                       CreatedAtUtcTicks
+                       CreatedAtUtcTicks, CreatedAtOffsetMinutes
                 FROM GachaRevisions
                 WHERE ChangeSetId = ?
                 ORDER BY rowid;
@@ -2089,9 +2089,9 @@ public sealed partial class SqliteGachaAtomicChangeStore
                     : null,
                 DeserializeSnapshot(row.BeforeSnapshotJson)?.ToDomain(),
                 DeserializeSnapshot(row.AfterSnapshotJson)?.ToDomain(),
-                new DateTimeOffset(
+                ReadTimestamp(
                     row.CreatedAtUtcTicks,
-                    TimeSpan.Zero)))
+                    row.CreatedAtOffsetMinutes ?? 0)))
             .ToArray();
     }
 
@@ -2114,7 +2114,7 @@ public sealed partial class SqliteGachaAtomicChangeStore
                 SELECT RevisionId, ChangeSetId, GameAccountId,
                        ExternalRecordId, ChangeKind, BeforeVersion,
                        AfterVersion, BeforeSnapshotJson, AfterSnapshotJson,
-                       CreatedAtUtcTicks
+                       CreatedAtUtcTicks, CreatedAtOffsetMinutes
                 FROM GachaRevisions
                 WHERE GameAccountId = ?
                 ORDER BY CreatedAtUtcTicks, rowid;
@@ -2135,7 +2135,9 @@ public sealed partial class SqliteGachaAtomicChangeStore
                     : null,
                 DeserializeSnapshot(row.BeforeSnapshotJson)?.ToDomain(),
                 DeserializeSnapshot(row.AfterSnapshotJson)?.ToDomain(),
-                new DateTimeOffset(row.CreatedAtUtcTicks, TimeSpan.Zero)))
+                ReadTimestamp(
+                    row.CreatedAtUtcTicks,
+                    row.CreatedAtOffsetMinutes ?? 0)))
             .ToArray();
     }
 
@@ -2164,7 +2166,7 @@ public sealed partial class SqliteGachaAtomicChangeStore
                     SELECT RevisionId, ChangeSetId, GameAccountId,
                            ExternalRecordId, ChangeKind, BeforeVersion,
                            AfterVersion, BeforeSnapshotJson, AfterSnapshotJson,
-                           CreatedAtUtcTicks
+                           CreatedAtUtcTicks, CreatedAtOffsetMinutes
                     FROM GachaRevisions
                     WHERE GameAccountId = ? AND RevisionId = ?;
                     """,
@@ -2188,7 +2190,9 @@ public sealed partial class SqliteGachaAtomicChangeStore
                     : null,
                 DeserializeSnapshot(row.BeforeSnapshotJson)?.ToDomain(),
                 DeserializeSnapshot(row.AfterSnapshotJson)?.ToDomain(),
-                new DateTimeOffset(row.CreatedAtUtcTicks, TimeSpan.Zero));
+                ReadTimestamp(
+                    row.CreatedAtUtcTicks,
+                    row.CreatedAtOffsetMinutes ?? 0));
     }
 
     private static IndexedPortablePreparation PrepareIndexedPortableApply(
@@ -3390,18 +3394,26 @@ public sealed partial class SqliteGachaAtomicChangeStore
             reference.ToString());
         Guid archiveId = knownArchiveId ??
             ReadArchiveId(connection, reference.GameAccountId);
-        IEnumerable<string> tombstoneKeys = knownIdentityId is not null
-            ?
-            [
-                CreateTombstoneKey(
-                    archiveId,
-                    knownIdentityId.Value,
-                    reference.ExternalRecordId),
-                CreateLocalAccountTombstoneKey(
-                    archiveId,
-                    reference.GameAccountId,
-                    reference.ExternalRecordId)
-            ]
+        IEnumerable<string> tombstoneKeys = knownArchiveId is not null
+            ? knownIdentityId is not null
+                ?
+                [
+                    CreateTombstoneKey(
+                        archiveId,
+                        knownIdentityId.Value,
+                        reference.ExternalRecordId),
+                    CreateLocalAccountTombstoneKey(
+                        archiveId,
+                        reference.GameAccountId,
+                        reference.ExternalRecordId)
+                ]
+                :
+                [
+                    CreateLocalAccountTombstoneKey(
+                        archiveId,
+                        reference.GameAccountId,
+                        reference.ExternalRecordId)
+                ]
             : GetTombstoneKeys(
                 connection,
                 archiveId,
@@ -3844,8 +3856,8 @@ public sealed partial class SqliteGachaAtomicChangeStore
                 (RevisionId, ChangeSetId, GameAccountId, ExternalRecordId,
                  ChangeKind, BeforeVersion, AfterVersion,
                  SnapshotFormatVersion, BeforeSnapshotJson, AfterSnapshotJson,
-                 CreatedAtUtcTicks)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                 CreatedAtUtcTicks, CreatedAtOffsetMinutes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """,
             Guid.NewGuid().ToString("D"),
             changeSetId.ToString("D"),
@@ -3857,7 +3869,8 @@ public sealed partial class SqliteGachaAtomicChangeStore
             SnapshotFormatVersion,
             beforeJson,
             afterJson,
-            committedAt.UtcDateTime.Ticks);
+            committedAt.UtcDateTime.Ticks,
+            checked((int)committedAt.Offset.TotalMinutes));
     }
 
     private static long InsertUndoMaterial(
@@ -4710,11 +4723,16 @@ public sealed partial class SqliteGachaAtomicChangeStore
         long TimeUtcTicks,
         int TimeOffsetMinutes,
         int Origin,
+        long? ObservedAtUtcTicks,
+        int? ObservedAtOffsetMinutes,
         long? FetchedAtUtcTicks,
         int? FetchedAtOffsetMinutes,
         long? ImportedAtUtcTicks,
         int? ImportedAtOffsetMinutes,
         string? AcquisitionBatchId,
+        string? SourceProvider,
+        string? SourceRecordId,
+        string? SourceSnapshotId,
         long Version)
     {
         public static GachaRevisionSnapshot FromRow(GachaRecordRow row) =>
@@ -4731,11 +4749,16 @@ public sealed partial class SqliteGachaAtomicChangeStore
                 row.TimeUtcTicks,
                 row.TimeOffsetMinutes,
                 row.Origin,
+                row.ObservedAtUtcTicks,
+                row.ObservedAtOffsetMinutes,
                 row.FetchedAtUtcTicks,
                 row.FetchedAtOffsetMinutes,
                 row.ImportedAtUtcTicks,
                 row.ImportedAtOffsetMinutes,
                 row.AcquisitionBatchId,
+                row.SourceProvider,
+                row.SourceRecordId,
+                row.SourceSnapshotId,
                 row.Version);
 
         public GachaRecordRow ToRow() =>
@@ -4753,11 +4776,16 @@ public sealed partial class SqliteGachaAtomicChangeStore
                 TimeUtcTicks = TimeUtcTicks,
                 TimeOffsetMinutes = TimeOffsetMinutes,
                 Origin = Origin,
+                ObservedAtUtcTicks = ObservedAtUtcTicks,
+                ObservedAtOffsetMinutes = ObservedAtOffsetMinutes,
                 FetchedAtUtcTicks = FetchedAtUtcTicks,
                 FetchedAtOffsetMinutes = FetchedAtOffsetMinutes,
                 ImportedAtUtcTicks = ImportedAtUtcTicks,
                 ImportedAtOffsetMinutes = ImportedAtOffsetMinutes,
                 AcquisitionBatchId = AcquisitionBatchId,
+                SourceProvider = SourceProvider,
+                SourceRecordId = SourceRecordId,
+                SourceSnapshotId = SourceSnapshotId,
                 Version = Version
             };
     }
@@ -4782,11 +4810,16 @@ public sealed partial class SqliteGachaAtomicChangeStore
                 TimeUtcTicks = TimeUtcTicks,
                 TimeOffsetMinutes = TimeOffsetMinutes,
                 Origin = Origin,
+                ObservedAtUtcTicks = ObservedAtUtcTicks,
+                ObservedAtOffsetMinutes = ObservedAtOffsetMinutes,
                 FetchedAtUtcTicks = FetchedAtUtcTicks,
                 FetchedAtOffsetMinutes = FetchedAtOffsetMinutes,
                 ImportedAtUtcTicks = ImportedAtUtcTicks,
                 ImportedAtOffsetMinutes = ImportedAtOffsetMinutes,
                 AcquisitionBatchId = AcquisitionBatchId,
+                SourceProvider = SourceProvider,
+                SourceRecordId = SourceRecordId,
+                SourceSnapshotId = SourceSnapshotId,
                 Version = Version
             };
     }
@@ -4884,6 +4917,8 @@ public sealed partial class SqliteGachaAtomicChangeStore
         public string? AfterSnapshotJson { get; set; }
 
         public long CreatedAtUtcTicks { get; set; }
+
+        public int? CreatedAtOffsetMinutes { get; set; }
     }
 
     private sealed class TombstoneRow

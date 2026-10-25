@@ -507,7 +507,9 @@ public sealed partial class SqliteGachaAtomicChangeStore
                     : new FactVersion(row.AfterVersion.Value),
                 row.BeforeSnapshotJson,
                 row.AfterSnapshotJson,
-                new DateTimeOffset(row.CreatedAtUtcTicks, TimeSpan.Zero)))
+                ReadTimestamp(
+                    row.CreatedAtUtcTicks,
+                    row.CreatedAtOffsetMinutes ?? 0)))
             .ToArray();
     }
 
@@ -564,7 +566,9 @@ public sealed partial class SqliteGachaAtomicChangeStore
                     row.BeforeSnapshotJson),
                 DeserializeAcquisitionFromDomainSnapshot(
                     row.AfterSnapshotJson),
-                new DateTimeOffset(row.CreatedAtUtcTicks, TimeSpan.Zero)))
+                ReadTimestamp(
+                    row.CreatedAtUtcTicks,
+                    row.CreatedAtOffsetMinutes ?? 0)))
             .ToArray();
     }
 
@@ -657,7 +661,9 @@ public sealed partial class SqliteGachaAtomicChangeStore
                     row.BeforeSnapshotJson),
                 DeserializeAcquisitionFromDomainSnapshot(
                     row.AfterSnapshotJson),
-                new DateTimeOffset(row.CreatedAtUtcTicks, TimeSpan.Zero));
+                ReadTimestamp(
+                    row.CreatedAtUtcTicks,
+                    row.CreatedAtOffsetMinutes ?? 0));
     }
 
     private async Task<ArchiveDomainFactRow?> FindDomainFactAsync(
@@ -1325,8 +1331,9 @@ public sealed partial class SqliteGachaAtomicChangeStore
                 (RevisionId, ChangeSetId, DomainKind, EntityId,
                  GameAccountId, ChangeKind, BeforeVersion, AfterVersion,
                  SnapshotFormatVersion, BeforeSnapshotJson,
-                 AfterSnapshotJson, CreatedAtUtcTicks)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                 AfterSnapshotJson, CreatedAtUtcTicks,
+                 CreatedAtOffsetMinutes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """,
             Guid.NewGuid().ToString("D"),
             changeSetId.ToString("D"),
@@ -1339,7 +1346,8 @@ public sealed partial class SqliteGachaAtomicChangeStore
             DomainSnapshotFormatVersion,
             mutation.BeforeSnapshotJson,
             mutation.AfterSnapshotJson,
-            committedAt.UtcDateTime.Ticks);
+            committedAt.UtcDateTime.Ticks,
+            checked((int)committedAt.Offset.TotalMinutes));
     }
 
     private static long InsertDomainUndoMaterial(
@@ -1550,7 +1558,9 @@ public sealed partial class SqliteGachaAtomicChangeStore
             existing.AfterSnapshotJson == (after is null
                 ? null
                 : SerializeDomainSnapshot(after)) &&
-            existing.CreatedAtUtcTicks == revision.CreatedAt.UtcDateTime.Ticks;
+            existing.CreatedAtUtcTicks == revision.CreatedAt.UtcDateTime.Ticks &&
+            (existing.CreatedAtOffsetMinutes ?? 0) ==
+                checked((int)revision.CreatedAt.Offset.TotalMinutes);
     }
 
     private static void InsertPortableManualRevision(
@@ -1587,8 +1597,9 @@ public sealed partial class SqliteGachaAtomicChangeStore
                 (RevisionId, ChangeSetId, DomainKind, EntityId,
                  GameAccountId, ChangeKind, BeforeVersion, AfterVersion,
                  SnapshotFormatVersion, BeforeSnapshotJson,
-                 AfterSnapshotJson, CreatedAtUtcTicks)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                 AfterSnapshotJson, CreatedAtUtcTicks,
+                 CreatedAtOffsetMinutes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """,
             revision.RevisionId.ToString("D"),
             changeSetId.ToString("D"),
@@ -1601,7 +1612,8 @@ public sealed partial class SqliteGachaAtomicChangeStore
             DomainSnapshotFormatVersion,
             before is null ? null : SerializeDomainSnapshot(before),
             after is null ? null : SerializeDomainSnapshot(after),
-            revision.CreatedAt.UtcDateTime.Ticks);
+            revision.CreatedAt.UtcDateTime.Ticks,
+            checked((int)revision.CreatedAt.Offset.TotalMinutes));
     }
 
     private static ArchiveDomainFactRow CreatePortableAcquisitionRow(
@@ -2201,6 +2213,8 @@ public sealed partial class SqliteGachaAtomicChangeStore
         public string? BeforeSnapshotJson { get; set; }
         public string? AfterSnapshotJson { get; set; }
         public long CreatedAtUtcTicks { get; set; }
+
+        public int? CreatedAtOffsetMinutes { get; set; }
     }
 
     private sealed class DomainIdentityRow

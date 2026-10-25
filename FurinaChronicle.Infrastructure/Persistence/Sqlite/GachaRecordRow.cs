@@ -45,6 +45,10 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
 
         public int Origin { get; set; }
 
+        public long? ObservedAtUtcTicks { get; set; }
+
+        public int? ObservedAtOffsetMinutes { get; set; }
+
         public long? FetchedAtUtcTicks { get; set; }
 
         public int? FetchedAtOffsetMinutes { get; set; }
@@ -54,6 +58,12 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
         public int? ImportedAtOffsetMinutes { get; set; }
 
         public string? AcquisitionBatchId { get; set; }
+
+        public string? SourceProvider { get; set; }
+
+        public string? SourceRecordId { get; set; }
+
+        public string? SourceSnapshotId { get; set; }
 
         public long Version { get; set; } = 1;
 
@@ -88,13 +98,8 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
             }
 
             ArgumentNullException.ThrowIfNull(record.Provenance);
-            if (record.Provenance.Source is not null ||
-                record.Provenance.Timestamps.ObservedAt is not null)
-            {
-                throw new NotSupportedException(
-                    "Gacha persistence does not yet support source references or observation times.");
-            }
-
+            DateTimeOffset? observedAt =
+                record.Provenance.Timestamps.ObservedAt;
             DateTimeOffset? fetchedAt =
                 record.Provenance.Timestamps.FetchedAt;
             DateTimeOffset? importedAt =
@@ -114,6 +119,10 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
                 TimeUtcTicks = record.Time.UtcDateTime.Ticks,
                 TimeOffsetMinutes = checked((int)record.Time.Offset.TotalMinutes),
                 Origin = (int)record.Provenance.Origin,
+                ObservedAtUtcTicks = observedAt?.UtcDateTime.Ticks,
+                ObservedAtOffsetMinutes = observedAt is null
+                    ? null
+                    : checked((int)observedAt.Value.Offset.TotalMinutes),
                 FetchedAtUtcTicks = fetchedAt?.UtcDateTime.Ticks,
                 FetchedAtOffsetMinutes = fetchedAt is null
                     ? null
@@ -123,7 +132,10 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
                     ? null
                     : checked((int)importedAt.Value.Offset.TotalMinutes),
                 AcquisitionBatchId =
-                    record.Provenance.AcquisitionBatchId?.ToString()
+                    record.Provenance.AcquisitionBatchId?.ToString(),
+                SourceProvider = record.Provenance.Source?.Provider,
+                SourceRecordId = record.Provenance.Source?.SourceRecordId,
+                SourceSnapshotId = record.Provenance.Source?.SourceSnapshotId,
             };
         }
 
@@ -140,6 +152,10 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
             TimeSpan offset = TimeSpan.FromMinutes(TimeOffsetMinutes);
             DateTimeOffset utcTime = new DateTimeOffset(TimeUtcTicks, TimeSpan.Zero);
             DateTimeOffset originalTime = utcTime.ToOffset(offset);
+            DateTimeOffset? observedAt = ReadOptionalTimestamp(
+                ObservedAtUtcTicks,
+                ObservedAtOffsetMinutes,
+                nameof(ObservedAtUtcTicks));
             DateTimeOffset? fetchedAt = ReadOptionalTimestamp(
                 FetchedAtUtcTicks,
                 FetchedAtOffsetMinutes,
@@ -163,11 +179,22 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
                 batchId = new AcquisitionBatchId(parsedBatchId);
             }
 
+            DataSourceReference? source =
+                SourceProvider is null &&
+                SourceRecordId is null &&
+                SourceSnapshotId is null
+                    ? null
+                    : new DataSourceReference(
+                        SourceProvider,
+                        SourceRecordId,
+                        SourceSnapshotId);
             var provenance = new RecordProvenance(
                 (DataOrigin)Origin,
                 new RecordTimestamps(
+                    ObservedAt: observedAt,
                     FetchedAt: fetchedAt,
                     ImportedAt: importedAt),
+                source,
                 acquisitionBatchId: batchId);
 
             return new GachaRecord(gameAccountId, ExternalRecordId, ItemName, RankType, originalTime)

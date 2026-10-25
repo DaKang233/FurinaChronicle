@@ -58,7 +58,11 @@ public sealed partial class SqliteGachaAtomicChangeStore
                     Id = targetId.ToString("D"),
                     Name = mapping.ProposedName,
                     CreatedAtUtcTicks = source.CreatedAt.UtcDateTime.Ticks,
+                    CreatedAtOffsetMinutes =
+                        checked((int)source.CreatedAt.Offset.TotalMinutes),
                     UpdatedAtUtcTicks = source.UpdatedAt.UtcDateTime.Ticks,
+                    UpdatedAtOffsetMinutes =
+                        checked((int)source.UpdatedAt.Offset.TotalMinutes),
                 });
                 int undoLimit = request.Package.Settings.Archives.Single(item =>
                     item.ArchiveReference == mapping.SourceArchiveReference).UndoLimit;
@@ -129,7 +133,11 @@ public sealed partial class SqliteGachaAtomicChangeStore
                     DisplayName = source.DisplayName,
                     IsPlaceholder = source.IsPlaceholder,
                     CreatedAtUtcTicks = source.CreatedAt.UtcDateTime.Ticks,
+                    CreatedAtOffsetMinutes =
+                        checked((int)source.CreatedAt.Offset.TotalMinutes),
                     UpdatedAtUtcTicks = source.UpdatedAt.UtcDateTime.Ticks,
+                    UpdatedAtOffsetMinutes =
+                        checked((int)source.UpdatedAt.Offset.TotalMinutes),
                 });
             }
             else

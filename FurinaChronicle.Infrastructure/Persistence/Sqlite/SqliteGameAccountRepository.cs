@@ -21,7 +21,9 @@ public sealed class SqliteGameAccountRepository(FurinaDatabase database)
             ga.DisplayName,
             ga.IsPlaceholder,
             ga.CreatedAtUtcTicks,
+            ga.CreatedAtOffsetMinutes,
             ga.UpdatedAtUtcTicks,
+            ga.UpdatedAtOffsetMinutes,
             gri.GameBiz AS IdentityGameBiz,
             gri.Server AS IdentityServer,
             gri.Uid AS IdentityUid

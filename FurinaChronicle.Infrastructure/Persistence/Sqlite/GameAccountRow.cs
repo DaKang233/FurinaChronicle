@@ -33,7 +33,11 @@ internal sealed class GameAccountRow
 
     public long CreatedAtUtcTicks { get; set; }
 
+    public int? CreatedAtOffsetMinutes { get; set; }
+
     public long UpdatedAtUtcTicks { get; set; }
+
+    public int? UpdatedAtOffsetMinutes { get; set; }
 
     public static GameAccountRow FromDomain(GameAccount account)
     {
@@ -47,7 +51,11 @@ internal sealed class GameAccountRow
             DisplayName = account.DisplayName,
             IsPlaceholder = account.IsPlaceholder,
             CreatedAtUtcTicks = account.CreatedAt.UtcDateTime.Ticks,
-            UpdatedAtUtcTicks = account.UpdatedAt.UtcDateTime.Ticks
+            CreatedAtOffsetMinutes =
+                checked((int)account.CreatedAt.Offset.TotalMinutes),
+            UpdatedAtUtcTicks = account.UpdatedAt.UtcDateTime.Ticks,
+            UpdatedAtOffsetMinutes =
+                checked((int)account.UpdatedAt.Offset.TotalMinutes),
         };
     }
 
