@@ -424,6 +424,68 @@ public sealed class GachaExportTests
                 [foreignAccount.Id]));
     }
 
+    [Fact]
+    public async Task MarkdownWriter_SummaryExplainsScopeAndLoss()
+    {
+        var writer = new GachaMarkdownExportWriter(
+            new EmptyGachaItemMetadataProvider());
+        await using var stream = new MemoryStream();
+
+        await writer.WriteAsync(
+            stream,
+            CreateDocument(),
+            new GachaMarkdownExportOptions(IncludeDetails: false));
+
+        string text = Encoding.UTF8.GetString(stream.ToArray());
+        Assert.Contains("# FurinaChronicle 抽卡记录报告", text);
+        Assert.Contains("不能重新导入", text);
+        Assert.Contains("档案：Export Archive", text);
+        Assert.Contains("完整性声明：none", text);
+        Assert.Contains("账号 800000001", text);
+        Assert.Contains("OfficialApi 3", text);
+        Assert.Contains("2026-01-01 10:00:00 +08:00", text);
+        Assert.DoesNotContain("# 明细", text);
+    }
+
+    [Fact]
+    public async Task MarkdownWriter_DetailsPreserveOffsetOriginAndUnknownTimes()
+    {
+        GachaExportDocument source = CreateDocument();
+        GachaExportAccount account = source.Accounts[0];
+        GachaRecord record = account.Records[0] with
+        {
+            ItemId = null,
+            Provenance = new RecordProvenance(
+                DataOrigin.StandardImport,
+                new RecordTimestamps(
+                    ImportedAt: new DateTimeOffset(
+                        2026, 2, 3, 4, 5, 6, TimeSpan.FromHours(8))),
+                new DataSourceReference(
+                    provider: "uigf",
+                    sourceRecordId: "source|1"))
+        };
+        GachaExportDocument document = source with
+        {
+            Accounts = [account with { Records = [record] }]
+        };
+        var writer = new GachaMarkdownExportWriter(
+            new EmptyGachaItemMetadataProvider());
+        await using var stream = new MemoryStream();
+
+        await writer.WriteAsync(
+            stream,
+            document,
+            new GachaMarkdownExportOptions(IncludeDetails: true));
+
+        string text = Encoding.UTF8.GetString(stream.ToArray());
+        Assert.Contains("# 明细", text);
+        Assert.Contains("| +08:00 |", text);
+        Assert.Contains("| StandardImport |", text);
+        Assert.Contains("| 未知 | 未知 | 2026-02-03 04:05:06 +08:00 |", text);
+        Assert.Contains("provider=uigf；record=source\\|1", text);
+        Assert.Contains("| 未知 |", text);
+    }
+
     private sealed class FixedMetadataProvider(
         GachaItemMetadata metadata) : IGachaItemMetadataProvider
     {

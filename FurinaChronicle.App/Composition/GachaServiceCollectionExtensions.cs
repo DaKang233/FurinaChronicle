@@ -63,9 +63,13 @@ internal static class GachaServiceCollectionExtensions
 
         services.AddSingleton<IUigfV42ExportWriter, UigfV42GachaWriter>();
         services.AddSingleton<IGachaTableExportWriter, GachaTableExportWriter>();
+        services.AddSingleton<
+            IGachaMarkdownExportWriter,
+            GachaMarkdownExportWriter>();
         services.AddTransient<LoadGachaExportData>();
         services.AddTransient<ExportUigfV42GachaRecords>();
         services.AddTransient<ExportGachaTable>();
+        services.AddTransient<ExportGachaMarkdown>();
     }
 
     private static void AddMetadata(IServiceCollection services)

@@ -20,3 +20,12 @@ public interface IGachaTableExportWriter
         GachaTableExportOptions options,
         CancellationToken cancellationToken = default);
 }
+
+public interface IGachaMarkdownExportWriter
+{
+    Task WriteAsync(
+        Stream destination,
+        GachaExportDocument document,
+        GachaMarkdownExportOptions options,
+        CancellationToken cancellationToken = default);
+}

@@ -98,3 +98,13 @@ public sealed record GachaTableExportOptions(
         GachaExportLanguages.Validate(Language);
     }
 }
+
+public sealed record GachaMarkdownExportOptions(
+    bool IncludeDetails,
+    string Language = GachaExportLanguages.SimplifiedChinese)
+{
+    public void Validate()
+    {
+        GachaExportLanguages.Validate(Language);
+    }
+}
