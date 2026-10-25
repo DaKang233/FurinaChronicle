@@ -1,6 +1,6 @@
 # Phase 8C 实施计划与首轮记录
 
-状态：8C.0～8C.4 implementation completed；8C.5 product flow pending
+状态：8C.0～8C.5 implementation completed；8C.5 awaiting device evidence；8C.6 pending
 
 启动日期：2026-10-23（Asia/Shanghai）
 
@@ -215,6 +215,24 @@ IArchiveAtomicRestorer       // 8C.3 实现
 
 详细边界、Schema、测试和 8C.5 交接见
 [8C.4 实施记录](PHASE_8C4_IMPLEMENTATION.md)。
+
+## 8C.5 完成记录
+
+- 版本为 `0.8.14 / 8C.5`；数据库仍为 Schema 9，没有新增迁移。
+- 现有 MAUI Windows 侧栏和 Android 档案管理页已有正式“备份与恢复”入口；不依赖 CLI
+  或隐藏验收构建。
+- 全部／单档案逻辑 Archive 导出、app-private staging、Merge／Scoped Replace、歧义
+  映射、Unresolved 决定、设置选择、确认、空间清理确认和 Receipt 结果查询均复用
+  8C.1～8C.4 共享服务。
+- 页面明确区分完整 Archive、分类 Portable、UIGF 和 Markdown。新增 Gacha Markdown
+  摘要与明细，保留范围、原始偏移、来源、可空抓取／导入时间和不完整说明。
+- Release 全量测试 `596/596`；MAUI Windows 与 Android arm64 Release 构建均为
+  0 warning、0 error。
+- Windows／Android 系统文件实际交互、双向往返、真实进程终止和受控数据库副本验收为
+  `Not run`，进入 8C.6；主库恢复点回切仍未授权且没有入口。
+
+详细产品边界、验证和 8C.6 交接见
+[8C.5 实施记录](PHASE_8C5_IMPLEMENTATION.md)。
 
 ## 明确不做
 

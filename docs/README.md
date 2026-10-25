@@ -12,6 +12,8 @@
 - [Phase 8B.7 实施与设备验收状态](project/PHASE_8B7_IMPLEMENTATION.md)
 - [Phase 8B 退出评审](project/PHASE_8B_EXIT_REVIEW.md)
 - [Phase 8C 输入清单](project/PHASE_8C_INPUTS.md)
+- [Phase 8C 实施计划](project/PHASE_8C_PLAN.md)
+- [Phase 8C.5 产品流程实施记录](project/PHASE_8C5_IMPLEMENTATION.md)
 - [术语表](project/GLOSSARY.md)
 - [待确认事项](project/OPEN_QUESTIONS.md)
 
