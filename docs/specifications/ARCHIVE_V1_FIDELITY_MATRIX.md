@@ -2,7 +2,7 @@
 
 状态：Accepted 8C.0 fidelity baseline；依赖 Accepted ADR 0021
 
-本矩阵从 8C.0 冻结时的 Schema 7 持久化对象出发，说明逻辑 Archive 应保留的语义、目标端处理方式和排除原因。表名只用于审查当前覆盖面，不进入公开格式；Archive DTO 不得镜像 SQLite Row。8C.3／8C.4 已将主库推进到 Schema 9；新增对象的处理见后文增量表。
+本矩阵从 8C.0 冻结时的 Schema 7 持久化对象出发，说明逻辑 Archive 应保留的语义、目标端处理方式和排除原因。表名只用于审查当前覆盖面，不进入公开格式；Archive DTO 不得镜像 SQLite Row。8C.3／8C.4 已将主库推进到 Schema 9，8C.6 推进到 Schema 10；新增对象和列的处理见后文增量表。
 
 ## 结论
 
@@ -58,6 +58,19 @@ Schema 9 还为 `ArchiveRestoreReceipts` 增加恢复模式和 RecoveryPointId�
 `ArchiveRestoreReceiptAccounts` 在目标独有账号被 Replace 删除后仍能保留历史映射。
 这些都是目标设备的提交／审计状态，不迁移到另一个设备。
 
+## Schema 10 增量：Archive 保真列
+
+Schema 10 不新增业务表。它补齐从 Archive 恢复后再次导出时必须保留的 SQLite
+承载：
+
+- `PlayerArchives` 与 `GameAccounts` 的创建／更新时间原始偏移；
+- `GachaRecords` 的 `ObservedAt` 和来源 provider／record／snapshot 引用；
+- `GachaRevisions` 与 `ArchiveDomainRevisions` 的创建时间原始偏移。
+
+旧库缺少这些列时迁移为空或使用旧值可证明的既有偏移，不以迁移时间、当前时间或其他
+时间字段伪造历史。Schema 10 没有扩大 Archive v1 的逻辑范围，只保证 Accepted 语义
+不会在 `导入 → 落库 → 再导出` 后静默丢失。
+
 ## 非表状态
 
 | 对象 | 当前事实 | Archive v1 处理 |
@@ -69,7 +82,7 @@ Schema 9 还为 `ArchiveRestoreReceipts` 增加恢复模式和 RecoveryPointId�
 | Android URI／Windows 路径 | 平台文件和窗口状态 | 排除 |
 | 临时导入 staging | 应用私有会话文件 | 排除并在会话结束清理 |
 | SQLite 主库／WAL／SHM | 当前存储实现 | 不作为公开载荷；仅允许内部一致快照读取 |
-| 原始来源响应／附件 | 当前 Schema 9 没有通用 RawSnapshot／附件持久化 | v1 不编造；未来首次持久化前新增独立 Dataset 和保留策略 |
+| 原始来源响应／附件 | 当前 Schema 10 没有通用 RawSnapshot／附件持久化 | v1 不编造；未来首次持久化前新增独立 Dataset 和保留策略 |
 
 ## 领域路径
 
@@ -122,5 +135,5 @@ Schema 9 还为 `ArchiveRestoreReceipts` 增加恢复模式和 RecoveryPointId�
 
 - UIGF 官方当前列出的 Current 版本为 4.2；现有 Gacha Portable v1 继续固定输出 UIGF 4.2。
 - Furina Archive v1、Gacha history Dataset 和容器布局已作为内部实施契约接受，但仍不是公开发布格式。
-- Schema 7 基线足以完成只读逻辑导出；Schema 8～9 只增加目标权威设置、恢复提交和设备本地安全状态，不扩大 Archive v1 的来源事实范围。8C.3／8C.4 已实现无正式产品入口的内部原子 Merge／Scoped Replace。
+- Schema 7 基线足以完成只读逻辑导出；Schema 8～9 只增加目标权威设置、恢复提交和设备本地安全状态，Schema 10 补齐已接受逻辑语义的无损持久化；三者均不扩大 Archive v1 的来源事实范围。8C.5 已接入正式文件入口，8C.6 已完成严格比较和双临时数据库自动往返，设备双向验收仍待执行。
 - 现有角色／武器及挑战 Portable 虽已通过双端文件验收，仍为 internal / unpublished。

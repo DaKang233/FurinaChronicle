@@ -1,6 +1,6 @@
 # Phase 8C 实施计划与首轮记录
 
-状态：8C.0～8C.5 implementation completed；8C.6 in progress
+状态：8C.0～8C.6 engineering completed；8C.6 awaiting device evidence
 
 启动日期：2026-10-23（Asia/Shanghai）
 
@@ -233,6 +233,27 @@ IArchiveAtomicRestorer       // 8C.3 实现
 
 详细产品边界、验证和 8C.6 交接见
 [8C.5 实施记录](PHASE_8C5_IMPLEMENTATION.md)。
+
+## 8C.6 工程完成与设备验收状态
+
+- 版本为 `0.8.15 / 8C.6`；Schema 10 补齐 Archive 双数据库往返实际暴露的持久化
+  保真缺口，不改变 Archive v1 容器版本或 Accepted 产品语义。
+- 严格逻辑比较器按档案／账号副本、事实、Revision、时间偏移、来源、完整度和设置
+  比较，只忽略目标本地父对象 ID、导出元数据和接收操作产生的额外 Revision。
+- 代表性合成档案覆盖多档案、同 UID 独立副本、空父对象、Unresolved、不完整 Gacha、
+  Gacha Revision、A→B→A 观察、Week 手工时间及 Revision、未知完成时间挑战和设置。
+- 两个重开的真实临时 SQLite 数据库完成 `Archive → Merge → NoOp → reopen/export →
+  Merge → NoOp → reopen/export`，严格比较通过；四类语义变异反例均能拒绝。
+- 新增只读宿主验收工具生成两份独立起点、严格比较返回包，并测量容器、展开、staging、
+  临时目录、耗时和进程 working set；它不打开生产数据库，也不替代设备证据。
+- Release 全量测试 `605/605`；MAUI Windows、独立 WinUI 3 和 Android
+  （`E:\AndroidSDK`）Release 适用构建均为 0 warning、0 error。
+- Windows↔Android 双向系统文件流程、真机 Preview／Merge／NoOp／取消／拒绝、受控
+  Scoped Replace、真实进程重开和返回包严格比较尚未执行，阶段状态为
+  `Awaiting device evidence`。主库恢复点回切仍未授权且没有入口。
+
+详细自动化证据、样本、指标、提交和人工清单见
+[8C.6 实施记录](PHASE_8C6_IMPLEMENTATION.md)。
 
 ## 明确不做
 
