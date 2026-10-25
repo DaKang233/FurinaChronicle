@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  Copyright (c) 2026 DaKang233.
+  SPDX-License-Identifier: MIT
+-->
+<ContentPage
+    x:Class="FurinaChronicle.App.UI.Pages.ArchiveTransferPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:controls="clr-namespace:FurinaChronicle.App.UI.Controls"
+    xmlns:viewModels="clr-namespace:FurinaChronicle.App.ViewModels"
+    x:DataType="viewModels:ArchiveTransferPageViewModel"
+    Title="备份与恢复">
+
+    <Shell.TitleView>
+        <controls:PassportAvatarButton
+            IsVisible="{OnPlatform Android=True, WinUI=False}" />
+    </Shell.TitleView>
+
+    <ScrollView VerticalScrollBarVisibility="Always">
+        <VerticalStackLayout Padding="16" Spacing="12">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <VerticalStackLayout Spacing="2">
+                    <Label FontAttributes="Bold" FontSize="24" Text="备份与恢复" />
+                    <Label
+                        FontSize="12"
+                        Opacity="0.72"
+                        Text="完整逻辑 Archive 用于跨端迁移；所有恢复都先预览，再进入单一原子提交。" />
+                </VerticalStackLayout>
+                <ActivityIndicator
+                    Grid.Column="1"
+                    IsRunning="{Binding IsBusy}"
+                    IsVisible="{Binding IsBusy}" />
+            </Grid>
+
+            <Border Padding="14">
+                <VerticalStackLayout Spacing="8">
+                    <Label FontAttributes="Bold" FontSize="18" Text="格式说明" />
+                    <Label Text="完整逻辑 Archive（.fca）：可重新导入；保留当前事实、来源、历史观察、已保留修订、空档案/账号和声明的设置。" />
+                    <Label Text="分类 Portable：只覆盖所选领域；当前属于 internal / unpublished，可重新导入。" />
+                    <Label Text="UIGF 4.2：抽卡社区标准；只表达标准及其兼容扩展允许的数据。" />
+                    <Label Text="Markdown：供人阅读和归档，不能重新导入，也不替代逻辑 Archive。" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border Padding="14">
+                <VerticalStackLayout Spacing="10">
+                    <Label FontAttributes="Bold" FontSize="18" Text="1. 导出" />
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <Label
+                            VerticalOptions="Center"
+                            Text="导出全部档案（关闭后只导出所选档案）" />
+                        <Switch
+                            Grid.Column="1"
+                            IsEnabled="{Binding IsNotBusy}"
+                            IsToggled="{Binding ExportAllArchives, Mode=TwoWay}" />
+                    </Grid>
+                    <Picker
+                        Title="选择档案"
+                        IsEnabled="{Binding IsNotBusy}"
+                        ItemsSource="{Binding Archives}"
+                        ItemDisplayBinding="{Binding Name}"
+                        SelectedItem="{Binding SelectedArchive, Mode=TwoWay}" />
+                    <Button
+                        Clicked="OnExportArchiveClicked"
+                        IsEnabled="{Binding IsNotBusy}"
+                        Text="导出完整逻辑 Archive" />
+
+                    <BoxView HeightRequest="1" Opacity="0.2" />
+                    <Label FontAttributes="Bold" Text="分类出口" />
+                    <Picker
+                        Title="选择分类数据集"
+                        IsEnabled="{Binding IsNotBusy}"
+                        ItemsSource="{Binding DatasetOptions}"
+                        ItemDisplayBinding="{Binding DisplayName}"
+                        SelectedItem="{Binding SelectedDataset, Mode=TwoWay}" />
+                    <ScrollView
+                        HorizontalScrollBarVisibility="Default"
+                        Orientation="Horizontal">
+                        <HorizontalStackLayout Spacing="8">
+                            <Button
+                                Clicked="OnExportDomainPortableClicked"
+                                IsEnabled="{Binding IsNotBusy}"
+                                Text="导出分类 Portable" />
+                            <Button
+                                Clicked="OnExportDomainMarkdownClicked"
+                                IsEnabled="{Binding IsNotBusy}"
+                                Text="导出分类 Markdown" />
+                            <Button
+                                Clicked="OnExportGachaSummaryClicked"
+                                IsEnabled="{Binding IsNotBusy}"
+                                Text="抽卡 Markdown 摘要" />
+                            <Button
+                                Clicked="OnExportGachaDetailsClicked"
+                                IsEnabled="{Binding IsNotBusy}"
+                                Text="抽卡 Markdown 明细" />
+                            <Button
+                                Clicked="OnOpenGachaExportsClicked"
+                                IsEnabled="{Binding IsNotBusy}"
+                                Text="前往 UIGF / 抽卡 Portable" />
+                        </HorizontalStackLayout>
+                    </ScrollView>
+                </VerticalStackLayout>
+            </Border>
+
+            <Border Padding="14">
+                <VerticalStackLayout Spacing="10">
+                    <Label FontAttributes="Bold" FontSize="18" Text="2. 打开并预览 Archive" />
+                    <ScrollView
+                        HorizontalScrollBarVisibility="Default"
+                        Orientation="Horizontal">
+                        <HorizontalStackLayout Spacing="8">
+                            <Button
+                                Clicked="OnOpenArchiveClicked"
+                                IsEnabled="{Binding IsNotBusy}"
+                                Text="选择 .fca 文件" />
+                            <Button
+                                Clicked="OnRetryPreviewClicked"
+                                IsEnabled="{Binding CanInteractWithPlan}"
+                                Text="重新生成预览" />
+                            <Button
+                                Clicked="OnCancelRestoreClicked"
+                                IsEnabled="{Binding IsNotBusy}"
+                                Text="取消当前会话" />
+                        </HorizontalStackLayout>
+                    </ScrollView>
+                    <Label FontAttributes="Bold" Text="文件" />
+                    <Label Text="{Binding PackageSummary}" />
+
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <VerticalStackLayout>
+                            <Label FontAttributes="Bold" Text="应用来源可移植设置" />
+                            <Label
+                                FontSize="12"
+                                Opacity="0.7"
+                                Text="默认保留目标设置；开启后仍会在 Preview 中逐项列出差异。" />
+                        </VerticalStackLayout>
+                        <Switch
+                            Grid.Column="1"
+                            IsEnabled="{Binding CanInteractWithPlan}"
+                            IsToggled="{Binding ApplyPortableSettings, Mode=TwoWay}"
+                            Toggled="OnApplyPortableSettingsToggled" />
+                    </Grid>
+                </VerticalStackLayout>
+            </Border>
+
+            <Border
+                IsVisible="{Binding HasPlan}"
+                Padding="14">
+                <VerticalStackLayout Spacing="10">
+                    <Label FontAttributes="Bold" FontSize="18" Text="3. 完整预览与确认" />
+                    <Label FontAttributes="Bold" Text="数据变化" />
+                    <Label Text="{Binding PlanSummary}" />
+                    <Label FontAttributes="Bold" Text="档案／账号映射" />
+                    <Label Text="{Binding MappingSummary}" />
+                    <Label FontAttributes="Bold" Text="冲突、确认与撤销边界" />
+                    <Label Text="{Binding DiagnosticSummary}" />
+                    <Button
+                        Clicked="OnApplyRestoreClicked"
+                        IsEnabled="{Binding CanConfirm}"
+                        Text="确认并执行原子恢复" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border Padding="14">
+                <VerticalStackLayout Spacing="6">
+                    <Label FontAttributes="Bold" FontSize="18" Text="设备本地 Replace 恢复点" />
+                    <Label Text="{Binding RecoveryPointSummary}" />
+                    <Label
+                        FontSize="12"
+                        Opacity="0.7"
+                        Text="恢复点不是公开 Archive，不会跨端。当前版本尚未开放主库回切。" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border Padding="12">
+                <VerticalStackLayout Spacing="4">
+                    <Label FontAttributes="Bold" Text="{Binding StatusMessage}" />
+                    <Label Text="{Binding ErrorMessage}" TextColor="Red" />
+                </VerticalStackLayout>
+            </Border>
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

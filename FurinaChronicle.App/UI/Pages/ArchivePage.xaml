@@ -35,6 +35,23 @@
             </Grid>
 
             <Border Padding="14">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                    <VerticalStackLayout Spacing="2">
+                        <Label FontAttributes="Bold" FontSize="18" Text="备份与恢复" />
+                        <Label
+                            FontSize="12"
+                            Opacity="0.7"
+                            Text="导出完整逻辑 Archive，或在完整 Preview 后执行 Merge / Scoped Replace。" />
+                    </VerticalStackLayout>
+                    <Button
+                        Grid.Column="1"
+                        Clicked="OnOpenBackupRestoreClicked"
+                        IsEnabled="{Binding IsNotBusy}"
+                        Text="打开" />
+                </Grid>
+            </Border>
+
+            <Border Padding="14">
                 <VerticalStackLayout Spacing="10">
                     <Label FontAttributes="Bold" FontSize="18" Text="档案" />
                     <Picker

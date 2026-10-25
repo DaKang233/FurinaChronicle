@@ -16,6 +16,7 @@ public partial class AppShell : Shell
     private readonly UserPage userPage;
     private readonly UserPageViewModel userPageViewModel;
     private readonly ArchivePage archivePage;
+    private readonly ArchiveTransferPage archiveTransferPage;
     private readonly Phase8BValidationPage phase8BValidationPage;
 #if !PHASE8B_VALIDATION
     private PassportFlyoutHeader? passportFlyoutHeader;
@@ -28,6 +29,7 @@ public partial class AppShell : Shell
         GachaPage gachaPage,
         ArchiveHistoryPage archiveHistoryPage,
         ArchivePage archivePage,
+        ArchiveTransferPage archiveTransferPage,
         Phase8BValidationPage phase8BValidationPage,
         UserPage userPage,
         UserPageViewModel userPageViewModel)
@@ -37,9 +39,13 @@ public partial class AppShell : Shell
         this.gachaPage = gachaPage;
         this.archiveHistoryPage = archiveHistoryPage;
         this.archivePage = archivePage;
+        this.archiveTransferPage = archiveTransferPage;
         this.phase8BValidationPage = phase8BValidationPage;
         this.userPage = userPage;
         this.userPageViewModel = userPageViewModel;
+        Routing.RegisterRoute(
+            "backup-restore-detail",
+            typeof(ArchiveTransferPage));
         Items.Add(CreateContent("正在启动", StartupRoute, startupPage));
     }
 
@@ -61,6 +67,24 @@ public partial class AppShell : Shell
     public Task ShowUserPageAsync()
     {
         return GoToAsync(UserRoute, animate: true);
+    }
+
+    public Task ShowGachaPageAsync()
+    {
+        return GoToAsync(
+            OperatingSystem.IsAndroid()
+                ? "//main/gacha"
+                : "//gacha",
+            animate: true);
+    }
+
+    public Task ShowBackupRestorePageAsync()
+    {
+        return GoToAsync(
+            OperatingSystem.IsAndroid()
+                ? "backup-restore-detail"
+                : "//backup-restore",
+            animate: true);
     }
 
     public void ToggleWindowsSidebar()
@@ -140,6 +164,10 @@ public partial class AppShell : Shell
         Items.Add(CreateFlyoutItem("抽卡记录", "gacha", gachaPage));
         Items.Add(CreateFlyoutItem("档案修改历史", "archive-history", archiveHistoryPage));
         Items.Add(CreateFlyoutItem("档案与账号管理", "archive", archivePage));
+        Items.Add(CreateFlyoutItem(
+            "备份与恢复",
+            "backup-restore",
+            archiveTransferPage));
         Items.Add(CreateFlyoutItem("用户", "user", userPage));
 #endif
     }

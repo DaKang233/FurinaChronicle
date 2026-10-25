@@ -120,6 +120,7 @@ public sealed class PlatformExportFileSaver
             ".md" => "Markdown 文档",
             ".csv" => "CSV 表格",
             ".xlsx" => "Excel 工作簿",
+            ".fca" => "Furina 逻辑 Archive",
             _ => "导出文件"
         };
 #elif ANDROID
@@ -196,6 +197,7 @@ public sealed class PlatformExportFileSaver
             ".csv" => "text/csv",
             ".xlsx" =>
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ".fca" => "application/zip",
             _ => "application/octet-stream"
         };
 #else

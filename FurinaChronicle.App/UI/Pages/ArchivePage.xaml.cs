@@ -38,6 +38,16 @@ public partial class ArchivePage : ContentPage
         }
     }
 
+    private async void OnOpenBackupRestoreClicked(
+        object? sender,
+        EventArgs e)
+    {
+        if (Shell.Current is AppShell shell)
+        {
+            await shell.ShowBackupRestorePageAsync();
+        }
+    }
+
     private void OnAccountSelectionChanged(object? sender, EventArgs e)
     {
         if (sender is Picker picker)

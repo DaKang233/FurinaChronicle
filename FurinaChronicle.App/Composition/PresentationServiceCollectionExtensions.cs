@@ -20,6 +20,7 @@ internal static class PresentationServiceCollectionExtensions
         services.AddTransient<GachaAnalysisViewModel>();
         services.AddTransient<ArchiveHistoryPageViewModel>();
         services.AddSingleton<ArchivePageViewModel>();
+        services.AddSingleton<ArchiveTransferPageViewModel>();
         services.AddSingleton<UserPageViewModel>();
         services.AddSingleton<StartupPageViewModel>();
         services.AddSingleton<Phase8BValidationPageViewModel>();
@@ -29,6 +30,7 @@ internal static class PresentationServiceCollectionExtensions
         services.AddSingleton<HomePage>();
         services.AddSingleton<UserPage>();
         services.AddSingleton<ArchivePage>();
+        services.AddSingleton<ArchiveTransferPage>();
         services.AddTransient<MainlandLoginMethodPage>();
         services.AddTransient<HoYoLabPasswordLoginPage>();
         services.AddTransient<QrLoginPage>();
