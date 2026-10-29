@@ -38,7 +38,7 @@ public sealed class Phase8B7MigrationTests
 
         using (SQLiteConnection raw = fixture.OpenRawConnection())
         {
-            Assert.Equal(10, raw.ExecuteScalar<int>("PRAGMA user_version;"));
+            Assert.Equal(FurinaDatabase.CurrentSchemaVersion, raw.ExecuteScalar<int>("PRAGMA user_version;"));
             Assert.Equal(
                 ApplicationId,
                 raw.ExecuteScalar<int>("PRAGMA application_id;"));

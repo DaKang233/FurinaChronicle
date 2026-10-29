@@ -100,11 +100,7 @@ public sealed class SqliteArchiveExportSnapshotFactory(
                         account.Uid,
                         account.ServerRegion,
                         account.IsPlaceholder,
-                        account.RoleIdentity is null
-                            ? account.IsPlaceholder
-                                ? "placeholder_account"
-                                : "legacy_unresolved_identity"
-                            : null,
+                        account.UnresolvedReason,
                         account.CreatedAt,
                         account.UpdatedAt));
                 }
@@ -224,7 +220,7 @@ public sealed class SqliteArchiveExportSnapshotFactory(
         public ArchiveExportScope Scope { get; } = scope;
         public ArchiveCatalog Catalog { get; } = catalog;
         public ArchivePortableSettings Settings { get; } = settings;
-        public int SchemaVersion { get; } = 10;
+        public int SchemaVersion { get; } = FurinaDatabase.CurrentSchemaVersion;
         public string StateToken { get; } = stateToken;
         public long SnapshotLength { get; } = snapshotLength;
 

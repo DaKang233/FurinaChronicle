@@ -7,7 +7,7 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite;
 
 public sealed partial class SqliteGachaAtomicChangeStore
 {
-    private const int ArchiveRestoreSchemaVersion = 10;
+    private const int ArchiveRestoreSchemaVersion = FurinaDatabase.CurrentSchemaVersion;
     private static readonly SemaphoreSlim ArchiveRestoreWriterGate = new(1, 1);
 
     private sealed record MaterializedArchiveFact(

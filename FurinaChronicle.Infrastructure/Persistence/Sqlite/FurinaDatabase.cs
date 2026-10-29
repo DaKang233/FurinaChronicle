@@ -8,7 +8,8 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite;
 
 public sealed class FurinaDatabase : IAsyncDisposable
 {
-    internal const int CurrentSchemaVersion = 10;
+    internal const int CurrentSchemaVersion = 11;
+    private const int ArchiveFidelitySchemaVersion = 10;
     private const int ArchiveReplaceSchemaVersion = 9;
     private const int ArchiveRestoreSchemaVersion = 8;
     private const int ChronicleSchemaVersion = 7;
@@ -135,6 +136,11 @@ public sealed class FurinaDatabase : IAsyncDisposable
                      schemaVersion == ArchiveReplaceSchemaVersion)
             {
                 await MigrateVersionNineToCurrentAsync(cancellationToken);
+            }
+            else if (applicationId == CurrentApplicationId &&
+                     schemaVersion == ArchiveFidelitySchemaVersion)
+            {
+                await MigrateVersionTenToCurrentAsync(cancellationToken);
             }
             else if (applicationId == 0 &&
                      schemaVersion == 0 &&
@@ -299,6 +305,17 @@ public sealed class FurinaDatabase : IAsyncDisposable
     }
 
     private async Task MigrateVersionNineToCurrentAsync(
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await Connection.RunInTransactionAsync(connection =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            SetCurrentSchemaVersion(connection);
+        });
+    }
+
+    private async Task MigrateVersionTenToCurrentAsync(
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -484,8 +501,32 @@ public sealed class FurinaDatabase : IAsyncDisposable
     private static void SetCurrentSchemaVersion(SQLiteConnection connection)
     {
         MigrateVersionNineToVersionTen(connection);
+        MigrateVersionTenToVersionEleven(connection);
         connection.Execute(
             $"PRAGMA user_version = {CurrentSchemaVersion};");
+    }
+
+    private static void MigrateVersionTenToVersionEleven(
+        SQLiteConnection connection)
+    {
+        if (connection.Query<SchemaColumnRow>("PRAGMA table_info(GameAccounts);")
+            .Any(value => value.Name == "UnresolvedReason"))
+        {
+            return;
+        }
+        connection.Execute(
+            "ALTER TABLE GameAccounts ADD COLUMN UnresolvedReason TEXT;");
+        // Reproduce only the explanation the old exporter could prove.
+        // Lost source explanations cannot be reconstructed from a v10 database.
+        connection.Execute(
+            """
+            UPDATE GameAccounts
+            SET UnresolvedReason = CASE
+                WHEN IsPlaceholder <> 0 THEN 'placeholder_account'
+                ELSE 'legacy_unresolved_identity'
+            END
+            WHERE GameRoleIdentityId IS NULL;
+            """);
     }
 
     private static void MigrateVersionNineToVersionTen(
@@ -621,6 +662,7 @@ public sealed class FurinaDatabase : IAsyncDisposable
                 "ServerRegion",
                 "DisplayName",
                 "IsPlaceholder",
+                "UnresolvedReason",
                 "CreatedAtUtcTicks",
                 "CreatedAtOffsetMinutes",
                 "UpdatedAtUtcTicks",
@@ -993,6 +1035,7 @@ public sealed class FurinaDatabase : IAsyncDisposable
                     ServerRegion INTEGER NOT NULL,
                     DisplayName TEXT,
                     IsPlaceholder INTEGER NOT NULL,
+                    UnresolvedReason TEXT,
                     CreatedAtUtcTicks INTEGER NOT NULL,
                     CreatedAtOffsetMinutes INTEGER,
                     UpdatedAtUtcTicks INTEGER NOT NULL,

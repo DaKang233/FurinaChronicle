@@ -132,6 +132,7 @@ public sealed partial class SqliteGachaAtomicChangeStore
                     ServerRegion = (int)source.LegacyServer,
                     DisplayName = source.DisplayName,
                     IsPlaceholder = source.IsPlaceholder,
+                    UnresolvedReason = source.UnresolvedReason,
                     CreatedAtUtcTicks = source.CreatedAt.UtcDateTime.Ticks,
                     CreatedAtOffsetMinutes =
                         checked((int)source.CreatedAt.Offset.TotalMinutes),

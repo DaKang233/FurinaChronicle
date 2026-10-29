@@ -20,6 +20,7 @@ public sealed class SqliteGameAccountRepository(FurinaDatabase database)
             ga.ServerRegion,
             ga.DisplayName,
             ga.IsPlaceholder,
+            ga.UnresolvedReason,
             ga.CreatedAtUtcTicks,
             ga.CreatedAtOffsetMinutes,
             ga.UpdatedAtUtcTicks,

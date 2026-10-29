@@ -17,6 +17,11 @@ namespace FurinaChronicle.Core.Archives
         DateTimeOffset UpdatedAt,
         GameRoleIdentity? RoleIdentity = null)
     {
+        // Preserve the supplied explanation; live identity diagnostics remain separate.
+        public string? UnresolvedReason { get; init; } = RoleIdentity is not null
+            ? null
+            : IsPlaceholder ? "placeholder_account" : "legacy_unresolved_identity";
+
         public GameRoleIdentityId? GameRoleIdentityId => RoleIdentity?.Id;
 
         public GameRoleIdentityResolutionState IdentityResolutionState =>

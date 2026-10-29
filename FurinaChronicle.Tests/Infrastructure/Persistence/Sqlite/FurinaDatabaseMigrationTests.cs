@@ -10,10 +10,10 @@ namespace FurinaChronicle.Tests.Infrastructure.Persistence.Sqlite;
 public sealed class FurinaDatabaseMigrationTests
 {
     private const int CurrentApplicationId = 0x46554348;
-    private const int CurrentSchemaVersion = 10;
+    private const int CurrentSchemaVersion = 11;
 
     [Fact]
-    public async Task InitializeAsync_NewDatabase_CreatesCurrentVersionTenSchema()
+    public async Task InitializeAsync_NewDatabase_CreatesCurrentSchema()
     {
         await using var fixture = MigrationFixture.Create();
 
@@ -58,6 +58,7 @@ public sealed class FurinaDatabaseMigrationTests
             .ToArray();
         Assert.Contains("CreatedAtOffsetMinutes", accountColumns);
         Assert.Contains("UpdatedAtOffsetMinutes", accountColumns);
+        Assert.Contains("UnresolvedReason", accountColumns);
         string[] revisionColumns = connection
             .Query<NameRow>("PRAGMA table_info(GachaRevisions);")
             .Select(row => row.Name)
@@ -894,9 +895,96 @@ public sealed class FurinaDatabaseMigrationTests
             connection.ExecuteScalar<int>("PRAGMA application_id;"));
     }
 
+    [Fact]
+    public async Task InitializeAsync_VersionTenPreservesAccountsAndKnownDiagnostics()
+    {
+        await using var fixture = MigrationFixture.Create();
+        await using (FurinaDatabase database = fixture.OpenDatabase())
+        {
+            await database.InitializeAsync();
+        }
+        Guid archiveId = Guid.NewGuid();
+        Guid resolvedId = Guid.NewGuid();
+        Guid placeholderId = Guid.NewGuid();
+        Guid unresolvedId = Guid.NewGuid();
+        using (SQLiteConnection legacy = fixture.OpenRawConnection())
+        {
+            legacy.Insert(PlayerArchiveRow.FromDomain(
+                SqliteRepositoryTestContext.CreateArchive("v10 archive", archiveId)));
+            GameAccount resolved = SqliteRepositoryTestContext.CreateAccount(
+                archiveId, id: resolvedId);
+            legacy.Insert(GameRoleIdentityRow.FromDomain(resolved.RoleIdentity!));
+            legacy.Insert(GameAccountRow.FromDomain(resolved));
+            legacy.Insert(GameAccountRow.FromDomain(
+                SqliteRepositoryTestContext.CreateAccount(archiveId,
+                    uid: "old-placeholder", region: GameServerRegion.Unknown,
+                    id: placeholderId, isPlaceholder: true)));
+            legacy.Insert(GameAccountRow.FromDomain(
+                SqliteRepositoryTestContext.CreateAccount(archiveId,
+                    uid: "old-unresolved", region: GameServerRegion.Unknown,
+                    id: unresolvedId)));
+            legacy.Execute("ALTER TABLE GameAccounts DROP COLUMN UnresolvedReason;");
+            legacy.Execute("PRAGMA user_version = 10;");
+        }
+
+        await using (FurinaDatabase database = fixture.OpenDatabase())
+        {
+            await database.InitializeAsync();
+            await database.InitializeAsync();
+            var accounts = new SqliteGameAccountRepository(database);
+            Assert.Null((await accounts.GetByIdAsync(resolvedId))!.UnresolvedReason);
+            Assert.Equal("placeholder_account",
+                (await accounts.GetByIdAsync(placeholderId))!.UnresolvedReason);
+            Assert.Equal("legacy_unresolved_identity",
+                (await accounts.GetByIdAsync(unresolvedId))!.UnresolvedReason);
+        }
+        await using (FurinaDatabase reopened = fixture.OpenDatabase())
+        {
+            await reopened.InitializeAsync();
+        }
+        using SQLiteConnection raw = fixture.OpenRawConnection();
+        AssertCurrentSchema(raw);
+        Assert.Equal(3, raw.ExecuteScalar<int>("SELECT COUNT(*) FROM GameAccounts;"));
+        Assert.Equal(archiveId.ToString("D"),
+            raw.ExecuteScalar<string>("SELECT PlayerArchiveId FROM GameAccounts WHERE Id = ?;",
+                placeholderId.ToString("D")));
+        Assert.Equal(0, raw.ExecuteScalar<int>(
+            "SELECT COUNT(*) FROM pragma_foreign_key_check;"));
+    }
+
+    [Fact]
+    public async Task InitializeAsync_VersionTenFailureRollsBackReasonColumnAndVersion()
+    {
+        await using var fixture = MigrationFixture.Create();
+        await using (FurinaDatabase database = fixture.OpenDatabase())
+        {
+            await database.InitializeAsync();
+        }
+        using (SQLiteConnection legacy = fixture.OpenRawConnection())
+        {
+            legacy.Insert(PlayerArchiveRow.FromDomain(
+                SqliteRepositoryTestContext.CreateArchive("keep on failure")));
+            legacy.Execute("ALTER TABLE GameAccounts DROP COLUMN UnresolvedReason;");
+            legacy.Execute("ALTER TABLE GameAccounts DROP COLUMN IsPlaceholder;");
+            legacy.Execute("PRAGMA user_version = 10;");
+        }
+        await using (FurinaDatabase database = fixture.OpenDatabase())
+        {
+            await Assert.ThrowsAsync<SQLiteException>(() => database.InitializeAsync());
+        }
+        using SQLiteConnection raw = fixture.OpenRawConnection();
+        Assert.Equal(10, raw.ExecuteScalar<int>("PRAGMA user_version;"));
+        Assert.DoesNotContain(raw.Query<NameRow>("PRAGMA table_info(GameAccounts);"),
+            column => column.Name == "UnresolvedReason");
+        Assert.Equal("keep on failure",
+            raw.ExecuteScalar<string>("SELECT Name FROM PlayerArchives;"));
+    }
+
     private static void DropVersionTenGachaColumns(
         SQLiteConnection connection)
     {
+        connection.Execute(
+            "ALTER TABLE GameAccounts DROP COLUMN UnresolvedReason;");
         connection.Execute(
             "ALTER TABLE GachaRecords DROP COLUMN ObservedAtUtcTicks;");
         connection.Execute(

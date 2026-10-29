@@ -241,30 +241,6 @@ internal static class Phase8CValidationTool
     }
 }
 
-internal sealed class RuntimeMetrics(long baselineWorkingSet)
-{
-    public long BaselineWorkingSet { get; } = baselineWorkingSet;
-
-    public long PeakWorkingSet { get; private set; } = baselineWorkingSet;
-
-    public long PeakTemporaryBytes { get; private set; }
-
-    public void Sample(string root)
-    {
-        PeakWorkingSet = Math.Max(
-            PeakWorkingSet,
-            Process.GetCurrentProcess().WorkingSet64);
-        long temporaryBytes = Directory.Exists(root)
-            ? Directory.EnumerateFiles(
-                    root,
-                    "*",
-                    SearchOption.AllDirectories)
-                .Sum(path => new FileInfo(path).Length)
-            : 0;
-        PeakTemporaryBytes = Math.Max(PeakTemporaryBytes, temporaryBytes);
-    }
-}
-
 internal sealed record PackageMetrics(
     string Sha256,
     long ContainerBytes,

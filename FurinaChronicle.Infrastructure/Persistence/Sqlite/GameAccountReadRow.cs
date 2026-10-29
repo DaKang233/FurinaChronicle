@@ -21,6 +21,8 @@ internal sealed class GameAccountReadRow
 
     public bool IsPlaceholder { get; set; }
 
+    public string? UnresolvedReason { get; set; }
+
     public long CreatedAtUtcTicks { get; set; }
 
     public int? CreatedAtOffsetMinutes { get; set; }
@@ -48,7 +50,10 @@ internal sealed class GameAccountReadRow
             IsPlaceholder,
             ReadTimestamp(CreatedAtUtcTicks, CreatedAtOffsetMinutes),
             ReadTimestamp(UpdatedAtUtcTicks, UpdatedAtOffsetMinutes),
-            roleIdentity);
+            roleIdentity)
+        {
+            UnresolvedReason = roleIdentity is null ? UnresolvedReason : null,
+        };
     }
 
     private static DateTimeOffset ReadTimestamp(long utcTicks, int? offsetMinutes) =>

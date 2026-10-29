@@ -156,7 +156,8 @@ public sealed partial class ArchiveSemanticComparerTests
 
     private static MemoryArchiveRestoreDataSource Create(
         bool remapped,
-        Mutation mutation = Mutation.None)
+        Mutation mutation = Mutation.None,
+        string? unresolvedReason = "phase8c6_synthetic_unresolved")
     {
         DateTimeOffset created =
             new(2026, 10, 1, 8, 0, 0, TimeSpan.FromHours(8));
@@ -217,7 +218,7 @@ public sealed partial class ArchiveSemanticComparerTests
                     "placeholder",
                     GameServerRegion.Unknown,
                     true,
-                    "placeholder_account",
+                    unresolvedReason,
                     created,
                     created.AddDays(1))]),
         };

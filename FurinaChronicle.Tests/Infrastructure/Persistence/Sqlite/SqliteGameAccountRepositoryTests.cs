@@ -10,6 +10,28 @@ namespace FurinaChronicle.Tests.Infrastructure.Persistence.Sqlite;
 
 public sealed class SqliteGameAccountRepositoryTests
 {
+    [Theory]
+    [InlineData("phase8c6_synthetic_unresolved")]
+    [InlineData(null)]
+    public async Task UnresolvedReasonSurvivesReadAndRemarkUpdate(string? reason)
+    {
+        await using var context = SqliteRepositoryTestContext.Create();
+        PlayerArchive archive = await AddArchiveAsync(context);
+        GameAccount account = SqliteRepositoryTestContext.CreateAccount(
+            archive.Id,
+            uid: "placeholder",
+            region: GameServerRegion.Unknown,
+            isPlaceholder: true) with { UnresolvedReason = reason };
+        await context.Accounts.AddAsync(account);
+
+        GameAccount loaded = Assert.IsType<GameAccount>(
+            await context.Accounts.GetByIdAsync(account.Id));
+        Assert.Equal(reason, loaded.UnresolvedReason);
+        await context.Accounts.UpdateAsync(loaded with { DisplayName = "new remark" });
+        Assert.Equal(reason,
+            (await context.Accounts.GetByIdAsync(account.Id))!.UnresolvedReason);
+    }
+
     [Fact]
     public async Task AddAsync_ThenGetByIdAsync_RoundTripsAllFields()
     {

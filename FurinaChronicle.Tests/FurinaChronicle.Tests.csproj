@@ -28,6 +28,10 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Compile Include="..\eng\phase8c\FurinaChronicle.Phase8CValidation\RuntimeMetrics.cs"
+             Link="Validation\RuntimeMetrics.cs" />
+    <Compile Include="..\eng\phase8c\FurinaChronicle.Phase8CValidation\SyntheticArchiveSnapshot.cs"
+             Link="Validation\SyntheticArchiveSnapshot.cs" />
   </ItemGroup>
 
   <ItemGroup>

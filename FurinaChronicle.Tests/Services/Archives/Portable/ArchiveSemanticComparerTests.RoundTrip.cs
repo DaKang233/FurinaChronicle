@@ -13,8 +13,30 @@ namespace FurinaChronicle.Tests.Services.Archives.Portable;
 
 public sealed partial class ArchiveSemanticComparerTests
 {
-    [Fact]
-    public async Task RepresentativeArchiveSurvivesTwoReopenedDatabaseRoundTrips()
+    [Theory]
+    [InlineData("phase8c6_synthetic_unresolved")]
+    [InlineData(null)]
+    public async Task RepresentativeArchiveSurvivesTwoReopenedDatabaseRoundTrips(
+        string? unresolvedReason)
+    {
+        await using MemoryArchiveRestoreDataSource source =
+            Create(remapped: false, unresolvedReason: unresolvedReason);
+        await VerifyTwoDatabaseRoundTripsAsync(source);
+    }
+
+    [Theory]
+    [InlineData("windows")]
+    [InlineData("android")]
+    public async Task ActualValidationSeedsPreserveAllSemanticsAcrossTwoDatabases(
+        string origin)
+    {
+        await using SyntheticArchiveSnapshot source =
+            SyntheticArchiveSnapshot.Create(origin);
+        await VerifyTwoDatabaseRoundTripsAsync(source);
+    }
+
+    private static async Task VerifyTwoDatabaseRoundTripsAsync(
+        IArchiveExportSnapshot source)
     {
         string root = Path.Combine(
             Path.GetTempPath(),
@@ -23,8 +45,6 @@ public sealed partial class ArchiveSemanticComparerTests
         Directory.CreateDirectory(root);
         try
         {
-            await using MemoryArchiveRestoreDataSource source =
-                Create(remapped: false);
             byte[] original = await WritePackageAsync(
                 source,
                 "windows-synthetic-origin");

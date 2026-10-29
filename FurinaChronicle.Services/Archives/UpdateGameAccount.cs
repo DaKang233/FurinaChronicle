@@ -98,6 +98,7 @@ public sealed class UpdateGameAccount(IGameAccountRepository repository)
             IsPlaceholder = false,
             UpdatedAt = DateTimeOffset.UtcNow,
             RoleIdentity = roleIdentity,
+            UnresolvedReason = null,
         };
 
         await repository.UpdateAsync(updated, cancellationToken);

@@ -85,6 +85,7 @@ public sealed class SqliteGachaPortableExportSnapshotFactory(
                             ga.ServerRegion,
                             ga.DisplayName,
                             ga.IsPlaceholder,
+                            ga.UnresolvedReason,
                             ga.CreatedAtUtcTicks,
                             ga.UpdatedAtUtcTicks,
                             gri.GameBiz AS IdentityGameBiz,

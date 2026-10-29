@@ -31,6 +31,8 @@ internal sealed class GameAccountRow
 
     public bool IsPlaceholder { get; set; }
 
+    public string? UnresolvedReason { get; set; }
+
     public long CreatedAtUtcTicks { get; set; }
 
     public int? CreatedAtOffsetMinutes { get; set; }
@@ -50,6 +52,9 @@ internal sealed class GameAccountRow
             ServerRegion = (int)account.ServerRegion,
             DisplayName = account.DisplayName,
             IsPlaceholder = account.IsPlaceholder,
+            UnresolvedReason = account.RoleIdentity is null
+                ? account.UnresolvedReason
+                : null,
             CreatedAtUtcTicks = account.CreatedAt.UtcDateTime.Ticks,
             CreatedAtOffsetMinutes =
                 checked((int)account.CreatedAt.Offset.TotalMinutes),
