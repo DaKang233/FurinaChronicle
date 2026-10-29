@@ -16,6 +16,8 @@
 - [Phase 8C.5 产品流程实施记录](project/PHASE_8C5_IMPLEMENTATION.md)
 - [Phase 8C.6 双向往返验收规范](specifications/PHASE_8C6_ROUNDTRIP_ACCEPTANCE.md)
 - [Phase 8C.6 工程实施与设备验收状态](project/PHASE_8C6_IMPLEMENTATION.md)
+- [Phase 8C.6 验收缺陷修复记录](project/PHASE_8C6_FIXES_20261029.md)
+- [Phase 8C.6 DSH / UIA 补测指南](development/PHASE_8C6_RETEST_GUIDE.md)
 - [术语表](project/GLOSSARY.md)
 - [待确认事项](project/OPEN_QUESTIONS.md)
 

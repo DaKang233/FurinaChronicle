@@ -1,12 +1,19 @@
 # Phase 8C.6 双向 Archive 往返工程实施与设备验收状态
 
-状态：Engineering completed；Awaiting device evidence
+状态：Engineering fixes verified；Partial device evidence；修复后设备回归待执行
 
 日期：2026-10-25
 
 版本：`0.8.15 / 8C.6`
 
-数据库：Schema 10
+数据库：Schema 11（2026-10-29 保真修复；原始工程记录使用 Schema 10）
+
+2026-10-29 更新：下文是 2026-10-25 的原始工程记录。随后收到的 DSH 双端设备报告
+位于维护者工作区，已取得双向文件、NoOp、取消、受控 Replace 等部分设备证据；不能
+继续将这些项目一概称为 Not run，也不能据此关闭全部门槛。报告暴露的首次导入原因
+丢失和工具采样竞态已修复，新增回归通过。当前状态和剩余项目以
+[修复记录](PHASE_8C6_FIXES_20261029.md)及[补测指南](../development/PHASE_8C6_RETEST_GUIDE.md)
+为准；旧报告和导出包保留，不重写为新版本证据。
 
 ## 范围与结论
 

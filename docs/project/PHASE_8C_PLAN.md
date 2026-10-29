@@ -1,6 +1,6 @@
 # Phase 8C 实施计划与首轮记录
 
-状态：8C.0～8C.6 engineering completed；8C.6 awaiting device evidence
+状态：8C.0～8C.6 engineering completed；8C.6 partial device evidence；Schema 11 修复后回归待验收
 
 启动日期：2026-10-23（Asia/Shanghai）
 
@@ -256,6 +256,10 @@ IArchiveAtomicRestorer       // 8C.3 实现
 [8C.6 实施记录](PHASE_8C6_IMPLEMENTATION.md)。
 
 ## 明确不做
+
+2026-10-29 补充：DSH 已提交部分双端设备证据；首次导入未解析原因丢失与验证工具
+采样竞态已修复，当前 Schema 11，Release 测试 616/616。
+详见[验收缺陷修复记录](PHASE_8C6_FIXES_20261029.md)。这不关闭未完成设备门槛。
 
 - 主库恢复点文件切换或正式生产恢复入口；
 - 云同步、ChangeJournal、WebDAV、服务端账号、E2EE、社区统计；
