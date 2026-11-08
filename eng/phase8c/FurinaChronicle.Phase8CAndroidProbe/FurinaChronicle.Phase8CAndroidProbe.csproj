@@ -1,0 +1,26 @@
+<!--
+  Copyright (c) 2026 DaKang233.
+  SPDX-License-Identifier: MIT
+-->
+
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-android</TargetFramework>
+    <SupportedOSPlatformVersion>24.0</SupportedOSPlatformVersion>
+    <AssemblyName>FurinaChronicle.Phase8CValidation</AssemblyName>
+    <ApplicationId>com.companyname.furinachronicle.validation.phase8c7probe</ApplicationId>
+    <ApplicationTitle>FurinaChronicle 8C.7 Probe</ApplicationTitle>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AndroidPackageFormats>apk</AndroidPackageFormats>
+    <EmbedAssembliesIntoApk>true</EmbedAssembliesIntoApk>
+  </PropertyGroup>
+  <Import Project="../../../Version.props" />
+  <Import Project="../../../build/FurinaVersion.targets" />
+  <ItemGroup>
+    <ProjectReference Include="../../../FurinaChronicle.Infrastructure/FurinaChronicle.Infrastructure.csproj" />
+    <Compile Include="../FurinaChronicle.Phase8CValidation/RestoreInterruptionProbe.cs" Link="RestoreInterruptionProbe.cs" />
+    <Compile Include="../FurinaChronicle.Phase8CValidation/SyntheticArchiveSnapshot.cs" Link="SyntheticArchiveSnapshot.cs" />
+  </ItemGroup>
+</Project>

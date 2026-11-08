@@ -13,6 +13,20 @@ internal static class Phase8CValidationTool
 {
     public static async Task<int> RunAsync(string[] args)
     {
+        if (args.Length == 4 && args[0] == "interruption")
+        {
+            try
+            {
+                await RestoreInterruptionProbe.RunAsync(
+                    args[1], args[2], args[3], "windows", Console.WriteLine);
+                return 0;
+            }
+            catch (Exception exception)
+            {
+                Console.Error.WriteLine(exception);
+                return 1;
+            }
+        }
         if (args.Length == 3 &&
             string.Equals(
                 args[0],
@@ -230,6 +244,8 @@ internal static class Phase8CValidationTool
 
     private static void WriteUsage()
     {
+        Console.Error.WriteLine(
+            "Usage: interruption <prepare|before|recover|after|check> <absolute-parent> <run-guid-N>");
         Console.Error.WriteLine(
             "Usage: dotnet run --project " +
             "eng/phase8c/FurinaChronicle.Phase8CValidation -- " +

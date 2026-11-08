@@ -4,3 +4,4 @@
 using System.Runtime.CompilerServices;
 
 [assembly: InternalsVisibleTo("FurinaChronicle.Tests")]
+[assembly: InternalsVisibleTo("FurinaChronicle.Phase8CValidation")]
