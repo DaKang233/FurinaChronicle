@@ -60,6 +60,17 @@ Windows 必须使用无真实通行证的测试用户环境，或已有证据证
 若侧栏出现真实通行证，记录环境不符合要求，不清空、读取或导出凭据来补救。
 首次启动需要的公共元数据准备也单独记录。
 
+2026-11-03 补充：以上“没有更换这些服务”为 2026-10-29 的历史状态。当前 Windows
+验证构建改为强制要求绝对 `FURINA_PHASE8C6_DIRECTORY`，全部 AppData／Cache 使用该
+根下的 `app-data`／`cache`；Preferences 仅保留会话状态，凭据存储禁用，不回落到生产
+存储。Android 继续使用独立包私有目录。本地权威可移植设置仍在验证 SQLite 中。
+这不表示登录迁移已验收。普通生产构建的目录与系统存储机制不变。
+
+切换 Phase 8 验收模式时，当前 `FurinaMauiIdentity.targets` 会按应用标识、名称及版本
+输入使生成 Windows 清单失效，并校验实际生成的标识和标题。旧版本仍须定向清理相同
+TFM／配置／RID 的中间目录；新版本也必须在启动前核对 AssemblyInfo 与 DLL 的
+`AppInfo.PackageName`。验收输出用独立 `BaseOutputPath`，不得覆盖现有生产产物。
+
 Android 的 UIA 能力沿用上一轮已验证方案：手机原生控件树／截图，加真机镜像或 ADB
 输入。Windows UIA 只看到一个投屏视频区域时，不要宣称它能读取手机控件。
 安装前重新核对设备别名、ABI、签名和完整包名；不用旧 transport ID 盲选设备。

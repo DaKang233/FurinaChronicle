@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 using FurinaChronicle.App.UI.TechnicalPreview;
+using FurinaChronicle.App.Persistence;
 
 namespace FurinaChronicle.App.Composition;
 
@@ -11,8 +12,14 @@ internal static class PlatformServiceCollectionExtensions
         this IServiceCollection services)
     {
         services.AddSingleton(TimeProvider.System);
+#if WINDOWS && (PHASE8C_VALIDATION || PHASE8B_VALIDATION)
+        _ = PlatformStoragePaths.AppDataDirectory;
+        services.AddSingleton<IPreferences, ValidationPreferences>();
+        services.AddSingleton<ISecureStorage, DisabledValidationSecureStorage>();
+#else
         services.AddSingleton<IPreferences>(Preferences.Default);
         services.AddSingleton<ISecureStorage>(SecureStorage.Default);
+#endif
 #if ANDROID
         services.AddSingleton<
             IMaterialBottomSheetPreview,

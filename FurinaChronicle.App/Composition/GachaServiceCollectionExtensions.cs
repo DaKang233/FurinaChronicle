@@ -1,6 +1,7 @@
 // Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
+using FurinaChronicle.App.Persistence;
 using FurinaChronicle.Infrastructure.Gacha.Exporting;
 using FurinaChronicle.Infrastructure.Gacha.Importing;
 using FurinaChronicle.Infrastructure.Gacha.Metadata;
@@ -75,7 +76,7 @@ internal static class GachaServiceCollectionExtensions
     private static void AddMetadata(IServiceCollection services)
     {
         string metadataDatabasePath = Path.Combine(
-            FileSystem.AppDataDirectory,
+            PlatformStoragePaths.AppDataDirectory,
             "genshin-metadata.db3");
         services.AddSingleton(new GachaMetadataOptions(metadataDatabasePath));
         services.AddSingleton<GachaMetadataDatabase>();
@@ -93,18 +94,18 @@ internal static class GachaServiceCollectionExtensions
         services.AddSingleton(
             new YsHelperGachaEventCatalogOptions(
                 Path.Combine(
-                    FileSystem.AppDataDirectory,
+                    PlatformStoragePaths.AppDataDirectory,
                     "metadata",
                     "yshelper-gacha-events.zh-Hans.json")));
         services.AddSingleton<IGachaEventCatalog, YsHelperGachaEventCatalog>();
 
         services.AddSingleton(
             new GachaItemIconCacheOptions(
-                Path.Combine(FileSystem.CacheDirectory, "gacha-item-icons")));
+                Path.Combine(PlatformStoragePaths.CacheDirectory, "gacha-item-icons")));
         services.AddSingleton<IGachaItemIconCache, FileGachaItemIconCache>();
         services.AddSingleton(
             new GachaBannerImageCacheOptions(
-                Path.Combine(FileSystem.CacheDirectory, "gacha-banner-images")));
+                Path.Combine(PlatformStoragePaths.CacheDirectory, "gacha-banner-images")));
         services.AddSingleton<IGachaBannerImageCache, FileGachaBannerImageCache>();
         services.AddTransient<PreloadGachaBannerImages>();
     }
@@ -116,7 +117,7 @@ internal static class GachaServiceCollectionExtensions
         services.AddSingleton<IGachaPortableInputStager>(
             _ => new FileGachaPortableInputStager(
                 Path.Combine(
-                    FileSystem.CacheDirectory,
+                    PlatformStoragePaths.CacheDirectory,
                     "gacha-portable-staging"),
                 limits));
         services.AddSingleton<
@@ -125,7 +126,7 @@ internal static class GachaServiceCollectionExtensions
         services.AddSingleton<IGachaPortableIndexedPackageFactory>(
             _ => new GachaPortableIndexedPackageFactory(
                 Path.Combine(
-                    FileSystem.CacheDirectory,
+                    PlatformStoragePaths.CacheDirectory,
                     "gacha-portable-index"),
                 limits));
         services.AddSingleton<

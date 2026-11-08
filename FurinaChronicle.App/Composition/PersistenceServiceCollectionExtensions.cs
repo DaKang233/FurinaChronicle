@@ -37,7 +37,7 @@ internal static class PersistenceServiceCollectionExtensions
         databasePath = Path.Combine(
             string.IsNullOrWhiteSpace(validationDirectory)
                 ? Path.Combine(
-                    FileSystem.AppDataDirectory,
+                    PlatformStoragePaths.AppDataDirectory,
                     "phase8c6-validation")
                 : Path.GetFullPath(validationDirectory),
             "furinachronicle-phase8c6-validation.db3");
@@ -53,13 +53,13 @@ internal static class PersistenceServiceCollectionExtensions
         databasePath = Path.Combine(
             string.IsNullOrWhiteSpace(validationDirectory)
                 ? Path.Combine(
-                    FileSystem.AppDataDirectory,
+                    PlatformStoragePaths.AppDataDirectory,
                     "phase8b7-validation")
                 : Path.GetFullPath(validationDirectory),
             "furinachronicle-validation.db3");
 #else
         databasePath = Path.Combine(
-            FileSystem.AppDataDirectory,
+            PlatformStoragePaths.AppDataDirectory,
             "furinachronicle.db3");
 #endif
         Debug.WriteLine($"FurinaChronicle database: {databasePath}");

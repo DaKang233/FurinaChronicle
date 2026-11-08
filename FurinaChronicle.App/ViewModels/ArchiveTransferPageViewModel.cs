@@ -1,6 +1,7 @@
 // Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
+using FurinaChronicle.App.Persistence;
 using System.Collections.ObjectModel;
 using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -709,7 +710,7 @@ public partial class ArchiveTransferPageViewModel(
     private static string CreateTemporaryPath(string extension)
     {
         string directory = Path.Combine(
-            FileSystem.CacheDirectory,
+            PlatformStoragePaths.CacheDirectory,
             "archive-product-exports");
         Directory.CreateDirectory(directory);
         return Path.Combine(

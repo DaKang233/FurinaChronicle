@@ -1,6 +1,7 @@
 // Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
+using FurinaChronicle.App.Persistence;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using FurinaChronicle.App.Exporting;
@@ -223,7 +224,7 @@ public partial class GachaPageViewModel(
 			throw new InvalidOperationException("所选档案没有可导出的游戏账号。");
 		}
 		string directory = Path.Combine(
-			FileSystem.CacheDirectory,
+			PlatformStoragePaths.CacheDirectory,
 			"gacha-portable-export");
 		Directory.CreateDirectory(directory);
 		string path = Path.Combine(

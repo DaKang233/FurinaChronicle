@@ -105,6 +105,7 @@
 	</ItemGroup>
 
 	<Import Project="..\build\FurinaVersion.targets" />
+	<Import Project="..\build\FurinaMauiIdentity.targets" />
 
 	<Target Name="ValidateAcceptanceBuildMode" BeforeTargets="PrepareForBuild">
 		<Error

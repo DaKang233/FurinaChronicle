@@ -22,11 +22,11 @@ internal static class ArchiveServiceCollectionExtensions
         services.AddSingleton(portableLimits);
         services.AddSingleton(new ArchiveSnapshotStorageOptions(
             Path.Combine(
-                FileSystem.CacheDirectory,
+                PlatformStoragePaths.CacheDirectory,
                 "archive-export-snapshots")));
         services.AddSingleton(new ArchiveRestoreStorageOptions(
             Path.Combine(
-                FileSystem.CacheDirectory,
+                PlatformStoragePaths.CacheDirectory,
                 "archive-restore-sessions")));
         services.AddSingleton<IArchivePackageWriter, ArchivePackageWriter>();
         services.AddSingleton<ArchivePackageReader>();
