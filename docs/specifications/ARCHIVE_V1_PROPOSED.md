@@ -10,7 +10,7 @@
 
 Archive v1 在 Windows 与 Android 之间迁移已支持领域的逻辑事实和历史。它不是数据库镜像，不包含凭据或源设备撤销栈，也不证明账号全部游戏历史完整。
 
-本规范已经作为 8C.0／8C.1 的内部实施契约接受。8C.1 只实现一致导出和只读校验；格式尚未公开发布，也不得用于生产恢复。
+本规范于 8C.0／8C.1 接受。随后 8C.2～8C.5 交付 RestorePlan、原子 Merge、Scoped Replace 和双端应用入口。格式仍为 internal / unpublished，验收范围见 [Phase 8C 退出评审](../project/PHASE_8C_EXIT_REVIEW.md)。
 
 ## 固定容器规则
 

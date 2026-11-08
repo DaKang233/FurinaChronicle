@@ -1,6 +1,6 @@
 # Phase 8C 实施计划与首轮记录
 
-状态：8C.0～8C.6 engineering completed；8C.6 partial device evidence；Schema 11 修复后回归待验收
+状态为 8C.7 交接完成。Phase 8C 功能验收关闭，设备证据及资源测量留项见[退出评审](PHASE_8C_EXIT_REVIEW.md)。
 
 启动日期：2026-10-23（Asia/Shanghai）
 
@@ -266,3 +266,7 @@ IArchiveAtomicRestorer       // 8C.3 实现
 - 在线 Provider、UIAF 成就或未支持挑战模式；
 - 完整 UI-1 或把 WinUI UI-0 接入真实数据库；
 - 设备证据补造或使用私人数据库制作 fixture。
+
+## 8C.7 退出与交接
+
+本页 8C.6 章节保存当期工程记录。后续设备回归和独立中断探针已完成，结论、产物指纹、测试结果及测量限制统一见[退出评审](PHASE_8C_EXIT_REVIEW.md)。格式支持、迁移和 Phase 9 输入见[实施与交接](PHASE_8C_IMPLEMENTATION.md)。

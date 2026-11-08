@@ -24,6 +24,8 @@ UI-0 WinUI 产物仅用于技术验证，不表示现有 MAUI Windows 业务能�
 
 测试结果保留 14 天，Windows 与 Android 构建产物保留 30 天。构建通过只证明自动化测试和编译发布成功，不代替 Windows、Android 真机运行验收。
 
+Phase 8C 的本地 Windows 进程和 Android 真机证据由独立验收工具保存。Android 探针使用专用包名，按本地 [8C 验收工具说明](../../eng/phase8c/README.md) 构建和运行。CI 应用发布物不包含该探针。实际运行、指纹及当前 CI 状态见 [Phase 8C 退出评审](../project/PHASE_8C_EXIT_REVIEW.md)。
+
 本地生成适用于物理设备的 APK 时，必须显式选择设备 ABI、清理对应 RID 的中间产物、覆盖安装并检查真实启动。完整命令、保留数据约束和已知 MAUI RID 资源陈旧故障见 [Android 真机构建与部署](ANDROID_PHYSICAL_DEVICE_DEPLOYMENT.md)。GitHub Actions 的干净工作区发布与本地长期复用工作区的定向清理是两种不同场景。
 
 ## Android 签名

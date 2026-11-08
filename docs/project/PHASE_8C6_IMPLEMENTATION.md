@@ -1,6 +1,6 @@
 # Phase 8C.6 双向 Archive 往返工程实施与设备验收状态
 
-状态：Engineering fixes verified；Partial device evidence；修复后设备回归待执行
+历史工程记录。修复后真机回归和中断补证的当前结论见 [8C.7 退出评审](PHASE_8C_EXIT_REVIEW.md)。
 
 日期：2026-10-25
 
