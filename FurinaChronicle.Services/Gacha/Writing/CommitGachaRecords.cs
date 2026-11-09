@@ -34,7 +34,8 @@ public sealed record CommitGachaRecordsResult(
     int ConflictCount,
     int SuppressedCount,
     string? ConflictReason = null,
-    HistoryCleanupPlan? CleanupPlan = null);
+    HistoryCleanupPlan? CleanupPlan = null,
+    bool HasOriginalCounts = true);
 
 public interface ICommitGachaRecords
 {
@@ -52,6 +53,12 @@ public sealed class CommitGachaRecords(IGachaAtomicChangeStore store)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(request.Records);
+        GachaAtomicChangeResult? previous = await store.FindCommittedAsync(
+            request.OperationId, cancellationToken);
+        if (previous is not null)
+        {
+            return FromCommitted(previous);
+        }
         if (request.Records.Count == 0)
         {
             return Empty(ChangeExecutionStatus.NoOp);
@@ -206,10 +213,15 @@ public sealed class CommitGachaRecords(IGachaAtomicChangeStore store)
                 archiveToCreate: accountsToCreate.Length == 0
                     ? null
                     : request.ArchiveToCreate,
-                accountsToCreate: accountsToCreate);
+                accountsToCreate: accountsToCreate,
+                batchCounts: new GachaCommitCounts(inserted, updated, duplicates, suppressed));
             GachaAtomicChangeResult result = await store.CommitAsync(
                 atomicRequest,
                 cancellationToken);
+            if (result.Status == ChangeExecutionStatus.AlreadyCommitted)
+            {
+                return FromCommitted(result);
+            }
             if (result.Status != ChangeExecutionStatus.Suppressed ||
                 result.ReintroductionWarning is not { } warning ||
                 !request.SuppressTombstonesAndContinue)
@@ -248,6 +260,12 @@ public sealed class CommitGachaRecords(IGachaAtomicChangeStore store)
             suppressed);
     }
 
+    private static CommitGachaRecordsResult FromCommitted(GachaAtomicChangeResult result) => new(
+        ChangeExecutionStatus.AlreadyCommitted, result.ChangeSetId,
+        result.BatchCounts?.Inserted ?? 0, result.BatchCounts?.Updated ?? 0,
+        result.BatchCounts?.Duplicates ?? 0, ConflictCount: 0,
+        result.BatchCounts?.Suppressed ?? 0, HasOriginalCounts: result.BatchCounts is not null);
+
     private static CommitGachaRecordsResult Empty(
         ChangeExecutionStatus status) =>
         new(status, null, 0, 0, 0, 0, 0);
@@ -270,7 +288,7 @@ public sealed class CommitGachaRecords(IGachaAtomicChangeStore store)
     private static GachaRecord MergeReplacing(
         GachaRecord current,
         GachaRecord incoming) =>
-        incoming with
+        PreserveProvenanceOnUnchangedFact(current, incoming with
         {
             GameAccountId = current.GameAccountId,
             ExternalRecordId = current.ExternalRecordId,
@@ -282,7 +300,17 @@ public sealed class CommitGachaRecords(IGachaAtomicChangeStore store)
                 incoming.UigfGachaType,
                 current.UigfGachaType),
             RankType = incoming.RankType ?? current.RankType,
-        };
+        });
+
+    private static GachaRecord PreserveProvenanceOnUnchangedFact(
+        GachaRecord current,
+        GachaRecord incoming)
+    {
+        GachaRecord withoutNewProvenance = incoming with { Provenance = current.Provenance };
+        return GachaRecordChangeClassifier.Compare(current, withoutNewProvenance).Kind == GachaRecordChangeKind.NoOp
+            ? withoutNewProvenance
+            : incoming;
+    }
 
     private static bool HasNonEmptyFactConflict(
         GachaRecord current,

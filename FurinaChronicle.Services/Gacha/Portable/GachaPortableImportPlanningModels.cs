@@ -159,7 +159,8 @@ public sealed record GachaPortableApplyResult(
     TombstoneReintroductionWarning? ReintroductionWarning = null,
     HistoryCleanupPlan? CleanupPlan = null,
     IReadOnlyList<TombstoneReintroductionWarning>?
-        ReintroductionWarnings = null);
+        ReintroductionWarnings = null,
+    bool HasOriginalCounts = true);
 
 public interface IGachaPortableImportApplier
 {

@@ -161,6 +161,14 @@ public sealed partial class SqliteGachaAtomicChangeStore : IArchiveAtomicRestore
                             request.OperationId));
                     return;
                 }
+                if (request.Plan.Mode == ArchiveRestoreMode.Replace)
+                {
+                    // SQLite Online Backup needs a source transaction that has
+                    // not written yet. The snapshot must include undo material
+                    // that the confirmed cleanup is about to evict.
+                    recoveryPoint = CreateArchiveRecoveryPoint(connection, request);
+                }
+
                 if (cleanupPlan is not null)
                 {
                     EvictChangeSets(
@@ -171,9 +179,6 @@ public sealed partial class SqliteGachaAtomicChangeStore : IArchiveAtomicRestore
 
                 if (request.Plan.Mode == ArchiveRestoreMode.Replace)
                 {
-                    recoveryPoint = CreateArchiveRecoveryPoint(
-                        connection,
-                        request);
                     InvalidateArchiveReplaceUndo(connection, request.Plan);
                 }
 

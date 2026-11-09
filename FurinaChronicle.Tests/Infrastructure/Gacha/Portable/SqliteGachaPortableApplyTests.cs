@@ -227,6 +227,11 @@ public sealed class SqliteGachaPortableApplyTests
         Assert.Equal(ChangeExecutionStatus.Applied, first.Status);
         Assert.Equal(ChangeExecutionStatus.AlreadyCommitted, retry.Status);
         Assert.Equal(first.ChangeSetId, retry.ChangeSetId);
+        Assert.True(retry.HasOriginalCounts);
+        Assert.Equal(first.InsertedRecordCount, retry.InsertedRecordCount);
+        Assert.Equal(first.UpdatedRecordCount, retry.UpdatedRecordCount);
+        Assert.Equal(first.SkippedRecordCount, retry.SkippedRecordCount);
+        Assert.Equal(first.Accounts.ToArray(), retry.Accounts.ToArray());
         using SQLiteConnection raw = context.OpenRawConnection();
         Assert.Equal(1, Count(raw, "RoleIdentityAliases"));
         Assert.Equal(1, Count(raw, "GachaRecords"));
@@ -262,16 +267,19 @@ public sealed class SqliteGachaPortableApplyTests
         GachaPortableImportPlan duplicatePlan =
             await PlanAsync(context, package);
 
-        GachaPortableApplyResult duplicate =
-            await context.AtomicGacha.ApplyAsync(
-                new GachaPortableApplyRequest(
-                    package,
-                    duplicatePlan,
-                    OperationId.New(),
-                    ReceivedAt.AddMinutes(1),
-                    Guid.NewGuid()));
+        var duplicateRequest = new GachaPortableApplyRequest(
+            package, duplicatePlan, OperationId.New(), ReceivedAt.AddMinutes(1), Guid.NewGuid());
+        GachaPortableApplyResult duplicate = await context.AtomicGacha.ApplyAsync(duplicateRequest);
+        await using var reopened = new FurinaDatabase(new SqliteDatabaseOptions(context.DatabasePath));
+        GachaPortableApplyResult replay = await new SqliteGachaAtomicChangeStore(reopened)
+            .ApplyAsync(duplicateRequest);
 
         Assert.Equal(ChangeExecutionStatus.NoOp, duplicate.Status);
+        Assert.Equal(ChangeExecutionStatus.AlreadyCommitted, replay.Status);
+        Assert.True(replay.HasOriginalCounts);
+        Assert.Equal(1, replay.SkippedRecordCount);
+        Assert.Equal(duplicate.TargetArchiveId, replay.TargetArchiveId);
+        Assert.Equal(duplicate.Accounts.ToArray(), replay.Accounts.ToArray());
         using SQLiteConnection raw = context.OpenRawConnection();
         Assert.Equal(1, Count(raw, "DataChangeSets"));
         Assert.Equal(1, Count(raw, "PortableImportReceipts"));

@@ -10,7 +10,46 @@ namespace FurinaChronicle.Tests.Infrastructure.Persistence.Sqlite;
 public sealed class FurinaDatabaseMigrationTests
 {
     private const int CurrentApplicationId = 0x46554348;
-    private const int CurrentSchemaVersion = 11;
+    private const int CurrentSchemaVersion = FurinaDatabase.CurrentSchemaVersion;
+
+    [Theory]
+    [InlineData("DROP INDEX UX_GachaRecords_Account_ExternalId;", "UX_GachaRecords_Account_ExternalId")]
+    [InlineData("DROP TRIGGER TR_Chronicle_GachaRecords_UPDATE;", "TR_Chronicle_GachaRecords_UPDATE")]
+    public async Task InitializeAsync_RejectsMissingCriticalSchemaObject(string drop, string name)
+    {
+        await using var fixture = MigrationFixture.Create();
+        await using (FurinaDatabase database = fixture.OpenDatabase())
+        {
+            await database.InitializeAsync();
+        }
+        using (SQLiteConnection raw = fixture.OpenRawConnection())
+        {
+            raw.Execute(drop);
+        }
+
+        await using FurinaDatabase reopened = fixture.OpenDatabase();
+        InvalidDataException error = await Assert.ThrowsAsync<InvalidDataException>(
+            () => reopened.InitializeAsync());
+        Assert.Contains(name, error.Message);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_WaitsForOtherOwnerOfInitializationLock()
+    {
+        await using var fixture = MigrationFixture.Create();
+        await using FurinaDatabase database = fixture.OpenDatabase();
+        using (var otherOwner = new FileStream(
+                   database.DatabasePath + ".initialize.lock",
+                   FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
+        {
+            using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(250));
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                () => database.InitializeAsync(cancellation.Token));
+        }
+        await database.InitializeAsync();
+        using SQLiteConnection raw = fixture.OpenRawConnection();
+        AssertCurrentSchema(raw);
+    }
 
     [Fact]
     public async Task InitializeAsync_NewDatabase_CreatesCurrentSchema()
@@ -141,7 +180,7 @@ public sealed class FurinaDatabaseMigrationTests
     }
 
     [Fact]
-    public async Task InitializeAsync_VersionSevenDatabase_MigratesToVersionTen()
+    public async Task InitializeAsync_VersionSevenDatabase_MigratesToCurrent()
     {
         await using var fixture = MigrationFixture.Create();
         await using (FurinaDatabase database = fixture.OpenDatabase())

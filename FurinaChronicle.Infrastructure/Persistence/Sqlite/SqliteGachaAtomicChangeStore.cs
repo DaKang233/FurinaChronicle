@@ -122,6 +122,17 @@ public sealed partial class SqliteGachaAtomicChangeStore
         return warnings;
     }
 
+    public async Task<GachaAtomicChangeResult?> FindCommittedAsync(
+        OperationId operationId,
+        CancellationToken cancellationToken = default)
+    {
+        await database.InitializeAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        CommitResultRow? committed = await database.Connection.FindWithQueryAsync<CommitResultRow>(
+            CommitResultQuery, operationId.ToString());
+        return committed is null ? null : ToAlreadyCommittedResult(committed);
+    }
+
     public async Task<GachaAtomicChangeResult> CommitAsync(
         GachaAtomicChangeRequest request,
         CancellationToken cancellationToken = default)
@@ -135,23 +146,10 @@ public sealed partial class SqliteGachaAtomicChangeStore
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            CommitResultRow? committed = connection
-                .Query<CommitResultRow>(
-                    """
-                    SELECT OperationId, ChangeSetId, Status,
-                           AffectedRecordCount, CommittedAtUtcTicks
-                    FROM OperationCommitResults
-                    WHERE OperationId = ?;
-                    """,
-                    request.OperationId.ToString())
-                .SingleOrDefault();
+            CommitResultRow? committed = ReadCommitResult(connection, request.OperationId);
             if (committed is not null)
             {
-                result = new GachaAtomicChangeResult(
-                    ChangeExecutionStatus.AlreadyCommitted,
-                    ParseOptionalGuid(committed.ChangeSetId),
-                    committed.AffectedRecordCount,
-                    OriginalStatus: (ChangeExecutionStatus)committed.Status);
+                result = ToAlreadyCommittedResult(committed);
                 return;
             }
 
@@ -1366,6 +1364,28 @@ public sealed partial class SqliteGachaAtomicChangeStore
                 """,
                 changeSetId.ToString("D"),
                 (int)UndoIneligibilityReason.IrreversibleDeletion);
+            // Match the existing receipt cleanup boundary for private account mappings.
+            if (purgeArchive)
+            {
+                connection.Execute(
+                    """
+                    UPDATE OperationCommitResults
+                    SET PortableApplySummaryJson = NULL
+                    WHERE json_extract(PortableApplySummaryJson, '$.TargetArchiveId') = ?;
+                    """, archiveId.ToString("D"));
+            }
+            else
+            {
+                connection.Execute(
+                    """
+                    UPDATE OperationCommitResults
+                    SET PortableApplySummaryJson = NULL
+                    WHERE EXISTS (
+                        SELECT 1 FROM json_each(PortableApplySummaryJson, '$.Accounts') AS account
+                        WHERE json_extract(account.value, '$.Target') = ?
+                    );
+                    """, request.ScopeId.ToString("D"));
+            }
             if (purgeArchive)
             {
                 connection.Execute(
@@ -1507,6 +1527,7 @@ public sealed partial class SqliteGachaAtomicChangeStore
                     UpdatedRecordCount: 0,
                     preparation.Accounts.Sum(
                         account => account.SkippedRecordCount));
+                SavePortableApplySummary(connection, request.OperationId, result);
                 return;
             }
 
@@ -1729,6 +1750,7 @@ public sealed partial class SqliteGachaAtomicChangeStore
                     account => account.UpdatedRecordCount),
                 preparation.Accounts.Sum(
                     account => account.SkippedRecordCount));
+            SavePortableApplySummary(connection, request.OperationId, result);
         });
 
         return result ?? throw new InvalidOperationException(
@@ -1821,6 +1843,7 @@ public sealed partial class SqliteGachaAtomicChangeStore
                     UpdatedRecordCount: 0,
                     preparation.Accounts.Sum(
                         account => account.SkippedRecordCount));
+                SavePortableApplySummary(connection, request.OperationId, result);
                 return;
             }
 
@@ -1921,6 +1944,7 @@ public sealed partial class SqliteGachaAtomicChangeStore
                     account => account.UpdatedRecordCount),
                 preparation.Accounts.Sum(
                     account => account.SkippedRecordCount));
+            SavePortableApplySummary(connection, request.OperationId, result);
         });
 
         return result ?? throw new InvalidOperationException(
@@ -3919,14 +3943,15 @@ public sealed partial class SqliteGachaAtomicChangeStore
             """
             INSERT INTO OperationCommitResults
                 (OperationId, ChangeSetId, Status,
-                 AffectedRecordCount, CommittedAtUtcTicks)
-            VALUES (?, ?, ?, ?, ?);
+                 AffectedRecordCount, CommittedAtUtcTicks, GachaCommitCountsJson)
+            VALUES (?, ?, ?, ?, ?, ?);
             """,
             request.OperationId.ToString(),
             changeSetId?.ToString("D"),
             (int)status,
             affectedRecordCount,
-            request.CommittedAt.UtcDateTime.Ticks);
+            request.CommittedAt.UtcDateTime.Ticks,
+            request.BatchCounts is null ? null : JsonSerializer.Serialize(request.BatchCounts));
     }
 
     private static void InsertUndoCommitResult(
@@ -4003,10 +4028,61 @@ public sealed partial class SqliteGachaAtomicChangeStore
             request.ReceivedAt.UtcDateTime.Ticks);
     }
 
+    private static void SavePortableApplySummary(
+        SQLiteConnection connection,
+        OperationId operationId,
+        GachaPortableApplyResult result)
+    {
+        var summary = new PortableApplySummary(
+            result.TargetArchiveId,
+            result.Accounts.Select(account => new PortableAccountApplySummary(
+                account.SourceAccountReference,
+                account.TargetAccountId,
+                account.TargetRoleIdentityId.Value,
+                account.InsertedRecordCount,
+                account.UpdatedRecordCount,
+                account.SkippedRecordCount)).ToArray(),
+            result.InsertedRecordCount,
+            result.UpdatedRecordCount,
+            result.SkippedRecordCount);
+        connection.Execute(
+            "UPDATE OperationCommitResults SET PortableApplySummaryJson = ? WHERE OperationId = ?;",
+            JsonSerializer.Serialize(summary), operationId.ToString());
+    }
+
+    private sealed record PortableApplySummary(
+        Guid? TargetArchiveId,
+        PortableAccountApplySummary[] Accounts,
+        int Inserted,
+        int Updated,
+        int Skipped);
+
+    private sealed record PortableAccountApplySummary(
+        Guid Source,
+        Guid Target,
+        Guid Identity,
+        int Inserted,
+        int Updated,
+        int Skipped);
+
     private static GachaPortableApplyResult ReadCommittedPortableResult(
         SQLiteConnection connection,
         CommitResultRow committed)
     {
+        if (committed.PortableApplySummaryJson is string json)
+        {
+            PortableApplySummary summary = JsonSerializer.Deserialize<PortableApplySummary>(json)
+                ?? throw new InvalidDataException("The stored Portable apply result is missing.");
+            return new GachaPortableApplyResult(
+                ChangeExecutionStatus.AlreadyCommitted,
+                ParseOptionalGuid(committed.ChangeSetId),
+                summary.TargetArchiveId,
+                summary.Accounts.Select(account => new GachaPortableAccountApplyResult(
+                    account.Source, account.Target, new GameRoleIdentityId(account.Identity),
+                    account.Inserted, account.Updated, account.Skipped)).ToArray(),
+                summary.Inserted, summary.Updated, summary.Skipped);
+        }
+
         if (committed.ChangeSetId is null)
         {
             return new GachaPortableApplyResult(
@@ -4016,7 +4092,8 @@ public sealed partial class SqliteGachaAtomicChangeStore
                 Accounts: [],
                 InsertedRecordCount: 0,
                 UpdatedRecordCount: 0,
-                SkippedRecordCount: 0);
+                SkippedRecordCount: 0,
+                HasOriginalCounts: false);
         }
 
         PortableReceiptReadRow? receipt =
@@ -4037,7 +4114,8 @@ public sealed partial class SqliteGachaAtomicChangeStore
                 Accounts: [],
                 InsertedRecordCount: 0,
                 UpdatedRecordCount: 0,
-                SkippedRecordCount: 0);
+                SkippedRecordCount: 0,
+                HasOriginalCounts: false);
         }
 
         GachaPortableAccountApplyResult[] accounts =
@@ -4071,21 +4149,22 @@ public sealed partial class SqliteGachaAtomicChangeStore
             accounts,
             InsertedRecordCount: 0,
             UpdatedRecordCount: 0,
-            SkippedRecordCount: 0);
+            SkippedRecordCount: 0,
+            HasOriginalCounts: false);
     }
+
+    private const string CommitResultQuery =
+        """
+        SELECT OperationId, ChangeSetId, Status, AffectedRecordCount,
+               CommittedAtUtcTicks, PortableApplySummaryJson, GachaCommitCountsJson
+        FROM OperationCommitResults
+        WHERE OperationId = ?;
+        """;
 
     private static CommitResultRow? ReadCommitResult(
         SQLiteConnection connection,
         OperationId operationId) =>
-        connection.Query<CommitResultRow>(
-            """
-            SELECT OperationId, ChangeSetId, Status,
-                   AffectedRecordCount, CommittedAtUtcTicks
-            FROM OperationCommitResults
-            WHERE OperationId = ?;
-            """,
-            operationId.ToString())
-        .SingleOrDefault();
+        connection.FindWithQuery<CommitResultRow>(CommitResultQuery, operationId.ToString());
 
     private static GachaAtomicChangeResult ToAlreadyCommittedResult(
         CommitResultRow committed) =>
@@ -4093,7 +4172,10 @@ public sealed partial class SqliteGachaAtomicChangeStore
             ChangeExecutionStatus.AlreadyCommitted,
             ParseOptionalGuid(committed.ChangeSetId),
             committed.AffectedRecordCount,
-            OriginalStatus: (ChangeExecutionStatus)committed.Status);
+            OriginalStatus: (ChangeExecutionStatus)committed.Status,
+            BatchCounts: committed.GachaCommitCountsJson is string counts
+                ? JsonSerializer.Deserialize<GachaCommitCounts>(counts)
+                : null);
 
     private static void ApplyCapacityLimits(
         SQLiteConnection connection,
@@ -4840,6 +4922,10 @@ public sealed partial class SqliteGachaAtomicChangeStore
         public int AffectedRecordCount { get; set; }
 
         public long CommittedAtUtcTicks { get; set; }
+
+        public string? PortableApplySummaryJson { get; set; }
+
+        public string? GachaCommitCountsJson { get; set; }
     }
 
     private sealed class ChangeSetIdRow

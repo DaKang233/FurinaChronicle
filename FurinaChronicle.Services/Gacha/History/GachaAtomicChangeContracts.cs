@@ -22,6 +22,8 @@ public sealed record GachaFactMutation(
     public bool IsDelete => ProposedRecord is null;
 }
 
+public sealed record GachaCommitCounts(int Inserted, int Updated, int Duplicates, int Suppressed);
+
 public sealed class GachaAtomicChangeRequest
 {
     public GachaAtomicChangeRequest(
@@ -38,7 +40,8 @@ public sealed class GachaAtomicChangeRequest
         IEnumerable<TombstoneReintroductionConfirmation>?
             reintroductionConfirmations = null,
         PlayerArchive? archiveToCreate = null,
-        IEnumerable<GameAccount>? accountsToCreate = null)
+        IEnumerable<GameAccount>? accountsToCreate = null,
+        GachaCommitCounts? batchCounts = null)
     {
         if (!Enum.IsDefined(operationKind))
         {
@@ -159,6 +162,7 @@ public sealed class GachaAtomicChangeRequest
             reintroductionConfirmations?.ToArray() ?? [];
         ArchiveToCreate = archiveToCreate;
         AccountsToCreate = normalizedAccounts;
+        BatchCounts = batchCounts;
     }
 
     public OperationId OperationId { get; }
@@ -187,6 +191,8 @@ public sealed class GachaAtomicChangeRequest
     public PlayerArchive? ArchiveToCreate { get; }
 
     public IReadOnlyList<GameAccount> AccountsToCreate { get; }
+
+    public GachaCommitCounts? BatchCounts { get; }
 }
 
 public sealed record GachaAtomicChangeResult(
@@ -196,7 +202,8 @@ public sealed record GachaAtomicChangeResult(
     string? ConflictReason = null,
     ChangeExecutionStatus? OriginalStatus = null,
     HistoryCleanupPlan? CleanupPlan = null,
-    TombstoneReintroductionWarning? ReintroductionWarning = null);
+    TombstoneReintroductionWarning? ReintroductionWarning = null,
+    GachaCommitCounts? BatchCounts = null);
 
 public sealed record TombstoneReintroductionConfirmation(
     string TombstoneKey,
@@ -309,6 +316,11 @@ public sealed class GachaUndoRequest
 
 public interface IGachaAtomicChangeStore
 {
+    Task<GachaAtomicChangeResult?> FindCommittedAsync(
+        OperationId operationId,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<GachaAtomicChangeResult?>(null);
+
     Task<GachaFactState?> GetCurrentAsync(
         GachaFactReference reference,
         CancellationToken cancellationToken = default);

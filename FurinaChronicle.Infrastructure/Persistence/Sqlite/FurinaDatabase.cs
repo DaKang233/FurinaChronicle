@@ -1,6 +1,7 @@
 // Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics;
 using FurinaChronicle.Core.Archives;
 using SQLite;
 
@@ -8,7 +9,8 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite;
 
 public sealed class FurinaDatabase : IAsyncDisposable
 {
-    internal const int CurrentSchemaVersion = 11;
+    internal const int CurrentSchemaVersion = 12;
+    private const int ArchiveUnresolvedReasonSchemaVersion = 11;
     private const int ArchiveFidelitySchemaVersion = 10;
     private const int ArchiveReplaceSchemaVersion = 9;
     private const int ArchiveRestoreSchemaVersion = 8;
@@ -77,6 +79,7 @@ public sealed class FurinaDatabase : IAsyncDisposable
 
             await Connection.SetBusyTimeoutAsync(TimeSpan.FromSeconds(5));
             cancellationToken.ThrowIfCancellationRequested();
+            using FileStream initializationLock = await AcquireInitializationLockAsync(cancellationToken);
             await Connection.ExecuteAsync("PRAGMA foreign_keys = ON;");
 
             int schemaVersion = await Connection.ExecuteScalarAsync<int>(
@@ -142,6 +145,11 @@ public sealed class FurinaDatabase : IAsyncDisposable
             {
                 await MigrateVersionTenToCurrentAsync(cancellationToken);
             }
+            else if (applicationId == CurrentApplicationId &&
+                     schemaVersion == ArchiveUnresolvedReasonSchemaVersion)
+            {
+                await MigrateVersionElevenToCurrentAsync(cancellationToken);
+            }
             else if (applicationId == 0 &&
                      schemaVersion == 0 &&
                      await IsEmptyDatabaseAsync(cancellationToken))
@@ -163,6 +171,29 @@ public sealed class FurinaDatabase : IAsyncDisposable
         finally
         {
             initializeGate.Release();
+        }
+    }
+
+    private async Task<FileStream> AcquireInitializationLockAsync(CancellationToken cancellationToken)
+    {
+        // Keep the sidecar in place so competing processes always lock the same file.
+        string path = DatabasePath + ".initialize.lock";
+        long startedAt = Stopwatch.GetTimestamp();
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            }
+            catch (IOException exception)
+            {
+                if (Stopwatch.GetElapsedTime(startedAt) >= TimeSpan.FromSeconds(10))
+                {
+                    throw new IOException("Unable to acquire the SQLite initialization lock.", exception);
+                }
+                await Task.Delay(TimeSpan.FromMilliseconds(100), cancellationToken);
+            }
         }
     }
 
@@ -316,6 +347,17 @@ public sealed class FurinaDatabase : IAsyncDisposable
     }
 
     private async Task MigrateVersionTenToCurrentAsync(
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await Connection.RunInTransactionAsync(connection =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            SetCurrentSchemaVersion(connection);
+        });
+    }
+
+    private async Task MigrateVersionElevenToCurrentAsync(
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -502,8 +544,42 @@ public sealed class FurinaDatabase : IAsyncDisposable
     {
         MigrateVersionNineToVersionTen(connection);
         MigrateVersionTenToVersionEleven(connection);
+        MigrateVersionElevenToVersionTwelve(connection);
         connection.Execute(
             $"PRAGMA user_version = {CurrentSchemaVersion};");
+    }
+
+    private static void AddOperationSummaryColumns(SQLiteConnection connection)
+    {
+        AddColumnIfMissing(connection, "OperationCommitResults", "PortableApplySummaryJson", "TEXT");
+        AddColumnIfMissing(connection, "OperationCommitResults", "GachaCommitCountsJson", "TEXT");
+    }
+
+    private static void MigrateVersionElevenToVersionTwelve(SQLiteConnection connection)
+    {
+        AddOperationSummaryColumns(connection);
+        // Receipt targets are historical identifiers. Keep the receipt and its
+        // original mappings when an archive is permanently removed.
+        connection.Execute("ALTER TABLE ArchiveRestoreReceiptArchives RENAME TO ArchiveRestoreReceiptArchivesV11;");
+        connection.Execute("ALTER TABLE ArchiveRestoreReceiptAccounts RENAME TO ArchiveRestoreReceiptAccountsV11;");
+        CreateArchiveRestoreReceiptMappingTables(connection);
+        connection.Execute(
+            """
+            INSERT INTO ArchiveRestoreReceiptArchives (ReceiptId, SourceArchiveReference, TargetArchiveId)
+            SELECT ReceiptId, SourceArchiveReference, TargetArchiveId
+            FROM ArchiveRestoreReceiptArchivesV11;
+            """);
+        connection.Execute(
+            """
+            INSERT INTO ArchiveRestoreReceiptAccounts
+                (ReceiptId, SourceArchiveReference, SourceAccountReference,
+                 TargetArchiveId, TargetAccountId, TargetRoleIdentityId)
+            SELECT ReceiptId, SourceArchiveReference, SourceAccountReference,
+                   TargetArchiveId, TargetAccountId, TargetRoleIdentityId
+            FROM ArchiveRestoreReceiptAccountsV11;
+            """);
+        connection.Execute("DROP TABLE ArchiveRestoreReceiptAccountsV11;");
+        connection.Execute("DROP TABLE ArchiveRestoreReceiptArchivesV11;");
     }
 
     private static void MigrateVersionTenToVersionEleven(
@@ -784,6 +860,8 @@ public sealed class FurinaDatabase : IAsyncDisposable
                 "Status",
                 "AffectedRecordCount",
                 "CommittedAtUtcTicks",
+                "PortableApplySummaryJson",
+                "GachaCommitCountsJson",
             ],
             cancellationToken);
         await ValidateTableColumnsAsync(
@@ -937,6 +1015,8 @@ public sealed class FurinaDatabase : IAsyncDisposable
             ],
             cancellationToken);
 
+        await ValidateRequiredIndexesAndTriggersAsync(cancellationToken);
+
         List<ForeignKeyViolationRow> violations =
             await Connection.QueryAsync<ForeignKeyViolationRow>(
                 "PRAGMA foreign_key_check;");
@@ -944,6 +1024,47 @@ public sealed class FurinaDatabase : IAsyncDisposable
         {
             throw new InvalidDataException(
                 "SQLite foreign-key validation failed. The database was not modified.");
+        }
+    }
+
+    private async Task ValidateRequiredIndexesAndTriggersAsync(CancellationToken cancellationToken)
+    {
+        const string recordIndex = "UX_GachaRecords_Account_ExternalId";
+        int uniqueIndex = await Connection.ExecuteScalarAsync<int>(
+            """
+            SELECT COUNT(*) FROM pragma_index_list('GachaRecords')
+            WHERE name = ? AND "unique" = 1 AND partial = 0;
+            """, recordIndex);
+        List<string> indexColumns = await Connection.QueryScalarsAsync<string>(
+            "SELECT name FROM pragma_index_info(?) ORDER BY seqno;", recordIndex);
+        if (uniqueIndex != 1 || !indexColumns.SequenceEqual(["GameAccountId", "ExternalRecordId"]))
+        {
+            throw new InvalidDataException($"Required SQLite index is missing or invalid: {recordIndex}.");
+        }
+
+        var triggers = new List<(string Name, string Table)>
+        {
+            ("TR_Chronicle_GameAccounts_DELETE", "GameAccounts"),
+            ("TR_Chronicle_PlayerArchives_DELETE", "PlayerArchives"),
+            ("TR_Chronicle_UndoScope", "DataChangeSetArchives"),
+        };
+        foreach (string table in new[] { "GachaRecords", "ArchiveDomainFacts" })
+        {
+            foreach (string action in new[] { "INSERT", "UPDATE", "DELETE" })
+            {
+                triggers.Add(($"TR_Chronicle_{table}_{action}", table));
+            }
+        }
+        foreach ((string name, string table) in triggers)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            int count = await Connection.ExecuteScalarAsync<int>(
+                "SELECT COUNT(*) FROM sqlite_schema WHERE type = 'trigger' AND name = ? AND tbl_name = ?;",
+                name, table);
+            if (count != 1)
+            {
+                throw new InvalidDataException($"Required SQLite trigger is missing: {name}.");
+            }
         }
     }
 
@@ -1083,6 +1204,7 @@ public sealed class FurinaDatabase : IAsyncDisposable
                 """);
 
             CreateHistoryTables(connection);
+            AddOperationSummaryColumns(connection);
             CreateArchiveDomainHistoryTables(connection);
             CreateChronicleProjectionTables(connection);
             CreateArchiveRestoreTables(connection);
@@ -1599,6 +1721,16 @@ public sealed class FurinaDatabase : IAsyncDisposable
                     REFERENCES DataChangeSets(ChangeSetId)
             );
             """);
+        CreateArchiveRestoreReceiptMappingTables(connection);
+        connection.Execute(
+            """
+            CREATE INDEX IX_ArchiveRestoreReceipts_Package_Plan
+            ON ArchiveRestoreReceipts(PackageFingerprint, PlanFingerprint);
+            """);
+    }
+
+    private static void CreateArchiveRestoreReceiptMappingTables(SQLiteConnection connection)
+    {
         connection.Execute(
             """
             CREATE TABLE ArchiveRestoreReceiptArchives
@@ -1609,9 +1741,7 @@ public sealed class FurinaDatabase : IAsyncDisposable
                 PRIMARY KEY (ReceiptId, SourceArchiveReference),
                 FOREIGN KEY (ReceiptId)
                     REFERENCES ArchiveRestoreReceipts(ReceiptId)
-                    ON DELETE CASCADE,
-                FOREIGN KEY (TargetArchiveId)
-                    REFERENCES PlayerArchives(Id)
+                    ON DELETE CASCADE
             );
             """);
         connection.Execute(
@@ -1631,16 +1761,9 @@ public sealed class FurinaDatabase : IAsyncDisposable
                 FOREIGN KEY (ReceiptId)
                     REFERENCES ArchiveRestoreReceipts(ReceiptId)
                     ON DELETE CASCADE,
-                FOREIGN KEY (TargetArchiveId)
-                    REFERENCES PlayerArchives(Id),
                 FOREIGN KEY (TargetRoleIdentityId)
                     REFERENCES GameRoleIdentities(Id)
             );
-            """);
-        connection.Execute(
-            """
-            CREATE INDEX IX_ArchiveRestoreReceipts_Package_Plan
-            ON ArchiveRestoreReceipts(PackageFingerprint, PlanFingerprint);
             """);
     }
 

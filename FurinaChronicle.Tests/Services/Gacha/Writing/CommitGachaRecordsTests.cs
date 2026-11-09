@@ -15,6 +15,33 @@ namespace FurinaChronicle.Tests.Services.Gacha.Writing;
 public sealed class CommitGachaRecordsTests
 {
     [Fact]
+    public async Task ReplayedOperationReturnsOriginalCountsAfterReopen()
+    {
+        await using var context = SqliteRepositoryTestContext.Create();
+        (_, Guid accountId) = await AddAccountAsync(context);
+        GachaRecord existing = CreateRecord(accountId, "1001");
+        GachaRecord added = CreateRecord(accountId, "1002");
+        await context.Gacha.SaveBatchAsync([existing]);
+        CommitGachaRecordsRequest request = Request(
+            [existing with { ItemName = "Corrected" }, added, added],
+            GachaRecordConflictPolicy.ReplaceExisting);
+
+        CommitGachaRecordsResult first = await new CommitGachaRecords(context.AtomicGacha)
+            .ExecuteAsync(request);
+        Assert.Equal(ChangeExecutionStatus.Applied, first.Status);
+        Assert.Equal((1, 1, 1), (first.InsertedCount, first.UpdatedCount, first.DuplicateCount));
+        await using var reopened = new FurinaChronicle.Infrastructure.Persistence.Sqlite.FurinaDatabase(
+            new FurinaChronicle.Infrastructure.Persistence.Sqlite.SqliteDatabaseOptions(context.DatabasePath));
+        CommitGachaRecordsResult replay = await new CommitGachaRecords(
+            new FurinaChronicle.Infrastructure.Persistence.Sqlite.SqliteGachaAtomicChangeStore(reopened))
+            .ExecuteAsync(request);
+
+        Assert.Equal(ChangeExecutionStatus.AlreadyCommitted, replay.Status);
+        Assert.True(replay.HasOriginalCounts);
+        Assert.Equal(first, replay with { Status = first.Status });
+    }
+
+    [Fact]
     public async Task PreserveExisting_FillEmptyCreatesRevisionAndCanUndo()
     {
         await using SqliteRepositoryTestContext context =
