@@ -27,7 +27,7 @@
 - Furina 全量 Archive。
 - 将 8B 领域导出形成可直接使用的产品流程，完善抽卡 Markdown 报告；不把可读导出首次验证推迟到本阶段。
 - Windows 与 Android 双向往返验证。
-- 8C.7 功能验收关闭，版本为 0.8.16，业务库为 Schema 11。双端真实文件往返、Scoped Replace、提交前后进程终止及原 Receipt 重开查询均通过。资源测量留项、验收产物与阶段边界见[退出评审](PHASE_8C_EXIT_REVIEW.md)。
+- 8C.7 功能验收关闭，版本为 0.8.16，当期验收库为 Schema 11，PR 修复后当前业务库为 Schema 12。双端真实文件往返、Scoped Replace、提交前后进程终止及原 Receipt 重开查询均通过。资源测量留项、验收产物与阶段边界见[退出评审](PHASE_8C_EXIT_REVIEW.md)。
 
 ## Phase 9：统一采集框架
 

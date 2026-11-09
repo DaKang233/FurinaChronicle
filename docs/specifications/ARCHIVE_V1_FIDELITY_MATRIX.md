@@ -147,3 +147,7 @@ v1～v10 迁移只延续旧 exporter 可证明的占位／未解析诊断；已�
 - Furina Archive v1、Gacha history Dataset 和容器布局已作为内部实施契约接受，但仍不是公开发布格式。
 - Schema 7 基线足以完成只读逻辑导出；Schema 8～9 只增加目标权威设置、恢复提交和设备本地安全状态，Schema 10 补齐已接受逻辑语义的无损持久化；三者均不扩大 Archive v1 的来源事实范围。8C.5 已接入正式文件入口，8C.6 已完成严格比较和双临时数据库自动往返，设备双向验收仍待执行。
 - 现有角色／武器及挑战 Portable 虽已通过双端文件验收，仍为 internal / unpublished。
+
+## Schema 12 维护修复
+
+目标端历史 Archive Receipt 在目标档案删除后保留原映射 ID。Gacha Portable 的原提交摘要属于接收端本机操作记录。这两类信息均排除于 Archive v1.0。Schema 12 保留 Archive 格式和范围。

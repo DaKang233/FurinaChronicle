@@ -15,8 +15,8 @@ Major.Minor.Patch.Build
 项目规划标签独立保存：
 
 ```text
-Version    = 0.8.6.<commit-count>
-PhaseLabel = 8B.5
+Version    = 0.8.16.<commit-count>
+PhaseLabel = 8C.7
 Commit     = <short-sha>
 ```
 
@@ -39,8 +39,8 @@ Commit     = <short-sha>
 ```xml
 <FurinaVersionMajor>0</FurinaVersionMajor>
 <FurinaVersionMinor>8</FurinaVersionMinor>
-<FurinaVersionPatch>6</FurinaVersionPatch>
-<FurinaPhaseLabel>8B.5</FurinaPhaseLabel>
+<FurinaVersionPatch>16</FurinaVersionPatch>
+<FurinaPhaseLabel>8C.7</FurinaPhaseLabel>
 ```
 
 `build/FurinaVersion.targets` 只读取这些值，并解析 Git 或 CI 显式输入；不得回写 `Version.props`。

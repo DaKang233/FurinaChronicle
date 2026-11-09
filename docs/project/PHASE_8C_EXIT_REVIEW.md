@@ -16,7 +16,7 @@
 | R08 提交前中断 | Windows TerminateProcess 与 Android 真机 force-stop 均在 `BEFORE_COMMIT` 后实际终止写入进程。重开后原状态令牌与记录一致，未提交 Receipt 缺席，孤立恢复点各清理一份 |
 | R07 与 R08 提交后重开 | 两端均在 `AFTER_COMMIT` 后强制终止。新进程按原 OperationId 找到同一 Applied Receipt，包及 Plan 指纹和映射一致，恢复点有效。重放返回 AlreadyCommitted，数据库状态令牌一致 |
 | ENV-W Windows 存储隔离 | 8C.7 新构建在独立目录实际打开用户页，确认无已登录通行证。正式备份与恢复页初始化了隔离 Schema 11 数据库，app-data 与 cache 也在独立目录。旧报告中的凭据隔离限制作为历史记录保留 |
-| 工程验证 | 当前工作区 Release 测试 632 通过、0 失败、0 跳过。Windows 控制台探针、Windows MAUI x64 Release 隔离构建及 Android ARM64 Debug 探针均构建通过，0 警告、0 错误。版权头及 Git 空白差异检查通过 |
+| 工程验证 | 阶段关闭提交 `f4988de` 的干净检出有 616 项 Release 测试通过。另一次包含未提交 UI 改动的本地检出有 632 项通过，新增 16 项来自 UI 测试。两次均无失败或跳过。Windows 控制台探针、Windows MAUI x64 Release 隔离构建及 Android ARM64 Debug 探针均构建通过，0 警告、0 错误。版权头及 Git 空白差异检查通过 |
 
 R07/R08 的控制台与设备探针复用实际包读取、Preview 规划、Scoped Replace 事务和 Receipt 查询。在提交前使用现有故障注入接口停在事务内，由外部终止进程。正式页面的文件交互证据来自 8C.6 设备报告。
 
@@ -33,7 +33,7 @@ R07/R08 的控制台与设备探针复用实际包读取、Preview 规划、Scop
 | `exit-20261109/windows-probe.log`、`android-probe.log` | R07、R08 的操作标识、PID、状态令牌、指纹与 Receipt |
 | `exit-20261109/windows-storage-check.log` | Windows 环境隔离与实际页面启动 |
 | `exit-20261109/artifact-identity.txt`、`android-package.log` | 8C.7 实际验证产物绑定 |
-| `exit-20261109/tests/phase8c7.trx` | 632 项 Release 回归结果 |
+| `exit-20261109/tests/phase8c7.trx` | 混合工作区 632 项 Release 回归结果 |
 
 本轮 Windows MAUI DLL SHA-256 为 `edd8236457c841d6efed6e6c3437d51b3bf017934748fe9e6ec914f04628c98a`。Android 真机为 Android 14／arm64-v8a，独立包 `com.companyname.furinachronicle.validation.phase8c7probe`，versionCode 215，APK SHA-256 为 `1ec633a1083887a8c78db20fbc6974beaa6027756aea45ab01f1f42a7b91cf2e`。
 

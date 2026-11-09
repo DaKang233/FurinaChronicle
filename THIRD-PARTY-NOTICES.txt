@@ -37,3 +37,13 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+Embedded Genshin item-name lookup
+FurinaChronicle.Infrastructure/Gacha/Metadata/Assets/genshin-localizations.json
+was introduced in FurinaChronicle commit 276f12f76bdb72fb2a56c031efcf7eb3b59f93e5.
+It maps names to item IDs in chs, cht, de, en, es, fr, id, jp, kr, pt, ru, th,
+and vi. The asset has no game-server partition.
+The shape and language keys correspond to the public UIGF item dictionary:
+https://github.com/UIGF-org/mihoyo-api-collect/blob/main/genshin_impact/thirdparty/dictionary_of_item.md
+The exact upstream snapshot and its data redistribution terms remain unverified.
+The license of the UIGF API software does not establish the asset's terms.
