@@ -13,10 +13,10 @@
 工作流首先在 Linux 执行 `FurinaChronicle.Tests` 的 Release 测试。测试通过后，分别在 Windows 托管运行器上生成：
 
 - 现有 MAUI Windows：`net10.0-windows10.0.19041.0`、`win-x64`、自包含且不打包的 Windows Release 应用；
-- UI-0 独立 WinUI 3 技术小样：`FurinaChronicle.Windows` 的 `win-x64`、自包含且不打包的 Release 应用；
+- 独立 WinUI 3 抽卡只读预览宿主：`FurinaChronicle.Windows` 的 `win-x64`、自包含且不打包的 Release 应用；
 - `net10.0-android`、内嵌程序集的 Android Release APK。
 
-UI-0 WinUI 产物仅用于技术验证，不表示现有 MAUI Windows 业务能力已迁移，也不应替代现有 Windows 产物。它随包携带 Windows App SDK 的许可与第三方声明。
+WinUI 预览产物默认读取隔离合成数据库，不表示现有 MAUI Windows 业务能力已追平，也不替代现有 Windows 产物。它随包携带 Windows App SDK 的许可与第三方声明；CI 产物名改为 `FurinaChronicle-windows-preview-win-x64-*`，输出目录为 `artifacts/windows-preview/win-x64`。独立 Android UI-1 验收包的本地命令见 [UI-1 DSH 验收指南](UI1_DSH_ACCEPTANCE_GUIDE.md)，普通 Android CI 包仍走现有应用入口。
 
 仓库根目录的 `global.json` 将 SDK 限定在 .NET 10，并允许使用当前 .NET 10 的最新功能带和补丁版本，避免托管运行器预装更高主版本 SDK 后错误选择其他 SDK 或 MAUI 工作负载。
 
