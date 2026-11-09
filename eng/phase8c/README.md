@@ -71,12 +71,18 @@ no production Preferences/SecureStorage fallback is allowed. This is a credentia
 regression host, not a login/credential migration test. Android keeps its package-private
 platform storage.
 
-When changing `Phase8CValidationMode` or `Phase8BValidationMode`,
+When changing `Phase8CValidationMode`, `Phase8BValidationMode` or `Ui1PreviewMode`,
 `build/FurinaMauiIdentity.targets` invalidates the generated Windows manifest when
 identity inputs change and rejects a mismatched package identity/title. Older revisions
 need a clean of the matching TFM/configuration/RID before switching modes. For every
 acceptance build, still verify the generated AssemblyInfo and actual DLL identity before
 launch; changing only the database path does not establish storage isolation.
+
+The incremental regression deliberately skips cleaning and launches no application:
+
+```powershell
+.\eng\ui1\Test-MauiBuildIdentity.ps1 -EvidenceDirectory .\artifacts\ui1\identity-check
+```
 
 Use a separate `BaseOutputPath` for validation artifacts so the existing production
 binaries remain intact. Do not infer application identity from the apphost EXE hash:

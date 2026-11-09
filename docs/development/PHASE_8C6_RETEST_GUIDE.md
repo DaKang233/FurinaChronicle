@@ -66,10 +66,11 @@ Windows 必须使用无真实通行证的测试用户环境，或已有证据证
 存储。Android 继续使用独立包私有目录。本地权威可移植设置仍在验证 SQLite 中。
 这不表示登录迁移已验收。普通生产构建的目录与系统存储机制不变。
 
-切换 Phase 8 验收模式时，当前 `FurinaMauiIdentity.targets` 会按应用标识、名称及版本
+切换三种验证／预览模式时，当前 `FurinaMauiIdentity.targets` 会按应用标识、名称及版本
 输入使生成 Windows 清单失效，并校验实际生成的标识和标题。旧版本仍须定向清理相同
 TFM／配置／RID 的中间目录；新版本也必须在启动前核对 AssemblyInfo 与 DLL 的
 `AppInfo.PackageName`。验收输出用独立 `BaseOutputPath`，不得覆盖现有生产产物。
+增量回归脚本见 `eng/ui1/Test-MauiBuildIdentity.ps1`。
 
 Android 的 UIA 能力沿用上一轮已验证方案：手机原生控件树／截图，加真机镜像或 ADB
 输入。Windows UIA 只看到一个投屏视频区域时，不要宣称它能读取手机控件。

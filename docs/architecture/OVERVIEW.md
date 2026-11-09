@@ -28,7 +28,9 @@ flowchart TD
 - `FurinaChronicle.Core`：身份、领域记录、值对象和纯领域规则。
 - `FurinaChronicle.Services`：用例、端口、导入计划、合并策略和事务边界。
 - `FurinaChronicle.Infrastructure`：SQLite、HTTP、JSON、压缩、文件格式和外部 Provider。
-- `FurinaChronicle.App`：MAUI 页面、平台文件选择、导航和用户交互。
+- `FurinaChronicle.App`：MAUI Android 页面、平台文件选择、导航和用户交互；迁移期保留旧 MAUI Windows 业务宿主。
+- `FurinaChronicle.Windows`：独立 WinUI 3 宿主，按 ADR 0020 逐步接入业务；当前抽卡只读预览默认读取隔离合成库。
+- `FurinaChronicle.Presentation`：双端共用的抽卡只读状态、纯展示数据与调度端口；不依赖 MAUI、WinUI、SQLite 或 Infrastructure，不承担平台导航、图片对象或窗口生命周期。
 
 Core 不得引用 MAUI、SQLite、平台存储、HTTP 客户端或具体外部 DTO。
 
