@@ -1,10 +1,11 @@
-﻿// Copyright (c) 2026 DaKang233.
+// Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics;
 using System.Text;
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Gacha;
+using FurinaChronicle.Core.Records;
 using FurinaChronicle.Infrastructure.Importing.Json;
 using FurinaChronicle.Infrastructure.Persistence;
 using FurinaChronicle.Infrastructure.Persistence.Sqlite;
@@ -147,6 +148,12 @@ public sealed class ImportGachaRecordsTests
             Assert.Equal(1, secondResult.InvalidCount);
             IReadOnlyList<GachaRecord> stored = await gachaRepository.GetRecentAsync(AccountId, 20);
             Assert.Equal(3, stored.Count);
+            Assert.All(stored, record =>
+            {
+                Assert.Equal(DataOrigin.StandardImport, record.Provenance.Origin);
+                Assert.NotNull(record.Provenance.Timestamps.ImportedAt);
+                Assert.NotNull(record.Provenance.AcquisitionBatchId);
+            });
         }
         finally
         {
@@ -205,6 +212,23 @@ public sealed class ImportGachaRecordsTests
             await database.DisposeAsync();
             Directory.Delete(directory, true);
         }
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ConflictingDuplicateFailsWithoutSaving()
+    {
+        await using var context = FurinaChronicle.Tests.Infrastructure.Persistence.Sqlite.SqliteRepositoryTestContext.Create();
+        await context.Archives.AddAsync(Archive);
+        await context.Accounts.AddAsync(Account);
+        var service = new ImportGachaRecords(new JsonGachaRecordReader(),
+            new CommitGachaRecords(context.AtomicGacha), context.Accounts);
+        int duplicateName = SampleJson.LastIndexOf("夏洛蒂", StringComparison.Ordinal);
+        string conflicting = SampleJson.Remove(duplicateName, "夏洛蒂".Length)
+            .Insert(duplicateName, "另一个物品");
+        using MemoryStream source = CreateStream(conflicting);
+
+        await Assert.ThrowsAsync<GachaRecordImportFormatException>(() => service.ExecuteAsync(source, AccountId));
+        Assert.Empty(await context.Gacha.GetRecentAsync(AccountId, 20));
     }
 
     [Fact]

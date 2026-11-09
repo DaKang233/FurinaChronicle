@@ -48,8 +48,9 @@ public sealed class BuildGachaAnalyticsTests
         Assert.Null(character.AverageUpFiveStarPulls);
         Assert.Null(character.MinimumFiveStarPulls);
         Assert.Null(character.MaximumFiveStarPulls);
-        Assert.Equal(3, character.PullsSinceLastFiveStar);
-        Assert.Equal(3, character.PullsSinceLastFourStar);
+        Assert.Null(character.PullsSinceLastFiveStar);
+        Assert.Null(character.PullsSinceLastFourStar);
+        Assert.All(character.FiveStarHistory, item => Assert.Null(item.Pulls));
         Assert.Equal(["五星乙", "五星甲"], character.FiveStarHistory.Select(item => item.ItemName));
         Assert.All(character.FiveStarHistory, item => Assert.NotNull(item.IconUrl));
         GachaPoolItemCount threeStarCount = Assert.Single(
@@ -65,6 +66,36 @@ public sealed class BuildGachaAnalyticsTests
             item => item.ItemId == "weapon-3");
         Assert.Equal(3, threeStar.Count);
         Assert.Equal(3, threeStar.AcquisitionTimes.Count);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_AggregatedHighRankCountsOnlyObservedItemsAndBreaksExactPity()
+    {
+        Guid account = Guid.NewGuid();
+        DateTimeOffset time = new(2026, 1, 1, 8, 0, 0, TimeSpan.FromHours(8));
+        GachaRecord[] records =
+        [
+            Record(account, "1", "五星甲", "avatar-5a", 5, time, "301"),
+            Record(account, "2", "五星乙", "avatar-5b", 5, time.AddMinutes(1), "301") with { Count = 10 },
+            Record(account, "3", "四星角色", "avatar-4", 4, time.AddMinutes(2), "301") with { Count = 7 },
+            Record(account, "4", "五星甲", "avatar-5a", 5, time.AddMinutes(3), "301"),
+            Record(account, "5", "三星武器", "weapon-3", 3, time.AddMinutes(4), "301") with { Count = 3 },
+            Record(account, "6", "五星甲", "avatar-5a", 5, time.AddMinutes(5), "301"),
+        ];
+        var service = new BuildGachaAnalytics(new InMemoryGachaRecordRepository(records), new StubMetadataProvider());
+
+        GachaAnalyticsReport report = await service.ExecuteAsync(new GachaRecordQuery([account]));
+
+        GachaPoolStatistics pool = Assert.Single(report.Pools);
+        Assert.Equal(23, pool.TotalPulls);
+        Assert.Equal(4, pool.FiveStarCount);
+        Assert.Equal(1, pool.FourStarCount);
+        Assert.Equal(new int?[] { 4, null, null, null }, pool.FiveStarHistory.Select(item => item.Pulls));
+        Assert.Equal(4, pool.AverageFiveStarPulls);
+        Assert.Equal(0, pool.PullsSinceLastFiveStar);
+        Assert.Null(pool.PullsSinceLastFourStar);
+        Assert.Equal(1, Assert.Single(report.Items, item => item.RankType == 4).Count);
+        Assert.Equal(4, Assert.Single(report.Calendar).FiveStarCount);
     }
 
     [Fact]

@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 DaKang233.
+// Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
 using System;
@@ -40,6 +40,12 @@ public sealed class UpdateGameAccount(IGameAccountRepository repository)
         if (!GameUidValidation.IsStructurallyValidUid(normalizedUid))
         {
             throw new ArgumentException("无效的 UID。有效的 UID 是长度为 9~10 个的数字。", nameof(uid));
+        }
+
+        if (serverRegion == GameServerRegion.Unknown &&
+            string.Equals(normalizedUid, current.Uid, StringComparison.Ordinal))
+        {
+            serverRegion = current.ServerRegion;
         }
 
         GameRoleNaturalIdentity naturalIdentity =

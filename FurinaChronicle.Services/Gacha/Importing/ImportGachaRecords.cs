@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 DaKang233.
+// Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
 using FurinaChronicle.Core.Archives;
@@ -41,10 +41,14 @@ namespace FurinaChronicle.Services.Gacha.Importing
             if (gameAccount == null) { throw new KeyNotFoundException("指定的游戏账号不存在。"); }
 
             GachaRecordReadResult readResult = await reader.ReadAsync(source, gameAccountId, cancellationToken);
-            GachaRecord[] distinctRecords = readResult.Records.DistinctBy(record => (record.GameAccountId, record.ExternalRecordId)).ToArray();
-
-            int duplicatesInsideSource = readResult.Records.Count - distinctRecords.Length;
             DateTimeOffset now = DateTimeOffset.UtcNow;
+            var provenance = new RecordProvenance(
+                DataOrigin.StandardImport,
+                new RecordTimestamps(ImportedAt: now),
+                acquisitionBatchId: AcquisitionBatchId.New());
+            GachaRecord[] records = readResult.Records
+                .Select(record => record with { Provenance = provenance })
+                .ToArray();
             CommitGachaRecordsResult saveResult =
                 await commitGachaRecords.ExecuteAsync(
                     new CommitGachaRecordsRequest(
@@ -56,7 +60,7 @@ namespace FurinaChronicle.Services.Gacha.Importing
                             : "Import compatible Gacha JSON",
                         now,
                         now,
-                        distinctRecords,
+                        records,
                         mode == GachaImportMode.Full
                             ? GachaRecordConflictPolicy.ReplaceExisting
                             : GachaRecordConflictPolicy.PreserveExisting,
@@ -73,7 +77,7 @@ namespace FurinaChronicle.Services.Gacha.Importing
             return new GachaRecordImportResult(
                 TotalCount: readResult.Records.Count + readResult.Errors.Count,
                 ImportedCount: saveResult.InsertedCount,
-                DuplicateCount: duplicatesInsideSource + saveResult.DuplicateCount,
+                DuplicateCount: saveResult.DuplicateCount,
                 InvalidCount: readResult.Errors.Count,
                 UpdatedCount: saveResult.UpdatedCount);
         }

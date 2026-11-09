@@ -224,6 +224,31 @@ public sealed class GachaExportTests
     }
 
     [Fact]
+    public async Task TableWriter_Csv_AdvancesAggregatedPullsAndOmitsUncertainPity()
+    {
+        GachaExportDocument source = CreateDocument();
+        GachaExportAccount account = source.Accounts[0];
+        GachaRecord original = account.Records[0];
+        GachaRecord[] records =
+        [
+            original with { Count = 4, RankType = 3 },
+            original with { Count = 10, RankType = 5 },
+            original with { Count = 1, RankType = 3 },
+            original with { Count = 1, RankType = 5 },
+            original with { Count = 2, RankType = 3 },
+        ];
+        var writer = new GachaTableExportWriter(new EmptyGachaItemMetadataProvider());
+        using var stream = new MemoryStream();
+        await writer.WriteAsync(stream, source with { Accounts = [account with { Records = records }] },
+            new GachaTableExportOptions(GachaTableFormat.Csv, GachaExportLanguages.SimplifiedChinese));
+
+        string[] lines = Encoding.UTF8.GetString(stream.ToArray())
+            .Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(new[] { "4", "", "", "", "2" },
+            lines.Skip(1).Select(row => row.Split(',')[8]));
+    }
+
+    [Fact]
     public async Task TableWriter_Csv_NeutralizesSpreadsheetFormulaPrefixes()
     {
         GachaExportDocument source = CreateDocument();

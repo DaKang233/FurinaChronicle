@@ -136,7 +136,7 @@ public sealed record GachaRevisionDisplayItem(
             },
             Format(item.Before, item.BeforeVersion),
             Format(item.After, item.AfterVersion),
-            item.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss 'UTC'"));
+            item.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss zzz"));
 
     private static string Format(GachaRecord? record, FactVersion? version)
     {

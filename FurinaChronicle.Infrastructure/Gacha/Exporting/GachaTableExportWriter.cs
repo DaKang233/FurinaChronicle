@@ -166,7 +166,7 @@ public sealed class GachaTableExportWriter(
         foreach (GachaExportAccount account in document.Accounts)
         {
             int index = 0;
-            Dictionary<string, int> pityByPool =
+            Dictionary<string, int?> pityByPool =
                 new(StringComparer.Ordinal);
 
             foreach (GachaRecord record in account.Records)
@@ -178,8 +178,8 @@ public sealed class GachaTableExportWriter(
                     record.UigfGachaType ??
                     record.GachaType ??
                     string.Empty;
-                int pityCount = pityByPool.GetValueOrDefault(poolKey) + 1;
-                pityByPool[poolKey] = pityCount;
+                int pullCount = Math.Max(1, record.Count);
+                int? pityCount = pityByPool.GetValueOrDefault(poolKey, 0) + pullCount;
 
                 string itemName = await resolver.GetReadableItemNameAsync(
                     record,
@@ -195,6 +195,12 @@ public sealed class GachaTableExportWriter(
                     await resolver.GetReadableRankTypeAsync(
                         record,
                         cancellationToken);
+
+                if (rankType == 5 && pullCount > 1)
+                {
+                    pityCount = null;
+                }
+                pityByPool[poolKey] = rankType == 5 && pullCount == 1 ? 0 : pityCount;
 
                 string archiveName = document.SourceArchive?.Name ?? string.Empty;
                 string archiveId = document.SourceArchive?.Id.ToString("D") ??
@@ -227,7 +233,7 @@ public sealed class GachaTableExportWriter(
                     itemType,
                     poolName,
                     index.ToString(CultureInfo.InvariantCulture),
-                    pityCount.ToString(CultureInfo.InvariantCulture),
+                    pityCount?.ToString(CultureInfo.InvariantCulture) ?? string.Empty,
                     archiveName,
                     archiveId,
                     account.Account.Id.ToString("D"),
@@ -253,10 +259,6 @@ public sealed class GachaTableExportWriter(
                     document.CompletenessAssertion
                 ]);
 
-                if (rankType == 5)
-                {
-                    pityByPool[poolKey] = 0;
-                }
             }
         }
     }

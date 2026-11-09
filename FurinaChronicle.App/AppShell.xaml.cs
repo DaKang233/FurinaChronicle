@@ -17,7 +17,9 @@ public partial class AppShell : Shell
     private readonly UserPageViewModel userPageViewModel;
     private readonly ArchivePage archivePage;
     private readonly ArchiveTransferPage archiveTransferPage;
+#if PHASE8B_VALIDATION
     private readonly Phase8BValidationPage phase8BValidationPage;
+#endif
 #if !PHASE8B_VALIDATION
     private PassportFlyoutHeader? passportFlyoutHeader;
 #endif
@@ -30,7 +32,9 @@ public partial class AppShell : Shell
         ArchiveHistoryPage archiveHistoryPage,
         ArchivePage archivePage,
         ArchiveTransferPage archiveTransferPage,
+#if PHASE8B_VALIDATION
         Phase8BValidationPage phase8BValidationPage,
+#endif
         UserPage userPage,
         UserPageViewModel userPageViewModel)
     {
@@ -40,7 +44,9 @@ public partial class AppShell : Shell
         this.archiveHistoryPage = archiveHistoryPage;
         this.archivePage = archivePage;
         this.archiveTransferPage = archiveTransferPage;
+#if PHASE8B_VALIDATION
         this.phase8BValidationPage = phase8BValidationPage;
+#endif
         this.userPage = userPage;
         this.userPageViewModel = userPageViewModel;
         Routing.RegisterRoute(

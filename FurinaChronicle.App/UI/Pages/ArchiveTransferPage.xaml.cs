@@ -1,6 +1,7 @@
 // Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
+using System.ComponentModel;
 using FurinaChronicle.App.Exporting;
 using FurinaChronicle.App.ViewModels;
 using FurinaChronicle.Core.Archives;
@@ -33,6 +34,11 @@ public partial class ArchiveTransferPage : ContentPage
     protected override async void OnAppearing()
     {
         base.OnAppearing();
+        ViewModel.PropertyChanged -= OnBusyChangedWhileAway;
+        if (ViewModel.IsBusy)
+        {
+            return;
+        }
         try
         {
             await ViewModel.InitializeAsync();
@@ -47,8 +53,23 @@ public partial class ArchiveTransferPage : ContentPage
 
     protected override async void OnDisappearing()
     {
-        await ViewModel.ReleaseRestoreSessionAsync();
         base.OnDisappearing();
+        ViewModel.PropertyChanged -= OnBusyChangedWhileAway;
+        if (ViewModel.IsBusy)
+        {
+            ViewModel.PropertyChanged += OnBusyChangedWhileAway;
+            return;
+        }
+        await ViewModel.ReleaseInactiveSessionAsync();
+    }
+
+    private async void OnBusyChangedWhileAway(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ArchiveTransferPageViewModel.IsBusy) && !ViewModel.IsBusy)
+        {
+            ViewModel.PropertyChanged -= OnBusyChangedWhileAway;
+            await ViewModel.ReleaseInactiveSessionAsync();
+        }
     }
 
     private async void OnExportArchiveClicked(object? sender, EventArgs e)

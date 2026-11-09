@@ -78,6 +78,25 @@ public sealed class GachaPortablePackageCodecTests
         Assert.Equal("100000001", Assert.Single(result.Accounts).Uid);
     }
 
+    [Theory]
+    [InlineData("1.0.0")]
+    [InlineData("1.0.0.0")]
+    [InlineData("1.+0")]
+    public async Task ReadAsync_RejectsVersionsOutsideManifestSchema(string version)
+    {
+        using MemoryStream stream = await WritePackageAsync(CreatePackage());
+        using MemoryStream changed = RewriteArchive(stream, entries =>
+        {
+            JsonObject manifest = JsonNode.Parse(entries["manifest.json"])!.AsObject();
+            manifest["format_version"] = version;
+            entries["manifest.json"] = Encoding.UTF8.GetBytes(manifest.ToJsonString());
+        });
+
+        GachaPortableException error = await Assert.ThrowsAsync<GachaPortableException>(
+            () => new GachaPortablePackageReader().ReadAsync(changed));
+        Assert.Equal(GachaPortableErrorCode.InvalidPackage, error.Code);
+    }
+
     [Fact]
     public async Task ReadAsync_FutureMajor_ReturnsUnsupportedVersion()
     {

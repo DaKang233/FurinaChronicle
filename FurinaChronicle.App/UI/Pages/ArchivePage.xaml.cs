@@ -120,7 +120,8 @@ public partial class ArchivePage : ContentPage
 
     private async void OnEditAccountClicked(object? sender, EventArgs e)
     {
-        if (ViewModel.SelectedAccount is null)
+        GameAccount? selected = ViewModel.SelectedAccount;
+        if (selected is null)
         {
             await DisplayAlertAsync("无法编辑", "请先选择游戏账号。", "确定");
             return;
@@ -129,12 +130,18 @@ public partial class ArchivePage : ContentPage
         string? displayName = await DisplayPromptAsync(
             "编辑游戏账号",
             "请输入账号备注；留空表示只显示 UID。",
-            "下一步",
+            selected.RoleIdentity is null ? "下一步" : "保存",
             "取消",
             maxLength: 50,
             keyboard: Keyboard.Text);
-        if (displayName is null)
+        if (displayName is null || ViewModel.SelectedAccount?.Id != selected.Id)
         {
+            return;
+        }
+
+        if (selected.RoleIdentity is not null)
+        {
+            await ViewModel.EditSelectedAccountAsync(displayName, string.Empty);
             return;
         }
 
@@ -143,10 +150,10 @@ public partial class ArchivePage : ContentPage
             "请输入 UID；留空表示不修改 UID。",
             "保存",
             "取消",
-            placeholder: ViewModel.SelectedAccount.Uid,
+            placeholder: selected.Uid,
             maxLength: 10,
             keyboard: Keyboard.Numeric);
-        if (uid is null)
+        if (uid is null || ViewModel.SelectedAccount?.Id != selected.Id)
         {
             return;
         }

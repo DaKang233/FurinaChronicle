@@ -703,6 +703,10 @@ public partial class GachaAnalysisViewModel(
         {
             SelectedDetailRecord = null;
             await RefreshAsync();
+            if (ErrorMessage is not null)
+            {
+                ErrorMessage = $"操作已提交，但明细刷新失败。请重新加载。{Environment.NewLine}{ErrorMessage}";
+            }
         }
     }
 
@@ -1170,6 +1174,8 @@ public partial class GachaAnalysisViewModel(
             : string.Join("、", summaries);
     }
 
+    private static string FormatPullCount(int? count) => count is int pulls ? $"{pulls} 抽" : "—";
+
     private async Task<GachaPoolStatisticsDisplayItem> ToDisplayItemAsync(
         GachaPoolStatistics pool)
     {
@@ -1187,7 +1193,7 @@ public partial class GachaAnalysisViewModel(
                         await GetCachedIconPathAsync(
                             item.ItemId,
                             item.IconUrl)),
-                    $"{item.Pulls} 抽",
+                    FormatPullCount(item.Pulls),
                     item.Time.ToString("yyyy-MM-dd HH:mm"),
                     accountMap.TryGetValue(
                         item.GameAccountId,
@@ -1255,7 +1261,8 @@ public partial class GachaAnalysisViewModel(
             $"五星 {pool.FiveStarCount}（{pool.FiveStarPercentage:F2}%） · " +
                 $"四星 {pool.FourStarCount}（{pool.FourStarPercentage:F2}%） · " +
                 $"三星 {pool.ThreeStarCount}（{pool.ThreeStarPercentage:F2}%）",
-            $"距上个五星 {pool.PullsSinceLastFiveStar} 抽 · 距上个四星 {pool.PullsSinceLastFourStar} 抽",
+            IsArchiveMode ? string.Empty :
+                $"距上个五星 {FormatPullCount(pool.PullsSinceLastFiveStar)} · 距上个四星 {FormatPullCount(pool.PullsSinceLastFourStar)}",
             fiveStars,
             limitedFiveStars,
             !IsArchiveMode &&

@@ -205,7 +205,9 @@ public sealed class GachaPortablePackageReader(
                 GachaPortableRules.ManifestPath);
         }
 
-        if (!Version.TryParse(manifest.FormatVersion, out Version? version))
+        string[] parts = manifest.FormatVersion?.Split('.') ?? [];
+        if (parts.Length is < 1 or > 2 ||
+            parts.Any(part => part.Length == 0 || !part.All(char.IsAsciiDigit)))
         {
             throw GachaPortableRules.Error(
                 GachaPortableErrorCode.InvalidPackage,
@@ -213,11 +215,11 @@ public sealed class GachaPortablePackageReader(
                 GachaPortableRules.ManifestPath);
         }
 
-        if (version.Major != 1)
+        if (parts[0] != "1")
         {
             throw GachaPortableRules.Error(
                 GachaPortableErrorCode.UnsupportedVersion,
-                $"Unsupported Gacha Portable version: {version}.",
+                $"Unsupported Gacha Portable version: {manifest.FormatVersion}.",
                 GachaPortableRules.ManifestPath);
         }
 

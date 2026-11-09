@@ -111,11 +111,12 @@ public sealed class BuildGachaAnalytics
             metadata = resolvedMetadata;
         }
 
+        bool singleAccount = query.GameAccountIds.Distinct().Take(2).Count() == 1;
         IReadOnlyList<GachaPoolStatistics> pools =
             components.HasFlag(GachaAnalyticsComponents.Pools)
                 ? records
                     .GroupBy(GachaPoolGroupResolver.Resolve)
-                    .Select(group => BuildPoolStatistics(group.Key, group, metadata))
+                    .Select(group => BuildPoolStatistics(group.Key, group, metadata, singleAccount))
                     .OrderBy(statistics => GetPoolOrder(statistics.PoolGroup))
                     .ToArray()
                 : [];
@@ -215,28 +216,23 @@ public sealed class BuildGachaAnalytics
     private static GachaPoolStatistics BuildPoolStatistics(
         GachaPoolGroup pool,
         IEnumerable<GachaRecord> source,
-        IReadOnlyDictionary<string, GachaItemMetadata?> metadata)
+        IReadOnlyDictionary<string, GachaItemMetadata?> metadata,
+        bool singleAccount)
     {
         GachaRecord[] records = source
             .OrderBy(record => record.Time)
             .ThenBy(record => record.ExternalRecordId, StringComparer.Ordinal)
             .ToArray();
         int total = records.Sum(GetPullCount);
-        int fiveCount = records
-            .Where(record => record.RankType == 5)
-            .Sum(GetPullCount);
-        int fourCount = records
-            .Where(record => record.RankType == 4)
-            .Sum(GetPullCount);
-        int threeCount = records
-            .Where(record => record.RankType == 3)
-            .Sum(GetPullCount);
+        int fiveCount = records.Count(record => record.RankType == 5);
+        int fourCount = records.Count(record => record.RankType == 4);
+        int threeCount = records.Count(record => record.RankType == 3);
         var fiveStarPities = new List<int>();
         var limitedFiveStarPities = new List<int>();
         var fiveStarHistory = new List<FiveStarGacha>();
         var limitedFiveStarHistory = new List<LimitedFiveStarGacha>();
-        int sinceFive = 0;
-        int sinceFour = 0;
+        int? sinceFive = null;
+        int? sinceFour = null;
 
         foreach (IGrouping<Guid, GachaRecord> accountRecords in records
             .GroupBy(record => record.GameAccountId))
@@ -245,6 +241,7 @@ public sealed class BuildGachaAnalytics
             int accountSinceFour = 0;
             int accountSinceLimitedFive = 0;
             bool hasFiveStarBoundary = false;
+            bool hasFourStarBoundary = false;
             bool hasLimitedFiveStarBoundary = false;
             foreach (GachaRecord record in accountRecords
                 .OrderBy(record => record.Time)
@@ -256,9 +253,11 @@ public sealed class BuildGachaAnalytics
                 accountSinceLimitedFive += count;
                 if (record.RankType == 5)
                 {
-                    if (hasFiveStarBoundary &&
+                    int? completedInterval = null;
+                    if (count == 1 && hasFiveStarBoundary &&
                         IsValidFiveStarInterval(pool, accountSinceFive))
                     {
+                        completedInterval = accountSinceFive;
                         fiveStarPities.Add(accountSinceFive);
                     }
                     fiveStarHistory.Add(new FiveStarGacha(
@@ -268,14 +267,14 @@ public sealed class BuildGachaAnalytics
                         record.ItemId,
                         GetIconUrl(record, metadata),
                         record.Time,
-                        accountSinceFive));
-                    hasFiveStarBoundary = true;
+                        completedInterval));
+                    hasFiveStarBoundary = count == 1;
                     accountSinceFive = 0;
 
                     if (IsLimitedFiveStar(record, pool))
                     {
                         int? completedLimitedInterval = null;
-                        if (hasLimitedFiveStarBoundary &&
+                        if (count == 1 && hasLimitedFiveStarBoundary &&
                             IsValidLimitedFiveStarInterval(
                                 pool,
                                 accountSinceLimitedFive))
@@ -291,17 +290,21 @@ public sealed class BuildGachaAnalytics
                             GetIconUrl(record, metadata),
                             record.Time,
                             completedLimitedInterval));
-                        hasLimitedFiveStarBoundary = true;
+                        hasLimitedFiveStarBoundary = count == 1;
                         accountSinceLimitedFive = 0;
                     }
                 }
                 if (record.RankType == 4)
                 {
+                    hasFourStarBoundary = count == 1;
                     accountSinceFour = 0;
                 }
             }
-            sinceFive += accountSinceFive;
-            sinceFour += accountSinceFour;
+            if (singleAccount)
+            {
+                sinceFive = hasFiveStarBoundary ? accountSinceFive : null;
+                sinceFour = hasFourStarBoundary ? accountSinceFour : null;
+            }
         }
 
         return new GachaPoolStatistics(
@@ -346,7 +349,7 @@ public sealed class BuildGachaAnalytics
                         first.ItemId,
                         GetIconUrl(first, metadata),
                         first.RankType,
-                        group.Sum(GetPullCount));
+                        group.Count());
                 })
                 .OrderByDescending(item => item.RankType)
                 .ThenByDescending(item => item.Count)
@@ -443,7 +446,7 @@ public sealed class BuildGachaAnalytics
                     first.ItemId,
                     GetIconUrl(first, metadata),
                     first.RankType,
-                    items.Sum(GetPullCount));
+                    items.Count());
             })
             .OrderByDescending(item => item.RankType)
             .ThenByDescending(item => item.Count)
@@ -615,12 +618,8 @@ public sealed class BuildGachaAnalytics
             {
                 Date = group.Key,
                 Total = group.Sum(GetPullCount),
-                Five = group
-                    .Where(record => record.RankType == 5)
-                    .Sum(GetPullCount),
-                Four = group
-                    .Where(record => record.RankType == 4)
-                    .Sum(GetPullCount)
+                Five = group.Count(record => record.RankType == 5),
+                Four = group.Count(record => record.RankType == 4)
             })
             .ToArray();
         int maximum = grouped.Length == 0 ? 0 : grouped.Max(day => day.Total);
@@ -652,7 +651,7 @@ public sealed class BuildGachaAnalytics
                     first.ItemType,
                     GetIconUrl(first, metadata),
                     first.RankType,
-                    group.Sum(GetPullCount),
+                    group.Count(),
                     group
                         .OrderByDescending(record => record.Time)
                         .Select(record => record.Time)

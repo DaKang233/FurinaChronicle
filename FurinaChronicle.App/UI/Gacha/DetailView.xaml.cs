@@ -75,7 +75,7 @@ public partial class DetailView : ContentView
             {
                 return;
             }
-            if (!DateTimeOffset.TryParse(timeText, out DateTimeOffset occurredAt))
+            if (!GachaCorrectionTime.TryParse(timeText, out DateTimeOffset occurredAt))
             {
                 throw new InvalidOperationException(
                     "无法识别发生时间；请保留明确时区。");
@@ -221,7 +221,7 @@ public partial class DetailView : ContentView
     private static Task ShowErrorAsync(Exception exception) =>
         Shell.Current.DisplayAlertAsync("操作失败", exception.Message, "确定");
 
-    private static Task ShowResultAsync(GachaAtomicChangeResult result)
+    private Task ShowResultAsync(GachaAtomicChangeResult result)
     {
         string message = result.Status switch
         {
@@ -237,6 +237,12 @@ public partial class DetailView : ContentView
                 result.ConflictReason ?? "此记录受永久删除标记抑制。",
             _ => result.ConflictReason ?? result.Status.ToString()
         };
+        if (result.Status is FurinaChronicle.Core.History.ChangeExecutionStatus.Applied or
+                FurinaChronicle.Core.History.ChangeExecutionStatus.AlreadyCommitted &&
+            ViewModel.ErrorMessage is string refreshWarning)
+        {
+            message += Environment.NewLine + refreshWarning;
+        }
         return Shell.Current.DisplayAlertAsync("操作结果", message, "确定");
     }
 }

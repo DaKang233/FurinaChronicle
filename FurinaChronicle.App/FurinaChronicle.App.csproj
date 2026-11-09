@@ -104,6 +104,11 @@
 	  </MauiXaml>
 	</ItemGroup>
 
+	<ItemGroup Condition="'$(Phase8BValidationMode)' != 'true'">
+	  <MauiXaml Remove="UI\Pages\Phase8BValidationPage.xaml" />
+	  <Compile Remove="UI\Pages\Phase8BValidationPage.xaml.cs;ViewModels\Phase8BValidationPageViewModel.cs" />
+	</ItemGroup>
+
 	<Import Project="..\build\FurinaVersion.targets" />
 	<Import Project="..\build\FurinaMauiIdentity.targets" />
 

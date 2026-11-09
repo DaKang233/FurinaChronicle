@@ -11,6 +11,24 @@ namespace FurinaChronicle.Tests.Services.Archives;
 public sealed class GameAccountUseCaseTests
 {
     [Fact]
+    public async Task Update_KeepsManuallySelectedRegionForUnchangedUid()
+    {
+        var archives = new InMemoryPlayerArchiveRepository();
+        var accounts = new InMemoryGameAccountRepository();
+        PlayerArchive archive = ArchiveTestData.Archive();
+        await archives.AddAsync(archive);
+        GameAccount created = await new AddGameAccount(archives, accounts).ExecuteAsync(
+            archive.Id, "400000001", GameServerRegion.Asia, "original");
+
+        GameAccount updated = await new UpdateGameAccount(accounts).ExecuteAsync(
+            created.Id, created.Uid, GameServerRegion.Unknown, "updated");
+
+        Assert.Equal(GameServerRegion.Asia, updated.ServerRegion);
+        Assert.Equal(created.RoleIdentity, updated.RoleIdentity);
+        Assert.Equal("updated", updated.DisplayName);
+    }
+
+    [Fact]
     public async Task Add_NormalizesFieldsAndPersistsAccount()
     {
         var archives = new InMemoryPlayerArchiveRepository();

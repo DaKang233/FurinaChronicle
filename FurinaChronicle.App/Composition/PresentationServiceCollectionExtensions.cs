@@ -23,7 +23,9 @@ internal static class PresentationServiceCollectionExtensions
         services.AddSingleton<ArchiveTransferPageViewModel>();
         services.AddSingleton<UserPageViewModel>();
         services.AddSingleton<StartupPageViewModel>();
+#if PHASE8B_VALIDATION
         services.AddSingleton<Phase8BValidationPageViewModel>();
+#endif
 
         services.AddTransient<GachaPage>();
         services.AddTransient<ArchiveHistoryPage>();
@@ -37,7 +39,9 @@ internal static class PresentationServiceCollectionExtensions
         services.AddTransient<MobileCaptchaLoginPage>();
         services.AddTransient<ManualCookieLoginPage>();
         services.AddSingleton<StartupPage>();
+#if PHASE8B_VALIDATION
         services.AddSingleton<Phase8BValidationPage>();
+#endif
 
         services.AddSingleton<AppShell>();
         services.AddSingleton<ApplicationStartupService>();

@@ -524,13 +524,22 @@ public partial class ArchiveTransferPageViewModel(
         await RefreshRecoveryPointAsync(cancellationToken);
     }
 
+    internal async Task ReleaseInactiveSessionAsync()
+    {
+        try
+        {
+            await ReleaseRestoreSessionAsync();
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            ErrorMessage = $"无法清理恢复会话：{exception.Message}";
+        }
+    }
+
     public async Task ReleaseRestoreSessionAsync()
     {
-        if (stagedPackage is not null)
-        {
-            await stagedPackage.DisposeAsync();
-            stagedPackage = null;
-        }
+        IArchiveRestoreStagedPackage? releasedPackage = stagedPackage;
+        stagedPackage = null;
         operationId = null;
         CurrentPlan = null;
         archiveDecisions.Clear();
@@ -541,6 +550,10 @@ public partial class ArchiveTransferPageViewModel(
         PlanSummary = "选择文件后才会生成恢复预览。";
         MappingSummary = "尚无档案或账号映射。";
         DiagnosticSummary = "尚无冲突或确认项。";
+        if (releasedPackage is not null)
+        {
+            await releasedPackage.DisposeAsync();
+        }
     }
 
     public async ValueTask DisposeAsync()
