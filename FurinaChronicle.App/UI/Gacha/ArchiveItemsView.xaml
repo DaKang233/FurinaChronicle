@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  Copyright (c) 2026 DaKang233.
+  SPDX-License-Identifier: MIT
+-->
+
+<ContentView
+    x:Class="FurinaChronicle.App.UI.Gacha.ArchiveItemsView"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:gacha="clr-namespace:FurinaChronicle.App.UI.Gacha"
+    xmlns:viewModels="clr-namespace:FurinaChronicle.App.ViewModels"
+    x:DataType="viewModels:GachaAnalysisViewModel">
+
+    <Grid RowDefinitions="Auto,*" RowSpacing="8">
+        <Label FontAttributes="Bold" FontSize="20" Text="档案物品统计" />
+
+        <CollectionView
+            Grid.Row="1"
+            ItemsSource="{Binding ItemGridRows}"
+            SelectionMode="None">
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="viewModels:GachaItemGridDisplayRow">
+                    <Grid>
+                        <Label
+                            Margin="0,8,0,4"
+                            FontAttributes="Bold"
+                            FontSize="17"
+                            IsVisible="{Binding IsHeader}"
+                            Text="{Binding GroupName}" />
+                        <FlexLayout
+                            AlignItems="Start"
+                            BindableLayout.ItemsSource="{Binding Items}"
+                            Direction="Row"
+                            IsVisible="{Binding IsItemRow}"
+                            JustifyContent="Start"
+                            Wrap="Wrap">
+                            <BindableLayout.ItemTemplate>
+                                <DataTemplate x:DataType="viewModels:GachaItemStatisticsDisplayItem">
+                                    <gacha:GachaItemIconView
+                                        CardWidth="116"
+                                        CountText="{Binding Count}"
+                                        DetailText="{Binding Rank}"
+                                        IconSize="90"
+                                        IconSource="{Binding IconUrl}"
+                                        ItemName="{Binding ItemName}"
+                                        Margin="4"
+                                        RankType="{Binding RankType}" />
+                                </DataTemplate>
+                            </BindableLayout.ItemTemplate>
+                        </FlexLayout>
+                    </Grid>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+    </Grid>
+</ContentView>

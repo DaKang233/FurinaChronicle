@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://www.dakang233.com/schemas/furina-gacha-portable/1/manifest.schema.json",
+  "title": "Furina Gacha Portable v1 manifest",
+  "type": "object",
+  "required": [
+    "format",
+    "format_version",
+    "game",
+    "generated_at",
+    "source_archive",
+    "scope",
+    "accounts"
+  ],
+  "properties": {
+    "format": { "const": "furina-gacha-portable" },
+    "format_version": { "type": "string", "pattern": "^1(?:\\.[0-9]+)?$" },
+    "game": { "const": "genshin" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "source_archive": {
+      "type": "object",
+      "required": ["archive_ref", "name"],
+      "properties": {
+        "archive_ref": { "$ref": "#/$defs/guid" },
+        "name": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "scope": {
+      "type": "object",
+      "required": ["kind", "account_count", "record_count", "completeness_assertion"],
+      "properties": {
+        "kind": { "const": "selected_accounts" },
+        "account_count": { "type": "integer", "minimum": 1, "maximum": 128 },
+        "record_count": { "type": "integer", "minimum": 0, "maximum": 2000000 },
+        "completeness_assertion": { "const": "none" }
+      },
+      "additionalProperties": true
+    },
+    "accounts": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "items": { "$ref": "#/$defs/account" }
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "guid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "natural_identity": {
+      "type": "object",
+      "required": ["game_biz", "server", "uid"],
+      "properties": {
+        "game_biz": { "enum": ["hk4e_cn", "hk4e_global"] },
+        "server": { "enum": ["cn_gf01", "cn_qd01", "os_usa", "os_euro", "os_asia", "os_cht"] },
+        "uid": { "type": "string", "pattern": "^[0-9]+$" }
+      },
+      "additionalProperties": true
+    },
+    "account": {
+      "type": "object",
+      "required": [
+        "account_ref",
+        "role_identity_id",
+        "natural_identity",
+        "uigf_path",
+        "supplement_path",
+        "record_count",
+        "uigf_length",
+        "uigf_sha256",
+        "supplement_length",
+        "supplement_sha256"
+      ],
+      "properties": {
+        "account_ref": { "$ref": "#/$defs/guid" },
+        "role_identity_id": { "$ref": "#/$defs/guid" },
+        "natural_identity": { "$ref": "#/$defs/natural_identity" },
+        "display_name": { "type": ["string", "null"] },
+        "uigf_path": {
+          "type": "string",
+          "pattern": "^accounts/[0-9a-f-]{36}/gacha\\.uigf\\.json$"
+        },
+        "supplement_path": {
+          "type": "string",
+          "pattern": "^accounts/[0-9a-f-]{36}/supplement\\.ndjson$"
+        },
+        "record_count": { "type": "integer", "minimum": 0, "maximum": 2000000 },
+        "uigf_length": { "type": "integer", "minimum": 0, "maximum": 268435456 },
+        "uigf_sha256": { "$ref": "#/$defs/sha256" },
+        "supplement_length": { "type": "integer", "minimum": 0, "maximum": 268435456 },
+        "supplement_sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": true
+    }
+  }
+}

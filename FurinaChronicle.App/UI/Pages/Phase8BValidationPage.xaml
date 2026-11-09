@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  Copyright (c) 2026 DaKang233.
+  SPDX-License-Identifier: MIT
+-->
+<ContentPage
+    x:Class="FurinaChronicle.App.UI.Pages.Phase8BValidationPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:viewModels="clr-namespace:FurinaChronicle.App.ViewModels"
+    x:DataType="viewModels:Phase8BValidationPageViewModel"
+    Title="8B.7 验收">
+
+    <ScrollView VerticalScrollBarVisibility="Always">
+        <VerticalStackLayout Padding="16" Spacing="12">
+            <Border Padding="14" Stroke="#D97706" StrokeThickness="2">
+                <VerticalStackLayout Spacing="6">
+                    <Label
+                        FontAttributes="Bold"
+                        FontSize="22"
+                        Text="Phase 8B.7 隔离验收模式"
+                        TextColor="#D97706" />
+                    <Label
+                        Text="此构建使用独立验收数据库，不访问主业务数据库；不会导出或修改通行证凭据。格式仍为内部支持，尚未公开发布。" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border Padding="14">
+                <VerticalStackLayout Spacing="8">
+                    <Label FontAttributes="Bold" FontSize="18" Text="构建与数据库" />
+                    <Label FontFamily="Monospace" Text="{Binding DiagnosticsText}" />
+                    <Button
+                        Command="{Binding ReloadCommand}"
+                        IsEnabled="{Binding IsNotBusy}"
+                        Text="重新读取状态" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border Padding="14">
+                <VerticalStackLayout Spacing="10">
+                    <Label FontAttributes="Bold" FontSize="18" Text="文件往返" />
+                    <Picker
+                        Title="目标／导出档案"
+                        IsEnabled="{Binding IsNotBusy}"
+                        ItemsSource="{Binding Archives}"
+                        ItemDisplayBinding="{Binding Name}"
+                        SelectedItem="{Binding SelectedArchive, Mode=TwoWay}" />
+                    <Picker
+                        Title="领域数据集"
+                        IsEnabled="{Binding IsNotBusy}"
+                        ItemsSource="{Binding DatasetOptions}"
+                        ItemDisplayBinding="{Binding DisplayName}"
+                        SelectedItem="{Binding SelectedDataset, Mode=TwoWay}" />
+                    <Label
+                        FontSize="12"
+                        Opacity="0.75"
+                        Text="导入先读取并验证文件，再显示只读 Preview；确认后才调用正式原子 Apply。" />
+                    <ScrollView HorizontalScrollBarVisibility="Default" Orientation="Horizontal">
+                        <HorizontalStackLayout Spacing="8">
+                            <Button
+                                Clicked="OnImportClicked"
+                                IsEnabled="{Binding IsNotBusy}"
+                                Text="选择并导入 Portable" />
+                            <Button
+                                Clicked="OnExportPortableClicked"
+                                IsEnabled="{Binding IsNotBusy}"
+                                Text="导出 Portable" />
+                            <Button
+                                Clicked="OnExportMarkdownClicked"
+                                IsEnabled="{Binding IsNotBusy}"
+                                Text="导出 Markdown" />
+                        </HorizontalStackLayout>
+                    </ScrollView>
+                </VerticalStackLayout>
+            </Border>
+
+            <Border Padding="14">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                    <VerticalStackLayout Spacing="4">
+                        <Label FontAttributes="Bold" Text="最近结果" />
+                        <Label Text="{Binding StatusMessage}" />
+                        <Label Text="{Binding ErrorMessage}" TextColor="Red" />
+                    </VerticalStackLayout>
+                    <ActivityIndicator
+                        Grid.Column="1"
+                        IsRunning="{Binding IsBusy}"
+                        IsVisible="{Binding IsBusy}" />
+                </Grid>
+            </Border>
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

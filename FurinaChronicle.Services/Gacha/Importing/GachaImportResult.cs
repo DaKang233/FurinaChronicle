@@ -1,3 +1,6 @@
+// Copyright (c) 2026 DaKang233.
+// SPDX-License-Identifier: MIT
+
 namespace FurinaChronicle.Services.Gacha.Importing;
 
 public sealed record GachaImportResult(
@@ -6,4 +9,5 @@ public sealed record GachaImportResult(
     int DuplicateCount,
     int InvalidCount,
     int IgnoredCount,
-    int CreatedAccountCount);
+    int CreatedAccountCount,
+    int UpdatedCount = 0);

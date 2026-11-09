@@ -1,0 +1,30 @@
+<!--
+  Copyright (c) 2026 DaKang233.
+  SPDX-License-Identifier: MIT
+-->
+<Project>
+  <!-- MAUI 10's generated Windows manifest is incremental on resource files, not identity properties. -->
+  <Target Name="InvalidateFurinaMauiIdentity"
+          BeforeTargets="MauiGeneratePackageAppxManifest"
+          DependsOnTargets="ResolveFurinaVersion"
+          Condition="'$(_ResizetizerIsWindowsAppSdk)' == 'True'">
+    <PropertyGroup>
+      <_FurinaIdentityInputs>$(ApplicationId)|$(ApplicationIdGuid)|$(ApplicationTitle)|$(ApplicationDisplayVersion)|$(ApplicationVersion)</_FurinaIdentityInputs>
+      <_FurinaIdentityStamp>$(IntermediateOutputPath)furina-maui-identity.inputs</_FurinaIdentityStamp>
+      <_FurinaPreviousIdentity Condition="Exists('$(_FurinaIdentityStamp)')">$([System.IO.File]::ReadAllText('$(_FurinaIdentityStamp)').Trim())</_FurinaPreviousIdentity>
+    </PropertyGroup>
+    <Delete Files="$(_MauiIntermediateManifest)Package.appxmanifest;$(_MauiManifestStampFile)"
+            Condition="'$(_FurinaPreviousIdentity)' != '$(_FurinaIdentityInputs)'" />
+    <WriteLinesToFile File="$(_FurinaIdentityStamp)" Lines="$(_FurinaIdentityInputs)"
+                      Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <ItemGroup><FileWrites Include="$(_FurinaIdentityStamp)" /></ItemGroup>
+  </Target>
+
+  <Target Name="ValidateFurinaMauiIdentity" AfterTargets="_MauiGetAssemblyAttributesFromAppxManifest"
+          Condition="'$(_ResizetizerIsWindowsAppSdk)' == 'True'">
+    <Error Condition="'@(_MauiAppxManifestIdentity)' != '$(_MauiWindowsApplicationId)'"
+           Text="Generated MAUI package identity does not match this build. Do not launch this artifact." />
+    <Error Condition="'@(_MauiAppxManifestDisplayName)' != '$(ApplicationTitle)'"
+           Text="Generated MAUI application title does not match this build. Do not launch this artifact." />
+  </Target>
+</Project>

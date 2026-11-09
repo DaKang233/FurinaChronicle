@@ -1,3 +1,6 @@
+// Copyright (c) 2026 DaKang233.
+// SPDX-License-Identifier: MIT
+
 namespace FurinaChronicle.Services.Gacha.Exporting;
 
 public interface IUigfV42ExportWriter
@@ -15,5 +18,14 @@ public interface IGachaTableExportWriter
         Stream destination,
         GachaExportDocument document,
         GachaTableExportOptions options,
+        CancellationToken cancellationToken = default);
+}
+
+public interface IGachaMarkdownExportWriter
+{
+    Task WriteAsync(
+        Stream destination,
+        GachaExportDocument document,
+        GachaMarkdownExportOptions options,
         CancellationToken cancellationToken = default);
 }

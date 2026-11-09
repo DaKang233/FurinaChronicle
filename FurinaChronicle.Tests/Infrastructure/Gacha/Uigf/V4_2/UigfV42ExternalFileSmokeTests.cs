@@ -1,3 +1,6 @@
+// Copyright (c) 2026 DaKang233.
+// SPDX-License-Identifier: MIT
+
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Infrastructure.Gacha.Metadata;
 using FurinaChronicle.Infrastructure.Gacha.Metadata.Localization;
@@ -6,6 +9,7 @@ using FurinaChronicle.Infrastructure.Gacha.Uigf.V4_2;
 using FurinaChronicle.Infrastructure.Persistence.Sqlite;
 using FurinaChronicle.Services.Gacha.Exporting;
 using FurinaChronicle.Services.Gacha.Importing;
+using FurinaChronicle.Services.Gacha.Writing;
 
 namespace FurinaChronicle.Tests.Infrastructure.Gacha.Uigf.V4_2;
 
@@ -47,7 +51,7 @@ public sealed class UigfV42ExternalFileSmokeTests
             var accounts =
                 new SqliteGameAccountRepository(database);
             var records =
-                new SqliteWishRecordRepository(database);
+                new SqliteGachaRecordRepository(database);
             var service = new ImportUigfGachaRecords(
                 new UigfCompatibleGachaReader(
                     new UigfV42GachaReader(),
@@ -56,7 +60,8 @@ public sealed class UigfV42ExternalFileSmokeTests
                 new EmptyGachaItemMetadataProvider(),
                 archives,
                 accounts,
-                records);
+                new CommitGachaRecords(
+                    new SqliteGachaAtomicChangeStore(database)));
 
             Guid archiveId = Guid.NewGuid();
             DateTimeOffset now = DateTimeOffset.UtcNow;

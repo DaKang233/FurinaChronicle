@@ -1,3 +1,6 @@
+// Copyright (c) 2026 DaKang233.
+// SPDX-License-Identifier: MIT
+
 #if WINDOWS
 using Microsoft.UI.Xaml;
 using Windows.Storage;
@@ -113,9 +116,11 @@ public sealed class PlatformExportFileSaver
     private static string GetFileTypeDescription(string extension) =>
         extension.ToLowerInvariant() switch
         {
-            ".json" => "UIGF JSON",
+            ".json" => "JSON 数据",
+            ".md" => "Markdown 文档",
             ".csv" => "CSV 表格",
             ".xlsx" => "Excel 工作簿",
+            ".fca" => "Furina 逻辑 Archive",
             _ => "导出文件"
         };
 #elif ANDROID
@@ -188,9 +193,11 @@ public sealed class PlatformExportFileSaver
         Path.GetExtension(fileName).ToLowerInvariant() switch
         {
             ".json" => "application/json",
+            ".md" => "text/markdown",
             ".csv" => "text/csv",
             ".xlsx" =>
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ".fca" => "application/zip",
             _ => "application/octet-stream"
         };
 #else

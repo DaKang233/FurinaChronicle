@@ -1,4 +1,7 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿// Copyright (c) 2026 DaKang233.
+// SPDX-License-Identifier: MIT
+
+using Microsoft.Extensions.DependencyInjection;
 
 namespace FurinaChronicle.App
 {
@@ -14,7 +17,13 @@ namespace FurinaChronicle.App
 
         protected override Window CreateWindow(IActivationState? activationState)
         {
-            return new Window(appShell);
+            var window = new Window(appShell);
+            if (OperatingSystem.IsWindows())
+            {
+                window.MinimumWidth = 1000;
+                window.MinimumHeight = 600;
+            }
+            return window;
         }
     }
 }

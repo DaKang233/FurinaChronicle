@@ -1,18 +1,28 @@
+// Copyright (c) 2026 DaKang233.
+// SPDX-License-Identifier: MIT
+
 using FurinaChronicle.Core.Archives;
+using FurinaChronicle.Core.Gacha;
+using FurinaChronicle.Core.Gacha.Metadata;
+using FurinaChronicle.Core.History;
 using FurinaChronicle.Core.Passport;
-using FurinaChronicle.Core.Wishes;
+using FurinaChronicle.Core.Records;
 using FurinaChronicle.Services.Abstractions;
+using FurinaChronicle.Services.Gacha.Abstractions;
 using FurinaChronicle.Services.Passport;
-using FurinaChronicle.Services.Wishes;
+using FurinaChronicle.Services.Gacha;
+using FurinaChronicle.Services.Gacha.Writing;
 
 namespace FurinaChronicle.Services.Gacha.Refreshing;
 
 public sealed class RefreshGachaRecords(
-    IWishRecordRepository recordRepository,
+    IGachaRecordRepository recordRepository,
+    ICommitGachaRecords commitGachaRecords,
     IPassportAccountStore passportAccountStore,
     ISTokenGachaUrlProvider sTokenUrlProvider,
     IWindowsGachaCacheUrlProvider windowsCacheUrlProvider,
-    IGachaLogClient gachaLogClient)
+    IGachaLogClient gachaLogClient,
+    IGachaItemMetadataProvider metadataProvider)
 {
     private static readonly string[] GachaTypes =
         ["301", "302", "500", "100", "200"];
@@ -28,12 +38,16 @@ public sealed class RefreshGachaRecords(
             throw new ArgumentException("Game account ID is required.", nameof(request));
         }
 
+        DateTimeOffset startedAt = DateTimeOffset.UtcNow;
         Uri sourceUrl = await ResolveSourceUrlAsync(request, cancellationToken);
-        HashSet<string> localIds = request.Mode == GachaRefreshMode.Incremental
+        AcquisitionBatchId batchId = AcquisitionBatchId.New();
+        HashSet<string> localIds = request.Mode == GachaImportMode.Incremental
             ? await LoadExistingIdsAsync(request.GameAccount.Id, cancellationToken)
             : new HashSet<string>(StringComparer.Ordinal);
-        var collected = new List<WishRecord>();
+        var collected = new List<GachaRecord>();
         var collectedIds = new HashSet<string>(StringComparer.Ordinal);
+        var metadataByName =
+            new Dictionary<string, GachaItemMetadata?>(StringComparer.Ordinal);
         int pageCount = 0;
         int boundaryCount = 0;
 
@@ -44,14 +58,26 @@ public sealed class RefreshGachaRecords(
             while (true)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                progress?.Report(new GachaRefreshProgress(
+                    gachaType,
+                    page,
+                    collected.Count,
+                    GachaRefreshProgressStage.RequestingPage,
+                    []));
                 GachaRemotePage remotePage = await gachaLogClient.GetPageAsync(
                     sourceUrl,
                     gachaType,
                     endId,
                     cancellationToken);
+                DateTimeOffset fetchedAt = DateTimeOffset.UtcNow;
+                var pageProvenance = new RecordProvenance(
+                    DataOrigin.OfficialApi,
+                    new RecordTimestamps(FetchedAt: fetchedAt),
+                    acquisitionBatchId: batchId);
                 pageCount++;
 
                 bool reachedBoundary = false;
+                var pageRecords = new List<GachaRemoteRecord>();
                 foreach (GachaRemoteRecord remote in remotePage.Records)
                 {
                     if (!string.IsNullOrWhiteSpace(remote.Uid) &&
@@ -64,7 +90,7 @@ public sealed class RefreshGachaRecords(
                             $"Gacha response UID {remote.Uid} does not match target UID {request.GameAccount.Uid}.");
                     }
 
-                    if (request.Mode == GachaRefreshMode.Incremental &&
+                    if (request.Mode == GachaImportMode.Incremental &&
                         localIds.Contains(remote.ExternalRecordId))
                     {
                         reachedBoundary = true;
@@ -74,14 +100,24 @@ public sealed class RefreshGachaRecords(
 
                     if (collectedIds.Add(remote.ExternalRecordId))
                     {
-                        collected.Add(remote.ToDomain(request.GameAccount.Id));
+                        GachaRemoteRecord completed =
+                            await CompleteMetadataAsync(
+                                remote,
+                                metadataByName,
+                                cancellationToken);
+                        pageRecords.Add(completed);
+                        collected.Add(completed.ToDomain(
+                            request.GameAccount.Id,
+                            pageProvenance));
                     }
                 }
 
                 progress?.Report(new GachaRefreshProgress(
                     gachaType,
                     page,
-                    collected.Count));
+                    collected.Count,
+                    GachaRefreshProgressStage.PageReceived,
+                    pageRecords));
 
                 if (reachedBoundary || remotePage.Records.Count == 0 ||
                     string.IsNullOrWhiteSpace(remotePage.NextEndId) ||
@@ -95,15 +131,43 @@ public sealed class RefreshGachaRecords(
             }
         }
 
-        WishSaveResult saveResult = await recordRepository.SaveBatchAsync(
-            collected,
-            cancellationToken);
+        CommitGachaRecordsResult saveResult =
+            await commitGachaRecords.ExecuteAsync(
+                new CommitGachaRecordsRequest(
+                    OperationId.New(),
+                    DataChangeOperationKind.Refresh,
+                    DataOrigin.OfficialApi,
+                    request.Mode == GachaImportMode.Full
+                        ? "Full Gacha refresh"
+                        : "Incremental Gacha refresh",
+                    startedAt,
+                    DateTimeOffset.UtcNow,
+                    collected,
+                    request.Mode == GachaImportMode.Full
+                        ? GachaRecordConflictPolicy.ReplaceExisting
+                        : GachaRecordConflictPolicy.PreserveExisting,
+                    SuppressTombstonesAndContinue: true,
+                    CaptureUndo: request.AccountToCreate is null,
+                    ArchiveToCreate: request.ArchiveToCreate,
+                    AccountsToCreate: request.AccountToCreate is null
+                        ? null
+                        : [request.AccountToCreate]),
+                cancellationToken);
+        if (saveResult.Status is ChangeExecutionStatus.Conflict or
+            ChangeExecutionStatus.NeedsConfirmation)
+        {
+            throw new InvalidOperationException(
+                saveResult.ConflictReason ??
+                "The Gacha refresh could not be committed safely.");
+        }
         return new GachaRefreshResult(
             collected.Count,
             saveResult.InsertedCount,
+            saveResult.UpdatedCount,
             saveResult.DuplicateCount,
             pageCount,
-            boundaryCount);
+            boundaryCount,
+            saveResult.SuppressedCount);
     }
 
     public async Task<GachaRefreshIdentity> DiscoverIdentityAsync(
@@ -249,7 +313,7 @@ public sealed class RefreshGachaRecords(
             return new HashSet<string>(StringComparer.Ordinal);
         }
 
-        IReadOnlyList<WishRecord> records = await recordRepository.GetPageAsync(
+        IReadOnlyList<GachaRecord> records = await recordRepository.GetPageAsync(
             gameAccountId,
             offset: 0,
             count,
@@ -257,5 +321,38 @@ public sealed class RefreshGachaRecords(
         return records
             .Select(record => record.ExternalRecordId)
             .ToHashSet(StringComparer.Ordinal);
+    }
+
+    private async Task<GachaRemoteRecord> CompleteMetadataAsync(
+        GachaRemoteRecord record,
+        IDictionary<string, GachaItemMetadata?> metadataByName,
+        CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(record.ItemId) ||
+            string.IsNullOrWhiteSpace(record.ItemName))
+        {
+            return record;
+        }
+
+        string itemName = record.ItemName.Trim();
+        if (!metadataByName.TryGetValue(
+            itemName,
+            out GachaItemMetadata? metadata))
+        {
+            metadata = await metadataProvider.FindByNameAsync(
+                GachaGame.GenshinImpact,
+                itemName,
+                cancellationToken);
+            metadataByName.Add(itemName, metadata);
+        }
+
+        return metadata is null
+            ? record
+            : record with
+            {
+                ItemId = metadata.ItemId,
+                ItemType = record.ItemType ?? metadata.ItemType,
+                RankType = record.RankType ?? metadata.RankType
+            };
     }
 }

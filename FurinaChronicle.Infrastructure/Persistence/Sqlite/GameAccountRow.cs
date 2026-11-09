@@ -1,4 +1,7 @@
-﻿using System;
+﻿// Copyright (c) 2026 DaKang233.
+// SPDX-License-Identifier: MIT
+
+using System;
 using System.Collections.Generic;
 using System.Text;
 using FurinaChronicle.Core.Archives;
@@ -17,6 +20,8 @@ internal sealed class GameAccountRow
     [NotNull]
     public string PlayerArchiveId { get; set; } = string.Empty;
 
+    public string? GameRoleIdentityId { get; set; }
+
     [NotNull]
     public string Uid { get; set; } = string.Empty;
 
@@ -26,9 +31,15 @@ internal sealed class GameAccountRow
 
     public bool IsPlaceholder { get; set; }
 
+    public string? UnresolvedReason { get; set; }
+
     public long CreatedAtUtcTicks { get; set; }
 
+    public int? CreatedAtOffsetMinutes { get; set; }
+
     public long UpdatedAtUtcTicks { get; set; }
+
+    public int? UpdatedAtOffsetMinutes { get; set; }
 
     public static GameAccountRow FromDomain(GameAccount account)
     {
@@ -36,25 +47,21 @@ internal sealed class GameAccountRow
         {
             Id = account.Id.ToString("D"),
             PlayerArchiveId = account.PlayerArchiveId.ToString("D"),
+            GameRoleIdentityId = account.GameRoleIdentityId?.ToString(),
             Uid = account.Uid,
             ServerRegion = (int)account.ServerRegion,
             DisplayName = account.DisplayName,
             IsPlaceholder = account.IsPlaceholder,
+            UnresolvedReason = account.RoleIdentity is null
+                ? account.UnresolvedReason
+                : null,
             CreatedAtUtcTicks = account.CreatedAt.UtcDateTime.Ticks,
-            UpdatedAtUtcTicks = account.UpdatedAt.UtcDateTime.Ticks
+            CreatedAtOffsetMinutes =
+                checked((int)account.CreatedAt.Offset.TotalMinutes),
+            UpdatedAtUtcTicks = account.UpdatedAt.UtcDateTime.Ticks,
+            UpdatedAtOffsetMinutes =
+                checked((int)account.UpdatedAt.Offset.TotalMinutes),
         };
     }
 
-    public GameAccount ToDomain()
-    {
-        return new GameAccount(
-            Guid.Parse(Id),
-            Guid.Parse(PlayerArchiveId),
-            Uid,
-            (GameServerRegion)ServerRegion,
-            DisplayName,
-            IsPlaceholder,
-            new DateTimeOffset(CreatedAtUtcTicks, TimeSpan.Zero),
-            new DateTimeOffset(UpdatedAtUtcTicks, TimeSpan.Zero));
-    }
 }

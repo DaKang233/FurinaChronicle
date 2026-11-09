@@ -1,5 +1,9 @@
+// Copyright (c) 2026 DaKang233.
+// SPDX-License-Identifier: MIT
+
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Services.Archives;
+using FurinaChronicle.Tests.Infrastructure.Persistence.Sqlite;
 using FurinaChronicle.Tests.TestDoubles;
 
 namespace FurinaChronicle.Tests.Services.Archives;
@@ -7,7 +11,7 @@ namespace FurinaChronicle.Tests.Services.Archives;
 public sealed class PlayerArchiveUseCaseTests
 {
     [Fact]
-    public async Task Create_NormalizesNameAndPersistsArchive()
+    public async Task Create_PreservesExactNameAndPersistsArchive()
     {
         var repository = new InMemoryPlayerArchiveRepository();
         var service = new CreatePlayerArchive(repository);
@@ -16,7 +20,7 @@ public sealed class PlayerArchiveUseCaseTests
         PlayerArchive created = await service.ExecuteAsync("  我的档案  ");
 
         DateTimeOffset after = DateTimeOffset.UtcNow;
-        Assert.Equal("我的档案", created.Name);
+        Assert.Equal("  我的档案  ", created.Name);
         Assert.NotEqual(Guid.Empty, created.Id);
         Assert.InRange(created.CreatedAt, before, after);
         Assert.Equal(created.CreatedAt, created.UpdatedAt);
@@ -43,7 +47,7 @@ public sealed class PlayerArchiveUseCaseTests
     }
 
     [Fact]
-    public async Task Rename_NormalizesAndPersistsNewName()
+    public async Task Rename_PreservesExactNameAndPersistsNewName()
     {
         var repository = new InMemoryPlayerArchiveRepository();
         PlayerArchive archive = ArchiveTestData.Archive();
@@ -52,9 +56,39 @@ public sealed class PlayerArchiveUseCaseTests
 
         PlayerArchive renamed = await service.ExecuteAsync(archive.Id, "  新名称  ");
 
-        Assert.Equal("新名称", renamed.Name);
+        Assert.Equal("  新名称  ", renamed.Name);
         Assert.True(renamed.UpdatedAt >= archive.UpdatedAt);
         Assert.Equal(renamed, await repository.GetByIdAsync(archive.Id));
+    }
+
+    [Fact]
+    public async Task Create_ExactDuplicateName_IsRejectedButWhitespaceVariantIsDistinct()
+    {
+        var repository = new InMemoryPlayerArchiveRepository();
+        var service = new CreatePlayerArchive(repository);
+        await service.ExecuteAsync("档案");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.ExecuteAsync("档案"));
+        PlayerArchive variant = await service.ExecuteAsync(" 档案 ");
+
+        Assert.Equal(" 档案 ", variant.Name);
+    }
+
+    [Fact]
+    public async Task Rename_ExactDuplicateName_IsRejected()
+    {
+        var repository = new InMemoryPlayerArchiveRepository();
+        PlayerArchive first = ArchiveTestData.Archive("档案一");
+        PlayerArchive second = ArchiveTestData.Archive("档案二");
+        await repository.AddAsync(first);
+        await repository.AddAsync(second);
+        var service = new RenamePlayerArchive(repository);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.ExecuteAsync(second.Id, first.Name));
+
+        Assert.Equal(second, await repository.GetByIdAsync(second.Id));
     }
 
     [Fact]
@@ -69,20 +103,26 @@ public sealed class PlayerArchiveUseCaseTests
     [Fact]
     public async Task Delete_ExistingArchive_RemovesIt()
     {
-        var repository = new InMemoryPlayerArchiveRepository();
-        PlayerArchive archive = ArchiveTestData.Archive();
-        await repository.AddAsync(archive);
-        var service = new DeletePlayerArchive(repository);
+        await using SqliteRepositoryTestContext context =
+            SqliteRepositoryTestContext.Create();
+        await context.Database.InitializeAsync();
+        PlayerArchive archive =
+            SqliteRepositoryTestContext.CreateArchive();
+        await context.Archives.AddAsync(archive);
+        var service = new DeletePlayerArchive(context.AtomicGacha);
 
         await service.ExecuteAsync(archive.Id);
 
-        Assert.Null(await repository.GetByIdAsync(archive.Id));
+        Assert.Null(await context.Archives.GetByIdAsync(archive.Id));
     }
 
     [Fact]
     public async Task Delete_UnknownArchive_ThrowsKeyNotFoundException()
     {
-        var service = new DeletePlayerArchive(new InMemoryPlayerArchiveRepository());
+        await using SqliteRepositoryTestContext context =
+            SqliteRepositoryTestContext.Create();
+        await context.Database.InitializeAsync();
+        var service = new DeletePlayerArchive(context.AtomicGacha);
 
         await Assert.ThrowsAsync<KeyNotFoundException>(
             () => service.ExecuteAsync(Guid.NewGuid()));

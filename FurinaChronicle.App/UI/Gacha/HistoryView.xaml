@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  Copyright (c) 2026 DaKang233.
+  SPDX-License-Identifier: MIT
+-->
+
+<ContentView
+    x:Class="FurinaChronicle.App.UI.Gacha.HistoryView"
+    x:Name="HistoryRoot"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:gacha="clr-namespace:FurinaChronicle.App.UI.Gacha"
+    xmlns:viewModels="clr-namespace:FurinaChronicle.App.ViewModels"
+    x:DataType="viewModels:GachaAnalysisViewModel">
+
+    <ContentView.Resources>
+        <DataTemplate
+            x:Key="HistoryPoolItemTemplate"
+            x:DataType="viewModels:GachaHistoryDisplayItem">
+            <Border Margin="0,0,0,8" Padding="10,8" MinimumHeightRequest="112">
+                <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="5">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="7">
+                        <Label
+                            FontAttributes="Bold"
+                            FontSize="15"
+                            Text="{Binding Version}" />
+                        <Label
+                            Grid.Column="1"
+                            FontSize="13"
+                            LineBreakMode="TailTruncation"
+                            MaxLines="1"
+                            Text="{Binding Title}" />
+                        <Label
+                            Grid.Column="2"
+                            FontAttributes="Bold"
+                            FontSize="11"
+                            Text="{Binding Total}" />
+                    </Grid>
+                    <FlexLayout
+                        Grid.Row="1"
+                        AlignItems="Start"
+                        BindableLayout.ItemsSource="{Binding FeaturedItems}"
+                        Direction="Row"
+                        Wrap="Wrap">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="viewModels:GachaHistoryItemDisplayItem">
+                                <gacha:GachaItemIconView
+                                    CardWidth="64"
+                                    CountText="{Binding Count}"
+                                    DetailText=""
+                                    IconSize="44"
+                                    IconSource="{Binding IconUrl}"
+                                    ItemName="{Binding ItemName}"
+                                    Margin="0,0,5,0"
+                                    RankType="{Binding RankType}"
+                                    ShowDetailText="False" />
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </FlexLayout>
+                    <Label
+                        Grid.Row="2"
+                        FontSize="10"
+                        LineBreakMode="TailTruncation"
+                        MaxLines="1"
+                        Text="{Binding Period}"
+                        TextColor="Gray" />
+                    <Button
+                        Grid.RowSpan="3"
+                        BackgroundColor="Transparent"
+                        BorderColor="Transparent"
+                        BorderWidth="0"
+                        Clicked="OnMobileHistoryItemClicked"
+                        CommandParameter="{Binding .}"
+                        IsVisible="{OnPlatform Android=True, Default=False}"
+                        Padding="0"
+                        Text="" />
+                </Grid>
+            </Border>
+        </DataTemplate>
+    </ContentView.Resources>
+
+    <Grid RowDefinitions="Auto,Auto,*" RowSpacing="8">
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <Label FontAttributes="Bold" FontSize="20" Text="抽卡历史" />
+            <ScrollView
+                Grid.Column="1"
+                HorizontalScrollBarVisibility="Default"
+                Orientation="Horizontal">
+                <HorizontalStackLayout Spacing="8">
+                    <ActivityIndicator
+                        IsRunning="{Binding IsBannerCacheBusy}"
+                        IsVisible="{Binding IsBannerCacheBusy}" />
+                    <Button
+                        Command="{Binding PreloadGachaBannerImagesCommand}"
+                        IsEnabled="{Binding CanManageBannerCache}"
+                        Text="预下载全部卡池图片" />
+                    <Button
+                        Command="{Binding ClearGachaBannerImagesCommand}"
+                        IsEnabled="{Binding CanManageBannerCache}"
+                        Text="清除卡池图片缓存" />
+                    <Label Text="图标模式" VerticalTextAlignment="Center" />
+                    <CheckBox IsChecked="{Binding IsHistoryIconMode}" />
+                </HorizontalStackLayout>
+            </ScrollView>
+        </Grid>
+
+        <Label
+            Grid.Row="1"
+            FontSize="11"
+            Text="{Binding BannerCacheStatus}"
+            TextColor="Gray" />
+
+        <!-- Windows keeps FufuLauncher's list-and-detail layout. -->
+        <Grid
+            x:Name="DesktopLayout"
+            Grid.Row="2"
+            ColumnDefinitions="420,16,*">
+            <Border Grid.Column="0" Padding="8">
+                <Grid RowDefinitions="Auto,*,Auto" RowSpacing="8">
+                    <VerticalStackLayout Padding="8,6" Spacing="3">
+                        <Label FontAttributes="Bold" FontSize="15" Text="历史卡池" />
+                        <Label
+                            FontSize="11"
+                            Text="按版本浏览独立卡池；侧栏显示 UP 物品及已抽取数量。"
+                            TextColor="Gray" />
+                    </VerticalStackLayout>
+                    <CollectionView
+                        Grid.Row="1"
+                        ItemTemplate="{StaticResource HistoryPoolItemTemplate}"
+                        ItemsSource="{Binding HistoryItems}"
+                        SelectedItem="{Binding SelectedHistoryItem, Mode=TwoWay}"
+                        SelectionMode="Single">
+                        <CollectionView.EmptyView>
+                            <Label Padding="12" Text="当前版本没有可显示的限定卡池。" />
+                        </CollectionView.EmptyView>
+                    </CollectionView>
+                    <Grid Grid.Row="2" ColumnDefinitions="*,Auto,*" ColumnSpacing="8">
+                        <Button
+                            Command="{Binding ShowNewerHistoryVersionCommand}"
+                            HorizontalOptions="Start"
+                            IsEnabled="{Binding HasNewerHistoryVersion}"
+                            Text="较新版本" />
+                        <Label
+                            Grid.Column="1"
+                            FontSize="11"
+                            Text="{Binding HistoryVersionSummary}"
+                            VerticalTextAlignment="Center" />
+                        <Button
+                            Grid.Column="2"
+                            Command="{Binding ShowOlderHistoryVersionCommand}"
+                            HorizontalOptions="End"
+                            IsEnabled="{Binding HasOlderHistoryVersion}"
+                            Text="较早版本" />
+                    </Grid>
+                </Grid>
+            </Border>
+
+            <Border Grid.Column="2">
+                <gacha:HistoryPoolDetailView
+                    BindingContext="{Binding SelectedHistoryItem}"
+                    IsIconMode="{Binding BindingContext.IsHistoryIconMode, Source={x:Reference HistoryRoot}}"
+                    IsTextMode="{Binding BindingContext.IsHistoryTextMode, Source={x:Reference HistoryRoot}}" />
+            </Border>
+        </Grid>
+
+        <!-- Android shows the complete list first, then an explicit detail level. -->
+        <Grid x:Name="MobileLayout" Grid.Row="2">
+            <Grid x:Name="MobileListLayout" RowDefinitions="Auto,*,Auto" RowSpacing="8">
+                <VerticalStackLayout Padding="4,2" Spacing="3">
+                    <Label FontAttributes="Bold" FontSize="15" Text="历史卡池" />
+                    <Label
+                        FontSize="11"
+                        Text="点击卡池条目进入详情。"
+                        TextColor="Gray" />
+                </VerticalStackLayout>
+                <CollectionView
+                    Grid.Row="1"
+                    ItemTemplate="{StaticResource HistoryPoolItemTemplate}"
+                    ItemsSource="{Binding HistoryItems}"
+                    SelectionMode="None">
+                    <CollectionView.EmptyView>
+                        <Label Padding="12" Text="当前版本没有可显示的限定卡池。" />
+                    </CollectionView.EmptyView>
+                </CollectionView>
+                <Grid Grid.Row="2" ColumnDefinitions="*,Auto,*" ColumnSpacing="8">
+                    <Button
+                        Command="{Binding ShowNewerHistoryVersionCommand}"
+                        HorizontalOptions="Start"
+                        IsEnabled="{Binding HasNewerHistoryVersion}"
+                        Text="较新版本" />
+                    <Label
+                        Grid.Column="1"
+                        FontSize="11"
+                        Text="{Binding HistoryVersionSummary}"
+                        VerticalTextAlignment="Center" />
+                    <Button
+                        Grid.Column="2"
+                        Command="{Binding ShowOlderHistoryVersionCommand}"
+                        HorizontalOptions="End"
+                        IsEnabled="{Binding HasOlderHistoryVersion}"
+                        Text="较早版本" />
+                </Grid>
+            </Grid>
+
+            <Grid x:Name="MobileDetailLayout" RowDefinitions="Auto,*" RowSpacing="8">
+                <Button
+                    Clicked="OnMobileBackClicked"
+                    HorizontalOptions="Start"
+                    Text="← 返回历史卡池" />
+                <Border Grid.Row="1">
+                    <gacha:HistoryPoolDetailView
+                        BindingContext="{Binding SelectedHistoryItem}"
+                        IsIconMode="{Binding BindingContext.IsHistoryIconMode, Source={x:Reference HistoryRoot}}"
+                        IsTextMode="{Binding BindingContext.IsHistoryTextMode, Source={x:Reference HistoryRoot}}" />
+                </Border>
+            </Grid>
+        </Grid>
+    </Grid>
+</ContentView>

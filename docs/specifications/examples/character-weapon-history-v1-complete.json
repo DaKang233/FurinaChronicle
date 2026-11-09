@@ -1,0 +1,120 @@
+{
+  "format": "furina-domain-history",
+  "package": {
+    "dataset_kind": 1,
+    "format_major": 1,
+    "format_minor": 0,
+    "package_fingerprint": "07857449a4271ae7696eb3f126ba66a6a7e7706c09c7518cd2d3d592742b9f94",
+    "source_archive_id": "11111111-1111-4111-8111-111111111111",
+    "source_archive_name": "示例档案",
+    "exported_at": "2026-10-18T10:00:00+08:00",
+    "accounts": [
+      {
+        "source_account_id": "22222222-2222-4222-8222-222222222222",
+        "role_identity": {
+          "id": "33333333-3333-4333-8333-333333333333",
+          "natural_identity": {
+            "game_biz": "hk4e_global",
+            "server": "os_asia",
+            "uid": "800000001"
+          }
+        },
+        "item_observations": [
+          {
+            "observation_id": "44444444-4444-4444-8444-444444444444",
+            "game_account_id": "22222222-2222-4222-8222-222222222222",
+            "kind": 1,
+            "collection_completeness": 2,
+            "entries": [
+              {
+                "kind": 1,
+                "type_id": "CHAR_10000089",
+                "instance_id": null,
+                "quantity": 1,
+                "level": 90,
+                "progression": 2,
+                "field_coverage": 7,
+                "field_completeness": 2
+              }
+            ],
+            "provenance": {
+              "origin": 1,
+              "timestamps": {
+                "observed_at": "2026-10-18T09:00:00+08:00",
+                "fetched_at": "2026-10-18T09:00:02+08:00",
+                "imported_at": null
+              },
+              "source": {
+                "provider": "miyoushe",
+                "source_record_id": null,
+                "source_snapshot_id": "characters-20261018"
+              },
+              "acquisition_batch_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+            }
+          }
+        ],
+        "manual_acquisitions": [
+          {
+            "acquisition_id": "55555555-5555-4555-8555-555555555555",
+            "game_account_id": "22222222-2222-4222-8222-222222222222",
+            "kind": 1,
+            "type_id": "CHAR_10000089",
+            "occurred_at": {
+              "kind": 3,
+              "start": "2026-10-12T00:00:00+08:00",
+              "end": "2026-10-19T00:00:00+08:00",
+              "precision": 5
+            },
+            "reason": 4,
+            "reason_detail": "周年庆自选",
+            "provenance": {
+              "origin": 6,
+              "timestamps": {
+                "observed_at": null,
+                "fetched_at": null,
+                "imported_at": null
+              },
+              "source": null,
+              "acquisition_batch_id": null
+            }
+          }
+        ],
+        "manual_revisions": [
+          {
+            "revision_id": "66666666-6666-4666-8666-666666666666",
+            "change_kind": 1,
+            "before_version": null,
+            "after_version": 1,
+            "before": null,
+            "after": {
+              "acquisition_id": "55555555-5555-4555-8555-555555555555",
+              "game_account_id": "22222222-2222-4222-8222-222222222222",
+              "kind": 1,
+              "type_id": "CHAR_10000089",
+              "occurred_at": {
+                "kind": 3,
+                "start": "2026-10-12T00:00:00+08:00",
+                "end": "2026-10-19T00:00:00+08:00",
+                "precision": 5
+              },
+              "reason": 4,
+              "reason_detail": "周年庆自选",
+              "provenance": {
+                "origin": 6,
+                "timestamps": {
+                  "observed_at": null,
+                  "fetched_at": null,
+                  "imported_at": null
+                },
+                "source": null,
+                "acquisition_batch_id": null
+              }
+            },
+            "created_at": "2026-10-18T09:30:00+08:00"
+          }
+        ],
+        "challenge_observations": []
+      }
+    ]
+  }
+}

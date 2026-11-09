@@ -1,12 +1,16 @@
-﻿using System;
+﻿// Copyright (c) 2026 DaKang233.
+// SPDX-License-Identifier: MIT
+
+using System;
 using System.Collections.Generic;
 using System.Text;
-using FurinaChronicle.Core.Archives;
-using FurinaChronicle.Services.Abstractions;
+using FurinaChronicle.Core.History;
+using FurinaChronicle.Services.History;
 
 namespace FurinaChronicle.Services.Archives;
 
-public sealed class DeleteGameAccount(IGameAccountRepository repository)
+public sealed class DeleteGameAccount(
+    IArchiveOperationHistoryStore operationHistoryStore)
 {
     public async Task ExecuteAsync(Guid gameAccountId, CancellationToken cancellationToken = default)
     {
@@ -15,8 +19,14 @@ public sealed class DeleteGameAccount(IGameAccountRepository repository)
             throw new ArgumentException("游戏账号 ID 不能为空。", nameof(gameAccountId));
         }
 
-        GameAccount? account = await repository.GetByIdAsync(gameAccountId, cancellationToken) ?? throw new KeyNotFoundException("要删除的游戏账号不存在。");
-
-        await repository.DeleteAsync(gameAccountId, cancellationToken);
+        DateTimeOffset now = DateTimeOffset.Now;
+        await operationHistoryStore.PurgeAccountAsync(
+            new ArchiveScopePurgeRequest(
+                OperationId.New(),
+                gameAccountId,
+                now,
+                now,
+                "永久删除游戏账号及其本地数据"),
+            cancellationToken);
     }
 }

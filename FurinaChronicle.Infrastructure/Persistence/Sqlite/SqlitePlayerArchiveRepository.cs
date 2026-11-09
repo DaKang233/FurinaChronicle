@@ -1,4 +1,7 @@
-﻿using FurinaChronicle.Core.Archives;
+﻿// Copyright (c) 2026 DaKang233.
+// SPDX-License-Identifier: MIT
+
+using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Services.Abstractions;
 using System;
 using System.Collections.Generic;
@@ -22,7 +25,9 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
 					Id,
 					Name,
 					CreatedAtUtcTicks,
-					UpdatedAtUtcTicks
+					CreatedAtOffsetMinutes,
+					UpdatedAtUtcTicks,
+					UpdatedAtOffsetMinutes
 				FROM {PlayerArchiveRow.TableName}
 				WHERE Id = ?
 				LIMIT 1
@@ -32,10 +37,7 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
 
 			var row = rows.FirstOrDefault();
 			if (row == null) { return null; }
-			var createdAtUtc = new DateTimeOffset(row.CreatedAtUtcTicks, TimeSpan.Zero);
-			var updatedAtUtc = new DateTimeOffset(row.UpdatedAtUtcTicks, TimeSpan.Zero);
-
-			return new PlayerArchive(archiveId, row.Name, createdAtUtc, updatedAtUtc);
+			return row.ToDomain();
 		}
 
 		public async Task UpdateAsync(PlayerArchive playerArchive, CancellationToken cancellationToken = default)
@@ -67,29 +69,6 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
 			});
 		}
 
-		public async Task DeleteAsync(Guid archiveId, CancellationToken cancellationToken = default)
-		{
-			if (archiveId == Guid.Empty)
-			{
-				throw new ArgumentException("存档 ID 不能为空。", nameof(archiveId));
-			}
-			await database.InitializeAsync(cancellationToken);
-			cancellationToken.ThrowIfCancellationRequested();
-			await database.Connection.RunInTransactionAsync((connection) =>
-			{
-				cancellationToken.ThrowIfCancellationRequested();
-				int affected = connection.Execute($"""
-					DELETE FROM {PlayerArchiveRow.TableName}
-					WHERE Id = ?
-					""", archiveId.ToString("D"));
-				if (affected == 0)
-				{
-					throw new KeyNotFoundException("要删除的玩家档案不存在。");
-				}
-				else Console.WriteLine($"Deleted {affected} rows from PlayerArchiveRow.");
-			});
-		}
-
 		public async Task<IReadOnlyList<PlayerArchive>> GetAllAsync(CancellationToken cancellationToken = default)
 		{
 			await database.InitializeAsync(cancellationToken);
@@ -101,7 +80,9 @@ namespace FurinaChronicle.Infrastructure.Persistence.Sqlite
 					Id,
 					Name,
 					CreatedAtUtcTicks,
-					UpdatedAtUtcTicks
+					CreatedAtOffsetMinutes,
+					UpdatedAtUtcTicks,
+					UpdatedAtOffsetMinutes
 				FROM {PlayerArchiveRow.TableName}
 				""");
 

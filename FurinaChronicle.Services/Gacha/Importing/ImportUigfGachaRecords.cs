@@ -1,10 +1,15 @@
+// Copyright (c) 2026 DaKang233.
+// SPDX-License-Identifier: MIT
+
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.Gacha.Metadata;
-using FurinaChronicle.Core.Wishes;
+using FurinaChronicle.Core.History;
+using FurinaChronicle.Core.Records;
 using FurinaChronicle.Services.Abstractions;
 using FurinaChronicle.Services.Gacha.Abstractions;
-using FurinaChronicle.Services.Wishes;
+using FurinaChronicle.Services.Gacha;
+using FurinaChronicle.Services.Gacha.Writing;
 
 namespace FurinaChronicle.Services.Gacha.Importing;
 
@@ -13,13 +18,67 @@ public sealed class ImportUigfGachaRecords(
     IGachaItemMetadataProvider metadataProvider,
     IPlayerArchiveRepository archiveRepository,
     IGameAccountRepository accountRepository,
-    IWishRecordRepository recordRepository)
+    ICommitGachaRecords commitGachaRecords)
 {
-    public async Task<GachaImportResult> ExecuteAsync(
+    public Task<GachaImportResult> ExecuteAsync(
         Stream source,
         Guid playerArchiveId,
         Guid? targetGameAccountId = null,
+        CancellationToken cancellationToken = default) =>
+        ExecuteAsync(
+            source,
+            playerArchiveId,
+            targetGameAccountId,
+            GachaImportMode.Incremental,
+            cancellationToken);
+
+    public Task<GachaImportResult> ExecuteAsync(
+        Stream source,
+        Guid playerArchiveId,
+        Guid? targetGameAccountId,
+        GachaImportMode mode,
+        CancellationToken cancellationToken = default) =>
+        ExecuteCoreAsync(
+            source,
+            playerArchiveId,
+            targetGameAccountId,
+            archiveToCreate: null,
+            mode,
+            cancellationToken);
+
+    public Task<GachaImportResult> ExecuteAsync(
+        Stream source,
+        PlayerArchive archiveToCreate,
         CancellationToken cancellationToken = default)
+        => ExecuteAsync(
+            source,
+            archiveToCreate,
+            GachaImportMode.Incremental,
+            cancellationToken);
+
+    public Task<GachaImportResult> ExecuteAsync(
+        Stream source,
+        PlayerArchive archiveToCreate,
+        GachaImportMode mode,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(archiveToCreate);
+        return ExecuteCoreAsync(
+            source,
+            archiveToCreate.Id,
+            targetGameAccountId: null,
+            archiveToCreate,
+            mode,
+            cancellationToken);
+    }
+
+    private async Task<GachaImportResult> ExecuteCoreAsync(
+        Stream source,
+        Guid playerArchiveId,
+        Guid? targetGameAccountId,
+        PlayerArchive? archiveToCreate,
+        GachaImportMode mode,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(source);
         if (playerArchiveId == Guid.Empty)
@@ -32,8 +91,21 @@ public sealed class ImportUigfGachaRecords(
             throw new ArgumentException("Target game account ID is required.", nameof(targetGameAccountId));
         }
 
-        _ = await archiveRepository.GetByIdAsync(playerArchiveId, cancellationToken)
-            ?? throw new KeyNotFoundException("The target player archive does not exist.");
+        PlayerArchive? existingArchive =
+            await archiveRepository.GetByIdAsync(
+                playerArchiveId,
+                cancellationToken);
+        if (existingArchive is null &&
+            archiveToCreate?.Id != playerArchiveId)
+        {
+            throw new KeyNotFoundException(
+                "The target player archive does not exist.");
+        }
+        if (existingArchive is not null && archiveToCreate is not null)
+        {
+            throw new InvalidOperationException(
+                "The proposed player archive already exists.");
+        }
 
         GameAccount? targetAccount = null;
         if (targetGameAccountId is Guid targetId)
@@ -48,7 +120,12 @@ public sealed class ImportUigfGachaRecords(
         }
 
         GachaReadResult readResult = await reader.ReadAsync(source, cancellationToken);
-        Dictionary<Guid, List<WishRecord>> recordsByAccount = [];
+        DateTimeOffset importedAt = DateTimeOffset.UtcNow;
+        var importProvenance = new RecordProvenance(
+            DataOrigin.StandardImport,
+            new RecordTimestamps(ImportedAt: importedAt),
+            acquisitionBatchId: AcquisitionBatchId.New());
+        Dictionary<Guid, List<GachaRecord>> recordsByAccount = [];
         Dictionary<string, GameAccount> accountsByUid = new(StringComparer.Ordinal);
         Dictionary<string, GachaItemMetadata?> metadataByItemId = new(StringComparer.Ordinal);
         ILookup<string, GachaReadError> readErrorsByUid = readResult.Errors
@@ -65,6 +142,7 @@ public sealed class ImportUigfGachaRecords(
         }
 
         int createdAccountCount = 0;
+        var accountsToCreate = new List<GameAccount>();
         int ignoredCount = 0;
         int invalidCount = readResult.Errors.Count;
 
@@ -96,6 +174,23 @@ public sealed class ImportUigfGachaRecords(
                 continue;
             }
 
+            GameServerRegion region = GameServerRegionResolver.Resolve(uid);
+            if (region == GameServerRegion.Unknown)
+            {
+                if (targetAccount is not null)
+                {
+                    throw AccountRejected(
+                        uid,
+                        "the server region cannot be inferred reliably from the UID");
+                }
+
+                invalidCount += sourceRecords.Length;
+                continue;
+            }
+
+            GameRoleNaturalIdentity naturalIdentity =
+                GenshinGameRoleIdentity.Create(uid, region);
+
             List<PreparedGachaRecord>? preparedRecords =
                 await PrepareAccountRecordsAsync(
                     sourceRecords,
@@ -117,22 +212,32 @@ public sealed class ImportUigfGachaRecords(
             GameAccount account;
             if (targetAccount is not null)
             {
+                if (targetAccount.RoleIdentity?.NaturalIdentity != naturalIdentity)
+                {
+                    throw AccountRejected(
+                        uid,
+                        "the target account does not have the same resolved natural identity");
+                }
+
                 account = targetAccount;
             }
             else if (!accountsByUid.TryGetValue(uid, out account!))
             {
                 GameAccount? existingAccount =
-                    await accountRepository.GetByArchiveIdAndUidAsync(
+                    await accountRepository.GetByArchiveIdAndNaturalIdentityAsync(
                         playerArchiveId,
-                        uid,
+                        naturalIdentity,
                         cancellationToken);
 
                 if (existingAccount is null)
                 {
-                    account = await CreateAccountAsync(
+                    account = await PrepareAccountAsync(
                         playerArchiveId,
                         uid,
+                        region,
+                        naturalIdentity,
                         cancellationToken);
+                    accountsToCreate.Add(account);
                     createdAccountCount++;
                 }
                 else
@@ -143,7 +248,7 @@ public sealed class ImportUigfGachaRecords(
                 accountsByUid.Add(uid, account);
             }
 
-            if (!recordsByAccount.TryGetValue(account.Id, out List<WishRecord>? records))
+            if (!recordsByAccount.TryGetValue(account.Id, out List<GachaRecord>? records))
             {
                 records = [];
                 recordsByAccount.Add(account.Id, records);
@@ -152,7 +257,7 @@ public sealed class ImportUigfGachaRecords(
             foreach (PreparedGachaRecord preparedRecord in preparedRecords)
             {
                 GachaSourceRecord sourceRecord = preparedRecord.Source;
-                records.Add(new WishRecord(
+                records.Add(new GachaRecord(
                     account.Id,
                     sourceRecord.ExternalRecordId,
                     preparedRecord.ItemName,
@@ -163,35 +268,62 @@ public sealed class ImportUigfGachaRecords(
                     ItemType = preparedRecord.ItemType,
                     GachaType = sourceRecord.GachaType,
                     UigfGachaType = sourceRecord.UigfGachaType,
-                    Count = sourceRecord.Count
+                    Count = sourceRecord.Count,
+                    Provenance = importProvenance
                 });
             }
         }
 
-        int importedCount = 0;
-        int duplicateCount = 0;
-
-        foreach (List<WishRecord> records in recordsByAccount.Values)
-        {
-            WishRecord[] distinctRecords = records
-                .DistinctBy(record => (record.GameAccountId, record.ExternalRecordId))
-                .ToArray();
-
-            duplicateCount += records.Count - distinctRecords.Length;
-            WishSaveResult saveResult = await recordRepository.SaveBatchAsync(
-                distinctRecords,
+        GachaRecord[] allRecords = recordsByAccount.Values
+            .SelectMany(records => records)
+            .ToArray();
+        CommitGachaRecordsResult saveResult =
+            await commitGachaRecords.ExecuteAsync(
+                new CommitGachaRecordsRequest(
+                    OperationId.New(),
+                    DataChangeOperationKind.Import,
+                    DataOrigin.StandardImport,
+                    mode == GachaImportMode.Full
+                        ? "Full import UIGF Gacha records"
+                        : "Import UIGF Gacha records",
+                    importedAt,
+                    DateTimeOffset.UtcNow,
+                    allRecords,
+                    mode == GachaImportMode.Full
+                        ? GachaRecordConflictPolicy.ReplaceExisting
+                        : GachaRecordConflictPolicy.PreserveExisting,
+                    SuppressTombstonesAndContinue: false,
+                    CaptureUndo: createdAccountCount == 0,
+                    ArchiveToCreate: archiveToCreate,
+                    AccountsToCreate: accountsToCreate),
                 cancellationToken);
-            importedCount += saveResult.InsertedCount;
-            duplicateCount += saveResult.DuplicateCount;
+        if (saveResult.Status == ChangeExecutionStatus.Conflict)
+        {
+            throw new GachaImportFormatException(
+                saveResult.ConflictReason ??
+                "The UIGF file conflicts with existing Gacha facts.");
+        }
+        if (saveResult.Status == ChangeExecutionStatus.Suppressed)
+        {
+            throw new GachaImportFormatException(
+                $"The UIGF file contains {saveResult.SuppressedCount} record(s) " +
+                "that were irreversibly deleted on this device. Explicit " +
+                "reintroduction confirmation is required.");
+        }
+        if (saveResult.Status == ChangeExecutionStatus.NeedsConfirmation)
+        {
+            throw new IOException(
+                "The UIGF import requires history cleanup confirmation before it can continue.");
         }
 
         return new GachaImportResult(
             readResult.TotalRecordCount,
-            importedCount,
-            duplicateCount,
+            saveResult.InsertedCount,
+            saveResult.DuplicateCount,
             invalidCount,
             ignoredCount,
-            createdAccountCount);
+            createdAccountCount,
+            saveResult.UpdatedCount);
     }
 
     private async Task<List<PreparedGachaRecord>?> PrepareAccountRecordsAsync(
@@ -248,18 +380,21 @@ public sealed class ImportUigfGachaRecords(
             "No records for this account were saved.");
     }
 
-    private async Task<GameAccount> CreateAccountAsync(
+    private async Task<GameAccount> PrepareAccountAsync(
         Guid playerArchiveId,
         string uid,
+        GameServerRegion region,
+        GameRoleNaturalIdentity naturalIdentity,
         CancellationToken cancellationToken)
     {
-        GameServerRegion region = GameServerRegionResolver.Resolve(uid);
-        if (region == GameServerRegion.Unknown)
-        {
-            throw new GachaImportFormatException($"Cannot infer a server region from UID {uid}.");
-        }
-
         DateTimeOffset now = DateTimeOffset.UtcNow;
+        GameRoleIdentity roleIdentity =
+            await accountRepository.GetRoleIdentityByNaturalIdentityAsync(
+                naturalIdentity,
+                cancellationToken) ??
+            new GameRoleIdentity(
+                GameRoleIdentityId.FromNaturalIdentity(naturalIdentity),
+                naturalIdentity);
         var account = new GameAccount(
             Guid.NewGuid(),
             playerArchiveId,
@@ -268,8 +403,8 @@ public sealed class ImportUigfGachaRecords(
             uid,
             IsPlaceholder: false,
             now,
-            now);
-        await accountRepository.AddAsync(account, cancellationToken);
+            now,
+            roleIdentity);
         return account;
     }
 
