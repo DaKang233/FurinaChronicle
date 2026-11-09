@@ -24,6 +24,7 @@
     <ProjectReference Include="..\FurinaChronicle.Services\FurinaChronicle.Services.csproj" />
     <ProjectReference Include="..\FurinaChronicle.Core\FurinaChronicle.Core.csproj" />
     <ProjectReference Include="..\FurinaChronicle.Infrastructure\FurinaChronicle.Infrastructure.csproj" />
+    <ProjectReference Include="..\FurinaChronicle.Presentation\FurinaChronicle.Presentation.csproj" />
   </ItemGroup>
 
   <ItemGroup>
