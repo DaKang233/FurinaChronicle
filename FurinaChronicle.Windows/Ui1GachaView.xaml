@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Copyright (c) 2026 DaKang233.
+  SPDX-License-Identifier: MIT
+-->
+<UserControl x:Class="FurinaChronicle.Windows.Ui1GachaView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:FurinaChronicle.Windows">
+    <UserControl.Resources>
+        <local:CachedImageConverter x:Key="CachedImage" />
+        <DataTemplate x:Key="RecordTableTemplate">
+            <Grid ColumnSpacing="10" Padding="4,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="170" /><ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="58" /><ColumnDefinition Width="64" /><ColumnDefinition Width="116" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{Binding Time}" TextWrapping="Wrap" />
+                <StackPanel Grid.Column="1" Spacing="2">
+                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding AccountLabel}" TextWrapping="Wrap" />
+                </StackPanel>
+                <TextBlock Grid.Column="2" Text="{Binding Rank}" TextWrapping="Wrap" />
+                <TextBlock Grid.Column="3" Text="{Binding ItemType}" TextWrapping="Wrap" />
+                <TextBlock Grid.Column="4" Text="{Binding Pool}" TextWrapping="Wrap" />
+            </Grid>
+        </DataTemplate>
+        <DataTemplate x:Key="RecordListTemplate">
+            <Grid Padding="4,10" ColumnSpacing="12">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="44" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                <Border Width="44" Height="44" CornerRadius="6" VerticalAlignment="Top"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                    <Grid>
+                        <TextBlock Text="{Binding Rank}" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <Image Source="{Binding Image.CachedPath, Converter={StaticResource CachedImage}}" Stretch="Uniform" />
+                    </Grid>
+                </Border>
+                <StackPanel Grid.Column="1" Spacing="3">
+                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding Detail}" TextWrapping="Wrap" FontSize="13" />
+                </StackPanel>
+            </Grid>
+        </DataTemplate>
+    </UserControl.Resources>
+    <Grid Padding="16,12" RowSpacing="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <StackPanel Spacing="4">
+            <TextBlock Text="抽卡分析" FontSize="26" FontWeight="SemiBold" />
+            <TextBlock Text="隔离合成数据 · 离线可用" TextWrapping="Wrap" />
+        </StackPanel>
+        <Grid Grid.Row="1" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <ComboBox x:Name="ArchivePicker" Header="档案" DisplayMemberPath="Label"
+                HorizontalAlignment="Stretch" AutomationProperties.AutomationId="Ui1Archive"
+                SelectionChanged="OnArchiveChanged" />
+            <ComboBox x:Name="AccountPicker" Grid.Column="1" Header="账号" DisplayMemberPath="Label"
+                HorizontalAlignment="Stretch" AutomationProperties.AutomationId="Ui1Account"
+                SelectionChanged="OnAccountChanged" />
+            <Button x:Name="RangeButton" Grid.Column="2" Content="档案多选" VerticalAlignment="Bottom" Click="OnRange" />
+        </Grid>
+        <Grid Grid.Row="2" ColumnSpacing="10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <ComboBox x:Name="ViewPicker" DisplayMemberPath="Label" SelectionChanged="OnViewChanged" AutomationProperties.Name="分析视图" />
+            <Button x:Name="FilterButton" Grid.Column="1" Content="筛选" Click="OnFilter" />
+            <TextBlock x:Name="SummaryText" Grid.Column="2" VerticalAlignment="Center" TextWrapping="Wrap" AutomationProperties.AutomationId="Ui1Summary" />
+            <Button Grid.Column="3" Content="重新载入" Click="OnReload">
+                <Button.KeyboardAccelerators><KeyboardAccelerator Key="F5" /></Button.KeyboardAccelerators>
+            </Button>
+            <Button x:Name="CancelButton" Grid.Column="4" Content="取消" Click="OnCancel" />
+        </Grid>
+        <TextBlock x:Name="StatusText" Grid.Row="3" TextWrapping="Wrap"
+            AutomationProperties.AutomationId="Ui1Status" AutomationProperties.LiveSetting="Polite" />
+        <Grid x:Name="ViewBody" Grid.Row="4" ColumnSpacing="12" SizeChanged="OnBodySizeChanged">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition x:Name="DetailColumn" Width="0" /></Grid.ColumnDefinitions>
+            <Grid RowSpacing="4">
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                <Grid x:Name="TableHeader" Padding="16,4" ColumnSpacing="10" Visibility="Collapsed">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="170" /><ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="58" /><ColumnDefinition Width="64" /><ColumnDefinition Width="116" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="时间" /><TextBlock Grid.Column="1" Text="物品 / 账号" />
+                    <TextBlock Grid.Column="2" Text="星级" /><TextBlock Grid.Column="3" Text="类型" />
+                    <TextBlock Grid.Column="4" Text="卡池" />
+                </Grid>
+                <ListView x:Name="RecordsList" Grid.Row="1" SelectionMode="None" IsItemClickEnabled="True"
+                    ItemClick="OnOpenDetail" ItemTemplate="{StaticResource RecordListTemplate}" AutomationProperties.AutomationId="Ui1Records">
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /></Style>
+                    </ListView.ItemContainerStyle>
+                </ListView>
+                <GridView x:Name="ItemGrid" Grid.Row="1" Visibility="Collapsed" SelectionMode="None" IsItemClickEnabled="True"
+                    ItemClick="OnOpenDetail" AutomationProperties.Name="物品网格">
+                    <GridView.ItemsPanel><ItemsPanelTemplate><ItemsWrapGrid Orientation="Horizontal" ItemWidth="154" ItemHeight="144" /></ItemsPanelTemplate></GridView.ItemsPanel>
+                    <GridView.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Width="138" Padding="8" Spacing="4" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                                <Grid Height="38">
+                                    <TextBlock Text="{Binding Rank}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    <Image Source="{Binding Image.CachedPath, Converter={StaticResource CachedImage}}" Stretch="Uniform" />
+                                </Grid>
+                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding Subtitle}" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </GridView.ItemTemplate>
+                </GridView>
+                <ScrollViewer x:Name="CalendarScroll" Grid.Row="1" Visibility="Collapsed" AutomationProperties.Name="月历">
+                    <Grid x:Name="CalendarGrid" ColumnSpacing="4" RowSpacing="4" />
+                </ScrollViewer>
+            </Grid>
+            <ScrollViewer x:Name="DetailPane" Grid.Column="1" Visibility="Collapsed" Padding="12"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" AutomationProperties.Name="并排详情">
+                <StackPanel Spacing="8">
+                    <TextBlock x:Name="DetailTitle" Text="请选择条目" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" />
+                    <TextBlock x:Name="DetailBody" TextWrapping="Wrap" IsTextSelectionEnabled="True" AutomationProperties.LiveSetting="Polite" />
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+        <Grid Grid.Row="5" ColumnSpacing="10">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+            <Button x:Name="PreviousButton" Content="上一页" Click="OnPrevious" />
+            <Button x:Name="NextButton" Grid.Column="1" Content="下一页" Click="OnNext" />
+            <TextBlock x:Name="PathText" Grid.Column="2" FontSize="11" TextWrapping="Wrap"
+                IsTextSelectionEnabled="True" VerticalAlignment="Center" />
+        </Grid>
+    </Grid>
+</UserControl>

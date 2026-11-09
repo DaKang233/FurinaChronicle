@@ -8,7 +8,8 @@
     x:Class="FurinaChronicle.Windows.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Title="FurinaChronicle · UI-0">
+    xmlns:local="using:FurinaChronicle.Windows"
+    Title="FurinaChronicle · UI-2 Preview">
     <Grid x:Name="RootGrid" Background="Transparent">
         <NavigationView
             x:Name="Navigation"
@@ -17,10 +18,18 @@
             IsSettingsVisible="False"
             IsTitleBarAutoPaddingEnabled="True"
             OpenPaneLength="232"
+            CompactModeThresholdWidth="800"
+            ExpandedModeThresholdWidth="1280"
             PaneDisplayMode="Auto"
             PaneTitle="FurinaChronicle"
             SelectionChanged="OnNavigationSelectionChanged">
             <NavigationView.MenuItems>
+                <NavigationViewItem Content="概览" Tag="overview" Icon="Home" />
+                <NavigationViewItem x:Name="GachaDestination" Content="数据 · 抽卡" Tag="gacha" AutomationProperties.AutomationId="Ui1Navigation">
+                    <NavigationViewItem.Icon><SymbolIcon Symbol="List" /></NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.MenuItems>
+            <NavigationView.FooterMenuItems>
                 <NavigationViewItem Content="组件样例" Tag="components">
                     <NavigationViewItem.Icon>
                         <SymbolIcon Symbol="AllApps" />
@@ -36,9 +45,17 @@
                         <SymbolIcon Symbol="Document" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-            </NavigationView.MenuItems>
+            </NavigationView.FooterMenuItems>
             <NavigationView.Content>
-                <Grid Padding="24,20,24,16" RowSpacing="12">
+                <Grid>
+                <ScrollViewer x:Name="OverviewPanel" Visibility="Collapsed">
+                    <StackPanel Padding="24" Spacing="12">
+                        <TextBlock Text="概览" FontSize="28" FontWeight="SemiBold" />
+                        <TextBlock Text="在本机查看隔离合成档案的抽卡明细与统计。" TextWrapping="Wrap" />
+                        <Button Content="打开抽卡分析" Click="OnOpenAnalysis" />
+                    </StackPanel>
+                </ScrollViewer>
+                <Grid x:Name="PreviewPanel" Padding="24,20,24,16" RowSpacing="12">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
@@ -211,6 +228,8 @@
                         Message="UI-0 技术小样已就绪。"
                         Severity="Informational"
                         Title="状态" />
+                </Grid>
+                <local:Ui1GachaView x:Name="GachaView" Visibility="Collapsed" />
                 </Grid>
             </NavigationView.Content>
         </NavigationView>

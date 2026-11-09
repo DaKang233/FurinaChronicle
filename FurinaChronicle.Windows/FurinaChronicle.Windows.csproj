@@ -55,7 +55,19 @@
     <ProjectReference Include="..\FurinaChronicle.Core\FurinaChronicle.Core.csproj" />
     <ProjectReference Include="..\FurinaChronicle.Services\FurinaChronicle.Services.csproj" />
     <ProjectReference Include="..\FurinaChronicle.Infrastructure\FurinaChronicle.Infrastructure.csproj" />
+    <ProjectReference Include="..\FurinaChronicle.Presentation\FurinaChronicle.Presentation.csproj" />
   </ItemGroup>
 
   <Import Project="..\build\FurinaVersion.targets" />
+
+  <!-- The unpackaged publish must carry the current resource index, including embedded XBF. -->
+  <Target Name="PublishPreviewResourceIndex" AfterTargets="ComputeFilesToPublish">
+    <Error Condition="!Exists('$(TargetDir)$(AssemblyName).pri')"
+           Text="The WinUI preview resource index is missing. Build before publishing." />
+    <ItemGroup>
+      <ResolvedFileToPublish Include="$(TargetDir)$(AssemblyName).pri"
+                             RelativePath="$(AssemblyName).pri"
+                             CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
 </Project>

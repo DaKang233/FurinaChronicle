@@ -28,7 +28,7 @@ public sealed partial class MainWindow : Window
     {
         InitializeComponent();
         PreviewList.ItemsSource = previewRecords;
-        Navigation.SelectedItem = Navigation.MenuItems[0];
+        Navigation.SelectedItem = GachaDestination;
         IsolationPathText.Text = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "FurinaChronicle",
@@ -37,6 +37,7 @@ public sealed partial class MainWindow : Window
 
         RootGrid.Loaded += OnRootLoaded;
         RootGrid.ActualThemeChanged += OnActualThemeChanged;
+        Closed += async (_, _) => await GachaView.CloseAsync();
         ApplyBackdrop(forceSolid: false);
         ResizeInitialWindow();
     }
@@ -52,7 +53,7 @@ public sealed partial class MainWindow : Window
     private void OnRootLoaded(object sender, RoutedEventArgs e)
     {
         UpdateThemeStatus();
-        PreviewList.Focus(FocusState.Programmatic);
+        if (PreviewPanel.Visibility == Visibility.Visible) PreviewList.Focus(FocusState.Programmatic);
     }
 
     private void OnActualThemeChanged(FrameworkElement sender, object args)
@@ -93,7 +94,7 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void OnNavigationSelectionChanged(
+    private async void OnNavigationSelectionChanged(
         NavigationView sender,
         NavigationViewSelectionChangedEventArgs args)
     {
@@ -101,6 +102,19 @@ public sealed partial class MainWindow : Window
         {
             return;
         }
+
+        bool showGacha = item.Tag?.ToString() == "gacha";
+        bool overview = item.Tag?.ToString() == "overview";
+        OverviewPanel.Visibility = overview ? Visibility.Visible : Visibility.Collapsed;
+        PreviewPanel.Visibility = showGacha || overview ? Visibility.Collapsed : Visibility.Visible;
+        GachaView.Visibility = showGacha ? Visibility.Visible : Visibility.Collapsed;
+        if (showGacha)
+        {
+            await GachaView.EnterAsync();
+            return;
+        }
+        GachaView.Leave();
+        if (overview) return;
 
         (SectionTitle.Text, SectionDescription.Text) = item.Tag?.ToString() switch
         {
@@ -115,6 +129,8 @@ public sealed partial class MainWindow : Window
                 "独立 WinUI 3 宿主 · 仅使用虚构数据")
         };
     }
+
+    private void OnOpenAnalysis(object sender, RoutedEventArgs e) => Navigation.SelectedItem = GachaDestination;
 
     private void OnRefreshClicked(object sender, RoutedEventArgs e)
     {
