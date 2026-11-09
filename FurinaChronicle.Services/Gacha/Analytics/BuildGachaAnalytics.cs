@@ -84,7 +84,8 @@ public sealed class BuildGachaAnalytics
         GachaRecordQuery query,
         GachaAnalyticsComponents components,
         IReadOnlyDictionary<Guid, GameServerRegion>? accountRegions,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        TimeSpan? calendarOffset = null)
     {
         ArgumentNullException.ThrowIfNull(query);
         query.Validate();
@@ -135,7 +136,7 @@ public sealed class BuildGachaAnalytics
         }
         IReadOnlyList<GachaCalendarDay> calendar =
             components.HasFlag(GachaAnalyticsComponents.Calendar)
-                ? BuildCalendar(records)
+                ? BuildCalendar(records, calendarOffset)
                 : [];
         IReadOnlyList<GachaItemStatistics> items =
             components.HasFlag(GachaAnalyticsComponents.Items)
@@ -610,10 +611,12 @@ public sealed class BuildGachaAnalytics
     }
 
     private static IReadOnlyList<GachaCalendarDay> BuildCalendar(
-        IReadOnlyList<GachaRecord> records)
+        IReadOnlyList<GachaRecord> records,
+        TimeSpan? displayOffset)
     {
         var grouped = records
-            .GroupBy(record => DateOnly.FromDateTime(record.Time.Date))
+            .GroupBy(record => DateOnly.FromDateTime(
+                displayOffset is TimeSpan offset ? record.Time.ToOffset(offset).Date : record.Time.Date))
             .Select(group => new
             {
                 Date = group.Key,

@@ -2119,10 +2119,18 @@ public sealed partial class SqliteGachaAtomicChangeStore
             .ToArray();
     }
 
-    public async Task<IReadOnlyList<GachaRevisionItem>>
+    public Task<IReadOnlyList<GachaRevisionItem>> GetRecordRevisionsAsync(
+        GachaFactReference reference, CancellationToken cancellationToken = default) =>
+        ReadRevisionsAsync(reference.GameAccountId, reference.ExternalRecordId, cancellationToken);
+
+    public Task<IReadOnlyList<GachaRevisionItem>>
         GetRevisionsByAccountAsync(
             Guid gameAccountId,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default) =>
+        ReadRevisionsAsync(gameAccountId, null, cancellationToken);
+
+    private async Task<IReadOnlyList<GachaRevisionItem>> ReadRevisionsAsync(
+        Guid gameAccountId, string? externalRecordId, CancellationToken cancellationToken)
     {
         if (gameAccountId == Guid.Empty)
         {
@@ -2132,18 +2140,22 @@ public sealed partial class SqliteGachaAtomicChangeStore
         }
         await database.InitializeAsync(cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
+        string account = gameAccountId.ToString("D");
+        string recordFilter = externalRecordId is null ? "" : " AND ExternalRecordId = ?";
+        object[] arguments = externalRecordId is null ? [account] : [account, externalRecordId];
         List<GachaRevisionReadRow> rows =
             await database.Connection.QueryAsync<GachaRevisionReadRow>(
-                """
+                $"""
                 SELECT RevisionId, ChangeSetId, GameAccountId,
                        ExternalRecordId, ChangeKind, BeforeVersion,
                        AfterVersion, BeforeSnapshotJson, AfterSnapshotJson,
                        CreatedAtUtcTicks, CreatedAtOffsetMinutes
                 FROM GachaRevisions
-                WHERE GameAccountId = ?
+                WHERE GameAccountId = ?{recordFilter}
                 ORDER BY CreatedAtUtcTicks, rowid;
                 """,
-                gameAccountId.ToString("D"));
+                arguments);
+        cancellationToken.ThrowIfCancellationRequested();
         return rows.Select(row => new GachaRevisionItem(
                 ParseRequiredGuid(row.RevisionId, "revision"),
                 ParseRequiredGuid(row.ChangeSetId, "change set"),
