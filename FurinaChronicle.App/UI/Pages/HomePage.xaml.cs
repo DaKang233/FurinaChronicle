@@ -9,14 +9,17 @@ namespace FurinaChronicle.App.UI.Pages;
 public partial class HomePage : ContentPage
 {
     private readonly IMaterialBottomSheetPreview bottomSheetPreview;
+    private readonly Ui1GachaPage ui1Page;
     private MaterialExtendedActionButton? actionButton = null;
 
     public HomePage(
         UserPageViewModel userPageViewModel,
-        IMaterialBottomSheetPreview bottomSheetPreview)
+        IMaterialBottomSheetPreview bottomSheetPreview,
+        Ui1GachaPage ui1Page)
     {
         InitializeComponent();
         this.bottomSheetPreview = bottomSheetPreview;
+        this.ui1Page = ui1Page;
         if (Shell.GetTitleView(this) is UI.Controls.PassportAvatarButton avatar)
         {
             avatar.BindingContext = userPageViewModel;
@@ -42,6 +45,14 @@ public partial class HomePage : ContentPage
         SizeChanged += OnPageSizeChanged;
         Loaded += OnPageLoaded;
         Unloaded += OnPageUnloaded;
+    }
+
+    private async void OnOpenUi1Clicked(object? sender, EventArgs e)
+    {
+        if (sender is not Button button) return;
+        button.IsEnabled = false;
+        try { await Navigation.PushAsync(ui1Page); }
+        finally { button.IsEnabled = true; }
     }
 
     private void OnPageLoaded(object? sender, EventArgs e)

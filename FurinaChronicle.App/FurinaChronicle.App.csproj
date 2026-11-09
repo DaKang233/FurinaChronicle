@@ -16,6 +16,8 @@
 		<SingleProject>true</SingleProject>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
+		<Ui1PreviewMode Condition="'$(Ui1PreviewMode)' == ''">false</Ui1PreviewMode>
+		<DefineConstants Condition="'$(Ui1PreviewMode)' == 'true'">$(DefineConstants);UI1_PREVIEW</DefineConstants>
 		<Phase8BValidationMode Condition="'$(Phase8BValidationMode)' == ''">false</Phase8BValidationMode>
 		<DefineConstants Condition="'$(Phase8BValidationMode)' == 'true'">$(DefineConstants);PHASE8B_VALIDATION</DefineConstants>
 		<Phase8CValidationMode Condition="'$(Phase8CValidationMode)' == ''">false</Phase8CValidationMode>
@@ -37,6 +39,8 @@
 		<!-- App Identifier -->
 		<ApplicationId Condition="'$(Phase8CValidationMode)' != 'true'">com.companyname.furinachronicle.app</ApplicationId>
 		<ApplicationId Condition="'$(Phase8CValidationMode)' == 'true'">com.companyname.furinachronicle.validation.phase8c6</ApplicationId>
+		<ApplicationTitle Condition="'$(Ui1PreviewMode)' == 'true'">FurinaChronicle UI-1 Preview</ApplicationTitle>
+		<ApplicationId Condition="'$(Ui1PreviewMode)' == 'true'">com.companyname.furinachronicle.preview.ui1</ApplicationId>
 
 		<!-- To develop, package, and publish an app to the Microsoft Store, see: https://aka.ms/MauiTemplateUnpackaged -->
 		<WindowsPackageType>None</WindowsPackageType>
@@ -75,6 +79,7 @@
 	  <ProjectReference Include="..\FurinaChronicle.Core\FurinaChronicle.Core.csproj" />
 	  <ProjectReference Include="..\FurinaChronicle.Services\FurinaChronicle.Services.csproj" />
 	  <ProjectReference Include="..\FurinaChronicle.Infrastructure\FurinaChronicle.Infrastructure.csproj" />
+	  <ProjectReference Include="..\FurinaChronicle.Presentation\FurinaChronicle.Presentation.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -113,6 +118,9 @@
 	<Import Project="..\build\FurinaMauiIdentity.targets" />
 
 	<Target Name="ValidateAcceptanceBuildMode" BeforeTargets="PrepareForBuild">
+		<Error
+			Condition="'$(Ui1PreviewMode)' == 'true' and ('$(Phase8BValidationMode)' == 'true' or '$(Phase8CValidationMode)' == 'true')"
+			Text="Ui1PreviewMode cannot be combined with phase validation modes." />
 		<Error
 			Condition="'$(Phase8BValidationMode)' == 'true' and '$(Phase8CValidationMode)' == 'true'"
 			Text="Phase8BValidationMode and Phase8CValidationMode cannot both be enabled." />

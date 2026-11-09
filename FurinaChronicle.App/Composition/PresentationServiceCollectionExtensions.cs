@@ -30,6 +30,7 @@ internal static class PresentationServiceCollectionExtensions
         services.AddTransient<GachaPage>();
         services.AddTransient<ArchiveHistoryPage>();
         services.AddSingleton<HomePage>();
+        services.AddSingleton<Ui1GachaPage>();
         services.AddSingleton<UserPage>();
         services.AddSingleton<ArchivePage>();
         services.AddSingleton<ArchiveTransferPage>();

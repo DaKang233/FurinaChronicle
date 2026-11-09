@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  Copyright (c) 2026 DaKang233.
+  SPDX-License-Identifier: MIT
+-->
+<ContentPage x:Class="FurinaChronicle.App.UI.Pages.Ui1GachaPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:shared="clr-namespace:FurinaChronicle.Presentation.Gacha;assembly=FurinaChronicle.Presentation"
+    Title="抽卡只读预览 · UI-1" SafeAreaEdges="All"
+    BackgroundColor="{AppThemeBinding Light=#FAFAFA, Dark=#181818}">
+    <ContentPage.ToolbarItems>
+        <ToolbarItem Text="重新载入" Order="Secondary" Clicked="OnReload" />
+        <ToolbarItem Text="页面往返" Order="Secondary" Clicked="OnNavigateAway" />
+    </ContentPage.ToolbarItems>
+    <ContentPage.Resources>
+        <DataTemplate x:Key="ItemCardTemplate" x:DataType="shared:GachaReadOnlyRow">
+            <Border Margin="4" Padding="8" StrokeThickness="0"
+                BackgroundColor="{AppThemeBinding Light=#EFEFF3, Dark=#292930}">
+                <VerticalStackLayout Spacing="4">
+                    <Grid HeightRequest="40">
+                        <Label Text="{Binding Rank}" HorizontalOptions="Center" VerticalOptions="Center" />
+                        <Image Source="{Binding Image.CachedPath}" Aspect="AspectFit" />
+                    </Grid>
+                    <Label Text="{Binding Name}" FontAttributes="Bold" />
+                    <Label Text="{Binding Subtitle}" FontSize="13" />
+                </VerticalStackLayout>
+            </Border>
+        </DataTemplate>
+    </ContentPage.Resources>
+    <Grid Padding="12,4" RowDefinitions="Auto,Auto,*,Auto" RowSpacing="4">
+        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
+            <Button x:Name="RangeButton" Text="数据范围" Clicked="OnRange" MinimumHeightRequest="48"
+                LineBreakMode="TailTruncation" AutomationId="Ui2Range" />
+            <Picker x:Name="ViewPicker" Grid.Column="1" Title="视图" ItemDisplayBinding="{Binding Label}"
+                MinimumHeightRequest="48" SelectedIndexChanged="OnViewChanged" AutomationId="Ui2View" />
+            <Button x:Name="FilterButton" Grid.Column="2" Text="筛选" Clicked="OnFilter" MinimumHeightRequest="48" />
+        </Grid>
+        <Label x:Name="StatusLabel" Grid.Row="1" AutomationId="Ui1Status" />
+        <CollectionView x:Name="RecordsList" Grid.Row="2" AutomationId="Ui1Records" SelectionMode="Single"
+            SelectionChanged="OnOpenDetail">
+            <CollectionView.EmptyView>
+                <Label Text="此范围暂无可显示的记录" Margin="8,24" />
+            </CollectionView.EmptyView>
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="shared:GachaReadOnlyRow">
+                    <Grid Padding="4,10" ColumnDefinitions="48,*" ColumnSpacing="10">
+                        <Border WidthRequest="44" HeightRequest="44" StrokeThickness="0"
+                            BackgroundColor="{AppThemeBinding Light=#E8E8E8, Dark=#353535}" VerticalOptions="Start">
+                            <Grid>
+                                <Label Text="{Binding Rank}" FontSize="12" HorizontalOptions="Center" VerticalOptions="Center" />
+                                <Image Source="{Binding Image.CachedPath}" Aspect="AspectFit" />
+                            </Grid>
+                        </Border>
+                        <VerticalStackLayout Grid.Column="1" Spacing="3">
+                            <Label Text="{Binding Name}" FontAttributes="Bold" />
+                            <Label Text="{Binding Detail}" FontSize="13" />
+                        </VerticalStackLayout>
+                    </Grid>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+        <ScrollView x:Name="CalendarScroll" Grid.Row="2" IsVisible="False" AutomationId="Ui2Calendar">
+            <Grid x:Name="CalendarGrid" ColumnSpacing="2" RowSpacing="2" />
+        </ScrollView>
+        <Grid Grid.Row="3" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
+            <Button x:Name="PreviousButton" Text="上一页" Clicked="OnPrevious" MinimumHeightRequest="48" />
+            <Label x:Name="SummaryLabel" Grid.Column="1" VerticalOptions="Center" HorizontalTextAlignment="Center" AutomationId="Ui1Summary" />
+            <Button x:Name="NextButton" Grid.Column="2" Text="下一页" Clicked="OnNext" MinimumHeightRequest="48" />
+            <Button x:Name="CancelButton" Grid.ColumnSpan="3" Text="取消载入" Clicked="OnCancel" MinimumHeightRequest="48" />
+        </Grid>
+    </Grid>
+</ContentPage>
