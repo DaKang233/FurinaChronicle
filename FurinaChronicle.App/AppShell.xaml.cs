@@ -17,6 +17,7 @@ public partial class AppShell : Shell
     private readonly UserPageViewModel userPageViewModel;
     private readonly ArchivePage archivePage;
     private readonly ArchiveTransferPage archiveTransferPage;
+    private readonly SettingsPage settingsPage;
 #if PHASE8B_VALIDATION
     private readonly Phase8BValidationPage phase8BValidationPage;
 #endif
@@ -32,6 +33,7 @@ public partial class AppShell : Shell
         ArchiveHistoryPage archiveHistoryPage,
         ArchivePage archivePage,
         ArchiveTransferPage archiveTransferPage,
+        SettingsPage settingsPage,
 #if PHASE8B_VALIDATION
         Phase8BValidationPage phase8BValidationPage,
 #endif
@@ -44,6 +46,7 @@ public partial class AppShell : Shell
         this.archiveHistoryPage = archiveHistoryPage;
         this.archivePage = archivePage;
         this.archiveTransferPage = archiveTransferPage;
+        this.settingsPage = settingsPage;
 #if PHASE8B_VALIDATION
         this.phase8BValidationPage = phase8BValidationPage;
 #endif
@@ -175,6 +178,7 @@ public partial class AppShell : Shell
             "backup-restore",
             archiveTransferPage));
         Items.Add(CreateFlyoutItem("用户", "user", userPage));
+        Items.Add(CreateFlyoutItem("设置", "settings", settingsPage));
 #endif
     }
 

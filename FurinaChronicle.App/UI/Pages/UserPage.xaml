@@ -11,6 +11,9 @@
     xmlns:viewModels="clr-namespace:FurinaChronicle.App.ViewModels"
     x:DataType="viewModels:UserPageViewModel"
     Title="用户">
+    <ContentPage.ToolbarItems>
+        <ToolbarItem Text="设置" Order="Secondary" Clicked="OnSettingsClicked" />
+    </ContentPage.ToolbarItems>
     <Grid Padding="20" RowDefinitions="Auto,Auto,*,Auto" RowSpacing="14">
         <Grid ColumnDefinitions="*,Auto">
             <VerticalStackLayout Spacing="2">

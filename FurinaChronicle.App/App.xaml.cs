@@ -1,7 +1,7 @@
 ﻿// Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
-using Microsoft.Extensions.DependencyInjection;
+using FurinaChronicle.App.UI.Gacha;
 
 namespace FurinaChronicle.App
 {
@@ -9,9 +9,10 @@ namespace FurinaChronicle.App
     {
         private readonly AppShell appShell;
 
-        public App(AppShell appShell)
+        public App(AppShell appShell, GachaAppearanceSettings appearance)
         {
             InitializeComponent();
+            appearance.ApplyTo(Resources);
             this.appShell = appShell;
         }
 

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  Copyright (c) 2026 DaKang233.
+  SPDX-License-Identifier: MIT
+-->
+
+<ContentPage
+    x:Class="FurinaChronicle.App.UI.Pages.SettingsPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:gacha="clr-namespace:FurinaChronicle.App.UI.Gacha"
+    Title="设置"
+    SafeAreaEdges="All">
+    <ScrollView>
+        <VerticalStackLayout Padding="20" Spacing="12" MaximumWidthRequest="640" HorizontalOptions="Fill">
+            <Label FontAttributes="Bold" FontSize="24" Text="外观" />
+            <Label FontAttributes="Bold" Text="抽卡物品底图" />
+            <Picker x:Name="ItemBackgroundPicker" Title="选择物品底图" AutomationId="GachaItemBackgroundStyle"
+                    SelectedIndexChanged="OnItemBackgroundChanged">
+                <Picker.Items>
+                    <x:String>新版底图（内嵌标记）</x:String>
+                    <x:String>经典底图（独立标记）</x:String>
+                </Picker.Items>
+            </Picker>
+            <gacha:GachaItemIconView RankType="5" IconSize="84" CardWidth="132" ItemName="五星底图预览"
+                                    HorizontalOptions="Start" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

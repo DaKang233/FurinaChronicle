@@ -27,7 +27,8 @@
                     Source="{Binding RarityBackgroundSource, Source={x:Reference Root}}" />
                 <Image
                     Aspect="AspectFill"
-                    Source="ui_imgsign_itemicon.png" />
+                    IsVisible="{Binding UseClassicBackground, Source={x:Reference Root}}"
+                    Source="{Binding RarityOverlaySource, Source={x:Reference Root}}" />
                 <Grid Padding="0">
                     <Image
                         Aspect="AspectFit"

@@ -3,6 +3,7 @@
 
 using FurinaChronicle.App.Diagnostics;
 using FurinaChronicle.App.Startup;
+using FurinaChronicle.App.UI.Gacha;
 using FurinaChronicle.App.UI.Pages;
 using FurinaChronicle.App.ViewModels;
 
@@ -31,6 +32,8 @@ internal static class PresentationServiceCollectionExtensions
         services.AddTransient<ArchiveHistoryPage>();
         services.AddSingleton<HomePage>();
         services.AddSingleton<Ui1GachaPage>();
+        services.AddSingleton<GachaAppearanceSettings>();
+        services.AddTransient<SettingsPage>();
         services.AddSingleton<UserPage>();
         services.AddSingleton<ArchivePage>();
         services.AddSingleton<ArchiveTransferPage>();

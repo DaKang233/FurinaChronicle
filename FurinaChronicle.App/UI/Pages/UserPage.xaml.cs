@@ -28,6 +28,9 @@ public partial class UserPage : ContentPage
         await ViewModel.InitializeAsync();
     }
 
+    private async void OnSettingsClicked(object? sender, EventArgs e) =>
+        await Navigation.PushAsync(serviceProvider.GetRequiredService<SettingsPage>());
+
     private async void OnMainlandLoginClicked(object? sender, EventArgs e)
     {
         await OpenLoginRootAsync(

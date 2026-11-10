@@ -5,6 +5,14 @@ namespace FurinaChronicle.App.UI.Gacha;
 
 public partial class GachaItemIconView : ContentView
 {
+    public static readonly BindableProperty UseClassicBackgroundProperty =
+        BindableProperty.Create(
+            nameof(UseClassicBackground),
+            typeof(bool),
+            typeof(GachaItemIconView),
+            defaultValue: false,
+            propertyChanged: OnBackgroundStyleChanged);
+
     public static readonly BindableProperty IconSourceProperty =
         BindableProperty.Create(
             nameof(IconSource),
@@ -76,6 +84,13 @@ public partial class GachaItemIconView : ContentView
     public GachaItemIconView()
     {
         InitializeComponent();
+        SetDynamicResource(UseClassicBackgroundProperty, GachaAppearanceSettings.ClassicBackgroundResource);
+    }
+
+    public bool UseClassicBackground
+    {
+        get => (bool)GetValue(UseClassicBackgroundProperty);
+        set => SetValue(UseClassicBackgroundProperty, value);
     }
 
     public ImageSource? IconSource
@@ -132,13 +147,16 @@ public partial class GachaItemIconView : ContentView
         set => SetValue(ShowDetailTextProperty, value);
     }
 
-    public ImageSource RarityBackgroundSource => ImageSource.FromFile(
-        RankType switch
+    public string RarityBackgroundSource
+    {
+        get
         {
-            5 => "gacha_quality_5.png",
-            4 => "gacha_quality_4.png",
-            _ => "gacha_quality_3.png"
-        });
+            int rank = RankType is >= 1 and <= 5 ? RankType.Value : 3;
+            return UseClassicBackground ? $"gacha_quality_{rank}.png" : $"item_background_{rank}.png";
+        }
+    }
+
+    public string? RarityOverlaySource => UseClassicBackground ? "ui_imgsign_itemicon.png" : null;
 
     public bool HasCount => !string.IsNullOrWhiteSpace(CountText);
 
@@ -155,6 +173,13 @@ public partial class GachaItemIconView : ContentView
     {
         ((GachaItemIconView)bindable).OnPropertyChanged(
             nameof(RarityBackgroundSource));
+    }
+
+    private static void OnBackgroundStyleChanged(BindableObject bindable, object oldValue, object newValue)
+    {
+        var view = (GachaItemIconView)bindable;
+        view.OnPropertyChanged(nameof(RarityBackgroundSource));
+        view.OnPropertyChanged(nameof(RarityOverlaySource));
     }
 
     private static void OnTextChanged(
