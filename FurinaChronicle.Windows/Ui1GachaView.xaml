@@ -70,7 +70,7 @@
         <Grid Grid.Row="2" ColumnSpacing="10">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <ComboBox x:Name="ViewPicker" DisplayMemberPath="Label" SelectionChanged="OnViewChanged" AutomationProperties.Name="分析视图" />
             <Button x:Name="FilterButton" Grid.Column="1" Content="筛选" Click="OnFilter" />
@@ -79,9 +79,16 @@
                 <Button.KeyboardAccelerators><KeyboardAccelerator Key="F5" /></Button.KeyboardAccelerators>
             </Button>
             <Button x:Name="CancelButton" Grid.Column="4" Content="取消" Click="OnCancel" />
+            <Button x:Name="ExportButton" Grid.Column="5" Content="导出" IsEnabled="False" Click="OnExport">
+                <Button.KeyboardAccelerators><KeyboardAccelerator Key="E" Modifiers="Control" /></Button.KeyboardAccelerators>
+            </Button>
         </Grid>
-        <TextBlock x:Name="StatusText" Grid.Row="3" TextWrapping="Wrap"
-            AutomationProperties.AutomationId="Ui1Status" AutomationProperties.LiveSetting="Polite" />
+        <StackPanel Grid.Row="3" Spacing="3">
+            <TextBlock x:Name="StatusText" TextWrapping="Wrap"
+                AutomationProperties.AutomationId="Ui1Status" AutomationProperties.LiveSetting="Polite" />
+            <TextBlock x:Name="ExportStatus" TextWrapping="Wrap" Visibility="Collapsed"
+                AutomationProperties.AutomationId="GachaExportStatus" AutomationProperties.LiveSetting="Polite" />
+        </StackPanel>
         <Grid x:Name="ViewBody" Grid.Row="4" ColumnSpacing="12" SizeChanged="OnBodySizeChanged">
             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition x:Name="DetailColumn" Width="0" /></Grid.ColumnDefinitions>
             <Grid RowSpacing="4">

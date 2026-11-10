@@ -27,6 +27,7 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        GachaView.SetPickerOwner(this);
         PreviewList.ItemsSource = previewRecords;
         Navigation.SelectedItem = GachaDestination;
         IsolationPathText.Text = Path.Combine(

@@ -60,6 +60,8 @@ public sealed partial class Ui1GachaView : UserControl
     public async Task CloseAsync()
     {
         Leave();
+        exportCancellation?.Cancel();
+        if (exportTask is Task runningExport) await runningExport;
         if (environment is not null) await environment.DisposeAsync();
     }
 
@@ -76,6 +78,7 @@ public sealed partial class Ui1GachaView : UserControl
             AccountPicker.SelectedItem = s.Accounts.FirstOrDefault(a => a.Id == s.AccountId);
             ViewPicker.SelectedItem = GachaReadOnlyViewOption.Options.First(option => option.View == s.View);
             RangeButton.IsEnabled = s.Accounts.Count > 0 && !s.IsBusy;
+            UpdateExportAvailability();
             RangeButton.Content = s.ArchiveAccountIds is { } ids ? $"档案范围（{ids.Count}）" : "档案多选";
             FilterButton.Visibility = s.View is GachaReadOnlyView.Records or GachaReadOnlyView.Calendar ? Visibility.Visible : Visibility.Collapsed;
             FilterButton.Content = s.View == GachaReadOnlyView.Calendar ? "月份与时区" :
