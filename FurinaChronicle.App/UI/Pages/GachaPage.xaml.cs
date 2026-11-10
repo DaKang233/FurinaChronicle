@@ -132,13 +132,13 @@ public partial class GachaPage : ContentPage
             picker.SelectedItem as GameAccount);
     }
 
-    private async void OnSTokenRefreshClicked(object? sender, EventArgs e)
+    private async Task RefreshFromPassportAsync()
     {
         await RunRefreshWithProgressAsync(() =>
             ViewModel.RefreshGachaAsync(GachaRefreshSource.SToken));
     }
 
-    private async void OnWebCacheRefreshClicked(object? sender, EventArgs e)
+    private async Task RefreshFromWebCacheAsync()
     {
         string? path = await DisplayPromptAsync(
             "网页缓存刷新",
@@ -155,7 +155,7 @@ public partial class GachaPage : ContentPage
         }
     }
 
-    private async void OnManualUrlRefreshClicked(object? sender, EventArgs e)
+    private async Task RefreshFromLinkAsync()
     {
         string? url = await DisplayPromptAsync(
             "输入抽卡记录 URL",
@@ -218,7 +218,7 @@ public partial class GachaPage : ContentPage
         }
     }
 
-    private async void OnImportPortableClicked(object? sender, EventArgs e)
+    private async Task ImportPortableAsync()
     {
         if (portableOperationRunning || ViewModel.IsBusy)
         {
@@ -490,7 +490,7 @@ public partial class GachaPage : ContentPage
         ViewModel.IsBusy = false;
     }
 
-    private async void OnExportPortableClicked(object? sender, EventArgs e)
+    private async Task ExportPortableAsync()
     {
         if (portableOperationRunning || !await CanBeginExportAsync())
         {
@@ -543,9 +543,7 @@ public partial class GachaPage : ContentPage
         }
     }
 
-    private async void OnTeyvatHelperImportClicked(
-        object? sender,
-        EventArgs e)
+    private async Task ImportFromTeyvatHelperAsync()
     {
         const string automaticOption = "使用当前通行证角色自动导入（国服）";
         const string manualOption = "手动输入 UID 和抽卡链接";
@@ -629,9 +627,7 @@ public partial class GachaPage : ContentPage
         }
     }
 
-    private async void OnImportIntoArchiveClicked(
-        object? sender,
-        EventArgs e)
+    private async Task ImportIntoArchiveAsync()
     {
         try
         {
@@ -647,9 +643,7 @@ public partial class GachaPage : ContentPage
         }
     }
 
-    private async void OnImportIntoSelectedAccountClicked(
-        object? sender,
-        EventArgs e)
+    private async Task ImportIntoSelectedAccountAsync()
     {
         if (ViewModel.SelectedArchive is null ||
             ViewModel.SelectedAccount is null)
@@ -732,16 +726,12 @@ public partial class GachaPage : ContentPage
             "取消");
     }
 
-    private async void OnExportArchiveUigfClicked(
-        object? sender,
-        EventArgs e)
+    private async Task ExportArchiveUigfAsync()
     {
         await ExportUigfAsync(lockedAccountId: null);
     }
 
-    private async void OnExportAccountUigfClicked(
-        object? sender,
-        EventArgs e)
+    private async Task ExportAccountUigfAsync()
     {
         if (ViewModel.SelectedAccount is null)
         {
@@ -755,16 +745,12 @@ public partial class GachaPage : ContentPage
         await ExportUigfAsync(ViewModel.SelectedAccount?.Id);
     }
 
-    private async void OnExportArchiveTableClicked(
-        object? sender,
-        EventArgs e)
+    private async Task ExportArchiveTableAsync()
     {
         await ExportTableAsync(lockedAccountId: null);
     }
 
-    private async void OnExportAccountTableClicked(
-        object? sender,
-        EventArgs e)
+    private async Task ExportAccountTableAsync()
     {
         if (ViewModel.SelectedAccount is null)
         {
