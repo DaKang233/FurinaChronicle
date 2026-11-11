@@ -19,6 +19,9 @@ internal static class PassportServiceCollectionExtensions
             SecureStoragePassportAccountStore>();
         services.AddSingleton<MiHoYoPassportClient>();
         services.AddSingleton<
+            IDeviceFingerprintProvider,
+            MiHoYoDeviceFingerprintClient>();
+        services.AddSingleton<
             IMainlandPassportClient,
             MainlandPassportClient>();
         services.AddSingleton<

@@ -138,7 +138,8 @@ public sealed class MiHoYoPassportClient : IDisposable
                 RequiredString(userInfo, "aid"),
                 RequiredString(userInfo, "mid"),
                 sToken,
-                DisplayName: OptionalString(userInfo, "account_name")));
+                DisplayName: OptionalString(userInfo, "account_name"),
+                DeviceFingerprint: ReadLoginFingerprint(response, QueryQrUrl)));
     }
 
     public async Task<MobileCaptchaChallenge> SendMobileCaptchaAsync(
@@ -199,7 +200,8 @@ public sealed class MiHoYoPassportClient : IDisposable
             RequiredString(userInfo, "aid"),
             RequiredString(userInfo, "mid"),
             RequiredString(token, "token"),
-            DisplayName: OptionalString(userInfo, "account_name"));
+            DisplayName: OptionalString(userInfo, "account_name"),
+            DeviceFingerprint: ReadLoginFingerprint(response, MobileLoginUrl));
     }
 
     public async Task<PassportLoginTokens> LoginWithOverseaPasswordAsync(
@@ -318,7 +320,7 @@ public sealed class MiHoYoPassportClient : IDisposable
         {
             geetest_challenge = result.Challenge,
             geetest_validate = result.Validate,
-            geetest_seccode = $"{result.Validate}|jordan"
+            geetest_seccode = result.Seccode ?? $"{result.Validate}|jordan"
         });
         return $"{sessionId};{Convert.ToBase64String(proof)}";
     }
@@ -834,6 +836,27 @@ public sealed class MiHoYoPassportClient : IDisposable
             _ => throw new FormatException(
                 $"HoYoLAB 返回了不支持的账号验证方式：{value}。")
         };
+    }
+
+    private static string? ReadLoginFingerprint(HttpResponseMessage response, string loginUrl)
+    {
+        if (response.RequestMessage?.RequestUri?.AbsoluteUri != loginUrl ||
+            !response.Headers.TryGetValues("x-rpc-device_fp", out var values))
+        {
+            return null;
+        }
+
+        using var headers = values.GetEnumerator();
+        if (!headers.MoveNext())
+        {
+            return null;
+        }
+
+        string value = headers.Current;
+        return !headers.MoveNext() && value.Length > 0 && value.All(character =>
+            character is >= '!' and <= '~' and not ('"' or ',' or ';' or '\\'))
+            ? value
+            : null;
     }
 
     private static string? HeaderValue(

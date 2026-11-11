@@ -80,6 +80,24 @@ public sealed class PassportAccount
             Realm);
     }
 
+    public PassportAccount WithDevice(
+        PassportDeviceIdentity device,
+        DateTimeOffset updatedAt)
+    {
+        ArgumentNullException.ThrowIfNull(device);
+        return new PassportAccount(
+            Id,
+            Aid,
+            Mid,
+            DisplayName,
+            LoginMethod,
+            Credentials,
+            device,
+            CreatedAt,
+            updatedAt,
+            Realm);
+    }
+
     public override string ToString()
     {
         return $"PassportAccount(Id={Id:D}, Aid={Aid}, Realm={Realm}, LoginMethod={LoginMethod})";

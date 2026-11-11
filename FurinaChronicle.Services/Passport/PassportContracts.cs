@@ -22,7 +22,8 @@ public sealed record PassportGeetestChallenge(
 
 public sealed record PassportGeetestResult(
     string Challenge,
-    string Validate);
+    string Validate,
+    string? Seccode = null);
 
 public sealed record PassportAccountVerificationChallenge(
     string State,

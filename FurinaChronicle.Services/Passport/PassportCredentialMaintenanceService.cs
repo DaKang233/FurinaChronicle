@@ -9,6 +9,7 @@ public sealed class PassportCredentialMaintenanceService(
     IPassportAccountStore accountStore,
     IMainlandPassportClient mainlandClient,
     IHoYoLabPassportClient hoYoLabClient,
+    IDeviceFingerprintProvider deviceFingerprintProvider,
     TimeProvider timeProvider,
     PassportCredentialMaintenanceOptions? maintenanceOptions = null)
 {
@@ -50,83 +51,25 @@ public sealed class PassportCredentialMaintenanceService(
         CancellationToken cancellationToken)
     {
         PassportAccount account = original;
-        PassportCredentials credentials = account.Credentials;
-        if (credentials.SToken is null || account.Mid is null)
-        {
-            return new MaintenanceOutcome(Changed: false, Failed: false);
-        }
-
-        DateTimeOffset now = timeProvider.GetUtcNow();
         bool changed = false;
         bool failed = false;
+
+        // A mainland session is bound to a device context. Accounts created
+        // before fingerprint support have none, and the game record endpoints
+        // answer 5003 for such a session; register one for the existing device.
         if (account.Realm == PassportRealm.MainlandChina &&
-            IsExpired(
-                credentials.SessionVerifiedAt,
-                options.SessionVerificationInterval,
-                now))
+            string.IsNullOrWhiteSpace(account.Device.DeviceFingerprint))
         {
             try
             {
-                PassportSessionVerification verification =
-                    await mainlandClient.VerifySessionAsync(
-                        account,
-                        cancellationToken);
-                credentials = credentials.WithVerifiedSession(
-                    verification.RefreshedSToken,
-                    now);
-                account = account.WithCredentials(credentials, now);
-                changed = true;
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch
-            {
-                // Verification failure does not prevent token exchange.
-                failed = true;
-            }
-        }
-
-        bool derivedExpired =
-            credentials.LToken is null ||
-            credentials.CookieToken is null ||
-            IsExpired(
-                credentials.LTokenUpdatedAt,
-                options.DerivedCredentialMaxAge,
-                now) ||
-            IsExpired(
-                credentials.CookieTokenUpdatedAt,
-                options.DerivedCredentialMaxAge,
-                now);
-
-        if (derivedExpired)
-        {
-            try
-            {
-                PassportDerivedTokens derived = account.Realm switch
+                string? fingerprint = await deviceFingerprintProvider.GetFingerprintAsync(
+                    account.Device.DeviceId,
+                    cancellationToken);
+                if (!string.IsNullOrWhiteSpace(fingerprint))
                 {
-                    PassportRealm.MainlandChina =>
-                        await mainlandClient.GetDerivedTokensAsync(
-                            account,
-                            cancellationToken),
-                    PassportRealm.Oversea =>
-                        await hoYoLabClient.GetDerivedTokensAsync(
-                            account,
-                            cancellationToken),
-                    _ => throw new ArgumentOutOfRangeException(
-                        nameof(account.Realm),
-                        account.Realm,
-                        "Unsupported passport realm.")
-                };
-                if (derived.LToken is not null ||
-                    derived.CookieToken is not null)
-                {
-                    credentials = credentials.WithDerivedTokens(
-                        derived.LToken,
-                        derived.CookieToken,
-                        now);
-                    account = account.WithCredentials(credentials, now);
+                    account = account.WithDevice(
+                        account.Device with { DeviceFingerprint = fingerprint },
+                        timeProvider.GetUtcNow());
                     changed = true;
                 }
             }
@@ -137,6 +80,92 @@ public sealed class PassportCredentialMaintenanceService(
             catch
             {
                 failed = true;
+            }
+        }
+
+        if (account.Credentials.SToken is not null && account.Mid is not null)
+        {
+            DateTimeOffset now = timeProvider.GetUtcNow();
+            PassportCredentials credentials = account.Credentials;
+            if (account.Realm == PassportRealm.MainlandChina &&
+                IsExpired(
+                    credentials.SessionVerifiedAt,
+                    options.SessionVerificationInterval,
+                    now))
+            {
+                try
+                {
+                    PassportSessionVerification verification =
+                        await mainlandClient.VerifySessionAsync(
+                            account,
+                            cancellationToken);
+                    credentials = credentials.WithVerifiedSession(
+                        verification.RefreshedSToken,
+                        now);
+                    account = account.WithCredentials(credentials, now);
+                    changed = true;
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch
+                {
+                    // Verification failure does not prevent token exchange.
+                    failed = true;
+                }
+            }
+
+            bool derivedExpired =
+                credentials.LToken is null ||
+                credentials.CookieToken is null ||
+                IsExpired(
+                    credentials.LTokenUpdatedAt,
+                    options.DerivedCredentialMaxAge,
+                    now) ||
+                IsExpired(
+                    credentials.CookieTokenUpdatedAt,
+                    options.DerivedCredentialMaxAge,
+                    now);
+
+            if (derivedExpired)
+            {
+                try
+                {
+                    PassportDerivedTokens derived = account.Realm switch
+                    {
+                        PassportRealm.MainlandChina =>
+                            await mainlandClient.GetDerivedTokensAsync(
+                                account,
+                                cancellationToken),
+                        PassportRealm.Oversea =>
+                            await hoYoLabClient.GetDerivedTokensAsync(
+                                account,
+                                cancellationToken),
+                        _ => throw new ArgumentOutOfRangeException(
+                            nameof(account.Realm),
+                            account.Realm,
+                            "Unsupported passport realm.")
+                    };
+                    if (derived.LToken is not null ||
+                        derived.CookieToken is not null)
+                    {
+                        credentials = credentials.WithDerivedTokens(
+                            derived.LToken,
+                            derived.CookieToken,
+                            now);
+                        account = account.WithCredentials(credentials, now);
+                        changed = true;
+                    }
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch
+                {
+                    failed = true;
+                }
             }
         }
 

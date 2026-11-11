@@ -12,15 +12,19 @@ namespace FurinaChronicle.Tests.Infrastructure.Passport;
 
 public sealed class MiHoYoPassportClientTests
 {
-    [Fact]
-    public async Task CreateAndPollQrSession_ParsesConfirmedSToken()
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("fixture-fingerprint", "fixture-fingerprint")]
+    [InlineData("fixture; ambiguous", null)]
+    public async Task CreateAndPollQrSession_ParsesConfirmedSToken(
+        string? fingerprintHeader, string? expectedFingerprint)
     {
         int call = 0;
         var handler = new StubHttpHandler(request =>
         {
             call++;
             Assert.Equal("stable-device", request.Headers.GetValues("x-rpc-device_id").Single());
-            return Task.FromResult(call == 1
+            var response = call == 1
                 ? JsonResponse(
                     """
                     {"retcode":0,"message":"OK","data":{"ticket":"ticket-1","url":"https://example.test/qr"}}
@@ -36,7 +40,13 @@ public sealed class MiHoYoPassportClientTests
                         "tokens":[{"token_type":1,"token":"root-token"}]
                       }
                     }
-                    """));
+                    """);
+            if (call == 2 && fingerprintHeader is not null)
+            {
+                response.RequestMessage = request;
+                response.Headers.TryAddWithoutValidation("x-rpc-device_fp", fingerprintHeader);
+            }
+            return Task.FromResult(response);
         });
         using var httpClient = new HttpClient(handler);
         using var client = new MiHoYoPassportClient(httpClient);
@@ -49,6 +59,31 @@ public sealed class MiHoYoPassportClientTests
         Assert.Equal("root-token", result.Tokens!.SToken);
         Assert.Equal("12345", result.Tokens.Aid);
         Assert.Equal("mid-1", result.Tokens.Mid);
+        Assert.Equal(expectedFingerprint, result.Tokens.DeviceFingerprint);
+    }
+
+    [Fact]
+    public async Task MobileCaptchaLogin_ReadsFingerprintFromSuccessfulResponse()
+    {
+        using var httpClient = new HttpClient(new StubHttpHandler(request =>
+        {
+            Assert.Equal(MiHoYoPassportClient.MobileLoginUrl, request.RequestUri!.AbsoluteUri);
+            Assert.Equal("fixture-device", Assert.Single(request.Headers.GetValues("x-rpc-device_id")));
+            var response = JsonResponse(
+                """
+                {"retcode":0,"data":{"token":{"token":"fixture-token"},"user_info":{"aid":"12345","mid":"fixture-mid"}}}
+                """);
+            response.RequestMessage = request;
+            response.Headers.TryAddWithoutValidation("x-rpc-device_fp", "fixture-fingerprint");
+            return Task.FromResult(response);
+        }));
+        using var client = new MiHoYoPassportClient(httpClient);
+        var device = new PassportDeviceIdentity("fixture-device", null);
+
+        var tokens = await client.LoginWithMobileCaptchaAsync("13800138000", "123456",
+            new MobileCaptchaChallenge("login", null, device.DeviceId), device);
+
+        Assert.Equal("fixture-fingerprint", tokens.DeviceFingerprint);
     }
 
     [Fact]

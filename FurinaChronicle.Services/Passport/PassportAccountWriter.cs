@@ -24,7 +24,16 @@ public sealed class PassportAccountWriter(
             .FirstOrDefault(account =>
                 account.Realm == realm &&
                 string.Equals(account.Aid, tokens.Aid, StringComparison.Ordinal));
-        PassportCredentials? previous = existing?.Credentials;
+        bool isMainlandInteractiveLogin = realm == PassportRealm.MainlandChina &&
+            method is PassportLoginMethod.QrCode or PassportLoginMethod.MobileCaptcha;
+        PassportDeviceIdentity? previousDevice = existing?.Device;
+        bool deviceChanged = previousDevice is not null &&
+            !string.Equals(previousDevice.DeviceId, device.DeviceId, StringComparison.Ordinal);
+        bool replaceDevice = isMainlandInteractiveLogin;
+        // The interactive login owns the device context: the fingerprint is
+        // registered for that device id, so reusing a previous device would
+        // split the session from the device the record requests declare.
+        PassportCredentials? previous = replaceDevice && deviceChanged ? null : existing?.Credentials;
         bool hasSToken = !string.IsNullOrWhiteSpace(tokens.SToken);
         bool hasLToken = !string.IsNullOrWhiteSpace(tokens.LToken);
         bool hasCookieToken = !string.IsNullOrWhiteSpace(tokens.CookieToken);
@@ -36,7 +45,17 @@ public sealed class PassportAccountWriter(
             hasLToken ? now : previous?.LTokenUpdatedAt,
             hasCookieToken ? now : previous?.CookieTokenUpdatedAt,
             hasSToken ? now : previous?.SessionVerifiedAt);
-        PassportDeviceIdentity stableDevice = existing?.Device ?? device;
+        PassportDeviceIdentity stableDevice = replaceDevice
+            ? device with
+            {
+                // Keep the established device fingerprint across re-logins; the
+                // session device id may change, as in the reference client. An
+                // explicit fingerprint from the login response still wins.
+                DeviceFingerprint = !string.IsNullOrWhiteSpace(tokens.DeviceFingerprint)
+                    ? tokens.DeviceFingerprint
+                    : previousDevice?.DeviceFingerprint ?? device.DeviceFingerprint,
+            }
+            : previousDevice ?? device;
         var account = new PassportAccount(
             existing?.Id ?? Guid.NewGuid(),
             tokens.Aid,

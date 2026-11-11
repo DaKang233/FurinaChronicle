@@ -377,8 +377,51 @@ public sealed class PassportAccountServiceTests
         Assert.Equal(2, (await store.GetAllAsync()).Count);
     }
 
+    [Theory]
+    [InlineData(true, "fixture-fingerprint")]
+    [InlineData(false, "fixture-fingerprint")]
+    [InlineData(true, null)]
+    public async Task InteractiveRelogin_SavesTheReturnedDevicePair(bool useQr, string? fingerprint)
+    {
+        var store = new MemoryAccountStore();
+        var seed = CreateAccount("12345", Now.AddDays(-8));
+        var existing = new PassportAccount(seed.Id, seed.Aid, seed.Mid, seed.DisplayName,
+            seed.LoginMethod, seed.Credentials,
+            new PassportDeviceIdentity("fixture-previous-device", "fixture-previous-fingerprint"),
+            seed.CreatedAt, seed.UpdatedAt);
+        await store.SaveAsync(existing);
+        var tokens = new PassportLoginTokens("12345", "fixture-mid", "fixture-root",
+            DeviceFingerprint: fingerprint);
+        var client = new StubPassportClient
+        {
+            QrPollResult = new PassportQrPollResult(PassportQrStatus.Confirmed, tokens),
+            MobileTokens = tokens,
+            DerivedTokens = new PassportDerivedTokens("fixture-new-ltoken", "fixture-new-cookie"),
+        };
+        var service = CreateService(store, client);
+        const string sessionDevice = "fixture-session-device";
+
+        var account = useQr
+            ? (await service.PollQrLoginAsync(
+                new PassportQrSession("ticket", "https://example.test/qr", sessionDevice))).Account
+            : await service.LoginWithMobileCaptchaAsync("13800138000", "123456",
+                new MobileCaptchaChallenge("login", null, sessionDevice));
+
+        Assert.NotNull(account);
+        Assert.Equal(existing.Id, account.Id);
+        Assert.Equal(
+            new PassportDeviceIdentity(
+                sessionDevice,
+                fingerprint ?? "fixture-previous-fingerprint"),
+            account.Device);
+        Assert.Equal("fixture-new-ltoken", account.Credentials.LToken);
+        Assert.Equal("fixture-new-cookie", account.Credentials.CookieToken);
+        Assert.Equal(1, client.DerivedTokenCallCount);
+        Assert.Equal(account, await store.GetByIdAsync(existing.Id));
+    }
+
     [Fact]
-    public async Task ConfirmedQrRelogin_PreservesDerivedCredentials()
+    public async Task ConfirmedQrRelogin_AdoptsSessionDeviceAndRefreshesDerivedCredentials()
     {
         var store = new MemoryAccountStore();
         PassportAccount existing = CreateAccount(
@@ -392,7 +435,10 @@ public sealed class PassportAccountServiceTests
                 new PassportLoginTokens(
                     "12345",
                     "mid-12345",
-                    "new-root"))
+                    "new-root")),
+            DerivedTokens = new PassportDerivedTokens(
+                "fixture-new-ltoken",
+                "fixture-new-cookie"),
         };
         var service = CreateService(store, client);
 
@@ -405,11 +451,90 @@ public sealed class PassportAccountServiceTests
         Assert.Equal(PassportQrStatus.Confirmed, status);
         Assert.NotNull(account);
         Assert.Equal(existing.Id, account.Id);
-        Assert.Equal(existing.Device, account.Device);
+        Assert.Equal(
+            new PassportDeviceIdentity("temporary-device", null),
+            account.Device);
         Assert.Equal("new-root", account.Credentials.SToken);
-        Assert.Equal("old-ltoken", account.Credentials.LToken);
-        Assert.Equal("old-cookie", account.Credentials.CookieToken);
-        Assert.Equal(0, client.DerivedTokenCallCount);
+        Assert.Equal("fixture-new-ltoken", account.Credentials.LToken);
+        Assert.Equal("fixture-new-cookie", account.Credentials.CookieToken);
+        Assert.Equal(1, client.DerivedTokenCallCount);
+    }
+
+    [Fact]
+    public async Task QrLogin_RegistersFingerprintWhenLoginResponseOmitsIt()
+    {
+        var store = new MemoryAccountStore();
+        var provider = new StubDeviceFingerprintProvider
+        {
+            Fingerprint = "fixture-registered-fingerprint"
+        };
+        var client = new StubPassportClient
+        {
+            QrPollResult = new PassportQrPollResult(
+                PassportQrStatus.Confirmed,
+                new PassportLoginTokens("12345", "mid-12345", "root"))
+        };
+        var service = CreateService(store, client, provider);
+
+        (PassportQrStatus status, PassportAccount? account) =
+            await service.PollQrLoginAsync(new PassportQrSession(
+                "ticket",
+                "https://example.test/qr",
+                "fixture-session-device"));
+
+        Assert.Equal(PassportQrStatus.Confirmed, status);
+        Assert.NotNull(account);
+        Assert.Equal(
+            new PassportDeviceIdentity(
+                "fixture-session-device",
+                "fixture-registered-fingerprint"),
+            account.Device);
+        Assert.Contains("fixture-session-device", provider.DeviceIds);
+    }
+
+    [Fact]
+    public async Task MaintainAllAsync_RegistersMissingDeviceFingerprint()
+    {
+        var store = new MemoryAccountStore();
+        PassportAccount account = CreateAccount(
+            "12345",
+            Now - TimeSpan.FromDays(1));
+        await store.SaveAsync(account);
+        var provider = new StubDeviceFingerprintProvider
+        {
+            Fingerprint = "fixture-registered-fingerprint"
+        };
+        var service = CreateService(store, new StubPassportClient(), provider);
+
+        PassportMaintenanceResult result = await service.MaintainAllAsync();
+
+        Assert.Equal(1, result.UpdatedCount);
+        Assert.Empty(result.FailedAccountIds);
+        PassportAccount? stored = await store.GetByIdAsync(account.Id);
+        Assert.NotNull(stored);
+        Assert.Equal(account.Device.DeviceId, stored.Device.DeviceId);
+        Assert.Equal(
+            "fixture-registered-fingerprint",
+            stored.Device.DeviceFingerprint);
+        Assert.Contains(account.Device.DeviceId, provider.DeviceIds);
+    }
+
+    [Fact]
+    public async Task MaintainAllAsync_FingerprintFailureKeepsAccountUnchanged()
+    {
+        var store = new MemoryAccountStore();
+        PassportAccount account = CreateAccount(
+            "12345",
+            Now - TimeSpan.FromDays(1));
+        await store.SaveAsync(account);
+        var provider = new StubDeviceFingerprintProvider();
+        var service = CreateService(store, new StubPassportClient(), provider);
+
+        PassportMaintenanceResult result = await service.MaintainAllAsync();
+
+        Assert.Equal(0, result.UpdatedCount);
+        Assert.Empty(result.FailedAccountIds);
+        Assert.Equal(account, await store.GetByIdAsync(account.Id));
     }
 
     [Fact]
@@ -431,20 +556,23 @@ public sealed class PassportAccountServiceTests
 
     private static TestPassportServices CreateService(
         MemoryAccountStore store,
-        StubPassportClient client)
+        StubPassportClient client,
+        StubDeviceFingerprintProvider? fingerprintProvider = null)
     {
+        var provider = fingerprintProvider ?? new StubDeviceFingerprintProvider();
         var writer = new PassportAccountWriter(
             store,
             client,
             client,
             new FixedTimeProvider(Now));
         return new TestPassportServices(
-            new MainlandPassportLoginService(client, writer),
+            new MainlandPassportLoginService(client, writer, provider),
             new HoYoLabPassportLoginService(client, writer),
             new PassportCredentialMaintenanceService(
                 store,
                 client,
                 client,
+                provider,
                 new FixedTimeProvider(Now),
                 new PassportCredentialMaintenanceOptions
                 {
@@ -518,6 +646,21 @@ public sealed class PassportAccountServiceTests
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => now;
+    }
+
+    private sealed class StubDeviceFingerprintProvider : IDeviceFingerprintProvider
+    {
+        public string? Fingerprint { get; set; }
+
+        public List<string> DeviceIds { get; } = [];
+
+        public Task<string?> GetFingerprintAsync(
+            string deviceId,
+            CancellationToken cancellationToken = default)
+        {
+            DeviceIds.Add(deviceId);
+            return Task.FromResult(Fingerprint);
+        }
     }
 
     private sealed class MemoryAccountStore : IPassportAccountStore

@@ -7,7 +7,8 @@ namespace FurinaChronicle.Services.Passport;
 
 public sealed class MainlandPassportLoginService(
     IMainlandPassportClient passportClient,
-    PassportAccountWriter accountWriter)
+    PassportAccountWriter accountWriter,
+    IDeviceFingerprintProvider deviceFingerprintProvider)
 {
     public Task<PassportQrSession> BeginQrLoginAsync(
         CancellationToken cancellationToken = default)
@@ -34,13 +35,13 @@ public sealed class MainlandPassportLoginService(
         PassportLoginTokens tokens = result.Tokens
             ?? throw new InvalidDataException(
                 "Confirmed QR login did not return credentials.");
+        string? fingerprint = await ResolveFingerprintAsync(
+            session.DeviceId, tokens.DeviceFingerprint, cancellationToken);
         PassportAccount account = await accountWriter.SaveAsync(
-            tokens,
+            tokens with { DeviceFingerprint = fingerprint },
             PassportLoginMethod.QrCode,
             PassportRealm.MainlandChina,
-            new PassportDeviceIdentity(
-                session.DeviceId,
-                DeviceFingerprint: null),
+            new PassportDeviceIdentity(session.DeviceId, fingerprint),
             cancellationToken);
         return (result.Status, account);
     }
@@ -81,11 +82,13 @@ public sealed class MainlandPassportLoginService(
                 challenge,
                 device,
                 cancellationToken);
+        string? fingerprint = await ResolveFingerprintAsync(
+            device.DeviceId, tokens.DeviceFingerprint, cancellationToken);
         return await accountWriter.SaveAsync(
-            tokens,
+            tokens with { DeviceFingerprint = fingerprint },
             PassportLoginMethod.MobileCaptcha,
             PassportRealm.MainlandChina,
-            device,
+            device with { DeviceFingerprint = fingerprint },
             cancellationToken);
     }
 
@@ -102,6 +105,23 @@ public sealed class MainlandPassportLoginService(
             {
                 DeviceFingerprint = tokens.DeviceFingerprint
             },
+            cancellationToken);
+    }
+
+    private async Task<string?> ResolveFingerprintAsync(
+        string deviceId,
+        string? provided,
+        CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(provided))
+        {
+            return provided;
+        }
+
+        // The login response normally does not carry x-rpc-device_fp, but the
+        // game-record endpoints require the session to present one.
+        return await deviceFingerprintProvider.GetFingerprintAsync(
+            deviceId,
             cancellationToken);
     }
 }
