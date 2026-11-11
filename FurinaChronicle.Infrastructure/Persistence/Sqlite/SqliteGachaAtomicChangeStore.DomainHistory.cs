@@ -770,6 +770,42 @@ public sealed partial class SqliteGachaAtomicChangeStore
                 return;
             }
 
+            if (envelope.ExpectedTarget is { } expected)
+            {
+                string roleId = expected.RoleIdentity!.Id.ToString();
+                if (connection.ExecuteScalar<int>(
+                        """
+                        SELECT EXISTS(SELECT 1 FROM GameAccounts
+                            WHERE Id = ? AND PlayerArchiveId = ? AND GameRoleIdentityId = ?);
+                        """,
+                        expected.Id.ToString("D"),
+                        expected.PlayerArchiveId.ToString("D"),
+                        roleId) != 1)
+                {
+                    result = DomainConflict(
+                        "The selected challenge account changed before the refresh was committed.");
+                    return;
+                }
+
+                // Live observations lack a stable source ID. A new observation ID
+                // cannot prove it is unrelated to data permanently removed here.
+                string challengeScope = CreateDomainTombstoneKey(
+                    expected.PlayerArchiveId, expected.Id, roleId,
+                    ChallengeObservationEntityKind, "*");
+                if (connection.ExecuteScalar<int>(
+                        """
+                        SELECT EXISTS(SELECT 1 FROM LocalOnlyTombstones
+                            WHERE ArchiveId = ? AND IsActive = 1 AND TombstoneKey GLOB ?);
+                        """,
+                        expected.PlayerArchiveId.ToString("D"),
+                        challengeScope) == 1)
+                {
+                    result = DomainConflict(
+                        "A permanent deletion in this challenge scope requires a stable source match before collection can continue.");
+                    return;
+                }
+            }
+
             if (envelope.Portable is not null)
             {
                 int receiptCount = connection.ExecuteScalar<int>(
@@ -2007,7 +2043,8 @@ public sealed partial class SqliteGachaAtomicChangeStore
         DateTimeOffset CommittedAt,
         bool CaptureUndo,
         Guid? CleanupConfirmationId,
-        PortableApplyContext? Portable = null)
+        PortableApplyContext? Portable = null,
+        GameAccount? ExpectedTarget = null)
     {
         public static DomainCommitEnvelope From(
             ItemObservationCommitRequest request) =>
@@ -2043,7 +2080,8 @@ public sealed partial class SqliteGachaAtomicChangeStore
                 request.StartedAt,
                 request.CommittedAt,
                 request.CaptureUndo,
-                request.CleanupConfirmationId);
+                request.CleanupConfirmationId,
+                ExpectedTarget: request.ExpectedTarget);
     }
 
     private sealed record PortableApplyContext(

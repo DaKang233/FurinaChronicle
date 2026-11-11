@@ -1,6 +1,7 @@
 // Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
+using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Challenges;
 using FurinaChronicle.Core.History;
 using FurinaChronicle.Core.Inventory;
@@ -167,7 +168,8 @@ public sealed class ChallengeObservationCommitRequest
         DateTimeOffset committedAt,
         IEnumerable<ChallengeObservation> observations,
         bool captureUndo = true,
-        Guid? cleanupConfirmationId = null)
+        Guid? cleanupConfirmationId = null,
+        GameAccount? expectedTarget = null)
     {
         ItemObservationCommitRequest.ValidateOperation(
             operationKind,
@@ -188,6 +190,15 @@ public sealed class ChallengeObservationCommitRequest
                 nameof(observations));
         }
 
+        if (expectedTarget is not null &&
+            (expectedTarget.RoleIdentity is null ||
+             normalized.Any(item => item.GameAccountId != expectedTarget.Id)))
+        {
+            throw new ArgumentException(
+                "The expected target must be the resolved account for all observations.",
+                nameof(expectedTarget));
+        }
+        ExpectedTarget = expectedTarget;
         OperationId = operationId;
         OperationKind = operationKind;
         Origin = origin;
@@ -206,6 +217,7 @@ public sealed class ChallengeObservationCommitRequest
     public DateTimeOffset StartedAt { get; }
     public DateTimeOffset CommittedAt { get; }
     public IReadOnlyList<ChallengeObservation> Observations { get; }
+    public GameAccount? ExpectedTarget { get; }
     public bool CaptureUndo { get; }
     public Guid? CleanupConfirmationId { get; }
 }
