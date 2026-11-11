@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  Copyright (c) 2026 DaKang233.
+  SPDX-License-Identifier: MIT
+-->
+
+<!--
+  Copyright (c) 2026 DaKang233.
+  SPDX-License-Identifier: MIT
+-->
+
+<ContentPage
+    x:Class="FurinaChronicle.App.UI.Pages.ChallengeHistoryPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:pages="clr-namespace:FurinaChronicle.App.UI.Pages"
+    SafeAreaEdges="All"
+    Title="挑战历史">
+    <Grid Padding="16" RowDefinitions="Auto,*,Auto" RowSpacing="12">
+        <VerticalStackLayout x:Name="Filters" Spacing="8">
+            <Label Text="深境螺旋" FontSize="24" FontAttributes="Bold" />
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                <Picker x:Name="ArchivePicker" Title="档案"
+                        SelectedIndexChanged="OnArchiveChanged"
+                        AutomationId="ChallengeArchivePicker" />
+                <Picker x:Name="AccountPicker" Grid.Column="1" Title="账号"
+                        SelectedIndexChanged="OnAccountChanged"
+                        AutomationId="ChallengeAccountPicker" />
+            </Grid>
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <Picker x:Name="PeriodPicker" Title="采集期次" AutomationId="ChallengeCollectionPeriod" />
+                <Button x:Name="ValidateButton" Grid.Column="1" Text="隔离验证采集"
+                        Clicked="OnValidateClicked" AutomationId="ValidateChallengeCollection" />
+            </Grid>
+            <Label x:Name="StatusLabel" AutomationId="ChallengeCollectionStatus" />
+        </VerticalStackLayout>
+
+        <CollectionView x:Name="HistoryList" Grid.Row="1" SelectionMode="None"
+                        AutomationId="ChallengeObservationList">
+            <CollectionView.EmptyView>
+                <Label Text="此账号暂无已保存的深境螺旋观察。" Margin="0,8" />
+            </CollectionView.EmptyView>
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="pages:ChallengeObservationCard">
+                    <Border Padding="12" Margin="0,0,0,8" StrokeShape="RoundRectangle 8">
+                        <VerticalStackLayout Spacing="4">
+                            <Label Text="{Binding Title}" FontAttributes="Bold" FontSize="18" />
+                            <Label Text="{Binding Evidence}" />
+                            <Label Text="{Binding Floors}" />
+                        </VerticalStackLayout>
+                    </Border>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+
+        <Grid x:Name="Paging" Grid.Row="2" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+            <Button x:Name="PreviousButton" Text="上一页" Clicked="OnPreviousClicked" />
+            <Label x:Name="PageLabel" Grid.Column="1" HorizontalTextAlignment="Center"
+                   VerticalTextAlignment="Center" />
+            <Button x:Name="NextButton" Grid.Column="2" Text="下一页" Clicked="OnNextClicked" />
+        </Grid>
+    </Grid>
+</ContentPage>

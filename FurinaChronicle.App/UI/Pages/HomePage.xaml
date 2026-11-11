@@ -78,6 +78,9 @@
                     </VerticalStackLayout>
                 </Border>
 
+                <Button Text="挑战历史" Clicked="OnOpenChallengeHistoryClicked"
+                    MinimumHeightRequest="48" AutomationId="OpenChallengeHistory" />
+
                 <Button Text="打开 UI-1 抽卡只读预览" Clicked="OnOpenUi1Clicked"
                     MinimumHeightRequest="48" AutomationId="OpenUi1Preview" />
 

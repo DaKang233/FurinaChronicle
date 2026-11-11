@@ -28,6 +28,8 @@ public enum SpiralAbyssCollectionStatus
     InvalidResponse,
     VerificationRequired,
     NotUnlocked,
+    VerificationCanceled,
+    VerificationFailed,
 }
 
 public sealed record SpiralAbyssSnapshot(
@@ -42,14 +44,34 @@ public sealed record SpiralAbyssSourceResult(
     SpiralAbyssSnapshot? Snapshot = null,
     TimeSpan? RetryAfter = null,
     int? HttpStatus = null,
-    int? ProviderCode = null);
+    int? ProviderCode = null,
+    GameRecordVerificationStage? VerificationStage = null,
+    bool? VerificationSessionCookieSent = null);
+
+public enum SpiralAbyssPeriod
+{
+    Current = 1,
+    Previous = 2,
+}
+
+public enum GameRecordVerificationStage
+{
+    Registration,
+    Submission,
+    Retry,
+}
+
+public delegate Task<PassportGeetestResult?> GameRecordVerificationPrompt(
+    PassportGeetestChallenge challenge, CancellationToken cancellationToken);
 
 public interface ISpiralAbyssSource
 {
-    Task<SpiralAbyssSourceResult> FetchCurrentAsync(
+    Task<SpiralAbyssSourceResult> FetchAsync(
         PassportAccount passport,
         GameRoleNaturalIdentity role,
-        CancellationToken cancellationToken);
+        SpiralAbyssPeriod period,
+        CancellationToken cancellationToken,
+        GameRecordVerificationPrompt? verificationPrompt = null);
 }
 
 public sealed record SpiralAbyssCollectionResult(
@@ -57,7 +79,9 @@ public sealed record SpiralAbyssCollectionResult(
     ArchiveOperationResult? Commit = null,
     TimeSpan? RetryAfter = null,
     int? HttpStatus = null,
-    int? ProviderCode = null);
+    int? ProviderCode = null,
+    GameRecordVerificationStage? VerificationStage = null,
+    bool? VerificationSessionCookieSent = null);
 
 /// <summary>
 /// Explicit, single-copy collection. The host owns credential selection and
@@ -74,12 +98,10 @@ public sealed class CollectSpiralAbyss(
         Guid archiveId,
         Guid gameAccountId,
         PassportAccount passport,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        SpiralAbyssPeriod period = SpiralAbyssPeriod.Current,
+        GameRecordVerificationPrompt? verificationPrompt = null)
     {
-        if (passport.Realm != PassportRealm.MainlandChina)
-        {
-            return new(SpiralAbyssCollectionStatus.UnsupportedRealm);
-        }
 
         DateTimeOffset startedAt = timeProvider.GetUtcNow();
         GameAccount? account = await accounts.GetByIdAsync(
@@ -91,7 +113,9 @@ public sealed class CollectSpiralAbyss(
         }
 
         GameRoleNaturalIdentity role = identity.NaturalIdentity;
-        if (role.GameBiz != "hk4e_cn")
+        bool isOversea = passport.Realm == PassportRealm.Oversea;
+        string gameBiz = isOversea ? GenshinGameRoleIdentity.GlobalGameBiz : GenshinGameRoleIdentity.MainlandGameBiz;
+        if (role.GameBiz != gameBiz)
         {
             return new(SpiralAbyssCollectionStatus.UnsupportedRealm);
         }
@@ -103,12 +127,14 @@ public sealed class CollectSpiralAbyss(
             return new(SpiralAbyssCollectionStatus.RoleNotBound);
         }
 
-        SpiralAbyssSourceResult fetched = await source.FetchCurrentAsync(
-            passport, role, cancellationToken);
+        SpiralAbyssSourceResult fetched = await source.FetchAsync(
+            passport, role, period, cancellationToken, verificationPrompt);
         if (fetched.Status != SpiralAbyssCollectionStatus.Received)
         {
             return new(fetched.Status, RetryAfter: fetched.RetryAfter,
-                HttpStatus: fetched.HttpStatus, ProviderCode: fetched.ProviderCode);
+                HttpStatus: fetched.HttpStatus, ProviderCode: fetched.ProviderCode,
+                VerificationStage: fetched.VerificationStage,
+                VerificationSessionCookieSent: fetched.VerificationSessionCookieSent);
         }
         if (fetched.Snapshot is not { } snapshot)
         {
@@ -129,7 +155,7 @@ public sealed class CollectSpiralAbyss(
                 new RecordTimestamps(
                     ObservedAt: snapshot.FetchedAt,
                     FetchedAt: snapshot.FetchedAt),
-                new DataSourceReference(provider: "miyoushe"),
+                new DataSourceReference(provider: isOversea ? "hoyolab" : "miyoushe"),
                 AcquisitionBatchId.New()));
 
         ArchiveOperationResult committed = await history.CommitChallengeObservationsAsync(
@@ -144,7 +170,8 @@ public sealed class CollectSpiralAbyss(
                 expectedTarget: account),
             cancellationToken);
 
-        return new(SpiralAbyssCollectionStatus.Received, committed);
+        return new(SpiralAbyssCollectionStatus.Received, committed, VerificationStage: fetched.VerificationStage,
+                VerificationSessionCookieSent: fetched.VerificationSessionCookieSent);
     }
 
     private static bool Matches(PassportGameRole candidate, GameRoleNaturalIdentity role) =>

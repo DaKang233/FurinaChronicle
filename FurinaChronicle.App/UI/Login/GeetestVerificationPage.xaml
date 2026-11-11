@@ -17,7 +17,7 @@
                 FontAttributes="Bold"
                 FontSize="18"
                 VerticalOptions="Center"
-                Text="请完成 HoYoLAB 安全验证" />
+                x:Name="VerificationPromptLabel" />
         </Grid>
         <WebView
             x:Name="VerificationWebView"

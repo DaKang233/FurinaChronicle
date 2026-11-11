@@ -207,6 +207,63 @@ public sealed class SpiralAbyssCollectionTests
             () => reader.ReadAsync(response, expectedRole, new CancellationToken(canceled: true)));
     }
 
+    [Fact]
+    public async Task ValidationOfPreviousPeriodReopensOnlyTheTemporaryStore()
+    {
+        await using var context = SqliteRepositoryTestContext.Create();
+        GameAccount target = await AddAccountAsync(context, "target");
+        using var source = new TestSource();
+        var profile = new TestProfile(new PassportGameRole(
+            "hk4e_cn", "cn_gf01", target.Uid, "fixture", 60, "fixture"));
+        var validation = new ValidateSpiralAbyssCollection(profile, source, TimeProvider.System);
+
+        SpiralAbyssValidationResult result = await validation.ExecuteAsync(
+            target, CreatePassport(), SpiralAbyssPeriod.Previous,
+            verificationPrompt: (_, _) => throw new InvalidOperationException("The fake source does not prompt."));
+
+        Assert.Equal(ChangeExecutionStatus.Applied, result.First.Commit?.Status);
+        Assert.Equal(ChangeExecutionStatus.NoOp, result.Repeated?.Commit?.Status);
+        Assert.Equal("901", Assert.Single(result.ReopenedObservations).SeasonId);
+        Assert.Equal([SpiralAbyssPeriod.Previous, SpiralAbyssPeriod.Previous], source.RequestedPeriods);
+        Assert.Equal([true, false], source.PromptAvailable);
+        Assert.Empty(await context.AtomicGacha.GetChallengeObservationsAsync(target.Id));
+    }
+
+    [Fact]
+    public async Task OverseasCollectsIntoTheBoundCopyWithHoYoLabProvenance()
+    {
+        await using var context = SqliteRepositoryTestContext.Create();
+        PlayerArchive archive = SqliteRepositoryTestContext.CreateArchive("oversea");
+        await context.Archives.AddAsync(archive);
+        GameAccount account = SqliteRepositoryTestContext.CreateAccount(
+            archive.Id, "800000001", GameServerRegion.Asia);
+        await context.Accounts.AddAsync(account);
+        using var source = new TestSource();
+        var collect = new CollectSpiralAbyss(context.Accounts,
+            new TestProfile(new PassportGameRole("hk4e_global", "os_asia", account.Uid, "fixture", 60, "fixture")),
+            source, context.AtomicGacha, source.Time);
+
+        Assert.Equal(SpiralAbyssCollectionStatus.UnsupportedRealm,
+            (await collect.ExecuteAsync(archive.Id, account.Id, CreatePassport())).Status);
+        Assert.Equal(0, source.RequestCount);
+
+        var passport = new PassportAccount(Guid.NewGuid(), "1111", null, null,
+            PassportLoginMethod.OverseaPassword,
+            new PassportCredentials(null, "fixture", null, null, null, null, null),
+            PassportDeviceIdentity.Create(), DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch,
+            PassportRealm.Oversea);
+        Assert.Equal(ChangeExecutionStatus.Applied,
+            (await collect.ExecuteAsync(archive.Id, account.Id, passport)).Commit?.Status);
+        Assert.Equal(ChangeExecutionStatus.NoOp,
+            (await collect.ExecuteAsync(archive.Id, account.Id, passport)).Commit?.Status);
+
+        await using var reopened = new FurinaDatabase(new SqliteDatabaseOptions(context.DatabasePath));
+        var observation = Assert.Single(await new SqliteGachaAtomicChangeStore(reopened)
+            .GetChallengeObservationsAsync(account.Id));
+        Assert.Equal("hoyolab", observation.Provenance.Source?.Provider);
+        Assert.Equal(account.Id, observation.GameAccountId);
+    }
+
     private static CollectSpiralAbyss CreateCollector(
         SqliteRepositoryTestContext context, TestSource source, GameAccount target,
         string region = "cn_gf01") =>
@@ -249,15 +306,21 @@ public sealed class SpiralAbyssCollectionTests
         public TestSource() => client = new HttpClient(this, disposeHandler: false);
 
         public TestTime Time { get; } = new();
+        public List<SpiralAbyssPeriod> RequestedPeriods { get; } = [];
+        public List<bool> PromptAvailable { get; } = [];
         public int Stars { get; set; } = 2;
         public int RequestCount { get; private set; }
         public HttpStatusCode Status { get; init; } = HttpStatusCode.OK;
         public string? Body { get; init; }
         public Func<Task>? BeforeResponse { get; set; }
 
-        public async Task<SpiralAbyssSourceResult> FetchCurrentAsync(
-            PassportAccount passport, GameRoleNaturalIdentity role, CancellationToken cancellationToken)
+        public async Task<SpiralAbyssSourceResult> FetchAsync(
+            PassportAccount passport, GameRoleNaturalIdentity role,
+            SpiralAbyssPeriod period, CancellationToken cancellationToken,
+            GameRecordVerificationPrompt? verificationPrompt = null)
         {
+            RequestedPeriods.Add(period);
+            PromptAvailable.Add(verificationPrompt is not null);
             using HttpResponseMessage response = await client.GetAsync(
                 "https://fixture.invalid/current-season", HttpCompletionOption.ResponseHeadersRead,
                 cancellationToken);

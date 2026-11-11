@@ -55,6 +55,7 @@ public partial class AppShell : Shell
         Routing.RegisterRoute(
             "backup-restore-detail",
             typeof(ArchiveTransferPage));
+        Routing.RegisterRoute("challenge-history", typeof(ChallengeHistoryPage));
         Items.Add(CreateContent("正在启动", StartupRoute, startupPage));
     }
 

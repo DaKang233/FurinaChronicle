@@ -8,19 +8,23 @@ using FurinaChronicle.Core.History;
 using FurinaChronicle.Core.Passport;
 using FurinaChronicle.Infrastructure.HistoryDomains.Collecting;
 using FurinaChronicle.Infrastructure.Passport;
-using FurinaChronicle.Infrastructure.Persistence.Sqlite;
 using FurinaChronicle.Services.HistoryDomains.Collecting;
 using FurinaChronicle.Services.Passport;
 using QRCoder;
 
-if (args is not [string uid] ||
-    !GameUidValidation.IsStructurallyValidUid(uid) ||
-    GameServerRegionResolver.Resolve(uid) is not (
+if (args.Length is < 1 or > 2 ||
+    (args.Length == 2 && args[1] is not ("current" or "previous")) ||
+    !GameUidValidation.IsStructurallyValidUid(args[0]) ||
+    GameServerRegionResolver.Resolve(args[0]) is not (
         GameServerRegion.ChinaOfficial or GameServerRegion.ChinaBilibili))
 {
-    Console.Error.WriteLine("Usage: FurinaChronicle.Phase9Probe <mainland-game-uid>");
+    Console.Error.WriteLine("Usage: FurinaChronicle.Phase9Probe <mainland-game-uid> [current|previous]");
     return 2;
 }
+
+string uid = args[0];
+SpiralAbyssPeriod period = args.Length == 2 && args[1] == "previous"
+    ? SpiralAbyssPeriod.Previous : SpiralAbyssPeriod.Current;
 
 using var cancellation = new CancellationTokenSource(TimeSpan.FromMinutes(4));
 Console.CancelKeyPress += (_, args) =>
@@ -31,7 +35,6 @@ Console.CancelKeyPress += (_, args) =>
 CancellationToken ct = cancellation.Token;
 DirectoryInfo directory = Directory.CreateTempSubdirectory("furina-phase9-");
 string qrPath = Path.Combine(directory.FullName, "sign-in.png");
-string dbPath = Path.Combine(directory.FullName, "probe.db");
 string step = "QR creation";
 try
 {
@@ -74,6 +77,10 @@ try
     }
 
     step = "session credentials";
+    // A fingerprint issued by the login endpoint belongs to the same device
+    // context as the session; dropping it makes the probe diverge from the
+    // application and from the record requests it is meant to diagnose.
+    device = device with { DeviceFingerprint = tokens.DeviceFingerprint };
     var clock = TimeProvider.System;
     DateTimeOffset now = clock.GetUtcNow();
     var credentials = new PassportCredentials(
@@ -96,35 +103,24 @@ try
 
     step = "role binding and collection";
     using var profile = new MiHoYoAccountProfileClient();
-    using var source = new MiYouSheSpiralAbyssSource(clock);
-    await using (var database = new FurinaDatabase(new SqliteDatabaseOptions(dbPath)))
+    using var source = new HoYoGameRecordSpiralAbyssSource(clock);
+    SpiralAbyssValidationResult result = await new ValidateSpiralAbyssCollection(
+        profile, source, clock).ExecuteAsync(target, passport, period, ct);
+    var first = result.First;
+    Console.WriteLine($"First request: {first.Status}, HTTP: {first.HttpStatus}, service code: {first.ProviderCode}, commit: {first.Commit?.Status}");
+    if (first.Commit?.Status != ChangeExecutionStatus.Applied)
     {
-        var accounts = new SqliteGameAccountRepository(database);
-        var history = new SqliteGachaAtomicChangeStore(database);
-        await new SqlitePlayerArchiveRepository(database).AddAsync(archive, ct);
-        await accounts.AddAsync(target, ct);
-
-        var collect = new CollectSpiralAbyss(accounts, profile, source, history, clock);
-        var first = await collect.ExecuteAsync(archive.Id, target.Id, passport, ct);
-        Console.WriteLine($"First request: {first.Status}, HTTP: {first.HttpStatus}, service code: {first.ProviderCode}, commit: {first.Commit?.Status}");
-        if (first.Commit?.Status != ChangeExecutionStatus.Applied)
-        {
-            return 4;
-        }
-
-        await Task.Delay(TimeSpan.FromSeconds(3), ct);
-        var second = await collect.ExecuteAsync(archive.Id, target.Id, passport, ct);
-        Console.WriteLine($"Second request: {second.Status}, HTTP: {second.HttpStatus}, service code: {second.ProviderCode}, commit: {second.Commit?.Status}");
-        if (second.Commit?.Status != ChangeExecutionStatus.NoOp)
-        {
-            return 5;
-        }
+        return 4;
     }
 
-    step = "database reopen";
-    await using var reopened = new FurinaDatabase(new SqliteDatabaseOptions(dbPath));
-    var observations = await new SqliteGachaAtomicChangeStore(reopened)
-        .GetChallengeObservationsAsync(target.Id, cancellationToken: ct);
+    var second = result.Repeated!;
+    Console.WriteLine($"Second request: {second.Status}, HTTP: {second.HttpStatus}, service code: {second.ProviderCode}, commit: {second.Commit?.Status}");
+    if (second.Commit?.Status != ChangeExecutionStatus.NoOp)
+    {
+        return 5;
+    }
+
+    var observations = result.ReopenedObservations;
     if (observations.Count != 1)
     {
         Console.Error.WriteLine($"Unexpected observation count after reopen: {observations.Count}.");
@@ -151,10 +147,7 @@ finally
 {
     try
     {
-        foreach (string path in new[] { qrPath, dbPath, dbPath + "-wal", dbPath + "-shm", dbPath + ".initialize.lock" })
-        {
-            File.Delete(path);
-        }
+        File.Delete(qrPath);
         directory.Delete();
     }
     catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)

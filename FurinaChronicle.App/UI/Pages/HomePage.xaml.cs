@@ -47,6 +47,14 @@ public partial class HomePage : ContentPage
         Unloaded += OnPageUnloaded;
     }
 
+    private async void OnOpenChallengeHistoryClicked(object? sender, EventArgs e)
+    {
+        if (sender is not Button button) return;
+        button.IsEnabled = false;
+        try { await Shell.Current.GoToAsync("challenge-history"); }
+        finally { button.IsEnabled = true; }
+    }
+
     private async void OnOpenUi1Clicked(object? sender, EventArgs e)
     {
         if (sender is not Button button) return;

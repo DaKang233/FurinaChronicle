@@ -6,6 +6,8 @@ using FurinaChronicle.App.Startup;
 using FurinaChronicle.App.UI.Gacha;
 using FurinaChronicle.App.UI.Pages;
 using FurinaChronicle.App.ViewModels;
+using FurinaChronicle.Infrastructure.HistoryDomains.Collecting;
+using FurinaChronicle.Services.HistoryDomains.Collecting;
 
 namespace FurinaChronicle.App.Composition;
 
@@ -31,6 +33,9 @@ internal static class PresentationServiceCollectionExtensions
         services.AddTransient<GachaPage>();
         services.AddTransient<ArchiveHistoryPage>();
         services.AddSingleton<HomePage>();
+        services.AddTransient<ChallengeHistoryPage>();
+        services.AddSingleton<ISpiralAbyssSource, HoYoGameRecordSpiralAbyssSource>();
+        services.AddSingleton<ValidateSpiralAbyssCollection>();
         services.AddSingleton<Ui1GachaPage>();
         services.AddSingleton<GachaAppearanceSettings>();
         services.AddTransient<SettingsPage>();

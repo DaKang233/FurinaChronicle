@@ -8,8 +8,7 @@ namespace FurinaChronicle.App;
 
 public partial class GeetestVerificationPage : ContentPage
 {
-    private const string CallbackPrefix =
-        "furinachronicle-geetest://complete";
+    private const string CallbackScheme = "furinachronicle-geetest";
     private readonly TaskCompletionSource<PassportGeetestResult?> completion =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int isCompleted;
@@ -18,6 +17,9 @@ public partial class GeetestVerificationPage : ContentPage
     {
         ArgumentNullException.ThrowIfNull(challenge);
         InitializeComponent();
+        VerificationPromptLabel.Text = challenge.IsOversea
+            ? "请完成 HoYoLAB 安全验证"
+            : "请完成米游社安全验证";
         VerificationWebView.Source = new HtmlWebViewSource
         {
             Html = CreateHtml(challenge)
@@ -47,7 +49,8 @@ public partial class GeetestVerificationPage : ContentPage
 
     private void OnWebViewNavigating(object? sender, WebNavigatingEventArgs e)
     {
-        if (!e.Url.StartsWith(CallbackPrefix, StringComparison.OrdinalIgnoreCase))
+        if (!Uri.TryCreate(e.Url, UriKind.Absolute, out Uri? uri) ||
+            !uri.Scheme.Equals(CallbackScheme, StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
@@ -55,21 +58,27 @@ public partial class GeetestVerificationPage : ContentPage
         e.Cancel = true;
         try
         {
-            Uri uri = new(e.Url);
+            if (!uri.Host.Equals("complete", StringComparison.OrdinalIgnoreCase) ||
+                uri.AbsolutePath is not ("" or "/"))
+            {
+                throw new FormatException();
+            }
             IReadOnlyDictionary<string, string> query = ParseQuery(uri.Query);
             if (!query.TryGetValue("challenge", out string? challenge) ||
                 !query.TryGetValue("validate", out string? validate) ||
+                !query.TryGetValue("seccode", out string? seccode) ||
                 string.IsNullOrWhiteSpace(challenge) ||
-                string.IsNullOrWhiteSpace(validate))
+                string.IsNullOrWhiteSpace(validate) ||
+                string.IsNullOrWhiteSpace(seccode))
             {
                 throw new FormatException("GeeTest 没有返回完整验证结果。");
             }
 
-            _ = CompleteAsync(new PassportGeetestResult(challenge, validate));
+            _ = CompleteAsync(new PassportGeetestResult(challenge, validate, seccode));
         }
-        catch (Exception exception)
+        catch (Exception exception) when (exception is FormatException or ArgumentException)
         {
-            _ = DisplayAlertAsync("安全验证失败", exception.Message, "确定");
+            _ = DisplayAlertAsync("安全验证失败", "GeeTest 返回的验证结果不完整或无效。", "确定");
             _ = CompleteAsync(null);
         }
     }
@@ -130,7 +139,8 @@ public partial class GeetestVerificationPage : ContentPage
                             if (!result) return;
                             location.href = 'furinachronicle-geetest://complete' +
                                 '?challenge=' + encodeURIComponent(result.geetest_challenge) +
-                                '&validate=' + encodeURIComponent(result.geetest_validate);
+                                '&validate=' + encodeURIComponent(result.geetest_validate) +
+                                '&seccode=' + encodeURIComponent(result.geetest_seccode ?? '');
                         });
                     });
                 </script>
