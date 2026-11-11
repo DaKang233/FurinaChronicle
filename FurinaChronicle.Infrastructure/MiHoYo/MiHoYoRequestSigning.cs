@@ -27,12 +27,13 @@ internal static class MiHoYoRequestSigning
     public static string CreateDsGen2(
         string salt,
         string body = "",
-        string query = "")
+        string query = "",
+        bool numericNonce = false)
     {
         long timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        string random = RandomNumberGenerator.GetString(
-            "abcdefghijklmnopqrstuvwxyz0123456789",
-            6);
+        string random = numericNonce
+            ? RandomNumberGenerator.GetInt32(100001, 200000).ToString(System.Globalization.CultureInfo.InvariantCulture)
+            : RandomNumberGenerator.GetString("abcdefghijklmnopqrstuvwxyz0123456789", 6);
         string source =
             $"salt={salt}&t={timestamp}&r={random}&b={body}&q={query}";
         string checksum = Convert.ToHexString(

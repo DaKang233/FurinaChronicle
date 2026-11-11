@@ -26,6 +26,8 @@ public enum SpiralAbyssCollectionStatus
     Unavailable,
     SourceRejected,
     InvalidResponse,
+    VerificationRequired,
+    NotUnlocked,
 }
 
 public sealed record SpiralAbyssSnapshot(
@@ -38,7 +40,9 @@ public sealed record SpiralAbyssSnapshot(
 public sealed record SpiralAbyssSourceResult(
     SpiralAbyssCollectionStatus Status,
     SpiralAbyssSnapshot? Snapshot = null,
-    TimeSpan? RetryAfter = null);
+    TimeSpan? RetryAfter = null,
+    int? HttpStatus = null,
+    int? ProviderCode = null);
 
 public interface ISpiralAbyssSource
 {
@@ -51,7 +55,9 @@ public interface ISpiralAbyssSource
 public sealed record SpiralAbyssCollectionResult(
     SpiralAbyssCollectionStatus Status,
     ArchiveOperationResult? Commit = null,
-    TimeSpan? RetryAfter = null);
+    TimeSpan? RetryAfter = null,
+    int? HttpStatus = null,
+    int? ProviderCode = null);
 
 /// <summary>
 /// Explicit, single-copy collection. The host owns credential selection and
@@ -101,7 +107,8 @@ public sealed class CollectSpiralAbyss(
             passport, role, cancellationToken);
         if (fetched.Status != SpiralAbyssCollectionStatus.Received)
         {
-            return new(fetched.Status, RetryAfter: fetched.RetryAfter);
+            return new(fetched.Status, RetryAfter: fetched.RetryAfter,
+                HttpStatus: fetched.HttpStatus, ProviderCode: fetched.ProviderCode);
         }
         if (fetched.Snapshot is not { } snapshot)
         {

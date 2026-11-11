@@ -47,3 +47,16 @@ dotnet test FurinaChronicle.Tests/FurinaChronicle.Tests.csproj -c Release --no-r
 - 通过本机 Snap Hutao Remastered 2.0.1.0 打开授权角色的深境螺旋页并触发「刷新数据」。界面显示本期第 124 期，刷新后未取得可核验的新响应或成功提示，因此在线请求仍为待验证。
 - 以只读方式查询本机胡桃数据库中的单一授权角色缓存，将挑战正文交给实际 FurinaChronicle 响应解析器。26 个期次全部通过，覆盖 58 层、174 个 Chamber 和 26 个有效周期。第 124 期解析为 2 层、6 间、18 星。缓存正文通过临时标准响应封装送入解析器，验证范围为正文映射。
 - 174 个 Chamber 均有两半的正值战斗时间戳，其中包括 26 个 12-3。已验证字段存在性，完成时刻语义仍待来源确认，解析结果保持 Unknown。仓库记录只包含汇总。
+
+### 2026-11-11 国服在线验证
+
+国服战绩传输已接入当前期深渊采集。隔离命令以米游社扫码取得当次登录态，在临时档案确认角色归属并调用采集用例。成功时依次验证首次提交、重复提交及数据库重开。诊断保留状态类别、HTTP 状态与上游数字错误码。
+
+```powershell
+dotnet run --project eng/phase9/FurinaChronicle.Phase9Probe -c Release -- <国服游戏UID>
+```
+
+使用授权角色两次扫码。角色绑定通过，第一次收到服务拒绝。补齐战绩请求头并增加脱敏诊断后，上游返回业务码 `5003`，分类为访问受限。未写入观察，实时成功响应、重复提交和重开仍待验证。若角色在米游社官方战绩页恢复可查，可以重跑同一命令。
+
+FufuLauncher 的参考实现位于 `Services/CycleChallenge/GameRecordApiClient.cs`、`CycleChallengeService.cs` 和 `Views/Pages/CycleChallengePage.xaml`。它提供国服战绩接口、未参与与未解锁的状态区分，以及当前期、前一期和本地历史的页面组织。此轮补充未解锁、未参与和业务限流的状态处理。后续展示可沿用账号／角色选择、挑战类型标签、期次列表和分模式详情的组织。FufuLauncher 单独展示上下半的时间，本轮继续保留 FurinaChronicle 的完成时间证据边界。
+隔离命令 Release 构建和全量 679 项测试通过。回归覆盖上游错误码、请求参数和未解锁／访问受限时跳过数据库写入。

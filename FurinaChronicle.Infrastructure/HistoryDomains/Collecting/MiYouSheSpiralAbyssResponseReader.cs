@@ -34,7 +34,7 @@ public sealed class MiYouSheSpiralAbyssResponseReader(TimeProvider timeProvider)
         cancellationToken.ThrowIfCancellationRequested();
         if (!response.IsSuccessStatusCode)
         {
-            return response.StatusCode switch
+            SpiralAbyssSourceResult rejected = response.StatusCode switch
             {
                 HttpStatusCode.Unauthorized => new(SpiralAbyssCollectionStatus.AuthenticationRequired),
                 HttpStatusCode.Forbidden => new(SpiralAbyssCollectionStatus.AccessDenied),
@@ -45,6 +45,7 @@ public sealed class MiYouSheSpiralAbyssResponseReader(TimeProvider timeProvider)
                     new(SpiralAbyssCollectionStatus.Unavailable),
                 _ => new(SpiralAbyssCollectionStatus.SourceRejected),
             };
+            return rejected with { HttpStatus = (int)response.StatusCode };
         }
 
         try
@@ -55,7 +56,7 @@ public sealed class MiYouSheSpiralAbyssResponseReader(TimeProvider timeProvider)
             await using Stream body = await response.Content.ReadAsStreamAsync(cancellationToken);
             Envelope? envelope = await JsonSerializer.DeserializeAsync<Envelope>(
                 body, JsonOptions, cancellationToken);
-            return Map(envelope, fetchedAt, expectedRole);
+            return Map(envelope, fetchedAt, expectedRole) with { HttpStatus = (int)response.StatusCode };
         }
         catch (JsonException)
         {
@@ -88,10 +89,18 @@ public sealed class MiYouSheSpiralAbyssResponseReader(TimeProvider timeProvider)
         }
         if (retcode != 0)
         {
-            return new(SpiralAbyssCollectionStatus.SourceRejected);
+            SpiralAbyssSourceResult rejected = retcode switch
+            {
+                -100 or 1004 or 10001 => new(SpiralAbyssCollectionStatus.AuthenticationRequired),
+                1034 => new(SpiralAbyssCollectionStatus.VerificationRequired),
+                -110 or 10101 => new(SpiralAbyssCollectionStatus.RateLimited),
+                -1 => new(SpiralAbyssCollectionStatus.Empty),
+                5003 or 10102 => new(SpiralAbyssCollectionStatus.AccessDenied),
+                _ => new(SpiralAbyssCollectionStatus.SourceRejected),
+            };
+            return rejected with { ProviderCode = retcode };
         }
-        if (envelope.Data is not { Floors: { } floors } data ||
-            data.ScheduleId is not > 0)
+        if (envelope.Data is not { } data)
         {
             return new(SpiralAbyssCollectionStatus.InvalidResponse);
         }
@@ -106,6 +115,14 @@ public sealed class MiYouSheSpiralAbyssResponseReader(TimeProvider timeProvider)
             !string.Equals(responseUid, expectedRole.Uid, StringComparison.Ordinal))
         {
             return new(SpiralAbyssCollectionStatus.ResponseRoleMismatch);
+        }
+        if (data.IsUnlock is false)
+        {
+            return new(SpiralAbyssCollectionStatus.NotUnlocked);
+        }
+        if (data.Floors is not { } floors || data.ScheduleId is not > 0)
+        {
+            return new(SpiralAbyssCollectionStatus.InvalidResponse);
         }
         if (floors.Length == 0)
         {
@@ -165,7 +182,7 @@ public sealed class MiYouSheSpiralAbyssResponseReader(TimeProvider timeProvider)
         seconds is > 0 ? DateTimeOffset.FromUnixTimeSeconds(seconds.Value) : null;
 
     private sealed record Envelope(int? Retcode, AbyssData? Data);
-    private sealed record AbyssData(int? ScheduleId, long? StartTime, long? EndTime, Floor?[]? Floors, JsonElement Uid);
+    private sealed record AbyssData(int? ScheduleId, long? StartTime, long? EndTime, Floor?[]? Floors, JsonElement Uid, bool? IsUnlock);
     private sealed record Floor(int? Index, Level?[]? Levels);
     private sealed record Level(int? Index, int? Star);
 }

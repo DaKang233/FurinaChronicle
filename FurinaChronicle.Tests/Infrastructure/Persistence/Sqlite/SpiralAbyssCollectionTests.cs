@@ -165,6 +165,10 @@ public sealed class SpiralAbyssCollectionTests
     [InlineData(HttpStatusCode.OK, "{", SpiralAbyssCollectionStatus.InvalidResponse)]
     [InlineData(HttpStatusCode.OK, "{\"retcode\":0,\"data\":{\"uid\":100000002,\"schedule_id\":901,\"floors\":[]}}",
         SpiralAbyssCollectionStatus.ResponseRoleMismatch)]
+    [InlineData(HttpStatusCode.OK, """{"retcode":5003,"data":null}""",
+        SpiralAbyssCollectionStatus.AccessDenied)]
+    [InlineData(HttpStatusCode.OK, """{"retcode":0,"data":{"is_unlock":false}}""",
+        SpiralAbyssCollectionStatus.NotUnlocked)]
     [InlineData(HttpStatusCode.Unauthorized, "", SpiralAbyssCollectionStatus.AuthenticationRequired)]
     [InlineData(HttpStatusCode.Forbidden, "", SpiralAbyssCollectionStatus.AccessDenied)]
     [InlineData(HttpStatusCode.TooManyRequests, "", SpiralAbyssCollectionStatus.RateLimited)]
