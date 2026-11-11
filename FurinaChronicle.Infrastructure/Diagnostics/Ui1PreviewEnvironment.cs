@@ -5,9 +5,14 @@ using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.History;
 using FurinaChronicle.Core.Records;
+using FurinaChronicle.Infrastructure.Gacha.Metadata;
+using FurinaChronicle.Infrastructure.Gacha.Metadata.Localization;
+using FurinaChronicle.Infrastructure.Gacha.Uigf.Compatibility;
+using FurinaChronicle.Infrastructure.Gacha.Uigf.V4_2;
 using FurinaChronicle.Infrastructure.Persistence.Sqlite;
 using FurinaChronicle.Services.Archives;
 using FurinaChronicle.Services.Gacha;
+using FurinaChronicle.Services.Gacha.Importing;
 using FurinaChronicle.Services.Gacha.Writing;
 
 namespace FurinaChronicle.Infrastructure.Diagnostics;
@@ -29,6 +34,11 @@ public sealed class Ui1PreviewEnvironment : IAsyncDisposable
     public SqliteGachaRecordRepository Records { get; }
     public SqliteGachaAtomicChangeStore Changes { get; }
 
+    // UI-3 import composition. Reads the same isolated database and writes through the
+    // production atomic use case; no production path or credential is discovered.
+    public IGachaImportReader GachaImportReader { get; }
+    public ImportUigfGachaRecords GachaImporter { get; }
+
     public Ui1PreviewEnvironment(string platformDataDirectory, string hostName)
     {
         if (!Path.IsPathFullyQualified(platformDataDirectory))
@@ -41,6 +51,17 @@ public sealed class Ui1PreviewEnvironment : IAsyncDisposable
         Accounts = new(Database);
         Records = new(Database);
         Changes = new(Database);
+        var uigfReader = new UigfCompatibleGachaReader(
+            new UigfV42GachaReader(),
+            new EmbeddedGachaLocalizationSource(),
+            TimeProvider.System);
+        GachaImportReader = uigfReader;
+        GachaImporter = new ImportUigfGachaRecords(
+            uigfReader,
+            new EmptyGachaItemMetadataProvider(),
+            Archives,
+            Accounts,
+            new CommitGachaRecords(Changes));
     }
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
