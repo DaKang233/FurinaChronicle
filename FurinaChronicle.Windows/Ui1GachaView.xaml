@@ -75,19 +75,33 @@
             <ComboBox x:Name="ViewPicker" DisplayMemberPath="Label" SelectionChanged="OnViewChanged" AutomationProperties.Name="分析视图" />
             <Button x:Name="FilterButton" Grid.Column="1" Content="筛选" Click="OnFilter" />
             <TextBlock x:Name="SummaryText" Grid.Column="2" VerticalAlignment="Center" TextWrapping="Wrap" AutomationProperties.AutomationId="Ui1Summary" />
-            <Button Grid.Column="3" Content="重新载入" Click="OnReload">
+            <Button x:Name="ReloadButton" Grid.Column="3" Content="重新载入" Click="OnReload">
                 <Button.KeyboardAccelerators><KeyboardAccelerator Key="F5" /></Button.KeyboardAccelerators>
             </Button>
             <Button x:Name="CancelButton" Grid.Column="4" Content="取消" Click="OnCancel" />
-            <Button x:Name="ExportButton" Grid.Column="5" Content="导出" IsEnabled="False" Click="OnExport">
-                <Button.KeyboardAccelerators><KeyboardAccelerator Key="E" Modifiers="Control" /></Button.KeyboardAccelerators>
-            </Button>
+            <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="8">
+                <Button x:Name="ImportButton" Content="导入" IsEnabled="False" Click="OnImport"
+                    AutomationProperties.AutomationId="GachaImport"
+                    AutomationProperties.Name="导入抽卡文件">
+                    <Button.KeyboardAccelerators><KeyboardAccelerator Key="I" Modifiers="Control" /></Button.KeyboardAccelerators>
+                </Button>
+                <Button x:Name="ImportModeButton" Content="仅补充" Click="OnToggleImportMode"
+                    AutomationProperties.AutomationId="GachaImportMode" />
+                <Button x:Name="ExportButton" Content="导出" IsEnabled="False" Click="OnExport">
+                    <Button.KeyboardAccelerators><KeyboardAccelerator Key="E" Modifiers="Control" /></Button.KeyboardAccelerators>
+                </Button>
+            </StackPanel>
         </Grid>
         <StackPanel Grid.Row="3" Spacing="3">
             <TextBlock x:Name="StatusText" TextWrapping="Wrap"
                 AutomationProperties.AutomationId="Ui1Status" AutomationProperties.LiveSetting="Polite" />
+            <TextBlock x:Name="ImportModeDescription" FontSize="12" TextWrapping="Wrap"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                AutomationProperties.AutomationId="GachaImportModeDescription" />
             <TextBlock x:Name="ExportStatus" TextWrapping="Wrap" Visibility="Collapsed"
                 AutomationProperties.AutomationId="GachaExportStatus" AutomationProperties.LiveSetting="Polite" />
+            <TextBlock x:Name="ImportStatus" TextWrapping="Wrap" Visibility="Collapsed"
+                AutomationProperties.AutomationId="GachaImportStatus" AutomationProperties.LiveSetting="Polite" />
         </StackPanel>
         <Grid x:Name="ViewBody" Grid.Row="4" ColumnSpacing="12" SizeChanged="OnBodySizeChanged">
             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition x:Name="DetailColumn" Width="0" /></Grid.ColumnDefinitions>

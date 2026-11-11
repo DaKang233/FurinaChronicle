@@ -45,23 +45,37 @@ public sealed partial class Ui1GachaView : UserControl
                     environment.Changes.GetRecordRevisionsAsync);
                 state = new(source, new WinUiDispatcher(DispatcherQueue));
                 state.PropertyChanged += (_, _) => Render();
+                EnsureImportComposition(environment);
                 PathText.Text = environment.DatabasePath;
             }
             await state.EnterAsync();
+            entered = true;
         }
         catch (Exception)
         {
+            entered = false;
             StatusText.Text = "无法打开测试数据，请检查目录访问权限并重试。";
         }
     }
 
-    public void Leave() => state?.Leave();
+    public void Leave()
+    {
+        entered = false;
+        state?.Leave();
+    }
 
     public async Task CloseAsync()
     {
         Leave();
         exportCancellation?.Cancel();
         if (exportTask is Task runningExport) await runningExport;
+        // A commit already started must not be interrupted by page/window navigation; the
+        // atomic use case finishes and the window waits for it before disposing the database.
+        importCancellation?.Cancel();
+        if (importFlowTask is Task runningImport)
+        {
+            try { await runningImport; } catch (Exception) { }
+        }
         if (environment is not null) await environment.DisposeAsync();
     }
 
@@ -102,6 +116,8 @@ public sealed partial class Ui1GachaView : UserControl
             NextButton.Content = calendar ? "下个月" : "下一页";
             PreviousButton.IsEnabled = calendar ? !s.IsBusy && s.VisibleMonth.HasValue : s.CanPrevious;
             NextButton.IsEnabled = calendar ? !s.IsBusy && s.VisibleMonth.HasValue : s.CanNext;
+            RenderImportState();
+            UpdateCommandAvailability();
         }
         finally { rendering = false; }
     }
