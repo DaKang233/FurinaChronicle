@@ -9,14 +9,18 @@ public enum StartupFailureKind
     DirectoryNotWritable = 1,
     DatabaseOpenFailed = 2,
     SchemaIncompatible = 3,
-    Unknown = 4
+    Unknown = 4,
+    SessionBusy = 5
 }
 
 public sealed record StartupProbeResult(
     bool Succeeded,
     StartupFailureKind FailureKind,
     string Status,
-    string? Detail);
+    string? Detail)
+{
+    public string? Warning { get; init; }
+}
 
 // Platform hosts implement this probe. The isolated WinUI host checks the writable preview
 // directory and opens/validates the isolated SQLite database; it never discovers production
@@ -34,6 +38,8 @@ public sealed record StartupSnapshot(
     string? Detail,
     bool CanRetry)
 {
+    public string? Warning { get; init; }
+
     public bool HasFailed => !IsReady && !IsBusy && FailureKind != StartupFailureKind.None;
 
     public string FailureKindLabel => FailureKind switch
@@ -42,6 +48,7 @@ public sealed record StartupSnapshot(
         StartupFailureKind.DatabaseOpenFailed => "隔离数据库无法打开",
         StartupFailureKind.SchemaIncompatible => "数据库版本不兼容",
         StartupFailureKind.Unknown => "未知启动错误",
+        StartupFailureKind.SessionBusy => "数据目录被占用",
         _ => "已就绪"
     };
 }
@@ -73,7 +80,10 @@ public sealed class StartupState(IStartupProbe probe)
                 result.FailureKind,
                 result.Status,
                 result.Detail,
-                !result.Succeeded);
+                !result.Succeeded)
+            {
+                Warning = result.Warning
+            };
         }
         catch (OperationCanceledException)
         {
