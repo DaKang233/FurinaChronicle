@@ -2,8 +2,11 @@
 // SPDX-License-Identifier: MIT
 
 using FurinaChronicle.Core.Archives;
+using FurinaChronicle.Core.Challenges;
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.History;
+using FurinaChronicle.Core.Inventory;
+using FurinaChronicle.Core.Records;
 using FurinaChronicle.Infrastructure.Archives.Portable;
 using FurinaChronicle.Infrastructure.Diagnostics;
 using FurinaChronicle.Presentation.Management;
@@ -11,6 +14,8 @@ using FurinaChronicle.Services.Archives;
 using FurinaChronicle.Services.Archives.Portable;
 using FurinaChronicle.Services.Gacha;
 using FurinaChronicle.Services.Gacha.History;
+using FurinaChronicle.Services.Gacha.Writing;
+using FurinaChronicle.Services.HistoryDomains;
 
 namespace FurinaChronicle.Tests.Presentation;
 
@@ -296,6 +301,421 @@ public sealed class Ui4ArchiveTransferIntegrationTests
         }
     }
 
+    [Fact]
+    public async Task ReplaceScopesRejectOverlapAndReplaceRemovesTargetOnlyFacts()
+    {
+        string root = TempDirectory();
+        ArchiveTransferState? sourceState = null;
+        ArchiveTransferState? targetState = null;
+        try
+        {
+            await using var sourceEnvironment =
+                new Ui1PreviewEnvironment(Path.Combine(root, "source"), "WinUI");
+            await sourceEnvironment.InitializeAsync();
+            sourceState = CreateState(sourceEnvironment, root);
+            await sourceState.EnterAsync();
+            string exportPath = Path.Combine(root, "source.fca");
+            Assert.True((await sourceState.ExportAsync(exportPath, Generator())).Succeeded);
+
+            await using var targetEnvironment =
+                new Ui1PreviewEnvironment(Path.Combine(root, "target"), "WinUI");
+            await targetEnvironment.InitializeAsync();
+            PlayerArchive targetArchive = Assert.Single(
+                await targetEnvironment.Archives.GetAllAsync(default),
+                item => item.Name == "01 合成档案");
+            GameAccount targetAccount = Assert.Single(
+                await targetEnvironment.Accounts.GetByArchiveIdAsync(targetArchive.Id),
+                item => item.Uid == "100000001");
+            DateTimeOffset now = DateTimeOffset.Now;
+            var commit = new CommitGachaRecords(targetEnvironment.Changes);
+            CommitGachaRecordsResult seeded = await commit.ExecuteAsync(
+                new CommitGachaRecordsRequest(
+                    OperationId.New(),
+                    DataChangeOperationKind.Import,
+                    DataOrigin.UserEntered,
+                    "target-only fact",
+                    now,
+                    now.AddSeconds(1),
+                    [
+                        new GachaRecord(
+                            targetAccount.Id,
+                            "ui4-target-only",
+                            "目标独有记录",
+                            5,
+                            now)
+                        {
+                            ItemId = "ui4-target-only"
+                        }
+                    ],
+                    GachaRecordConflictPolicy.PreserveExisting,
+                    SuppressTombstonesAndContinue: false));
+            Assert.Equal(ChangeExecutionStatus.Applied, seeded.Status);
+
+            targetState = CreateState(targetEnvironment, root);
+            await targetState.EnterAsync();
+            Assert.True((await targetState.OpenPackageAsync(exportPath)).Succeeded);
+            await targetState.SetModeAsync(ArchiveRestoreMode.Replace);
+            ArchiveCatalogArchive sourceArchive = targetState.Snapshot.PackageArchives
+                .Single(item => item.Name == "01 合成档案");
+            ArchiveCatalogAccount sourceAccount = sourceArchive.Accounts
+                .Single(item => item.LegacyUid == targetAccount.Uid);
+            ArchiveTransferActionResult accountScope =
+                await targetState.AddReplaceSelectionAsync(
+                    new ArchiveReplaceSelection(
+                        sourceArchive.ArchiveReference,
+                        ArchiveReplaceScopeKind.Account,
+                        sourceAccount.AccountReference));
+            Assert.True(targetState.Snapshot.Plan is not null);
+
+            ArchiveTransferActionResult overlap =
+                await targetState.AddReplaceSelectionAsync(
+                    new ArchiveReplaceSelection(
+                        sourceArchive.ArchiveReference,
+                        ArchiveReplaceScopeKind.Archive));
+            Assert.False(overlap.Succeeded);
+            Assert.Contains("重叠", overlap.Message);
+            Assert.Contains("未写入", overlap.Message);
+
+            ArchiveTransferActionResult mergeMode =
+                await targetState.SetModeAsync(ArchiveRestoreMode.Merge);
+            Assert.True(mergeMode.Succeeded || targetState.Snapshot.Plan is not null);
+            Assert.Empty(targetState.Snapshot.ReplaceSelections);
+            Assert.Equal(ArchiveRestoreMode.Merge, targetState.Snapshot.Mode);
+            Assert.Equal(ArchiveRestoreMode.Merge, targetState.Snapshot.Plan?.Mode);
+
+            await targetState.SetModeAsync(ArchiveRestoreMode.Replace);
+            await targetState.AddReplaceSelectionAsync(
+                new ArchiveReplaceSelection(
+                    sourceArchive.ArchiveReference,
+                    ArchiveReplaceScopeKind.Account,
+                    sourceAccount.AccountReference));
+            Assert.True(await MakePlanReadyAsync(targetState));
+            ArchiveTransferApplyOutcome apply = await targetState.ApplyAsync();
+            Assert.True(apply.Succeeded, targetState.Snapshot.DiagnosticSummary);
+            Assert.Equal(ArchiveRestoreMode.Replace, apply.Receipt?.Mode);
+
+            IReadOnlyList<GachaRecord> targetOnly =
+                await targetEnvironment.Records.GetByExternalRecordIdsAsync(
+                    targetAccount.Id,
+                    ["ui4-target-only"]);
+            Assert.Empty(targetOnly);
+            Assert.Equal(61, await CountRecordsAsync(targetEnvironment, targetAccount.Id));
+            _ = accountScope;
+        }
+        finally
+        {
+            if (targetState is not null) await targetState.ReleaseAsync();
+            if (sourceState is not null) await sourceState.ReleaseAsync();
+            await DeleteDirectoryAsync(root);
+        }
+    }
+
+    [Fact]
+    public async Task ReplaceMissingDatasetIsAConflictAndIsNotTreatedAsClear()
+    {
+        string root = TempDirectory();
+        ArchiveTransferState? sourceState = null;
+        IArchiveRestoreStagedPackage? staged = null;
+        try
+        {
+            await using var sourceEnvironment =
+                new Ui1PreviewEnvironment(Path.Combine(root, "source"), "WinUI");
+            await sourceEnvironment.InitializeAsync();
+            sourceState = CreateState(sourceEnvironment, root);
+            await sourceState.EnterAsync();
+            string exportPath = Path.Combine(root, "source.fca");
+            Assert.True((await sourceState.ExportAsync(exportPath, Generator())).Succeeded);
+
+            await using var targetEnvironment =
+                new Ui1PreviewEnvironment(Path.Combine(root, "target"), "WinUI");
+            await targetEnvironment.InitializeAsync();
+            ServiceArchiveTransferSource source = CreateTransferSource(targetEnvironment, root);
+            await using (var stream = new FileStream(
+                exportPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                staged = await source.StageAsync(stream);
+            }
+
+            ArchiveCatalogArchive archive = staged.Catalog.Archives
+                .Single(item => item.Name == "01 合成档案");
+            ArchiveCatalogAccount account = archive.Accounts[0];
+            var filtered = new FilteredPackage(staged);
+            ArchiveRestorePlan plan = await source.PlanAsync(
+                new ArchiveRestorePlanRequest(
+                    filtered,
+                    Mode: ArchiveRestoreMode.Replace,
+                    ReplaceSelections:
+                    [
+                        new ArchiveReplaceSelection(
+                            archive.ArchiveReference,
+                            ArchiveReplaceScopeKind.Domain,
+                            account.AccountReference,
+                            ArchiveReplaceDomain.ChallengeObservation)
+                    ]));
+            Assert.Contains(
+                plan.Conflicts,
+                item => item.Code == ArchiveRestoreConflictCode.UnsupportedPartialRestore);
+            Assert.False(plan.CanApply);
+            Assert.Equal(
+                3,
+                (await targetEnvironment.Archives.GetAllAsync(default)).Count);
+        }
+        finally
+        {
+            // The wrapped package is the real staged package; dispose it before deleting staging.
+            if (staged is not null) await staged.DisposeAsync();
+            if (sourceState is not null) await sourceState.ReleaseAsync();
+            await DeleteDirectoryAsync(root);
+        }
+    }
+
+    [Fact]
+    public async Task TombstoneReintroductionRequiresIndependentConfirmation()
+    {
+        string root = TempDirectory();
+        ArchiveTransferState? sourceState = null;
+        ArchiveTransferState? targetState = null;
+        try
+        {
+            await using var sourceEnvironment =
+                new Ui1PreviewEnvironment(Path.Combine(root, "source"), "WinUI");
+            await sourceEnvironment.InitializeAsync();
+            sourceState = CreateState(sourceEnvironment, root);
+            await sourceState.EnterAsync();
+            string exportPath = Path.Combine(root, "source.fca");
+            Assert.True((await sourceState.ExportAsync(exportPath, Generator())).Succeeded);
+
+            await using var targetEnvironment =
+                new Ui1PreviewEnvironment(Path.Combine(root, "target"), "WinUI");
+            await targetEnvironment.InitializeAsync();
+            PlayerArchive archive = Assert.Single(
+                await targetEnvironment.Archives.GetAllAsync(default),
+                item => item.Name == "01 合成档案");
+            GameAccount account = Assert.Single(
+                await targetEnvironment.Accounts.GetByArchiveIdAsync(archive.Id),
+                item => item.Uid == "100000001");
+            GachaRecord record = Assert.Single(
+                (await new GetGachaRecordPage(targetEnvironment.Records).ExecuteAsync(
+                    new GachaRecordQuery([account.Id], Limit: 1),
+                    1,
+                    1)).Records);
+            var history = new ManageGachaHistory(targetEnvironment.Changes);
+            GachaAtomicChangeResult deleted = await history.IrreversiblyDeleteAsync(
+                OperationId.New(),
+                new GachaFactReference(account.Id, record.ExternalRecordId));
+            Assert.Equal(ChangeExecutionStatus.Applied, deleted.Status);
+
+            targetState = CreateState(targetEnvironment, root);
+            await targetState.EnterAsync();
+            Assert.True((await targetState.OpenPackageAsync(exportPath)).Succeeded);
+            ArchiveRestorePlan plan = Assert.IsType<ArchiveRestorePlan>(
+                targetState.Snapshot.Plan);
+            Assert.NotEmpty(plan.Tombstones);
+            Assert.Contains(
+                plan.Confirmations,
+                item => item.Kind == ArchiveRestoreConfirmationKind.TombstoneReintroduction &&
+                    !item.Satisfied);
+            Assert.False(plan.CanApply);
+
+            ArchiveTransferApplyOutcome before =
+                await targetState.ApplyAsync();
+            Assert.False(before.Succeeded);
+            Assert.Empty(await targetEnvironment.Records.GetByExternalRecordIdsAsync(
+                account.Id,
+                [record.ExternalRecordId]));
+
+            Assert.True(await MakePlanReadyAsync(targetState));
+            ArchiveTransferApplyOutcome after =
+                await targetState.ApplyAsync();
+            Assert.True(after.Succeeded, targetState.Snapshot.DiagnosticSummary);
+            Assert.Single(await targetEnvironment.Records.GetByExternalRecordIdsAsync(
+                account.Id,
+                [record.ExternalRecordId]));
+        }
+        finally
+        {
+            if (targetState is not null) await targetState.ReleaseAsync();
+            if (sourceState is not null) await sourceState.ReleaseAsync();
+            await DeleteDirectoryAsync(root);
+        }
+    }
+
+    [Fact]
+    public async Task ReplacePlanExpiryRejectsStalePlanWithoutWriting()
+    {
+        string root = TempDirectory();
+        ArchiveTransferState? sourceState = null;
+        ArchiveTransferState? targetState = null;
+        try
+        {
+            await using var sourceEnvironment =
+                new Ui1PreviewEnvironment(Path.Combine(root, "source"), "WinUI");
+            await sourceEnvironment.InitializeAsync();
+            sourceState = CreateState(sourceEnvironment, root);
+            await sourceState.EnterAsync();
+            string exportPath = Path.Combine(root, "source.fca");
+            Assert.True((await sourceState.ExportAsync(exportPath, Generator())).Succeeded);
+
+            await using var targetEnvironment =
+                new Ui1PreviewEnvironment(Path.Combine(root, "target"), "WinUI");
+            await targetEnvironment.InitializeAsync();
+            targetState = CreateState(targetEnvironment, root);
+            await targetState.EnterAsync();
+            Assert.True((await targetState.OpenPackageAsync(exportPath)).Succeeded);
+            await targetState.SetModeAsync(ArchiveRestoreMode.Replace);
+            ArchiveCatalogArchive archive = targetState.Snapshot.PackageArchives
+                .First(item => item.Accounts.Count > 0);
+            ArchiveCatalogAccount account = archive.Accounts[0];
+            await targetState.AddReplaceSelectionAsync(
+                new ArchiveReplaceSelection(
+                    archive.ArchiveReference,
+                    ArchiveReplaceScopeKind.Account,
+                    account.AccountReference));
+            Assert.True(await MakePlanReadyAsync(targetState));
+            int before = (await targetEnvironment.Archives.GetAllAsync(default)).Count;
+
+            await new CreatePlayerArchive(targetEnvironment.Archives)
+                .ExecuteAsync("Replace plan expiry probe", default);
+
+            ArchiveTransferApplyOutcome outcome = await targetState.ApplyAsync();
+            Assert.False(outcome.Succeeded);
+            Assert.Contains("预览已过期", outcome.Message);
+            Assert.Equal(before + 1,
+                (await targetEnvironment.Archives.GetAllAsync(default)).Count);
+        }
+        finally
+        {
+            if (targetState is not null) await targetState.ReleaseAsync();
+            if (sourceState is not null) await sourceState.ReleaseAsync();
+            await DeleteDirectoryAsync(root);
+        }
+    }
+
+    [Fact]
+    public async Task ReceiptIsIdempotentForRepeatedReplaceApply()
+    {
+        string root = TempDirectory();
+        ArchiveTransferState? sourceState = null;
+        IArchiveRestoreStagedPackage? staged = null;
+        try
+        {
+            await using var sourceEnvironment =
+                new Ui1PreviewEnvironment(Path.Combine(root, "source"), "WinUI");
+            await sourceEnvironment.InitializeAsync();
+            sourceState = CreateState(sourceEnvironment, root);
+            await sourceState.EnterAsync();
+            string exportPath = Path.Combine(root, "source.fca");
+            Assert.True((await sourceState.ExportAsync(exportPath, Generator())).Succeeded);
+
+            await using var targetEnvironment =
+                new Ui1PreviewEnvironment(Path.Combine(root, "target"), "WinUI");
+            await targetEnvironment.InitializeAsync();
+            ServiceArchiveTransferSource source = CreateTransferSource(targetEnvironment, root);
+            await using (var stream = new FileStream(
+                exportPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                staged = await source.StageAsync(stream);
+            }
+
+            ArchiveCatalogArchive archive = staged.Catalog.Archives
+                .Single(item => item.Name == "01 合成档案");
+            ArchiveCatalogAccount account = archive.Accounts[0];
+            PlayerArchive targetArchive = Assert.Single(
+                await targetEnvironment.Archives.GetAllAsync(default),
+                item => item.Name == archive.Name);
+            GameAccount targetAccount = Assert.Single(
+                await targetEnvironment.Accounts.GetByArchiveIdAsync(targetArchive.Id),
+                item => item.Uid == account.LegacyUid);
+            ArchiveReplaceSelection selection = new(
+                archive.ArchiveReference,
+                ArchiveReplaceScopeKind.Account,
+                account.AccountReference);
+            ArchiveRestorePlan firstPlan = await source.PlanAsync(
+                new ArchiveRestorePlanRequest(
+                    staged,
+                    Mode: ArchiveRestoreMode.Replace,
+                    ReplaceSelections: [selection]));
+            ArchiveRestoreConfirmation[] confirmations = firstPlan.Confirmations
+                .Select(item => new ArchiveRestoreConfirmation(
+                    item.Kind,
+                    item.Reference,
+                    item.MarkerKey,
+                    item.MarkerVersion))
+                .ToArray();
+            ArchiveRestorePlan readyPlan = await source.PlanAsync(
+                new ArchiveRestorePlanRequest(
+                    staged,
+                    Confirmations: confirmations,
+                    Mode: ArchiveRestoreMode.Replace,
+                    ReplaceSelections: [selection]));
+            Assert.True(readyPlan.CanApply);
+
+            OperationId operationId = OperationId.New();
+            DateTimeOffset now = DateTimeOffset.Now;
+            var request = new ArchiveRestoreApplyRequest(
+                staged,
+                readyPlan,
+                operationId,
+                now,
+                now,
+                "idempotency probe");
+            ArchiveRestoreApplyResult first = await source.ApplyAsync(request);
+            Assert.Equal(ChangeExecutionStatus.Applied, first.Status);
+            var firstReceipt = first.Receipt;
+            int countAfterFirst = await CountRecordsAsync(
+                targetEnvironment, targetAccount.Id);
+            ArchiveRestoreApplyResult second = await source.ApplyAsync(request);
+            Assert.True(second.Status is ChangeExecutionStatus.AlreadyCommitted or
+                ChangeExecutionStatus.NoOp);
+            Assert.Equal(firstReceipt?.ReceiptId, second.Receipt?.ReceiptId);
+            Assert.Equal(
+                countAfterFirst,
+                await CountRecordsAsync(targetEnvironment, targetAccount.Id));
+        }
+        finally
+        {
+            if (staged is not null) await staged.DisposeAsync();
+            if (sourceState is not null) await sourceState.ReleaseAsync();
+            await DeleteDirectoryAsync(root);
+        }
+    }
+
+    private static async Task<int> CountRecordsAsync(
+        Ui1PreviewEnvironment environment,
+        Guid accountId) =>
+        await environment.Records.CountAsync(accountId);
+
+    private static ServiceArchiveTransferSource CreateTransferSource(
+        Ui1PreviewEnvironment environment,
+        string root)
+    {
+        var limits = new ArchivePortableLimits();
+        var reader = new ArchivePackageReader(limits);
+        var writer = new ArchivePackageWriter(limits);
+        var snapshots = new SqliteArchiveExportSnapshotFactory(
+            environment.Database,
+            TimeProvider.System,
+            new ArchiveSnapshotStorageOptions(Path.Combine(root, "snapshots")));
+        var stager = new SqliteArchiveRestoreInputStager(
+            reader,
+            new ArchiveRestoreStorageOptions(Path.Combine(root, "staging")),
+            limits);
+        var planner = new PlanArchiveRestore(
+            new SqliteArchiveRestoreTargetSnapshotFactory(snapshots),
+            TimeProvider.System);
+        var workspace = new TestWorkspace(Path.Combine(root, "temporary"));
+        var services = new ArchiveTransferServiceSet(
+            new ArchiveLogicalExporter(snapshots, writer, reader),
+            stager,
+            planner,
+            environment.Changes,
+            workspace);
+        return new ServiceArchiveTransferSource(
+            new GetPlayerArchives(environment.Archives),
+            environment.Accounts,
+            services);
+    }
+
     private static async Task<bool> MakePlanReadyAsync(ArchiveTransferState state)
     {
         for (int attempt = 0; attempt < 12; attempt++)
@@ -402,6 +822,104 @@ public sealed class Ui4ArchiveTransferIntegrationTests
             Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(path);
         return path;
+    }
+
+    private sealed class FilteredPackage(IArchiveRestoreStagedPackage inner)
+        : IArchiveRestoreStagedPackage
+    {
+        public string PackageFingerprint => inner.PackageFingerprint;
+
+        public ArchivePackageSummary Summary { get; } = inner.Summary with
+        {
+            Manifest = inner.Summary.Manifest with
+            {
+                Datasets = inner.Summary.Manifest.Datasets
+                    .Where(item => !item.DatasetReference.Contains(
+                        "challenge-history", StringComparison.OrdinalIgnoreCase))
+                    .ToArray()
+            }
+        };
+
+        public ArchiveCatalog Catalog => inner.Catalog;
+        public ArchivePortableSettings Settings => inner.Settings;
+        public DateTimeOffset GeneratedAt => inner.GeneratedAt;
+        public ArchiveExportScope Scope => inner.Scope;
+        public long ContainerLength => inner.ContainerLength;
+        public long StagingLength => inner.StagingLength;
+
+        public IAsyncEnumerable<GachaRecord> ReadGachaRecordsAsync(
+            Guid accountReference,
+            CancellationToken cancellationToken = default) =>
+            inner.ReadGachaRecordsAsync(accountReference, cancellationToken);
+
+        public IAsyncEnumerable<GachaRevisionItem> ReadGachaRevisionsAsync(
+            Guid accountReference,
+            CancellationToken cancellationToken = default) =>
+            inner.ReadGachaRevisionsAsync(accountReference, cancellationToken);
+
+        public IAsyncEnumerable<ItemStateObservation> ReadItemObservationsAsync(
+            Guid accountReference,
+            CancellationToken cancellationToken = default) =>
+            inner.ReadItemObservationsAsync(accountReference, cancellationToken);
+
+        public IAsyncEnumerable<ManualAcquisitionState> ReadManualAcquisitionsAsync(
+            Guid accountReference,
+            CancellationToken cancellationToken = default) =>
+            inner.ReadManualAcquisitionsAsync(accountReference, cancellationToken);
+
+        public IAsyncEnumerable<ManualAcquisitionRevisionItem>
+            ReadManualAcquisitionRevisionsAsync(
+                Guid accountReference,
+                CancellationToken cancellationToken = default) =>
+            inner.ReadManualAcquisitionRevisionsAsync(accountReference, cancellationToken);
+
+        public IAsyncEnumerable<ChallengeObservation> ReadChallengeObservationsAsync(
+            Guid accountReference,
+            CancellationToken cancellationToken = default) =>
+            inner.ReadChallengeObservationsAsync(accountReference, cancellationToken);
+
+        public Task<IReadOnlyDictionary<string, ArchiveIndexedFact<GachaRecord>>>
+            FindGachaRecordsAsync(
+                Guid accountReference,
+                IReadOnlyCollection<string> externalRecordIds,
+                CancellationToken cancellationToken = default) =>
+            inner.FindGachaRecordsAsync(accountReference, externalRecordIds, cancellationToken);
+
+        public Task<ArchiveIndexedFact<GachaRevisionItem>?> FindGachaRevisionAsync(
+            Guid accountReference,
+            Guid revisionId,
+            CancellationToken cancellationToken = default) =>
+            inner.FindGachaRevisionAsync(accountReference, revisionId, cancellationToken);
+
+        public Task<ArchiveIndexedFact<ItemStateObservation>?> FindItemObservationAsync(
+            Guid accountReference,
+            ItemObservationId observationId,
+            CancellationToken cancellationToken = default) =>
+            inner.FindItemObservationAsync(accountReference, observationId, cancellationToken);
+
+        public Task<ArchiveIndexedFact<ManualAcquisitionState>?>
+            FindManualAcquisitionAsync(
+                Guid accountReference,
+                ManualAcquisitionId acquisitionId,
+                CancellationToken cancellationToken = default) =>
+            inner.FindManualAcquisitionAsync(accountReference, acquisitionId, cancellationToken);
+
+        public Task<ArchiveIndexedFact<ManualAcquisitionRevisionItem>?>
+            FindManualAcquisitionRevisionAsync(
+                Guid accountReference,
+                Guid revisionId,
+                CancellationToken cancellationToken = default) =>
+            inner.FindManualAcquisitionRevisionAsync(
+                accountReference, revisionId, cancellationToken);
+
+        public Task<ArchiveIndexedFact<ChallengeObservation>?>
+            FindChallengeObservationAsync(
+                Guid accountReference,
+                ChallengeObservationId observationId,
+                CancellationToken cancellationToken = default) =>
+            inner.FindChallengeObservationAsync(accountReference, observationId, cancellationToken);
+
+        public ValueTask DisposeAsync() => inner.DisposeAsync();
     }
 
     private sealed class TestWorkspace(string temporaryDirectory) : IArchiveTransferWorkspace

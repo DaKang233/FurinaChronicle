@@ -75,6 +75,9 @@ public sealed record ArchiveTransferSnapshot
     public bool CanApply { get; init; }
     public ArchiveRestorePlan? Plan { get; init; }
     public bool ApplyPortableSettings { get; init; }
+    public ArchiveRestoreMode Mode { get; init; } = ArchiveRestoreMode.Merge;
+    public IReadOnlyList<ArchiveReplaceSelection> ReplaceSelections { get; init; } = [];
+    public IReadOnlyList<ArchiveCatalogArchive> PackageArchives { get; init; } = [];
     public string PackageSummary { get; init; } = "尚未选择逻辑档案文件。";
     public string PlanSummary { get; init; } = "选择文件并生成预览后显示。";
     public string MappingSummary { get; init; } = "尚无档案或账号映射。";
@@ -90,6 +93,8 @@ public sealed record ArchiveTransferSnapshot
     public string ExportScopeLabel => ExportAllArchives
         ? "全部档案"
         : SelectedArchive is null ? "尚未选择档案" : $"所选档案：{SelectedArchive.Name}";
+
+    public bool IsReplaceMode => Mode == ArchiveRestoreMode.Replace;
 }
 
 public sealed record ArchiveTransferActionResult(bool Succeeded, string Message);
@@ -115,6 +120,8 @@ public sealed class ArchiveTransferState(
     private IArchiveRestoreStagedPackage? package;
     private OperationId? operationId;
     private Guid? preferredArchiveId;
+    private ArchiveRestoreMode mode = ArchiveRestoreMode.Merge;
+    private readonly List<ArchiveReplaceSelection> replaceSelections = [];
 
     public ArchiveTransferSnapshot Snapshot { get; private set; } = new();
 
@@ -252,9 +259,14 @@ public sealed class ArchiveTransferState(
             archiveDecisions.Clear();
             accountDecisions.Clear();
             confirmations.Clear();
+            replaceSelections.Clear();
+            mode = ArchiveRestoreMode.Merge;
             Set(Snapshot with
             {
                 PackageSummary = DescribePackage(package),
+                PackageArchives = package.Catalog.Archives,
+                Mode = ArchiveRestoreMode.Merge,
+                ReplaceSelections = [],
                 PlanSummary = "选择文件后已校验；正在生成 Merge 预览。",
                 MappingSummary = "尚无档案或账号映射。",
                 DiagnosticSummary = "尚无冲突或待确认项。",
@@ -291,11 +303,14 @@ public sealed class ArchiveTransferState(
         try
         {
             ArchiveRestorePlan plan = await ReplanAsync(cancellationToken);
+            string modeLabel = plan.Mode == ArchiveRestoreMode.Replace
+                ? "Scoped Replace"
+                : "Merge";
             return new(
                 plan.CanApply,
                 plan.CanApply
-                    ? "Merge 预览已满足全部前置条件，可以确认提交。"
-                    : "Merge 预览仍有未解决的映射、冲突或确认项；数据库未改变。");
+                    ? $"{modeLabel} 预览已满足全部前置条件，可以确认提交。"
+                    : $"{modeLabel} 预览仍有未解决的映射、冲突或确认项；数据库未改变。");
         }
         catch (OperationCanceledException)
         {
@@ -303,7 +318,7 @@ public sealed class ArchiveTransferState(
         }
         catch (Exception exception)
         {
-            return Fail(Describe(exception));
+            return FailPlanning(Describe(exception));
         }
     }
 
@@ -353,6 +368,153 @@ public sealed class ArchiveTransferState(
         return package is null
             ? new(false, "请先选择 .fca 文件。")
             : await ReplanActionAsync(cancellationToken);
+    }
+
+    public async Task<ArchiveTransferActionResult> SetModeAsync(
+        ArchiveRestoreMode requestedMode,
+        CancellationToken cancellationToken = default)
+    {
+        if (!Enum.IsDefined(requestedMode))
+        {
+            return Fail("不支持的恢复模式。");
+        }
+
+        if (package is null)
+        {
+            mode = ArchiveRestoreMode.Merge;
+            Set(Snapshot with { Mode = mode });
+            return Fail("请先选择 .fca 文件。");
+        }
+
+        mode = requestedMode;
+        if (mode == ArchiveRestoreMode.Merge)
+        {
+            replaceSelections.Clear();
+        }
+
+        confirmations.Clear();
+        archiveDecisions.Clear();
+        accountDecisions.Clear();
+        Set(Snapshot with
+        {
+            Mode = mode,
+            ReplaceSelections = replaceSelections.ToArray(),
+            Plan = null,
+            HasPlan = false,
+            CanApply = false,
+            Status = mode == ArchiveRestoreMode.Merge
+                ? "已切换为 Merge；正在生成预览。"
+                : "已切换为 Scoped Replace；请选择至少一个不可重叠范围。"
+        });
+        return await ReplanActionAsync(cancellationToken);
+    }
+
+    public async Task<ArchiveTransferActionResult> AddReplaceSelectionAsync(
+        ArchiveReplaceSelection selection,
+        CancellationToken cancellationToken = default)
+    {
+        if (mode != ArchiveRestoreMode.Replace)
+        {
+            return Fail("请先切换到 Scoped Replace 模式。");
+        }
+
+        if (package is null) return Fail("请先选择 .fca 文件。");
+        List<ArchiveReplaceSelection> next = [.. replaceSelections, selection];
+        string? validation = ArchiveReplaceScopeValidator.Validate(
+            package.Catalog,
+            next);
+        if (validation is not null)
+        {
+            Set(Snapshot with
+            {
+                Error = validation,
+                Status = "Replace 范围未加入；数据库未改变。"
+            });
+            return new(false, validation);
+        }
+
+        replaceSelections.Clear();
+        replaceSelections.AddRange(next);
+        confirmations.Clear();
+        ArchiveTransferActionResult planResult =
+            await ReplanActionAsync(cancellationToken);
+        return new(
+            true,
+            planResult.Succeeded
+                ? "Replace 范围已加入。"
+                : "Replace 范围已加入；预览仍有待确认或冲突项，请查看诊断，数据库未改变。");
+    }
+
+    public async Task<ArchiveTransferActionResult> RemoveReplaceSelectionAsync(
+        ArchiveReplaceSelection selection,
+        CancellationToken cancellationToken = default)
+    {
+        replaceSelections.RemoveAll(item => item == selection);
+        if (package is null) return Fail("请先选择 .fca 文件。");
+        confirmations.Clear();
+        if (replaceSelections.Count == 0)
+        {
+            Set(Snapshot with
+            {
+                ReplaceSelections = [],
+                Plan = null,
+                HasPlan = false,
+                CanApply = false,
+                Status = "Replace 范围已为空；请至少选择一个不可重叠范围。",
+                Error = null
+            });
+            return new(false, "尚未选择 Replace 范围。");
+        }
+
+        return await ReplanActionAsync(cancellationToken);
+    }
+
+    public async Task<ArchiveTransferActionResult> ClearReplaceSelectionsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        replaceSelections.Clear();
+        confirmations.Clear();
+        Set(Snapshot with
+        {
+            ReplaceSelections = [],
+            Plan = null,
+            HasPlan = false,
+            CanApply = false,
+            Status = "已清除 Replace 范围；请重新选择范围。"
+        });
+        return package is null
+            ? Fail("请先选择 .fca 文件。")
+            : new(false, "尚未选择 Replace 范围。");
+    }
+
+    public string DescribeReplaceSelection(ArchiveReplaceSelection selection) =>
+        ArchiveReplaceScopeValidator.Describe(package?.Catalog, selection);
+
+    public string BuildApplyConfirmationText()
+    {
+        ArchiveRestorePlan? plan = Snapshot.Plan;
+        if (plan is null) return "尚未生成恢复预览。";
+        string scopeText = plan.ReplaceSelections.Count == 0
+            ? "范围：Merge 全包（补充/合并）。"
+            : "Replace 范围（不可重叠）：" + Environment.NewLine +
+                string.Join(
+                    Environment.NewLine,
+                    plan.ReplaceSelections.Select(item =>
+                        "• " + ArchiveReplaceScopeValidator.Describe(
+                            package?.Catalog,
+                            item)));
+        string destructive = plan.Mode == ArchiveRestoreMode.Replace
+            ? "这是破坏性 Scoped Replace：上述范围内目标独有的事实将被移除；范围外数据保留。" +
+                Environment.NewLine +
+                "缺失 Dataset 不会被当作清空；包未声明的数据集会阻止该范围（服务冲突）。" +
+                Environment.NewLine +
+                "Tombstone 需独立确认；提交失败不改变原数据；本页不提供热回切。"
+            : "Merge 不静默删除目标数据；缺失 Dataset 不等于清空；Tombstone 需独立确认。";
+        return scopeText + Environment.NewLine + Environment.NewLine +
+            destructive + Environment.NewLine + Environment.NewLine +
+            Snapshot.PlanSummary + Environment.NewLine + Environment.NewLine +
+            "确认只适用于当前包指纹、计划指纹与当前目标状态；目标变化后必须重新预览。" +
+            Environment.NewLine + Snapshot.DiagnosticSummary;
     }
 
     public async Task<ArchiveTransferActionResult> AcceptPendingConfirmationsAsync(
@@ -442,7 +604,7 @@ public sealed class ArchiveTransferState(
                 }
             }
 
-            string message = DescribeApplyResult(result);
+            string message = DescribeApplyResult(result, plan);
             if (result.Status is ChangeExecutionStatus.Applied or
                 ChangeExecutionStatus.NoOp or
                 ChangeExecutionStatus.AlreadyCommitted)
@@ -502,7 +664,7 @@ public sealed class ArchiveTransferState(
                     : $"当前恢复点：{point.CreatedAt:yyyy-MM-dd HH:mm:ss zzz}；" +
                         $"{point.Length} 字节；Schema {point.DatabaseSchemaVersion}；" +
                         $"校验 {(point.IsValid ? "有效" : "无效")}。" +
-                        " 本页只显示状态，不提供主库热回切。"
+                        " 本页只读：当前服务仅提供恢复点摘要，不提供恢复点应用/主库切换/热回切。"
             });
         }
         catch (OperationCanceledException)
@@ -538,13 +700,19 @@ public sealed class ArchiveTransferState(
         }
         catch (Exception exception)
         {
-            return Fail(Describe(exception));
+            return FailPlanning(Describe(exception));
         }
     }
 
     private async Task<ArchiveRestorePlan> ReplanAsync(CancellationToken cancellationToken)
     {
         if (package is null) throw new InvalidOperationException("尚未选择 .fca 文件。");
+        if (mode == ArchiveRestoreMode.Replace && replaceSelections.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "Replace 需要至少选择一个不可重叠的 Archive/Account/Domain 范围。");
+        }
+
         ArchiveRestorePlan plan = await source.PlanAsync(
             new ArchiveRestorePlanRequest(
                 package,
@@ -552,8 +720,10 @@ public sealed class ArchiveTransferState(
                 accountDecisions,
                 confirmations,
                 Snapshot.ApplyPortableSettings,
-                ArchiveRestoreMode.Merge,
-                ReplaceSelections: null),
+                mode,
+                mode == ArchiveRestoreMode.Replace
+                    ? replaceSelections.ToArray()
+                    : null),
             cancellationToken);
         UpdatePlan(plan);
         return plan;
@@ -568,20 +738,33 @@ public sealed class ArchiveTransferState(
                 plan.Settings.Differences.Select(item =>
                     $"{item.Setting} {item.SourceValue ?? "无"} → {item.TargetValue ?? "无"}"));
         string planSummary =
-            $"模式：Merge（补充/合并，不是原始 SQLite 拷贝）；" +
+            $"模式：{(plan.Mode == ArchiveRestoreMode.Replace ? "Scoped Replace（明确范围替换）" : "Merge（补充/合并）")}；" +
             $"档案 新建 {plan.Preview.ArchiveCreateCount} / 复用 {plan.Preview.ArchiveReuseCount}；" +
-            $"账号 新建 {plan.Preview.AccountCreateCount} / 复用 {plan.Preview.AccountReuseCount}；" +
-            $"冲突 {plan.Preview.ConflictCount}；Tombstone {plan.Preview.TombstoneCount}。" +
+            $"账号 新建 {plan.Preview.AccountCreateCount} / 复用 {plan.Preview.AccountReuseCount}" +
+            (plan.Mode == ArchiveRestoreMode.Replace
+                ? $" / 移除 {plan.Preview.AccountRemoveCount}"
+                : "") +
+            $"；冲突 {plan.Preview.ConflictCount}；Tombstone {plan.Preview.TombstoneCount}。" +
             Environment.NewLine +
             string.Join(
                 Environment.NewLine,
                 plan.Preview.Datasets.Select(item =>
                     $"{FactKindName(item.Kind)}：新增 {item.AddCount}，保留 {item.SkipCount}，" +
+                    $"替换 {item.ReplaceCount}，移除 {item.RemoveCount}，" +
                     $"冲突 {item.ConflictCount}，重引入 {item.TombstoneCount}。")) +
             Environment.NewLine + settings +
             Environment.NewLine +
-            "Merge 边界：来源缺失的 Dataset 不会清空目标；Tombstone 独立确认；" +
-            "提交失败不改变原数据；本页不提供热回切。";
+            (plan.Mode == ArchiveRestoreMode.Replace
+                ? "Replace 范围：\n" + string.Join(
+                    Environment.NewLine,
+                    plan.ReplaceSelections.Select(item =>
+                        "• " + ArchiveReplaceScopeValidator.Describe(package?.Catalog, item))) +
+                    Environment.NewLine +
+                    "Replace 边界：范围外目标数据保留；缺失 Dataset 不会被视为清空，" +
+                    "未声明数据集会阻塞该范围；Tombstone 独立确认；提交失败不改变原数据；" +
+                    "不提供热回切。"
+                : "Merge 边界：来源缺失的 Dataset 不会清空目标；Tombstone 独立确认；" +
+                    "提交失败不改变原数据；本页不提供热回切。");
         string mapping = string.Join(
             Environment.NewLine,
             plan.Archives.Select(item =>
@@ -610,6 +793,9 @@ public sealed class ArchiveTransferState(
             Plan = plan,
             HasPlan = true,
             CanApply = plan.CanApply,
+            Mode = plan.Mode,
+            ReplaceSelections = plan.ReplaceSelections.ToArray(),
+            PackageArchives = package?.Catalog.Archives ?? [],
             PlanSummary = planSummary,
             MappingSummary = string.IsNullOrWhiteSpace(mapping)
                 ? "所选范围没有父对象映射。"
@@ -630,6 +816,8 @@ public sealed class ArchiveTransferState(
         archiveDecisions.Clear();
         accountDecisions.Clear();
         confirmations.Clear();
+        replaceSelections.Clear();
+        mode = ArchiveRestoreMode.Merge;
         if (released is not null)
         {
             try { await released.DisposeAsync(); } catch (Exception) { }
@@ -641,6 +829,9 @@ public sealed class ArchiveTransferState(
             HasPlan = false,
             CanApply = false,
             Plan = null,
+            PackageArchives = [],
+            Mode = ArchiveRestoreMode.Merge,
+            ReplaceSelections = [],
             PackageSummary = "尚未选择逻辑档案文件。",
             PlanSummary = "选择文件并生成预览后显示。",
             MappingSummary = "尚无档案或账号映射。",
@@ -729,12 +920,17 @@ public sealed class ArchiveTransferState(
         _ => kind.ToString()
     };
 
-    private static string DescribeApplyResult(ArchiveRestoreApplyResult result) =>
+    private static string DescribeApplyResult(
+        ArchiveRestoreApplyResult result,
+        ArchiveRestorePlan plan) =>
         result.Status switch
         {
             ChangeExecutionStatus.Applied =>
-                $"恢复已提交：影响 {result.Receipt?.AffectedRecordCount ?? 0} 项；" +
-                $"Receipt {result.Receipt?.ReceiptId:D}。",
+                $"{(plan.Mode == ArchiveRestoreMode.Replace ? "Scoped Replace" : "Merge")} 已提交：" +
+                $"影响 {result.Receipt?.AffectedRecordCount ?? 0} 项，" +
+                $"Receipt {result.Receipt?.ReceiptId:D}；" +
+                $"受影响档案 {result.Receipt?.Archives.Count ?? 0} 个、" +
+                $"账号映射 {result.Receipt?.Accounts.Count ?? 0} 个。",
             ChangeExecutionStatus.NoOp =>
                 $"恢复为幂等 NoOp；Receipt {result.Receipt?.ReceiptId:D}。",
             ChangeExecutionStatus.AlreadyCommitted =>
@@ -786,6 +982,19 @@ public sealed class ArchiveTransferState(
     private ArchiveTransferActionResult Fail(string message)
     {
         Set(Snapshot with { Error = message, Status = "操作未完成；本地数据未改变。" });
+        return new(false, message);
+    }
+
+    private ArchiveTransferActionResult FailPlanning(string message)
+    {
+        Set(Snapshot with
+        {
+            Error = message,
+            Status = "预览未生成；数据库未改变。",
+            Plan = null,
+            HasPlan = false,
+            CanApply = false
+        });
         return new(false, message);
     }
 
