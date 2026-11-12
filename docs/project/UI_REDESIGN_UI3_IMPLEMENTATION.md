@@ -193,3 +193,48 @@ Windows UIA 场景（每个场景使用全新的 `FURINA_UI1_DIRECTORY`，实际
 独立 WinUI 仍未接线：SToken 刷新、Windows 网页缓存刷新（需先确定隔离写库与凭据
 边界）、提瓦特小助手导入、操作历史撤销（UI-4）、批量记录操作、Portable 撤销材料
 清理的真实容量路径。Android 侧 D1～D4 需单独授权修复并补真机／模拟器证据。
+
+## UI-3 收尾（2026-11-13）
+
+### 交付内容
+
+- **Windows 网页缓存刷新**：WinUI 数据操作菜单新增“通过网页缓存刷新…”。系统文件夹
+  选择器选择原神安装目录 → 固定账号、档案与全量模式快照 → 确认 → 经真实
+  `WindowsGachaCacheUrlProvider` 与 `RefreshGachaRecords` 的 Windows 缓存来源刷新。
+  无目录、无缓存文件、缓存无 URL、链接失效、UID 不一致均有明确中文提示且不写库；
+  缓存链接只存在于服务内部，不显示、不保存、不写日志。
+- **提瓦特小助手导入（手动路径）**：新增“从提瓦特小助手导入…”。输入 UID 与含
+  authkey 的抽卡链接（密码框，不回显）→ 先固定本地导入目标 → 第三方隐私确认
+  （明确会发送给 lelaer.com，链接不显示／不保存／不写日志）→ 经
+  `TeyvatHelperUigfImportSource.DownloadManuallyAsync` 下载 → 复用统一 UIGF
+  预览、目标重校验、原子提交与结果刷新（与文件导入共用同一
+  `ImportPreparedSourceAsync`，文件流行为不变）。无效 UID／链接在发请求前拒绝；
+  自动路径在无通行证上下文时明确提示不可用。
+- **SToken 刷新（本轮未实现，交决策）**：隔离宿主缺少通行证登录与设备指纹／验证码
+  交互、缺少经批准的 Windows 凭据存储，且 ADR 0020 要求真实凭据／生产库接入前另行
+  评审。可选方案：
+  - A：隔离清单内显式导入 SToken+MID + Windows DPAPI 加密文件 + 清除凭据命令，
+    仅限开发隔离宿主；
+  - B（建议随 UI-4 凭据工作包）：在共享层新增经评审的 Windows 安全凭据存储与
+    登录／角色选择 UX，再接入 SToken 刷新；生产凭据迁移仍按 UI-6 评审。
+  本轮保持“手动链接 + 网页缓存”两种无凭据刷新，SToken 在 UI-4 凭据工作包处理。
+
+### 本轮验证
+
+| 检查 | 结果 |
+|---|---|
+| Release 全量回归（Lead 复跑） | **822/822**（基线 797 + 新增 25：网页缓存 10、提瓦特 13、真实服务组合集成 2） |
+| 独立 WinUI 构建／发布 | 0 警告 0 错误；self-contained 发布到 `artifacts/ui3-import/windows-ui3-final/` |
+| 版权头检查 | Pass |
+| 网页缓存刷新 | 取消目录、空目录、缓存无 URL 可 UIA 验收；成功路径需真实游戏安装 + 有效 authkey + 网络 → Blocked（自动化已用真实 provider/用例 + 伪造缓存与日志客户端覆盖发现→UID 校验→增量/全量提交） |
+| 提瓦特手动导入 | 取消、无效 UID、无效／缺 authkey 链接、隐私确认取消（不请求不写库）、假 authkey 下载失败可验收；成功路径需真实有效链接 → Blocked（自动化已用真实 source + 统一导入流程覆盖） |
+
+UIA 交接见 `artifacts/ui3-import/uia-handoff-ui3-final.md`（控件
+`GachaWindowsCacheRefresh`、`GachaTeyvatHelperImport` 与对话框 Id；夹具
+`fixtures-ui3-final/`）。成功路径的 Blocked 原因与后续补验条件已记录，未以自动化
+测试代替交互验收。
+
+### 阶段边界（更新）
+
+UI-3 的 WinUI 命令清单除 **SToken 刷新**（转入 UI-4 凭据工作包）与撤销入口（UI-4）
+外已全部接线。Android 侧 D1～D4 由独立缺陷修复批次处理。
