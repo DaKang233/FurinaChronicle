@@ -95,6 +95,9 @@
                             <MenuFlyoutItem Text="导入 Furina 抽卡数据集…" Tag="portable-import"
                                 Click="OnDataMenuCommand"
                                 AutomationProperties.AutomationId="GachaPortableImport" />
+                            <MenuFlyoutItem Text="从提瓦特小助手导入…" Tag="teyvat-import"
+                                Click="OnDataMenuCommand"
+                                AutomationProperties.AutomationId="GachaTeyvatHelperImport" />
                             <MenuFlyoutItem Text="导出 Furina 抽卡数据集…" Tag="portable-export"
                                 Click="OnDataMenuCommand"
                                 AutomationProperties.AutomationId="GachaPortableExport" />
@@ -102,6 +105,9 @@
                             <MenuFlyoutItem Text="手动链接刷新…" Tag="manual-refresh"
                                 Click="OnDataMenuCommand"
                                 AutomationProperties.AutomationId="GachaManualRefresh" />
+                            <MenuFlyoutItem Text="通过网页缓存刷新…" Tag="windows-cache-refresh"
+                                Click="OnDataMenuCommand"
+                                AutomationProperties.AutomationId="GachaWindowsCacheRefresh" />
                             <MenuFlyoutItem Text="清除图标缓存…" Tag="clear-icon-cache"
                                 Click="OnDataMenuCommand"
                                 AutomationProperties.AutomationId="GachaClearIconCache" />

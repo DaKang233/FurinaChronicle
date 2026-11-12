@@ -47,6 +47,7 @@ public sealed partial class Ui1GachaView
         manualRefresher ??= new GachaManualRefreshCoordinator(
             planning,
             new ServiceGachaManualRefreshGateway(preview.GachaRefresher));
+        EnsureFinalCommandComposition(preview);
     }
 
     private void UpdateDataOperationAvailability()
@@ -113,6 +114,12 @@ public sealed partial class Ui1GachaView
                 break;
             case "manual-refresh":
                 await RunDataOperationAsync(ManualRefreshAsync);
+                break;
+            case "windows-cache-refresh":
+                await RunDataOperationAsync(RefreshFromWindowsCacheAsync);
+                break;
+            case "teyvat-import":
+                await RunDataOperationAsync(ImportFromTeyvatHelperAsync);
                 break;
             case "clear-icon-cache":
                 await RunDataOperationAsync(ClearIconCacheAsync);

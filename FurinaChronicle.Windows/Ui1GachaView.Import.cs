@@ -84,13 +84,6 @@ public sealed partial class Ui1GachaView
             (isError ? "导入未完成：" : "导入状态：") + text);
     }
 
-    private void SetImportBusy(bool busy, string? message)
-    {
-        importBusy = busy;
-        if (message is not null) ShowImportStatus(message);
-        UpdateCommandAvailability();
-    }
-
     private void OnToggleImportMode(object sender, RoutedEventArgs e)
     {
         if (importBusy || importFlowTask is not null || importMode is null ||
@@ -137,48 +130,86 @@ public sealed partial class Ui1GachaView
             StorageFile? file = await PickImportFileAsync();
             if (file is null) return;
 
-            SetImportBusy(true, "正在读取并校验导入文件…");
-            GachaImportSource source = CreateImportSource(file);
+            await ImportPreparedSourceAsync(
+                CreateImportSource(file),
+                snapshot,
+                archiveId,
+                mode,
+                cancellation.Token,
+                ShowImportStatus);
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+            // Leaving the page may cancel the read/preview phase; nothing was written.
+        }
+        catch (Exception)
+        {
+            ShowImportStatus("导入未完成；未确认任何记录被修改，请重新载入后再试。", isError: true);
+        }
+        finally
+        {
+            importCancellation = null;
+        }
+    }
+
+    // Shared by the file picker flow and the Teyvat Helper manual flow: an already materialized
+    // import source goes through read -> target -> preview -> atomic commit, with the display
+    // surface supplied by the caller.
+    private async Task ImportPreparedSourceAsync(
+        GachaImportSource source,
+        GachaReadOnlySnapshot snapshot,
+        Guid archiveId,
+        GachaImportMode mode,
+        CancellationToken cancellationToken,
+        Action<string, bool> showStatus,
+        GachaImportTargetRequest? preselectedTarget = null)
+    {
+        if (importCoordinator is null) return;
+        importBusy = true;
+        UpdateCommandAvailability();
+        try
+        {
+            showStatus("正在读取并校验导入文件…", false);
             GachaImportSourceReadResult read = await importCoordinator.ReadSourceAsync(
-                source, cancellation.Token);
+                source, cancellationToken);
             if (!entered) return;
             if (!read.Succeeded || read.Summary is null)
             {
-                ShowImportStatus(
+                showStatus(
                     read.FailureMessage ?? "无法读取所选文件，未写入任何数据。",
-                    isError: true);
+                    true);
                 return;
             }
 
             GachaImportPlan? plan = null;
-            GachaImportTargetRequest? target = null;
+            GachaImportTargetRequest? target = preselectedTarget;
             while (true)
             {
                 if (!entered) return;
                 target ??= await ChooseImportTargetAsync(snapshot, archiveId);
                 if (target is null)
                 {
-                    ShowImportStatus("已取消导入，未写入任何数据。");
+                    showStatus("已取消导入，未写入任何数据。", false);
                     return;
                 }
 
-                SetImportBusy(true, "正在生成导入预览…");
+                showStatus("正在生成导入预览…", false);
                 GachaImportPlanResult planned = await importCoordinator.PlanAsync(
-                    read.Summary, target, mode, cancellation.Token);
+                    read.Summary, target, mode, cancellationToken);
                 if (!planned.Succeeded || planned.Plan is null)
                 {
-                    ShowImportStatus(
+                    showStatus(
                         planned.FailureMessage ?? "无法生成导入预览，未写入任何数据。",
-                        isError: true);
+                        true);
                     return;
                 }
 
                 plan = planned.Plan;
                 if (!plan.CanExecute)
                 {
-                    ShowImportStatus(
+                    showStatus(
                         plan.BlockMessage ?? "导入目标与文件不匹配，未写入任何数据。",
-                        isError: true);
+                        true);
                     return;
                 }
 
@@ -186,7 +217,7 @@ public sealed partial class Ui1GachaView
                 if (decision == ContentDialogResult.Primary) break;
                 if (decision != ContentDialogResult.Secondary)
                 {
-                    ShowImportStatus("已取消导入，未写入任何数据。");
+                    showStatus("已取消导入，未写入任何数据。", false);
                     return;
                 }
 
@@ -195,7 +226,7 @@ public sealed partial class Ui1GachaView
                 target = null;
             }
 
-            SetImportBusy(true, "正在保存导入结果…");
+            showStatus("正在保存导入结果…", false);
             (ContentDialog progress, Task showTask) = ShowImportProgressDialog();
             GachaImportExecution execution;
             try
@@ -212,25 +243,27 @@ public sealed partial class Ui1GachaView
 
             if (!execution.IsSuccess)
             {
-                ShowImportStatus(execution.Message, isError: true);
+                showStatus(execution.Message, true);
                 return;
             }
 
             string? refreshNote = await RefreshAfterImportAsync();
-            ShowImportStatus(
-                refreshNote is null ? execution.Message : execution.Message + "\n" + refreshNote);
+            showStatus(
+                refreshNote is null ? execution.Message : execution.Message + "\n" + refreshNote,
+                false);
         }
-        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            // Leaving the page may cancel the read/preview phase; nothing was written.
+            // Read/preview cancellation writes nothing.
         }
         catch (Exception)
         {
-            ShowImportStatus("导入未完成；未确认任何记录被修改，请重新载入后再试。", isError: true);
+            showStatus("导入未完成；未确认任何记录被修改，请重新载入后再试。", true);
         }
         finally
         {
-            importCancellation = null;
+            importBusy = false;
+            UpdateCommandAvailability();
         }
     }
 
