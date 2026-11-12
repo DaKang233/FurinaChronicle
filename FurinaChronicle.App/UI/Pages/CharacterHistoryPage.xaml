@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  Copyright (c) 2026 DaKang233.
+  SPDX-License-Identifier: MIT
+-->
+
+<ContentPage
+    x:Class="FurinaChronicle.App.UI.Pages.CharacterHistoryPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:pages="clr-namespace:FurinaChronicle.App.UI.Pages"
+    xmlns:history="clr-namespace:FurinaChronicle.Presentation.History;assembly=FurinaChronicle.Presentation"
+    SafeAreaEdges="All"
+    Title="角色与武器">
+    <Grid Padding="16" RowDefinitions="Auto,*,Auto" RowSpacing="12">
+        <VerticalStackLayout x:Name="Filters" Spacing="8">
+            <Label Text="角色与武器" FontSize="24" FontAttributes="Bold" />
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                <Picker x:Name="ArchivePicker" Title="档案"
+                        SelectedIndexChanged="OnArchiveChanged"
+                        AutomationId="CharacterArchivePicker" />
+                <Picker x:Name="AccountPicker" Grid.Column="1" Title="账号"
+                        SelectedIndexChanged="OnAccountChanged"
+                        AutomationId="CharacterAccountPicker" />
+            </Grid>
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8">
+                <Picker x:Name="KindPicker" Title="类型"
+                        SelectedIndexChanged="OnKindChanged"
+                        AutomationId="CharacterKindPicker" />
+                <Button x:Name="CompareButton" Grid.Column="1" Text="比较最近两次"
+                        Clicked="OnCompareClicked" AutomationId="CompareCharacterObservations" />
+                <Button x:Name="RefreshButton" Grid.Column="2" Text="刷新到当前档案"
+                        Clicked="OnRefreshClicked" AutomationId="RefreshCharacterCollection" />
+                <Button x:Name="ValidateButton" Grid.Column="3" Text="隔离刷新验证"
+                        Clicked="OnValidateClicked" AutomationId="ValidateCharacterCollection" />
+            </Grid>
+            <Label x:Name="StatusLabel" AutomationId="CharacterCollectionStatus" />
+            <Picker x:Name="ObservationPicker" Title="历史观察（最新在前）"
+                    SelectedIndexChanged="OnObservationChanged"
+                    AutomationId="CharacterObservationPicker" />
+            <Label x:Name="ObservationDetailLabel" AutomationId="CharacterObservationDetail" />
+        </VerticalStackLayout>
+
+        <CollectionView x:Name="HistoryList" Grid.Row="1" SelectionMode="None"
+                        AutomationId="CharacterObservationList">
+            <CollectionView.EmptyView>
+                <Label Text="此账号暂无已保存的角色或武器观察。" Margin="0,8" />
+            </CollectionView.EmptyView>
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="history:CharacterObservationCard">
+                    <Border Padding="12" Margin="0,0,0,8" StrokeShape="RoundRectangle 8">
+                        <VerticalStackLayout Spacing="4">
+                            <Label Text="{Binding Title}" FontAttributes="Bold" FontSize="18" />
+                            <Label Text="{Binding Evidence}" />
+                            <Label Text="{Binding Detail}" />
+                        </VerticalStackLayout>
+                    </Border>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+
+        <Grid x:Name="Paging" Grid.Row="2" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+            <Button x:Name="PreviousButton" Text="上一页" Clicked="OnPreviousClicked" />
+            <Label x:Name="PageLabel" Grid.Column="1" HorizontalTextAlignment="Center"
+                   VerticalTextAlignment="Center" />
+            <Button x:Name="NextButton" Grid.Column="2" Text="下一页" Clicked="OnNextClicked" />
+        </Grid>
+    </Grid>
+</ContentPage>

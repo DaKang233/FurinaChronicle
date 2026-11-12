@@ -14,11 +14,15 @@
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
     xmlns:pages="clr-namespace:FurinaChronicle.App.UI.Pages"
+    xmlns:history="clr-namespace:FurinaChronicle.Presentation.History;assembly=FurinaChronicle.Presentation"
     SafeAreaEdges="All"
     Title="挑战历史">
     <Grid Padding="16" RowDefinitions="Auto,*,Auto" RowSpacing="12">
         <VerticalStackLayout x:Name="Filters" Spacing="8">
-            <Label Text="深境螺旋" FontSize="24" FontAttributes="Bold" />
+            <Label Text="挑战历史" FontSize="24" FontAttributes="Bold" />
+            <Picker x:Name="ModePicker" Title="挑战模式"
+                    SelectedIndexChanged="OnModeChanged"
+                    AutomationId="ChallengeModePicker" />
             <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
                 <Picker x:Name="ArchivePicker" Title="档案"
                         SelectedIndexChanged="OnArchiveChanged"
@@ -27,12 +31,18 @@
                         SelectedIndexChanged="OnAccountChanged"
                         AutomationId="ChallengeAccountPicker" />
             </Grid>
-            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
                 <Picker x:Name="PeriodPicker" Title="采集期次" AutomationId="ChallengeCollectionPeriod" />
-                <Button x:Name="ValidateButton" Grid.Column="1" Text="隔离验证采集"
+                <Button x:Name="RefreshButton" Grid.Column="1" Text="刷新到当前档案"
+                        Clicked="OnRefreshClicked" AutomationId="RefreshChallengeCollection" />
+                <Button x:Name="ValidateButton" Grid.Column="2" Text="隔离验证采集"
                         Clicked="OnValidateClicked" AutomationId="ValidateChallengeCollection" />
             </Grid>
             <Label x:Name="StatusLabel" AutomationId="ChallengeCollectionStatus" />
+            <Picker x:Name="ObservationPicker" Title="历史观察（最新在前）"
+                    SelectedIndexChanged="OnObservationChanged"
+                    AutomationId="ChallengeObservationPicker" />
+            <Label x:Name="ObservationDetailLabel" AutomationId="ChallengeObservationDetail" />
         </VerticalStackLayout>
 
         <CollectionView x:Name="HistoryList" Grid.Row="1" SelectionMode="None"
@@ -41,12 +51,12 @@
                 <Label Text="此账号暂无已保存的深境螺旋观察。" Margin="0,8" />
             </CollectionView.EmptyView>
             <CollectionView.ItemTemplate>
-                <DataTemplate x:DataType="pages:ChallengeObservationCard">
+                <DataTemplate x:DataType="history:ChallengeObservationCard">
                     <Border Padding="12" Margin="0,0,0,8" StrokeShape="RoundRectangle 8">
                         <VerticalStackLayout Spacing="4">
                             <Label Text="{Binding Title}" FontAttributes="Bold" FontSize="18" />
                             <Label Text="{Binding Evidence}" />
-                            <Label Text="{Binding Floors}" />
+                            <Label Text="{Binding Detail}" />
                         </VerticalStackLayout>
                     </Border>
                 </DataTemplate>

@@ -55,6 +55,14 @@ public partial class HomePage : ContentPage
         finally { button.IsEnabled = true; }
     }
 
+    private async void OnOpenCharacterHistoryClicked(object? sender, EventArgs e)
+    {
+        if (sender is not Button button) return;
+        button.IsEnabled = false;
+        try { await Shell.Current.GoToAsync("character-history"); }
+        finally { button.IsEnabled = true; }
+    }
+
     private async void OnOpenUi1Clicked(object? sender, EventArgs e)
     {
         if (sender is not Button button) return;

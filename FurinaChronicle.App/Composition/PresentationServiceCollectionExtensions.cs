@@ -7,6 +7,8 @@ using FurinaChronicle.App.UI.Gacha;
 using FurinaChronicle.App.UI.Pages;
 using FurinaChronicle.App.ViewModels;
 using FurinaChronicle.Infrastructure.HistoryDomains.Collecting;
+using FurinaChronicle.Infrastructure.Metadata;
+using FurinaChronicle.Services.Abstractions;
 using FurinaChronicle.Services.HistoryDomains.Collecting;
 
 namespace FurinaChronicle.App.Composition;
@@ -34,8 +36,30 @@ internal static class PresentationServiceCollectionExtensions
         services.AddTransient<ArchiveHistoryPage>();
         services.AddSingleton<HomePage>();
         services.AddTransient<ChallengeHistoryPage>();
+        services.AddTransient<CharacterHistoryPage>();
         services.AddSingleton<ISpiralAbyssSource, HoYoGameRecordSpiralAbyssSource>();
         services.AddSingleton<ValidateSpiralAbyssCollection>();
+        services.AddSingleton<
+            IChallengeModeSource,
+            HoYoGameRecordChallengeModeSource>();
+        services.AddSingleton<ValidateChallengeModeCollection>();
+        services.AddSingleton<
+            ICharacterWeaponSource,
+            HoYoGameRecordCharacterWeaponSource>();
+        services.AddSingleton<ValidateCharacterWeaponCollection>();
+        services.AddSingleton<CollectSpiralAbyss>();
+        services.AddSingleton<CollectChallengeMode>();
+        services.AddSingleton<CollectCharacterWeapon>();
+        services.AddSingleton(new SnapMetadataOptions(
+            Path.Combine(
+                FileSystem.Current.AppDataDirectory,
+                "Metadata",
+                "SnapMetadata")));
+        services.AddSingleton(serviceProvider => new SnapMetadataClient(
+            serviceProvider.GetRequiredService<SnapMetadataOptions>()));
+        services.AddSingleton<
+            IDomainMetadataService,
+            CompositeDomainMetadataService>();
         services.AddSingleton<Ui1GachaPage>();
         services.AddSingleton<GachaAppearanceSettings>();
         services.AddTransient<SettingsPage>();
