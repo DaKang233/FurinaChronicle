@@ -41,6 +41,7 @@ public sealed partial class Ui1GachaView : UserControl
         manualRefresher = services.ManualRefresh;
         windowsCacheRefresh = services.WindowsCacheRefresh;
         teyvatImport = services.TeyvatImport;
+        stokenRefresh = services.STokenRefresh;
         importMode ??= new GachaImportModeState();
         RenderImportState();
     }

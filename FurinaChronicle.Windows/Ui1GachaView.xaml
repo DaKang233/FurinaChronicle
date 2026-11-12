@@ -105,6 +105,9 @@
                             <MenuFlyoutItem Text="手动链接刷新…" Tag="manual-refresh"
                                 Click="OnDataMenuCommand"
                                 AutomationProperties.AutomationId="GachaManualRefresh" />
+                            <MenuFlyoutItem Text="通过登录账号刷新…" Tag="stoken-refresh"
+                                Click="OnDataMenuCommand"
+                                AutomationProperties.AutomationId="GachaSTokenRefresh" />
                             <MenuFlyoutItem Text="通过网页缓存刷新…" Tag="windows-cache-refresh"
                                 Click="OnDataMenuCommand"
                                 AutomationProperties.AutomationId="GachaWindowsCacheRefresh" />

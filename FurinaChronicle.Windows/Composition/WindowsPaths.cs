@@ -32,6 +32,8 @@ public sealed class WindowsPaths
 
         SettingsDirectory = Path.Combine(BaseDirectory, "UI4", "WinUI", "settings");
         SelectionFilePath = Path.Combine(SettingsDirectory, "archive-selection.json");
+        CredentialDirectory = Path.Combine(BaseDirectory, "UI4", "WinUI", "credentials");
+        CredentialFilePath = Path.Combine(CredentialDirectory, "credentials.bin");
     }
 
     public string BaseDirectory { get; }
@@ -39,6 +41,10 @@ public sealed class WindowsPaths
     public string SettingsDirectory { get; }
 
     public string SelectionFilePath { get; }
+
+    public string CredentialDirectory { get; }
+
+    public string CredentialFilePath { get; }
 
     public string? ConfigurationError { get; }
 }

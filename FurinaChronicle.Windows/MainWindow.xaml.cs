@@ -27,6 +27,7 @@ public sealed partial class MainWindow : Window
     private ChroniclePage? chroniclePage;
     private CharacterWeaponPage? characterWeaponPage;
     private ChallengePage? challengePage;
+    private PassportPage? passportPage;
     private bool shellReady;
     private bool shellBuilt;
     private bool switching;
@@ -193,7 +194,24 @@ public sealed partial class MainWindow : Window
             Visibility = Visibility.Collapsed
         };
         PageHost.Children.Add(challengePage);
+
+        passportPage = new PassportPage(
+            composition.Services.GetRequiredService<PassportCredentialState>())
+        {
+            Visibility = Visibility.Collapsed
+        };
+        passportPage.RefreshRequested += OnPassportRefreshRequested;
+        PageHost.Children.Add(passportPage);
         shellBuilt = true;
+    }
+
+    private async void OnPassportRefreshRequested(object? sender, EventArgs e)
+    {
+        if (!shellReady) return;
+        switching = true;
+        Navigation.SelectedItem = GachaDestination;
+        switching = false;
+        await ShowPageAsync("gacha");
     }
 
     private async void OnOpenArchiveTransfer(object? sender, EventArgs e)
@@ -266,6 +284,7 @@ public sealed partial class MainWindow : Window
             if (chroniclePage is not null) chroniclePage.Visibility = Visibility.Collapsed;
             if (characterWeaponPage is not null) characterWeaponPage.Visibility = Visibility.Collapsed;
             if (challengePage is not null) challengePage.Visibility = Visibility.Collapsed;
+            if (passportPage is not null) passportPage.Visibility = Visibility.Collapsed;
             switch (tag)
             {
                 case "overview":
@@ -312,6 +331,11 @@ public sealed partial class MainWindow : Window
                     currentPageTag = tag;
                     challengePage!.Visibility = Visibility.Visible;
                     await challengePage.EnterAsync();
+                    break;
+                case "passport":
+                    currentPageTag = tag;
+                    passportPage!.Visibility = Visibility.Visible;
+                    await passportPage.EnterAsync();
                     break;
             }
         }

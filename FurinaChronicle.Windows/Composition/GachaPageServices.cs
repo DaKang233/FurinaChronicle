@@ -3,6 +3,7 @@
 
 using FurinaChronicle.Infrastructure.Diagnostics;
 using FurinaChronicle.Presentation.Gacha;
+using FurinaChronicle.Presentation.Management;
 
 namespace FurinaChronicle.Windows.Composition;
 
@@ -20,4 +21,5 @@ public sealed record GachaPageServices(
     GachaRecordOperationCoordinator RecordOperations,
     GachaManualRefreshCoordinator ManualRefresh,
     GachaWindowsCacheRefreshCoordinator WindowsCacheRefresh,
-    GachaTeyvatHelperImportCoordinator TeyvatImport);
+    GachaTeyvatHelperImportCoordinator TeyvatImport,
+    GachaSTokenRefreshCoordinator STokenRefresh);

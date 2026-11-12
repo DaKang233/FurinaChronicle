@@ -21,6 +21,7 @@ using FurinaChronicle.Services.Gacha.Portable;
 using FurinaChronicle.Services.Gacha.Writing;
 using FurinaChronicle.Services.History;
 using FurinaChronicle.Services.HistoryDomains;
+using FurinaChronicle.Services.Passport;
 using FurinaChronicle.Windows.Shell;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Dispatching;
@@ -130,6 +131,23 @@ public sealed class WindowsComposition : IAsyncDisposable
         services.AddSingleton<IArchiveTransferSource, ServiceArchiveTransferSource>();
         services.AddTransient<ArchiveTransferState>();
 
+        // Isolated credential vault (DPAPI CurrentUser) and the explicit SToken refresh path.
+        // Nothing here opens production credentials; migration stays behind the UI-6 review.
+        services.AddSingleton(sp => new DpapiPassportCredentialStore(
+            sp.GetRequiredService<WindowsPaths>()));
+        services.AddSingleton<IIsolatedCredentialStore>(
+            sp => sp.GetRequiredService<DpapiPassportCredentialStore>());
+        services.AddSingleton<IPassportAccountStore>(
+            sp => sp.GetRequiredService<DpapiPassportCredentialStore>());
+        services.AddTransient<PassportCredentialState>();
+        services.AddSingleton(sp => new STokenRefreshComposition(
+            sp.GetRequiredService<Ui1PreviewEnvironment>(),
+            sp.GetRequiredService<IPassportAccountStore>()));
+        services.AddSingleton(sp =>
+            sp.GetRequiredService<STokenRefreshComposition>().Refresher);
+        services.AddSingleton<IGachaSTokenRefreshExecutor, ServiceGachaSTokenRefreshExecutor>();
+        services.AddSingleton<GachaSTokenRefreshCoordinator>();
+
         // UI-5 pages: formal isolated Chronicle query service and page-local state machines.
         services.AddSingleton<IChronicleQueryService>(sp =>
         {
@@ -167,7 +185,8 @@ public sealed class WindowsComposition : IAsyncDisposable
             sp.GetRequiredService<Ui1PreviewEnvironment>(),
             dispatcher,
             filePicker,
-            sp.GetRequiredService<TimeProvider>()));
+            sp.GetRequiredService<TimeProvider>(),
+            sp.GetRequiredService<GachaSTokenRefreshCoordinator>()));
 
         return new WindowsComposition(
             services.BuildServiceProvider(new ServiceProviderOptions
@@ -212,10 +231,12 @@ public sealed class WindowsComposition : IAsyncDisposable
             new WindowsArchiveTransferWorkspace(environment.TemporaryDirectory));
     }
 
-    private static GachaPageServices BuildGachaPageServices(        Ui1PreviewEnvironment environment,
+    private static GachaPageServices BuildGachaPageServices(
+        Ui1PreviewEnvironment environment,
         IUiDispatcher dispatcher,
         IFilePickerService filePicker,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        GachaSTokenRefreshCoordinator sTokenRefresh)
     {
         var planning = new ServiceGachaImportPlanningSource(
             new GetPlayerArchives(environment.Archives),
@@ -258,6 +279,7 @@ public sealed class WindowsComposition : IAsyncDisposable
                     environment.WindowsCacheUrlProvider)),
             new GachaTeyvatHelperImportCoordinator(
                 planning,
-                new ServiceGachaTeyvatHelperImportGateway(environment.TeyvatHelperImport)));
+                new ServiceGachaTeyvatHelperImportGateway(environment.TeyvatHelperImport)),
+            sTokenRefresh);
     }
 }

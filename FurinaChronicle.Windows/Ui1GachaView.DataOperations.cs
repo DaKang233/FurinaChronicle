@@ -6,6 +6,7 @@ using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.History;
 using FurinaChronicle.Infrastructure.Diagnostics;
 using FurinaChronicle.Presentation.Gacha;
+using FurinaChronicle.Presentation.Management;
 using FurinaChronicle.Services.Archives;
 using FurinaChronicle.Services.Gacha;
 using FurinaChronicle.Services.Gacha.History;
@@ -25,6 +26,7 @@ public sealed partial class Ui1GachaView
     private GachaPortableImportCoordinator? portableImporter;
     private GachaPortableExportPlanner? portableExporter;
     private GachaRecordOperationCoordinator? recordOperations;
+    private GachaSTokenRefreshCoordinator? stokenRefresh;
     private GachaManualRefreshCoordinator? manualRefresher;
     private Task? dataOperationTask;
     private GachaReadOnlyRow? selectedRow;
@@ -114,6 +116,9 @@ public sealed partial class Ui1GachaView
                 break;
             case "manual-refresh":
                 await RunDataOperationAsync(ManualRefreshAsync);
+                break;
+            case "stoken-refresh":
+                await RunDataOperationAsync(RefreshFromLoginAccountAsync);
                 break;
             case "windows-cache-refresh":
                 await RunDataOperationAsync(RefreshFromWindowsCacheAsync);
@@ -530,6 +535,76 @@ public sealed partial class Ui1GachaView
         finally
         {
             await CloseDataProgressDialogAsync(refreshDialog, refreshShow);
+        }
+
+        if (!outcome.Succeeded)
+        {
+            ShowDataOperationStatus(outcome.Message, isError: true);
+            return;
+        }
+
+        string? refresh = await RefreshAfterImportAsync();
+        ShowDataOperationStatus(
+            outcome.Message + (refresh is null ? "" : $"\n{refresh}"));
+    }
+
+    private async Task RefreshFromLoginAccountAsync()
+    {
+        if (stokenRefresh is null || importMode is null ||
+            state?.Snapshot is not { IsBusy: false, AccountId: Guid accountId } snapshot)
+        {
+            ShowDataOperationStatus("请先选择要刷新的账号并等待当前读取结束。", isError: true);
+            return;
+        }
+
+        // Full mode is frozen here; the coordinator snapshots target account and mode before any
+        // credential/network work.
+        GachaSTokenRefreshPlanResult planned = await stokenRefresh.PlanAsync(accountId);
+        if (!planned.Succeeded || planned.Plan is null)
+        {
+            ShowDataOperationStatus(
+                planned.FailureMessage ?? "无法通过登录账号刷新，未写入任何数据。",
+                isError: true);
+            return;
+        }
+
+        GachaSTokenRefreshPlan plan = planned.Plan;
+        var confirmDialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "通过登录账号刷新",
+            PrimaryButtonText = "开始刷新",
+            CloseButtonText = "取消",
+            DefaultButton = ContentDialogButton.Primary,
+            Content = new ScrollViewer
+            {
+                MaxHeight = 420,
+                Content = new TextBlock
+                {
+                    Text = plan.ConfirmationText,
+                    TextWrapping = TextWrapping.Wrap,
+                    IsTextSelectionEnabled = true
+                }
+            }
+        };
+        AutomationProperties.SetAutomationId(confirmDialog, "GachaSTokenRefreshDialog");
+        if (await confirmDialog.ShowAsync() != ContentDialogResult.Primary)
+        {
+            ShowDataOperationStatus("已取消通过登录账号刷新，未写入任何数据。");
+            return;
+        }
+
+        GachaSTokenRefreshOutcome outcome;
+        (ContentDialog progress, Task show) = ShowDataProgressDialog(
+            "正在通过登录账号刷新",
+            "正在使用本机隔离宿主凭据请求抽卡接口并以原子变更集提交；此阶段不能取消。");
+        try
+        {
+            outcome = await stokenRefresh.ExecuteAsync(plan);
+        }
+        finally
+        {
+            await CloseDataProgressDialogAsync(progress, show);
         }
 
         if (!outcome.Succeeded)

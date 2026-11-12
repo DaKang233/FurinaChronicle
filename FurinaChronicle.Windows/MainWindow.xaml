@@ -61,8 +61,8 @@
                     AutomationProperties.AutomationId="Ui4NavigationHistory">
                     <NavigationViewItem.Icon><SymbolIcon Symbol="Repair" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem x:Name="PassportDestination" Content="登录账号（待交付）"
-                    Tag="passport" IsEnabled="False"
+                <NavigationViewItem x:Name="PassportDestination" Content="登录账号"
+                    Tag="passport"
                     AutomationProperties.AutomationId="Ui4NavigationPassport">
                     <NavigationViewItem.Icon><SymbolIcon Symbol="Contact" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
