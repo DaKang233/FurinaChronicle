@@ -8,6 +8,7 @@ using FurinaChronicle.Core.Passport;
 using FurinaChronicle.Core.Records;
 using FurinaChronicle.Infrastructure.Gacha.Metadata;
 using FurinaChronicle.Infrastructure.Gacha.Metadata.Localization;
+using FurinaChronicle.Infrastructure.Gacha.Importing;
 using FurinaChronicle.Infrastructure.Gacha.Portable;
 using FurinaChronicle.Infrastructure.Gacha.Refreshing;
 using FurinaChronicle.Infrastructure.Gacha.Uigf.Compatibility;
@@ -30,6 +31,7 @@ public sealed class Ui1PreviewEnvironment : IAsyncDisposable
     private readonly SemaphoreSlim gate = new(1, 1);
     private readonly FileGachaItemIconCache gachaIconCache;
     private readonly MiHoYoGachaLogClient gachaLogClient;
+    private readonly TeyvatHelperUigfClient teyvatHelperClient;
     private FileStream? lease;
     private bool initialized;
     public string RootDirectory { get; }
@@ -60,6 +62,8 @@ public sealed class Ui1PreviewEnvironment : IAsyncDisposable
     public ManageGachaHistory GachaHistory { get; }
     public FileGachaItemIconCache GachaIconCache => gachaIconCache;
     public RefreshGachaRecords GachaRefresher { get; }
+    public WindowsGachaCacheUrlProvider WindowsCacheUrlProvider { get; }
+    public TeyvatHelperUigfImportSource TeyvatHelperImport { get; }
 
     public Ui1PreviewEnvironment(string platformDataDirectory, string hostName)
     {
@@ -107,14 +111,21 @@ public sealed class Ui1PreviewEnvironment : IAsyncDisposable
             new GachaItemIconCacheOptions(Path.Combine(ImageCacheDirectory, "gacha-item-icons")),
             TimeProvider.System);
         gachaLogClient = new MiHoYoGachaLogClient();
+        WindowsCacheUrlProvider = new WindowsGachaCacheUrlProvider();
         GachaRefresher = new RefreshGachaRecords(
             Records,
             new CommitGachaRecords(Changes),
             new IsolatedPassportAccountStore(),
             new UnavailableSTokenUrlProvider(),
-            new UnavailableWindowsCacheUrlProvider(),
+            WindowsCacheUrlProvider,
             gachaLogClient,
             new EmptyGachaItemMetadataProvider());
+        teyvatHelperClient = new TeyvatHelperUigfClient();
+        TeyvatHelperImport = new TeyvatHelperUigfImportSource(
+            new IsolatedPassportAccountStore(),
+            new IsolatedPassportSelectionStore(),
+            new UnavailableSTokenUrlProvider(),
+            teyvatHelperClient);
     }
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
@@ -191,6 +202,7 @@ public sealed class Ui1PreviewEnvironment : IAsyncDisposable
         {
             gachaIconCache.Dispose();
             gachaLogClient.Dispose();
+            teyvatHelperClient.Dispose();
             await Database.DisposeAsync().ConfigureAwait(false);
             lease?.Dispose();
             lease = null;
@@ -199,7 +211,9 @@ public sealed class Ui1PreviewEnvironment : IAsyncDisposable
     }
 
     // The isolated host never opens production credentials. These explicit placeholders keep the
-    // migration boundary visible: SToken and Windows web-cache refresh are not wired here.
+    // migration boundary visible: SToken refresh is not wired here and there is no passport
+    // login/role-selection context, while the manual Teyvat Helper path and the Windows web-cache
+    // source do not need one.
     private sealed class IsolatedPassportAccountStore : IPassportAccountStore
     {
         public Task<IReadOnlyList<PassportAccount>> GetAllAsync(
@@ -224,6 +238,23 @@ public sealed class Ui1PreviewEnvironment : IAsyncDisposable
             throw new NotSupportedException("The isolated UI-3 host does not store passport accounts.");
     }
 
+    private sealed class IsolatedPassportSelectionStore : IPassportSelectionStore
+    {
+        public Task<PassportSelection?> LoadAsync(
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<PassportSelection?>(null);
+
+        public Task SaveAsync(
+            PassportSelection selection,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException(
+                "The isolated UI-3 host does not store passport role selections.");
+
+        public Task ClearAsync(CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException(
+                "The isolated UI-3 host does not store passport role selections.");
+    }
+
     private sealed class UnavailableSTokenUrlProvider : ISTokenGachaUrlProvider
     {
         public Task<Uri> CreateAsync(
@@ -232,17 +263,5 @@ public sealed class Ui1PreviewEnvironment : IAsyncDisposable
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException(
                 "SToken refresh is not available in the isolated UI-3 host.");
-    }
-
-    private sealed class UnavailableWindowsCacheUrlProvider : IWindowsGachaCacheUrlProvider
-    {
-        public bool IsSupported => false;
-
-        public Task<Uri> FindAsync(
-            string gameInstallationPath,
-            GameServerRegion region,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException(
-                "Windows web-cache refresh is not available in the isolated UI-3 host.");
     }
 }
