@@ -154,3 +154,29 @@ Lead Windows UIA（隔离库直查）：
 - SToken 成功刷新需授权环境实测；当前仅错误路径与 fake executor 覆盖。
 - 窗口位置恢复、第二实例激活未实现，与生产单写者/切换方案一起评审。
 - 生产库发现、备份、凭据迁移与默认入口切换必须在 UI-6 切换前单独评审并获维护者确认。
+
+## WP-A4：Scoped Replace 与恢复点（UI-4 收尾）
+
+提交：`334507d`（替换计划/范围校验与集成测试）、`a71b1e5`（WinUI 模式与范围编辑器）。
+
+- **模式互斥**：备份恢复页新增“恢复模式”选择（Merge / Scoped Replace）；切换模式清空旧计划与
+  已选范围，避免把 Replace 预览当作 Merge 提交。
+- **范围与不可重叠**：来源档案 + Archive / Account / Domain 三种范围；`ArchiveReplaceScopeValidator`
+  （UI 层）与服务层 `PlanArchiveRestore.ValidateReplaceSelections` 双重校验，重叠/重复/未知/
+  形状无效均拒绝且不提交（文案含“未写入任何数据”）。
+- **预览与确认**：显示替换/保留/新增/移除/冲突/Tombstone 计数、设置差异；明确“缺失 Dataset
+  不会被视为清空、未声明数据集由服务拒绝、Tombstone 独立确认、提交失败不改变原数据、无热回切”；
+  破坏性确认（范围清单、范围外保留、不可逆说明）+ 提交前包/计划/目标指纹与 `CheckFreshnessAsync`
+  校验；旧计划明确“预览已过期”且不写库；成功后 Receipt/影响计数/受影响档案/账号映射并刷新。
+- **恢复点**：服务只提供 `FindCurrentRecoveryPointAsync`/清理孤儿恢复点，没有应用/切换 API；
+  页面保持只读摘要并明确标注，不伪造能力。
+- **测试**：9 项真实 SQLite 集成测试（范围重叠拒绝、缺失 Dataset 不清空、Tombstone 独立确认、
+  计划过期、失败不写库、Receipt 幂等、Merge/Replace 互斥）；并修复计划过期测试对“索引 0 档案”
+  的隐含假设（改为选择包含账号的档案），全量回归连续多次稳定 967/967。
+- **验证**：967/967；WinUI 构建/发布 0 警告 0 错误；版权头通过；Lead UIA 9 项 Pass
+  （恢复点只读、无应用入口、无计划时 Apply 禁用、切到 Scoped Replace、编辑器可见、切回 Merge
+  编辑器隐藏、截图证据）。
+
+UI-4 至此功能面完整：组合根/壳/启动/概览/档案与账号/操作历史与撤销/设置/备份恢复（Merge 与
+Scoped Replace）/登录凭据与 SToken 刷新。恢复点应用/切换、生产凭据迁移与默认入口切换仍按
+UI-6 评审执行。
