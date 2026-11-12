@@ -14,6 +14,14 @@ public sealed record ApplicationVersionInfo(
     string Source,
     bool IsReliable)
 {
+    public const string ProductName = "FurinaChronicle";
+
+    /// <summary>
+    /// The version users should see: three numeric segments from the shared
+    /// version source, without the Git-derived build or phase label.
+    /// </summary>
+    public string UserVisibleName => $"{ProductName} · {DisplayVersion}";
+
     public string DiagnosticText =>
         $"Version: {Version}{Environment.NewLine}" +
         $"Phase: {PhaseLabel}{Environment.NewLine}" +

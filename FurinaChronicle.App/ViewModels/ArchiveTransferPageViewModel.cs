@@ -654,7 +654,7 @@ public partial class ArchiveTransferPageViewModel(
             : $"当前恢复点：{point.CreatedAt:yyyy-MM-dd HH:mm:ss zzz}；" +
               $"{point.Length} 字节；Schema {point.DatabaseSchemaVersion}；" +
               $"校验 {(point.IsValid ? "有效" : "无效")}。" +
-              " 8C.5 只显示状态，不提供主库回切。";
+              " 当前版本只显示状态，不提供主库回切。";
     }
 
     private ArchiveGeneratorInfo CreateGeneratorInfo() => new(

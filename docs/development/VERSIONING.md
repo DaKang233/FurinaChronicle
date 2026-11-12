@@ -132,6 +132,18 @@ MAUI 生成的 Windows 中间 Appx manifest 使用 `Major.Minor.Patch.Build`，�
 
 如果未来改为 MSIX 打包，必须在实施时单独记录 Package Version 的平台范围约束，但不得另设人工版本源。
 
+## 应用命名
+
+应用的产品名称固定为 `FurinaChronicle`，不把程序集或项目后缀（如 `.App`）带进用户可见名称。用户可见版本使用共享版本源的三段前缀：
+
+```text
+FurinaChronicle · Major.Minor.Patch
+```
+
+- 窗口标题、关于页和设置页使用上述格式；`PhaseLabel`、完整 Build、commit 和 dirty 只放在诊断信息中。
+- 验证包与预览包可以在标题中追加 `PhaseLabel`（例如 `FurinaChronicle 10.0 Validation`），但必须从 `Version.props` 读取，不得硬编码旧阶段名；安装标识保持稳定，不随阶段重新编号。
+- `ApplicationVersionInfo.UserVisibleName` 是应用内生成该名称的唯一逻辑；新增页面不得自行拼接版本字符串。
+
 ## Git 不可用、源码压缩包与 shallow clone
 
 版本来源按以下优先级解析：

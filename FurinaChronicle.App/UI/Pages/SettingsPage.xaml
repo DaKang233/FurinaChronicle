@@ -24,6 +24,10 @@
             </Picker>
             <gacha:GachaItemIconView RankType="5" IconSize="84" CardWidth="132" ItemName="五星底图预览"
                                     HorizontalOptions="Start" />
+
+            <Label FontAttributes="Bold" FontSize="24" Text="关于" />
+            <Label x:Name="VersionLabel" AutomationId="ApplicationVersion" />
+            <Label x:Name="VersionDiagnosticLabel" FontSize="12" AutomationId="ApplicationVersionDiagnostics" />
         </VerticalStackLayout>
     </ScrollView>
 </ContentPage>

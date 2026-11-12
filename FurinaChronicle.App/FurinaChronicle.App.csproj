@@ -32,14 +32,14 @@
 		<MauiXamlInflator>SourceGen</MauiXamlInflator>
 
 		<!-- Display name -->
-		<ApplicationTitle Condition="'$(Phase8BValidationMode)' != 'true' and '$(Phase8CValidationMode)' != 'true'">FurinaChronicle.App</ApplicationTitle>
-		<ApplicationTitle Condition="'$(Phase8BValidationMode)' == 'true'">FurinaChronicle 8B.7 Validation</ApplicationTitle>
-		<ApplicationTitle Condition="'$(Phase8CValidationMode)' == 'true'">FurinaChronicle 8C.6 Validation</ApplicationTitle>
+		<ApplicationTitle Condition="'$(Phase8BValidationMode)' != 'true' and '$(Phase8CValidationMode)' != 'true' and '$(Ui1PreviewMode)' != 'true'">FurinaChronicle</ApplicationTitle>
+		<ApplicationTitle Condition="'$(Phase8BValidationMode)' == 'true'">FurinaChronicle $(FurinaPhaseLabel) Validation</ApplicationTitle>
+		<ApplicationTitle Condition="'$(Phase8CValidationMode)' == 'true'">FurinaChronicle $(FurinaPhaseLabel) Validation</ApplicationTitle>
 
 		<!-- App Identifier -->
 		<ApplicationId Condition="'$(Phase8CValidationMode)' != 'true'">com.companyname.furinachronicle.app</ApplicationId>
 		<ApplicationId Condition="'$(Phase8CValidationMode)' == 'true'">com.companyname.furinachronicle.validation.phase8c6</ApplicationId>
-		<ApplicationTitle Condition="'$(Ui1PreviewMode)' == 'true'">FurinaChronicle UI-1 Preview</ApplicationTitle>
+		<ApplicationTitle Condition="'$(Ui1PreviewMode)' == 'true'">FurinaChronicle $(FurinaPhaseLabel) Preview</ApplicationTitle>
 		<ApplicationId Condition="'$(Ui1PreviewMode)' == 'true'">com.companyname.furinachronicle.preview.ui1</ApplicationId>
 
 		<!-- To develop, package, and publish an app to the Microsoft Store, see: https://aka.ms/MauiTemplateUnpackaged -->

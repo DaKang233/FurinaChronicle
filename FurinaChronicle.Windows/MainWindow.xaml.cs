@@ -1,6 +1,7 @@
 // Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
+using System.Reflection;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -41,6 +42,17 @@ public sealed partial class MainWindow : Window
         Closed += async (_, _) => await GachaView.CloseAsync();
         ApplyBackdrop(forceSolid: false);
         ResizeInitialWindow();
+    }
+
+    private static string ProductWindowTitle()
+    {
+        AssemblyMetadataAttribute? prefix = typeof(MainWindow).Assembly
+            .GetCustomAttributes<AssemblyMetadataAttribute>()
+            .LastOrDefault(attribute =>
+                attribute.Key == "FurinaVersionPrefix");
+        return string.IsNullOrWhiteSpace(prefix?.Value)
+            ? "FurinaChronicle"
+            : $"FurinaChronicle · {prefix.Value}";
     }
 
     private void ResizeInitialWindow()
