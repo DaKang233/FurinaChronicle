@@ -47,6 +47,7 @@ internal static class ArchiveServiceCollectionExtensions
         services.AddTransient<CreatePlayerArchive>();
         services.AddTransient<GetPlayerArchives>();
         services.AddTransient<GetGameAccounts>();
+        services.AddTransient<GetUnresolvedGameAccounts>();
         services.AddTransient<AddGameAccount>();
         services.AddTransient<UpdateGameAccount>();
         services.AddTransient<RenamePlayerArchive>();

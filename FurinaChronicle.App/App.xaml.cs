@@ -1,6 +1,7 @@
-﻿// Copyright (c) 2026 DaKang233.
+// Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
+using FurinaChronicle.App.Composition;
 using FurinaChronicle.App.UI.Gacha;
 
 namespace FurinaChronicle.App
@@ -9,10 +10,15 @@ namespace FurinaChronicle.App
     {
         private readonly AppShell appShell;
 
-        public App(AppShell appShell, GachaAppearanceSettings appearance)
+        public App(
+            AppShell appShell,
+            GachaAppearanceSettings appearance,
+            MauiSettingsAppearanceStore settingsAppearance)
         {
             InitializeComponent();
             appearance.ApplyTo(Resources);
+            // Persisted settings-page theme is applied before the first window shows.
+            settingsAppearance.ApplyPersistedTheme();
             this.appShell = appShell;
         }
 

@@ -10,7 +10,16 @@ namespace FurinaChronicle.App;
 public partial class AppShell : Shell
 {
     private const string StartupRoute = "startup";
+    private const string OverviewRoute = "home";
     private const string ChronicleRoute = "chronicle-page";
+    private const string GachaPageRoute = "gacha-page";
+    private const string ArchiveHistoryPageRoute = "archive-history-page";
+    private const string UserPageRoute = "user-page";
+    private const string SettingsPageRoute = "settings-page";
+    private const string Ui0PreviewRoute = "ui0-preview";
+    private const string Ui1PreviewRoute = "ui1-preview";
+    private readonly OverviewPage overviewPage;
+    private readonly DataHubPage dataHubPage;
     private readonly HomePage homePage;
     private readonly ChroniclePage chroniclePage;
     private readonly GachaPage gachaPage;
@@ -30,6 +39,8 @@ public partial class AppShell : Shell
 
     public AppShell(
         StartupPage startupPage,
+        OverviewPage overviewPage,
+        DataHubPage dataHubPage,
         HomePage homePage,
         ChroniclePage chroniclePage,
         GachaPage gachaPage,
@@ -44,6 +55,8 @@ public partial class AppShell : Shell
         UserPageViewModel userPageViewModel)
     {
         InitializeComponent();
+        this.overviewPage = overviewPage;
+        this.dataHubPage = dataHubPage;
         this.homePage = homePage;
         this.chroniclePage = chroniclePage;
         this.gachaPage = gachaPage;
@@ -62,6 +75,16 @@ public partial class AppShell : Shell
         Routing.RegisterRoute(ChronicleRoute, typeof(ChroniclePage));
         Routing.RegisterRoute("challenge-history", typeof(ChallengeHistoryPage));
         Routing.RegisterRoute("character-history", typeof(CharacterHistoryPage));
+        // Android pushes the shared MAUI pages from the overview / data / archive
+        // destinations; the names differ from the Windows flyout routes on purpose.
+        Routing.RegisterRoute(GachaPageRoute, typeof(GachaPage));
+        Routing.RegisterRoute(
+            ArchiveHistoryPageRoute,
+            typeof(ArchiveHistoryPage));
+        Routing.RegisterRoute(UserPageRoute, typeof(UserPage));
+        Routing.RegisterRoute(SettingsPageRoute, typeof(SettingsPage));
+        Routing.RegisterRoute(Ui0PreviewRoute, typeof(HomePage));
+        Routing.RegisterRoute(Ui1PreviewRoute, typeof(Ui1GachaPage));
         Items.Add(CreateContent("正在启动", StartupRoute, startupPage));
     }
 
@@ -82,15 +105,31 @@ public partial class AppShell : Shell
 
     public Task ShowUserPageAsync()
     {
-        return GoToAsync(UserRoute, animate: true);
+        return GoToAsync(
+            OperatingSystem.IsAndroid() ? UserPageRoute : "//user",
+            animate: true);
     }
 
     public Task ShowGachaPageAsync()
     {
         return GoToAsync(
+            OperatingSystem.IsAndroid() ? GachaPageRoute : "//gacha",
+            animate: true);
+    }
+
+    public Task ShowArchiveHistoryPageAsync()
+    {
+        return GoToAsync(
             OperatingSystem.IsAndroid()
-                ? "//main/gacha"
-                : "//gacha",
+                ? ArchiveHistoryPageRoute
+                : "//archive-history",
+            animate: true);
+    }
+
+    public Task ShowSettingsPageAsync()
+    {
+        return GoToAsync(
+            OperatingSystem.IsAndroid() ? SettingsPageRoute : "//settings",
             animate: true);
     }
 
@@ -125,17 +164,8 @@ public partial class AppShell : Shell
         ? "//main/phase8b7-validation"
         : "//phase8b7-validation";
 #else
-        ? "//main/home"
+        ? $"//main/{OverviewRoute}"
         : "//home";
-#endif
-
-    private string UserRoute => OperatingSystem.IsAndroid()
-#if PHASE8B_VALIDATION
-        ? "//main/phase8b7-validation"
-        : "//phase8b7-validation";
-#else
-        ? "//main/user"
-        : "//user";
 #endif
 
     private void ConfigureMainNavigation()
@@ -162,13 +192,14 @@ public partial class AppShell : Shell
 #else
         if (OperatingSystem.IsAndroid())
         {
+            // Four destinations (UI-4 §6.3): overview / chronicle / data / archive.
+            // History, user/login and settings are reachable from the archive page.
             FlyoutBehavior = FlyoutBehavior.Disabled;
             var tabs = new TabBar { Route = "main" };
-            tabs.Items.Add(CreateContent("主页", "home", homePage));
-            tabs.Items.Add(CreateContent("抽卡记录", "gacha", gachaPage));
-            tabs.Items.Add(CreateContent("修改历史", "archive-history", archiveHistoryPage));
+            tabs.Items.Add(CreateContent("概览", OverviewRoute, overviewPage));
+            tabs.Items.Add(CreateContent("游戏历程", "chronicle", chroniclePage));
+            tabs.Items.Add(CreateContent("数据", "data", dataHubPage));
             tabs.Items.Add(CreateContent("档案", "archive", archivePage));
-            tabs.Items.Add(CreateContent("用户", "user", userPage));
             Items.Add(tabs);
             return;
         }

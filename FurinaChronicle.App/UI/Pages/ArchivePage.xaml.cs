@@ -48,6 +48,36 @@ public partial class ArchivePage : ContentPage
         }
     }
 
+    private async void OnOpenArchiveHistoryClicked(
+        object? sender,
+        EventArgs e)
+    {
+        if (Shell.Current is AppShell shell)
+        {
+            await shell.ShowArchiveHistoryPageAsync();
+        }
+    }
+
+    private async void OnOpenUserPageClicked(
+        object? sender,
+        EventArgs e)
+    {
+        if (Shell.Current is AppShell shell)
+        {
+            await shell.ShowUserPageAsync();
+        }
+    }
+
+    private async void OnOpenSettingsClicked(
+        object? sender,
+        EventArgs e)
+    {
+        if (Shell.Current is AppShell shell)
+        {
+            await shell.ShowSettingsPageAsync();
+        }
+    }
+
     private void OnAccountSelectionChanged(object? sender, EventArgs e)
     {
         if (sender is Picker picker)

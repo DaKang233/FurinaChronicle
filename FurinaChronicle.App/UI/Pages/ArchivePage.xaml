@@ -53,6 +53,57 @@
 
             <Border Padding="14">
                 <VerticalStackLayout Spacing="10">
+                    <Label FontAttributes="Bold" FontSize="18" Text="更多入口" />
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <VerticalStackLayout Spacing="2">
+                            <Label FontAttributes="Bold" Text="操作历史 / 修改历史" />
+                            <Label
+                                FontSize="12"
+                                Opacity="0.7"
+                                Text="查看当前档案的操作记录与事实修订，管理可撤销项；与设置页共用撤销保留次数。" />
+                        </VerticalStackLayout>
+                        <Button
+                            Grid.Column="1"
+                            Clicked="OnOpenArchiveHistoryClicked"
+                            IsEnabled="{Binding IsNotBusy}"
+                            Text="打开"
+                            AutomationId="OpenArchiveHistory" />
+                    </Grid>
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <VerticalStackLayout Spacing="2">
+                            <Label FontAttributes="Bold" Text="用户与登录" />
+                            <Label
+                                FontSize="12"
+                                Opacity="0.7"
+                                Text="米哈游通行证登录、角色选择与退出凭据（退出登录不删除本地档案）。" />
+                        </VerticalStackLayout>
+                        <Button
+                            Grid.Column="1"
+                            Clicked="OnOpenUserPageClicked"
+                            IsEnabled="{Binding IsNotBusy}"
+                            Text="打开"
+                            AutomationId="OpenUserPage" />
+                    </Grid>
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <VerticalStackLayout Spacing="2">
+                            <Label FontAttributes="Bold" Text="设置" />
+                            <Label
+                                FontSize="12"
+                                Opacity="0.7"
+                                Text="外观、数据与存储、撤销保留次数、应用信息与本地诊断。" />
+                        </VerticalStackLayout>
+                        <Button
+                            Grid.Column="1"
+                            Clicked="OnOpenSettingsClicked"
+                            IsEnabled="{Binding IsNotBusy}"
+                            Text="打开"
+                            AutomationId="OpenSettings" />
+                    </Grid>
+                </VerticalStackLayout>
+            </Border>
+
+            <Border Padding="14">
+                <VerticalStackLayout Spacing="10">
                     <Label FontAttributes="Bold" FontSize="18" Text="档案" />
                     <Picker
                         Title="选择档案"

@@ -149,7 +149,11 @@ public partial class ArchivePageViewModel(
             SelectedAccount = null;
             await LoadArchivesCoreAsync();
             await LoadAccountsCoreAsync();
-            StatusMessage = $"已删除档案“{archiveName}”。";
+            // Selection is by stable archive id; after a delete the page falls back
+            // explicitly instead of silently keeping a stale selection.
+            StatusMessage = SelectedArchive is null
+                ? $"已删除档案“{archiveName}”；当前没有剩余档案。"
+                : $"已删除档案“{archiveName}”；已回退到“{SelectedArchive.Name}”。";
         });
     }
 

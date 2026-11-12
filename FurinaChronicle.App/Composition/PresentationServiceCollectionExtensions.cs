@@ -8,6 +8,7 @@ using FurinaChronicle.App.UI.Pages;
 using FurinaChronicle.App.ViewModels;
 using FurinaChronicle.Infrastructure.HistoryDomains.Collecting;
 using FurinaChronicle.Infrastructure.Metadata;
+using FurinaChronicle.Presentation.Management;
 using FurinaChronicle.Services.Abstractions;
 using FurinaChronicle.Services.HistoryDomains.Collecting;
 
@@ -29,9 +30,21 @@ internal static class PresentationServiceCollectionExtensions
         services.AddSingleton<ArchiveTransferPageViewModel>();
         services.AddSingleton<UserPageViewModel>();
         services.AddSingleton<StartupPageViewModel>();
+        services.AddSingleton<OverviewPageViewModel>();
 #if PHASE8B_VALIDATION
         services.AddSingleton<Phase8BValidationPageViewModel>();
 #endif
+
+        // UI-4/UI-5 Android destinations and the shared settings state (UI-4 §12.4).
+        services.AddSingleton<OverviewPage>();
+        services.AddSingleton<DataHubPage>();
+        services.AddSingleton<MauiSettingsAppearanceStore>();
+        services.AddSingleton<ISettingsAppearanceStore>(
+            provider => provider.GetRequiredService<MauiSettingsAppearanceStore>());
+        services.AddSingleton<ISettingsStoragePort, MauiSettingsStoragePort>();
+        services.AddSingleton<ISettingsApplicationPort, MauiSettingsApplicationPort>();
+        services.AddSingleton<ISettingsHistoryPort, ServiceSettingsHistoryPort>();
+        services.AddSingleton<SettingsState>();
 
         services.AddTransient<GachaPage>();
         services.AddTransient<ArchiveHistoryPage>();

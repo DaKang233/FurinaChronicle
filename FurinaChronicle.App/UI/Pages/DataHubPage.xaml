@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  Copyright (c) 2026 DaKang233.
+  SPDX-License-Identifier: MIT
+-->
+
+<ContentPage
+    x:Class="FurinaChronicle.App.UI.Pages.DataHubPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:controls="clr-namespace:FurinaChronicle.App.UI.Controls"
+    SafeAreaEdges="All"
+    Title="数据">
+
+    <Shell.TitleView>
+        <controls:PassportAvatarButton
+            IsVisible="{OnPlatform Android=True, WinUI=False}" />
+    </Shell.TitleView>
+
+    <ScrollView VerticalScrollBarVisibility="Always">
+        <VerticalStackLayout Padding="16,12,16,24" Spacing="12">
+            <VerticalStackLayout Spacing="2">
+                <Label FontAttributes="Bold" FontSize="26" Text="数据" />
+                <Label
+                    FontSize="12"
+                    LineBreakMode="WordWrap"
+                    Opacity="0.72"
+                    Text="本地业务的三个领域入口。每个页面保留自己的档案与账号选择；本页不设置全局当前账号。" />
+            </VerticalStackLayout>
+
+            <Border Padding="14">
+                <VerticalStackLayout Spacing="8">
+                    <Label FontAttributes="Bold" FontSize="18" Text="抽卡记录" />
+                    <Label
+                        FontSize="12"
+                        LineBreakMode="WordWrap"
+                        Opacity="0.72"
+                        Text="本地抽卡记录、分析总览、明细表格与操作历史；刷新、导入 UIGF/Portable、导出 UIGF/表格/Portable 都从抽卡页的“数据操作”进入。" />
+                    <Button
+                        Clicked="OnOpenGachaClicked"
+                        HorizontalOptions="Start"
+                        MinimumHeightRequest="44"
+                        Text="打开抽卡记录"
+                        AutomationId="DataOpenGacha" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border Padding="14">
+                <VerticalStackLayout Spacing="8">
+                    <Label FontAttributes="Bold" FontSize="18" Text="角色与武器" />
+                    <Label
+                        FontSize="12"
+                        LineBreakMode="WordWrap"
+                        Opacity="0.72"
+                        Text="角色与武器的本地观测/获得历史（独立领域数据，与抽卡记录分开保存与导出）。" />
+                    <Button
+                        Clicked="OnOpenCharacterWeaponClicked"
+                        HorizontalOptions="Start"
+                        MinimumHeightRequest="44"
+                        Text="打开角色与武器"
+                        AutomationId="DataOpenCharacterWeapon" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border Padding="14">
+                <VerticalStackLayout Spacing="8">
+                    <Label FontAttributes="Bold" FontSize="18" Text="周期挑战" />
+                    <Label
+                        FontSize="12"
+                        LineBreakMode="WordWrap"
+                        Opacity="0.72"
+                        Text="深境螺旋与挑战模式的本地观测历史（周期成绩、进度与证据来源分别标注）。" />
+                    <Button
+                        Clicked="OnOpenChallengeClicked"
+                        HorizontalOptions="Start"
+                        MinimumHeightRequest="44"
+                        Text="打开周期挑战"
+                        AutomationId="DataOpenChallenge" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border Padding="14">
+                <VerticalStackLayout Spacing="8">
+                    <Label FontAttributes="Bold" FontSize="18" Text="跨领域视图" />
+                    <Label
+                        FontSize="12"
+                        LineBreakMode="WordWrap"
+                        Opacity="0.72"
+                        Text="游戏历程（Chronicle）把这些领域事件按时间汇总；它是独立的一级目的地。" />
+                    <Button
+                        Clicked="OnOpenChronicleClicked"
+                        HorizontalOptions="Start"
+                        MinimumHeightRequest="44"
+                        Text="打开游戏历程"
+                        AutomationId="DataOpenChronicle" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Label
+                FontSize="11"
+                Opacity="0.66"
+                LineBreakMode="WordWrap"
+                Text="提示：归档、账号身份与备份恢复在“档案”页；设置与操作历史也在档案页底部可达。" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

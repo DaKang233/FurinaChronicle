@@ -9,25 +9,232 @@
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
     xmlns:gacha="clr-namespace:FurinaChronicle.App.UI.Gacha"
-    Title="设置"
-    SafeAreaEdges="All">
-    <ScrollView>
-        <VerticalStackLayout Padding="20" Spacing="12" MaximumWidthRequest="640" HorizontalOptions="Fill">
-            <Label FontAttributes="Bold" FontSize="24" Text="外观" />
-            <Label FontAttributes="Bold" Text="抽卡物品底图" />
-            <Picker x:Name="ItemBackgroundPicker" Title="选择物品底图" AutomationId="GachaItemBackgroundStyle"
-                    SelectedIndexChanged="OnItemBackgroundChanged">
-                <Picker.Items>
-                    <x:String>新版底图（内嵌标记）</x:String>
-                    <x:String>经典底图（独立标记）</x:String>
-                </Picker.Items>
-            </Picker>
-            <gacha:GachaItemIconView RankType="5" IconSize="84" CardWidth="132" ItemName="五星底图预览"
-                                    HorizontalOptions="Start" />
+    x:Name="SettingsPageRoot"
+    SafeAreaEdges="All"
+    Title="设置">
+    <ScrollView VerticalScrollBarVisibility="Always">
+        <VerticalStackLayout Padding="16,12,16,24" Spacing="12" MaximumWidthRequest="720">
+            <Label FontAttributes="Bold" FontSize="26" Text="设置" />
+            <Label
+                FontSize="12"
+                LineBreakMode="WordWrap"
+                Opacity="0.72"
+                Text="外观、隔离数据与存储、历史撤销保留和应用信息。所有操作只作用于本应用包私有目录；不修改生产库或凭据。" />
 
-            <Label FontAttributes="Bold" FontSize="24" Text="关于" />
-            <Label x:Name="VersionLabel" AutomationId="ApplicationVersion" />
-            <Label x:Name="VersionDiagnosticLabel" FontSize="12" AutomationId="ApplicationVersionDiagnostics" />
+            <Border Padding="14">
+                <VerticalStackLayout Spacing="10">
+                    <Label FontAttributes="Bold" FontSize="18" Text="外观" />
+                    <Label FontSize="12" Opacity="0.72" Text="主题" />
+                    <Picker
+                        x:Name="ThemePicker"
+                        AutomationId="SettingsThemePicker"
+                        SelectedIndexChanged="OnThemeChanged"
+                        Title="主题">
+                        <Picker.Items>
+                            <x:String>跟随系统</x:String>
+                            <x:String>浅色</x:String>
+                            <x:String>深色</x:String>
+                        </Picker.Items>
+                    </Picker>
+                    <Label FontAttributes="Bold" Text="抽卡物品底图" />
+                    <Picker
+                        x:Name="ItemBackgroundPicker"
+                        Title="选择物品底图"
+                        AutomationId="GachaItemBackgroundStyle"
+                        SelectedIndexChanged="OnItemBackgroundChanged">
+                        <Picker.Items>
+                            <x:String>新版底图（内嵌标记）</x:String>
+                            <x:String>经典底图（独立标记）</x:String>
+                        </Picker.Items>
+                    </Picker>
+                    <gacha:GachaItemIconView
+                        RankType="5"
+                        IconSize="72"
+                        CardWidth="120"
+                        ItemName="五星底图预览"
+                        HorizontalOptions="Start" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border Padding="14">
+                <VerticalStackLayout Spacing="10">
+                    <Label FontAttributes="Bold" FontSize="18" Text="数据与存储" />
+                    <Label FontSize="12" Opacity="0.72" Text="隔离数据目录" />
+                    <Label
+                        x:Name="DataRootLabel"
+                        FontSize="12"
+                        LineBreakMode="WordWrap"
+                        AutomationId="SettingsDataRoot" />
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <VerticalStackLayout Spacing="2">
+                            <Label FontSize="12" Opacity="0.72" Text="数据库" />
+                            <Label
+                                x:Name="DatabaseLabel"
+                                FontSize="12"
+                                LineBreakMode="WordWrap"
+                                AutomationId="SettingsDatabase" />
+                        </VerticalStackLayout>
+                        <Label
+                            Grid.Column="1"
+                            x:Name="DatabaseSizeLabel"
+                            FontAttributes="Bold"
+                            FontSize="12"
+                            VerticalTextAlignment="Center"
+                            AutomationId="SettingsDatabaseSize" />
+                    </Grid>
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <VerticalStackLayout Spacing="2">
+                            <Label FontSize="12" Opacity="0.72" Text="图标缓存" />
+                            <Label
+                                x:Name="CacheLabel"
+                                FontSize="12"
+                                LineBreakMode="WordWrap"
+                                AutomationId="SettingsCache" />
+                        </VerticalStackLayout>
+                        <Label
+                            Grid.Column="1"
+                            x:Name="CacheSizeLabel"
+                            FontAttributes="Bold"
+                            FontSize="12"
+                            VerticalTextAlignment="Center"
+                            AutomationId="SettingsCacheSize" />
+                    </Grid>
+                    <Button
+                        Clicked="OnClearIconCacheClicked"
+                        MinimumHeightRequest="44"
+                        Text="清除图标缓存（不删除抽卡事实）"
+                        AutomationId="SettingsClearIconCache" />
+                    <Button
+                        Clicked="OnExportDiagnosticsClicked"
+                        MinimumHeightRequest="44"
+                        Text="导出本地诊断文本"
+                        AutomationId="SettingsExportDiagnostics" />
+                    <Label
+                        FontSize="11"
+                        LineBreakMode="WordWrap"
+                        Opacity="0.66"
+                        Text="诊断文本只含版本、阶段、提交、数据库/缓存文件大小与安全声明，不含记录内容、凭据或完整用户路径。缓存清除只删除可重建的图标文件。" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border Padding="14">
+                <VerticalStackLayout Spacing="10">
+                    <Label FontAttributes="Bold" FontSize="18" Text="历史（撤销保留）" />
+                    <Label
+                        FontSize="12"
+                        LineBreakMode="WordWrap"
+                        Opacity="0.72"
+                        Text="撤销材料保留次数与“操作历史”页共用同一设置；0 表示不再保留未来操作的撤销材料，但不会删除修订历史。" />
+                    <Picker
+                        x:Name="ArchivePicker"
+                        AutomationId="SettingsArchivePicker"
+                        ItemDisplayBinding="{Binding Name}"
+                        SelectedIndexChanged="OnHistoryArchiveChanged"
+                        Title="选择档案" />
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <Entry
+                            x:Name="UndoLimitEntry"
+                            AutomationId="SettingsUndoLimit"
+                            Keyboard="Numeric"
+                            MaxLength="4"
+                            Placeholder="0～1000"
+                            Text="3" />
+                        <Button
+                            Grid.Column="1"
+                            Clicked="OnSaveUndoLimitClicked"
+                            MinimumHeightRequest="44"
+                            Text="保存保留次数"
+                            AutomationId="SettingsUndoLimitSave" />
+                    </Grid>
+                </VerticalStackLayout>
+            </Border>
+
+            <Border Padding="14">
+                <VerticalStackLayout Spacing="10">
+                    <Label FontAttributes="Bold" FontSize="18" Text="应用" />
+                    <Label
+                        x:Name="VersionLabel"
+                        AutomationId="ApplicationVersion" />
+                    <Label
+                        x:Name="VersionDiagnosticLabel"
+                        FontSize="12"
+                        Opacity="0.72"
+                        AutomationId="ApplicationVersionDiagnostics" />
+                    <Button
+                        Clicked="OnToggleLicenseClicked"
+                        MinimumHeightRequest="44"
+                        Text="查看许可"
+                        AutomationId="SettingsLicenseToggle" />
+                    <Label
+                        x:Name="LicenseLabel"
+                        FontSize="11"
+                        IsVisible="False"
+                        LineBreakMode="WordWrap"
+                        AutomationId="SettingsLicenseText" />
+                    <Button
+                        Clicked="OnToggleThirdPartyClicked"
+                        MinimumHeightRequest="44"
+                        Text="查看第三方声明"
+                        AutomationId="SettingsThirdPartyToggle" />
+                    <Label
+                        x:Name="ThirdPartyLabel"
+                        FontSize="11"
+                        IsVisible="False"
+                        LineBreakMode="WordWrap"
+                        AutomationId="SettingsThirdPartyText" />
+                    <Label
+                        FontSize="11"
+                        LineBreakMode="WordWrap"
+                        Opacity="0.66"
+                        Text="本页不提供“全量备份”按钮：完整逻辑 Archive 的导出、Merge 与 Scoped Replace 只在“档案 → 备份与恢复”中执行。" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border
+                x:Name="ValidationToolsSection"
+                Padding="14"
+                IsVisible="False">
+                <VerticalStackLayout Spacing="10">
+                    <Label FontAttributes="Bold" FontSize="18" Text="开发与验收（隔离验证构建）" />
+                    <Label
+                        FontSize="12"
+                        LineBreakMode="WordWrap"
+                        Opacity="0.72"
+                        Text="UI-0 / UI-1 技术预览页仅用于交互验证，不连接生产库或凭据。" />
+                    <Button
+                        Clicked="OnOpenUi0PreviewClicked"
+                        MinimumHeightRequest="44"
+                        Text="打开 UI-0 交互验证页"
+                        AutomationId="SettingsOpenUi0" />
+                    <Button
+                        Clicked="OnOpenUi1PreviewClicked"
+                        MinimumHeightRequest="44"
+                        Text="打开 UI-1 抽卡只读预览"
+                        AutomationId="SettingsOpenUi1" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                <ActivityIndicator
+                    x:Name="BusyIndicator"
+                    IsRunning="False"
+                    IsVisible="False"
+                    VerticalOptions="Center" />
+                <VerticalStackLayout Grid.Column="1" Spacing="2">
+                    <Label
+                        x:Name="StatusLabel"
+                        FontSize="12"
+                        LineBreakMode="WordWrap"
+                        AutomationId="SettingsStatus" />
+                    <Label
+                        x:Name="ErrorLabel"
+                        FontSize="12"
+                        IsVisible="False"
+                        LineBreakMode="WordWrap"
+                        TextColor="{AppThemeBinding Light=#B3261E, Dark=#FFB4AB}"
+                        AutomationId="SettingsError" />
+                </VerticalStackLayout>
+            </Grid>
         </VerticalStackLayout>
     </ScrollView>
 </ContentPage>

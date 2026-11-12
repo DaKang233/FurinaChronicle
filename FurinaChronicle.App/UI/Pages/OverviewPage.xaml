@@ -1,0 +1,240 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  Copyright (c) 2026 DaKang233.
+  SPDX-License-Identifier: MIT
+-->
+
+<ContentPage
+    x:Class="FurinaChronicle.App.UI.Pages.OverviewPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:controls="clr-namespace:FurinaChronicle.App.UI.Controls"
+    xmlns:viewModels="clr-namespace:FurinaChronicle.App.ViewModels"
+    x:DataType="viewModels:OverviewPageViewModel"
+    x:Name="OverviewPageRoot"
+    SafeAreaEdges="All"
+    Title="概览">
+
+    <Shell.TitleView>
+        <controls:PassportAvatarButton
+            IsVisible="{OnPlatform Android=True, WinUI=False}" />
+    </Shell.TitleView>
+
+    <ScrollView VerticalScrollBarVisibility="Always">
+        <VerticalStackLayout Padding="16,12,16,24" Spacing="12">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <VerticalStackLayout Spacing="2">
+                    <Label FontAttributes="Bold" FontSize="26" Text="概览" />
+                    <Label
+                        FontSize="12"
+                        LineBreakMode="WordWrap"
+                        Opacity="0.72"
+                        Text="本地档案、账号与记录的一次只读汇总；不重建 Chronicle，也不修改任何业务数据。" />
+                </VerticalStackLayout>
+                <Button
+                    Grid.Column="1"
+                    Command="{Binding ReloadCommand}"
+                    IsEnabled="{Binding IsNotBusy}"
+                    MinimumHeightRequest="44"
+                    Text="刷新"
+                    AutomationId="OverviewReload" />
+            </Grid>
+
+            <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8">
+                <Border Padding="12">
+                    <VerticalStackLayout Spacing="2">
+                        <Label FontSize="11" Opacity="0.72" Text="档案" />
+                        <Label
+                            FontAttributes="Bold"
+                            FontSize="22"
+                            Text="{Binding ArchiveCount}"
+                            AutomationId="OverviewArchiveCount" />
+                    </VerticalStackLayout>
+                </Border>
+                <Border Grid.Column="1" Padding="12">
+                    <VerticalStackLayout Spacing="2">
+                        <Label FontSize="11" Opacity="0.72" Text="账号副本" />
+                        <Label
+                            FontAttributes="Bold"
+                            FontSize="22"
+                            Text="{Binding AccountCount}"
+                            AutomationId="OverviewAccountCount" />
+                    </VerticalStackLayout>
+                </Border>
+                <Border Grid.Column="2" Padding="12">
+                    <VerticalStackLayout Spacing="2">
+                        <Label FontSize="11" Opacity="0.72" Text="抽卡记录" />
+                        <Label
+                            FontAttributes="Bold"
+                            FontSize="22"
+                            Text="{Binding TotalGachaRecords}"
+                            AutomationId="OverviewRecordCount" />
+                    </VerticalStackLayout>
+                </Border>
+            </Grid>
+
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                <ActivityIndicator
+                    IsRunning="{Binding IsBusy}"
+                    IsVisible="{Binding IsBusy}"
+                    VerticalOptions="Center" />
+                <Label
+                    Grid.Column="1"
+                    FontSize="12"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding StatusMessage}"
+                    VerticalTextAlignment="Center"
+                    AutomationId="OverviewStatus" />
+            </Grid>
+
+            <Label
+                FontSize="12"
+                IsVisible="{Binding HasError}"
+                LineBreakMode="WordWrap"
+                Text="{Binding ErrorMessage}"
+                TextColor="{AppThemeBinding Light=#B3261E, Dark=#FFB4AB}"
+                AutomationId="OverviewError" />
+
+            <Border
+                BackgroundColor="{AppThemeBinding Light=#FEF3C7, Dark=#4A3410}"
+                IsVisible="{Binding HasIdentityPending}"
+                Padding="12"
+                StrokeThickness="0"
+                StrokeShape="RoundRectangle 10">
+                <Label
+                    FontSize="12"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding IdentityPendingNote}"
+                    AutomationId="OverviewIdentityPending" />
+            </Border>
+
+            <Border
+                BackgroundColor="{AppThemeBinding Light=#EDF2F8, Dark=#28313D}"
+                IsVisible="{Binding IsEmpty}"
+                Padding="16"
+                StrokeThickness="0"
+                StrokeShape="RoundRectangle 12">
+                <VerticalStackLayout Spacing="8">
+                    <Label FontAttributes="Bold" Text="还没有本地档案" />
+                    <Label
+                        FontSize="12"
+                        LineBreakMode="WordWrap"
+                        Text="可以前往“档案”页创建档案，或在抽卡页的“数据操作”中导入 UIGF / Furina 抽卡数据集。" />
+                    <HorizontalStackLayout Spacing="8">
+                        <Button Clicked="OnOpenArchiveClicked" MinimumHeightRequest="44"
+                                Text="前往档案页" AutomationId="OverviewEmptyOpenArchive" />
+                        <Button Clicked="OnContinueGachaClicked" MinimumHeightRequest="44"
+                                Text="打开数据 · 抽卡" AutomationId="OverviewEmptyOpenGacha" />
+                    </HorizontalStackLayout>
+                </VerticalStackLayout>
+            </Border>
+
+            <Border Padding="14">
+                <VerticalStackLayout Spacing="8">
+                    <Label FontAttributes="Bold" FontSize="18" Text="最近活动" />
+                    <Label
+                        FontSize="12"
+                        IsVisible="{Binding HasNoRecentActivities}"
+                        LineBreakMode="WordWrap"
+                        Opacity="0.72"
+                        Text="{Binding RecentActivityEmptyText}"
+                        AutomationId="OverviewRecentEmpty" />
+                    <VerticalStackLayout
+                        BindableLayout.ItemsSource="{Binding RecentActivities}"
+                        Spacing="8">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="viewModels:OverviewActivityCard">
+                                <Border Padding="10" StrokeShape="RoundRectangle 8">
+                                    <VerticalStackLayout Spacing="2">
+                                        <Label FontAttributes="Bold" FontSize="14" Text="{Binding ItemName}" />
+                                        <Label FontSize="11" Opacity="0.8" Text="{Binding Context}" />
+                                        <Label FontSize="11" Opacity="0.66" Text="{Binding Time}" />
+                                    </VerticalStackLayout>
+                                </Border>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
+            </Border>
+
+            <Border Padding="14">
+                <VerticalStackLayout Spacing="8">
+                    <Label FontAttributes="Bold" FontSize="18" Text="档案与记录" />
+                    <Label
+                        FontSize="12"
+                        IsVisible="{Binding IsEmpty}"
+                        Opacity="0.72"
+                        Text="暂无档案。" />
+                    <VerticalStackLayout
+                        BindableLayout.ItemsSource="{Binding Archives}"
+                        Spacing="8">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="viewModels:OverviewArchiveCard">
+                                <Border Padding="10" StrokeShape="RoundRectangle 8">
+                                    <VerticalStackLayout Spacing="2">
+                                        <Label FontAttributes="Bold" Text="{Binding Name}" />
+                                        <Label FontSize="11" Opacity="0.8" Text="{Binding Summary}" />
+                                        <Label FontSize="11" Opacity="0.66" Text="{Binding LastActivity}" />
+                                    </VerticalStackLayout>
+                                </Border>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
+            </Border>
+
+            <Border Padding="14">
+                <VerticalStackLayout Spacing="8">
+                    <Label FontAttributes="Bold" FontSize="18" Text="领域覆盖" />
+                    <VerticalStackLayout
+                        BindableLayout.ItemsSource="{Binding CoverageNotes}"
+                        Spacing="4">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="x:String">
+                                <Label
+                                    FontSize="12"
+                                    LineBreakMode="WordWrap"
+                                    Text="{Binding .}" />
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
+            </Border>
+
+            <Border Padding="14">
+                <VerticalStackLayout Spacing="8">
+                    <Label FontAttributes="Bold" FontSize="18" Text="前往" />
+                    <Button Clicked="OnContinueGachaClicked" MinimumHeightRequest="44"
+                            Text="继续查看 · 抽卡记录" AutomationId="OverviewOpenGacha" />
+                    <Button Clicked="OnOpenChronicleClicked" MinimumHeightRequest="44"
+                            Text="游戏历程（Chronicle）" AutomationId="OverviewOpenChronicle" />
+                    <Button Clicked="OnOpenDataHubClicked" MinimumHeightRequest="44"
+                            Text="数据（抽卡 / 角色与武器 / 周期挑战）" AutomationId="OverviewOpenData" />
+                    <Button Clicked="OnOpenArchiveClicked" MinimumHeightRequest="44"
+                            Text="档案（含操作历史、备份恢复、用户与设置）" AutomationId="OverviewOpenArchive" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border
+                x:Name="ValidationToolsSection"
+                BackgroundColor="{AppThemeBinding Light=#EDF2F8, Dark=#28313D}"
+                IsVisible="False"
+                Padding="14"
+                StrokeThickness="0"
+                StrokeShape="RoundRectangle 12">
+                <VerticalStackLayout Spacing="8">
+                    <Label FontAttributes="Bold" FontSize="18" Text="开发与验收（隔离验证构建）" />
+                    <Label
+                        FontSize="12"
+                        LineBreakMode="WordWrap"
+                        Opacity="0.72"
+                        Text="以下入口只用于 UI-0/UI-1 交互验证，不连接生产库或凭据。" />
+                    <Button Clicked="OnOpenUi0PreviewClicked" MinimumHeightRequest="44"
+                            Text="打开 UI-0 交互验证页" AutomationId="OverviewOpenUi0" />
+                    <Button Clicked="OnOpenUi1PreviewClicked" MinimumHeightRequest="44"
+                            Text="打开 UI-1 抽卡只读预览" AutomationId="OverviewOpenUi1" />
+                </VerticalStackLayout>
+            </Border>
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>
