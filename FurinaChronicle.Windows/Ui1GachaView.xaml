@@ -87,6 +87,27 @@
                 </Button>
                 <Button x:Name="ImportModeButton" Content="仅补充" Click="OnToggleImportMode"
                     AutomationProperties.AutomationId="GachaImportMode" />
+                <Button x:Name="DataCommandsButton" Content="数据操作"
+                    AutomationProperties.AutomationId="GachaDataCommands"
+                    AutomationProperties.Name="数据操作（Portable、手动链接、图标缓存）">
+                    <Button.Flyout>
+                        <MenuFlyout>
+                            <MenuFlyoutItem Text="导入 Furina 抽卡数据集…" Tag="portable-import"
+                                Click="OnDataMenuCommand"
+                                AutomationProperties.AutomationId="GachaPortableImport" />
+                            <MenuFlyoutItem Text="导出 Furina 抽卡数据集…" Tag="portable-export"
+                                Click="OnDataMenuCommand"
+                                AutomationProperties.AutomationId="GachaPortableExport" />
+                            <MenuFlyoutSeparator />
+                            <MenuFlyoutItem Text="手动链接刷新…" Tag="manual-refresh"
+                                Click="OnDataMenuCommand"
+                                AutomationProperties.AutomationId="GachaManualRefresh" />
+                            <MenuFlyoutItem Text="清除图标缓存…" Tag="clear-icon-cache"
+                                Click="OnDataMenuCommand"
+                                AutomationProperties.AutomationId="GachaClearIconCache" />
+                        </MenuFlyout>
+                    </Button.Flyout>
+                </Button>
                 <Button x:Name="ExportButton" Content="导出" IsEnabled="False" Click="OnExport">
                     <Button.KeyboardAccelerators><KeyboardAccelerator Key="E" Modifiers="Control" /></Button.KeyboardAccelerators>
                 </Button>
@@ -102,6 +123,9 @@
                 AutomationProperties.AutomationId="GachaExportStatus" AutomationProperties.LiveSetting="Polite" />
             <TextBlock x:Name="ImportStatus" TextWrapping="Wrap" Visibility="Collapsed"
                 AutomationProperties.AutomationId="GachaImportStatus" AutomationProperties.LiveSetting="Polite" />
+            <TextBlock x:Name="DataOperationStatus" TextWrapping="Wrap" Visibility="Collapsed"
+                AutomationProperties.AutomationId="GachaDataOperationStatus"
+                AutomationProperties.LiveSetting="Polite" />
         </StackPanel>
         <Grid x:Name="ViewBody" Grid.Row="4" ColumnSpacing="12" SizeChanged="OnBodySizeChanged">
             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition x:Name="DetailColumn" Width="0" /></Grid.ColumnDefinitions>
@@ -147,6 +171,19 @@
                 <StackPanel Spacing="8">
                     <TextBlock x:Name="DetailTitle" Text="请选择条目" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" />
                     <TextBlock x:Name="DetailBody" TextWrapping="Wrap" IsTextSelectionEnabled="True" AutomationProperties.LiveSetting="Polite" />
+                    <StackPanel x:Name="RecordOperationPanel" Orientation="Horizontal" Spacing="8"
+                        Visibility="Collapsed">
+                        <Button x:Name="CorrectRecordButton" Content="纠正" Click="OnCorrectRecordCommand"
+                            IsEnabled="False" AutomationProperties.AutomationId="GachaRecordCorrect"
+                            AutomationProperties.Name="纠正所选记录" />
+                        <Button x:Name="DeleteRecordButton" Content="删除" Click="OnDeleteRecordCommand"
+                            IsEnabled="False" AutomationProperties.AutomationId="GachaRecordDelete"
+                            AutomationProperties.Name="删除所选记录（可撤销）" />
+                        <Button x:Name="IrreversibleDeleteButton" Content="永久删除"
+                            Click="OnIrreversibleDeleteCommand" IsEnabled="False"
+                            AutomationProperties.AutomationId="GachaRecordIrreversibleDelete"
+                            AutomationProperties.Name="永久删除所选记录（不可撤销）" />
+                    </StackPanel>
                 </StackPanel>
             </ScrollViewer>
         </Grid>

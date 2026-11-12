@@ -53,7 +53,8 @@ public sealed partial class Ui1GachaView
     {
         GachaReadOnlySnapshot? snapshot = state?.Snapshot;
         bool reading = snapshot?.IsBusy == true;
-        bool idle = importFlowTask is null && exportTask is null && exportCancellation is null;
+        bool idle = importFlowTask is null && exportTask is null &&
+            exportCancellation is null && dataOperationTask is null;
         ArchivePicker.IsEnabled = idle && !reading;
         AccountPicker.IsEnabled = idle && !reading;
         RangeButton.IsEnabled = idle && !reading && snapshot is { Accounts.Count: > 0 };
@@ -69,6 +70,7 @@ public sealed partial class Ui1GachaView
         ImportButton.IsEnabled = idle && !reading && snapshot is { ArchiveId: not null };
         ImportModeButton.IsEnabled = idle && !reading;
         UpdateExportAvailability();
+        UpdateDataOperationAvailability();
     }
 
     private void ShowImportStatus(string text, bool isError = false)
@@ -92,14 +94,14 @@ public sealed partial class Ui1GachaView
     private void OnToggleImportMode(object sender, RoutedEventArgs e)
     {
         if (importBusy || importFlowTask is not null || importMode is null ||
-            state?.Snapshot.IsBusy == true) return;
+            dataOperationTask is not null || state?.Snapshot.IsBusy == true) return;
         importMode.Toggle();
         RenderImportState();
     }
 
     private async void OnImport(object sender, RoutedEventArgs e)
     {
-        if (importFlowTask is not null) return;
+        if (importFlowTask is not null || dataOperationTask is not null) return;
         Task flow = RunImportAsync();
         importFlowTask = flow;
         UpdateCommandAvailability();

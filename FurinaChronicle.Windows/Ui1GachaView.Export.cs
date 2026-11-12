@@ -30,12 +30,13 @@ public sealed partial class Ui1GachaView
     internal void SetPickerOwner(Window owner) => pickerOwner = owner;
 
     private void UpdateExportAvailability() => ExportButton.IsEnabled = exportCancellation is null &&
-        importFlowTask is null && !importBusy &&
+        importFlowTask is null && dataOperationTask is null && !importBusy &&
         state?.Snapshot is { IsBusy: false, ArchiveId: not null, Accounts.Count: > 0 };
 
     private async void OnExport(object sender, RoutedEventArgs e)
     {
-        if (exportCancellation is not null || importFlowTask is not null || importBusy ||
+        if (exportCancellation is not null || importFlowTask is not null ||
+            dataOperationTask is not null || importBusy ||
             environment is null || pickerOwner is null ||
             state?.Snapshot is not { IsBusy: false, ArchiveId: Guid archiveId, Accounts.Count: > 0 } snapshot)
             return;

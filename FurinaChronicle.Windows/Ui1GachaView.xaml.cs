@@ -46,6 +46,7 @@ public sealed partial class Ui1GachaView : UserControl
                 state = new(source, new WinUiDispatcher(DispatcherQueue));
                 state.PropertyChanged += (_, _) => Render();
                 EnsureImportComposition(environment);
+                EnsureDataOperationComposition(environment);
                 PathText.Text = environment.DatabasePath;
             }
             await state.EnterAsync();
@@ -76,6 +77,10 @@ public sealed partial class Ui1GachaView : UserControl
         {
             try { await runningImport; } catch (Exception) { }
         }
+        if (dataOperationTask is Task runningOperation)
+        {
+            try { await runningOperation; } catch (Exception) { }
+        }
         if (environment is not null) await environment.DisposeAsync();
     }
 
@@ -98,6 +103,7 @@ public sealed partial class Ui1GachaView : UserControl
             FilterButton.Content = s.View == GachaReadOnlyView.Calendar ? "月份与时区" :
                 s.Filter.Day is DateOnly day ? $"筛选 · {day:MM-dd}" : s.Filter == new GachaReadOnlyFilter() ? "筛选" : "筛选 · 已应用";
             detailLoad?.Cancel();
+            selectedRow = null;
             DetailTitle.Text = "请选择条目";
             DetailBody.Text = "";
             bool calendar = s.View == GachaReadOnlyView.Calendar;
@@ -245,6 +251,8 @@ public sealed partial class Ui1GachaView : UserControl
     private async void OnOpenDetail(object sender, ItemClickEventArgs e)
     {
         if (e.ClickedItem is not GachaReadOnlyRow row || source is null) return;
+        selectedRow = row;
+        UpdateCommandAvailability();
         detailLoad?.Cancel();
         using var load = new CancellationTokenSource();
         detailLoad = load;
@@ -254,11 +262,31 @@ public sealed partial class Ui1GachaView : UserControl
         if (side) DetailTitle.Text = row.Name;
         else
         {
-            var dialog = new ContentDialog
+            ContentDialog? dialog = null;
+            var panel = new StackPanel { Spacing = 12 };
+            panel.Children.Add(text);
+            if (row.Reference is not null)
             {
-                XamlRoot = XamlRoot, Title = row.Name, CloseButtonText = "关闭",
-                Content = new ScrollViewer { MaxHeight = 360, Content = text }
+                panel.Children.Add(new TextBlock
+                {
+                    Text = "记录操作会先关闭详情，再打开独立的确认框。",
+                    FontSize = 12,
+                    TextWrapping = TextWrapping.Wrap
+                });
+            }
+
+            dialog = new ContentDialog
+            {
+                XamlRoot = XamlRoot,
+                Title = row.Name,
+                CloseButtonText = "关闭",
+                Content = new ScrollViewer { MaxHeight = 520, Content = panel }
             };
+            if (row.Reference is not null)
+            {
+                panel.Children.Add(CreateRecordOperationButtons(row, dialog));
+            }
+
             dialog.Closed += (_, _) => load.Cancel();
             await Task.WhenAll(dialog.ShowAsync().AsTask(), LoadDetailAsync());
         }
