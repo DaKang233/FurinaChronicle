@@ -2,12 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 using FurinaChronicle.Infrastructure.Diagnostics;
-using FurinaChronicle.Infrastructure.Gacha.Metadata;
 using FurinaChronicle.Presentation.Gacha;
-using FurinaChronicle.Services.Archives;
-using FurinaChronicle.Services.Gacha;
-using FurinaChronicle.Services.Gacha.Analytics;
-using Microsoft.UI.Dispatching;
+using FurinaChronicle.Windows.Composition;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -18,6 +14,8 @@ public sealed partial class Ui1GachaView : UserControl
 {
     private Ui1PreviewEnvironment? environment;
     private ServiceGachaReadOnlySource? source;
+    private IUiDispatcher? dispatcher;
+    private IFilePickerService? filePicker;
     private GachaReadOnlyState? state;
     private CancellationTokenSource? detailLoad;
     private bool rendering;
@@ -28,22 +26,38 @@ public sealed partial class Ui1GachaView : UserControl
         ViewPicker.ItemsSource = GachaReadOnlyViewOption.Options;
     }
 
+    // Called once by the shell after the shared composition root resolves the isolated
+    // environment and all stateless gacha coordinators.
+    public void Initialize(GachaPageServices services)
+    {
+        environment = services.Environment;
+        source = services.Source;
+        dispatcher = services.Dispatcher;
+        filePicker = services.FilePicker;
+        importCoordinator = services.Import;
+        portableImporter = services.PortableImport;
+        portableExporter = services.PortableExport;
+        recordOperations = services.RecordOperations;
+        manualRefresher = services.ManualRefresh;
+        windowsCacheRefresh = services.WindowsCacheRefresh;
+        teyvatImport = services.TeyvatImport;
+        importMode ??= new GachaImportModeState();
+        RenderImportState();
+    }
+
     public async Task EnterAsync()
     {
         try
         {
             if (state is null)
             {
-                string? previewDirectory = Environment.GetEnvironmentVariable("FURINA_UI1_DIRECTORY");
-                environment = new(string.IsNullOrWhiteSpace(previewDirectory)
-                    ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FurinaChronicle")
-                    : previewDirectory, "WinUI");
-                source = new ServiceGachaReadOnlySource(new GetPlayerArchives(environment.Archives),
-                    new GetGameAccounts(environment.Archives, environment.Accounts), new GetGachaRecordPage(environment.Records),
-                    environment.InitializeAsync, environment.GetCachedIconPath,
-                    new BuildGachaAnalytics(environment.Records, new EmptyGachaItemMetadataProvider(), new EmbeddedGachaEventCatalog()),
-                    environment.Changes.GetRecordRevisionsAsync);
-                state = new(source, new WinUiDispatcher(DispatcherQueue));
+                if (environment is null || source is null || dispatcher is null)
+                {
+                    StatusText.Text = "共享隔离环境尚未初始化；请重新启动应用。";
+                    return;
+                }
+
+                state = new(source, dispatcher);
                 state.PropertyChanged += (_, _) => Render();
                 EnsureImportComposition(environment);
                 EnsureDataOperationComposition(environment);
@@ -81,7 +95,6 @@ public sealed partial class Ui1GachaView : UserControl
         {
             try { await runningOperation; } catch (Exception) { }
         }
-        if (environment is not null) await environment.DisposeAsync();
     }
 
     private void Render()
@@ -328,20 +341,5 @@ public sealed partial class Ui1GachaView : UserControl
         if (state is null) return;
         if (state.Snapshot.View == GachaReadOnlyView.Calendar) await state.ShiftCalendarAsync(1);
         else await state.ChangePageAsync(state.Snapshot.PageNumber + 1);
-    }
-
-    private sealed class WinUiDispatcher(DispatcherQueue queue) : IUiDispatcher
-    {
-        public Task InvokeAsync(Action action)
-        {
-            if (queue.HasThreadAccess) { action(); return Task.CompletedTask; }
-            var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            if (!queue.TryEnqueue(() =>
-            {
-                try { action(); completion.TrySetResult(); }
-                catch (Exception exception) { completion.TrySetException(exception); }
-            })) completion.TrySetCanceled();
-            return completion.Task;
-        }
     }
 }

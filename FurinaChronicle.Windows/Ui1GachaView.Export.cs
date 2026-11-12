@@ -10,8 +10,6 @@ using FurinaChronicle.Services.Gacha.Exporting;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Windows.Storage;
-using Windows.Storage.Pickers;
-using WinRT.Interop;
 
 namespace FurinaChronicle.Windows;
 
@@ -23,11 +21,8 @@ public sealed partial class Ui1GachaView
         ("CSV（可读表格）", ".csv", GachaTableFormat.Csv),
         ("XLSX（可读表格）", ".xlsx", GachaTableFormat.Xlsx)
     ];
-    private Window? pickerOwner;
     private CancellationTokenSource? exportCancellation;
     private Task? exportTask;
-
-    internal void SetPickerOwner(Window owner) => pickerOwner = owner;
 
     private void UpdateExportAvailability() => ExportButton.IsEnabled = exportCancellation is null &&
         importFlowTask is null && dataOperationTask is null && !importBusy &&
@@ -37,7 +32,7 @@ public sealed partial class Ui1GachaView
     {
         if (exportCancellation is not null || importFlowTask is not null ||
             dataOperationTask is not null || importBusy ||
-            environment is null || pickerOwner is null ||
+            environment is null || filePicker is null ||
             state?.Snapshot is not { IsBusy: false, ArchiveId: Guid archiveId, Accounts.Count: > 0 } snapshot)
             return;
 
@@ -46,7 +41,7 @@ public sealed partial class Ui1GachaView
         UpdateExportAvailability();
         try
         {
-            exportTask = ExportAsync(environment, pickerOwner, snapshot, archiveId, cancellation.Token);
+            exportTask = ExportAsync(environment, snapshot, archiveId, cancellation.Token);
             await exportTask;
         }
         finally
@@ -57,7 +52,7 @@ public sealed partial class Ui1GachaView
         }
     }
 
-    private async Task ExportAsync(Ui1PreviewEnvironment preview, Window owner, GachaReadOnlySnapshot snapshot,
+    private async Task ExportAsync(Ui1PreviewEnvironment preview, GachaReadOnlySnapshot snapshot,
         Guid archiveId, CancellationToken token)
     {
         try
@@ -117,11 +112,11 @@ public sealed partial class Ui1GachaView
                     UigfV42ExportOptions.Compatible, token), token);
 
             token.ThrowIfCancellationRequested();
-            var picker = new FileSavePicker { SuggestedFileName = $"FurinaChronicle-Gacha-{DateTime.Today:yyyyMMdd}" };
-            picker.FileTypeChoices.Add(chosen.Name, new List<string> { chosen.Extension });
-            InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(owner));
             ShowExportStatus("请选择保存位置…");
-            StorageFile? destination = await picker.PickSaveFileAsync();
+            StorageFile? destination = await filePicker!.PickSaveFileAsync(
+                $"FurinaChronicle-Gacha-{DateTime.Today:yyyyMMdd}",
+                chosen.Name,
+                chosen.Extension);
             if (destination is null)
             {
                 ShowExportStatus("已取消保存，未写出导出文件。");

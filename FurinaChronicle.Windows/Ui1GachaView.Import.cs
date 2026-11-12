@@ -9,8 +9,6 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Windows.Storage;
-using Windows.Storage.Pickers;
-using WinRT.Interop;
 
 namespace FurinaChronicle.Windows;
 
@@ -110,7 +108,7 @@ public sealed partial class Ui1GachaView
     private async Task RunImportAsync()
     {
         if (importCoordinator is null || importMode is null || state is null ||
-            pickerOwner is null || state.Snapshot is not
+            filePicker is null || state.Snapshot is not
             {
                 IsBusy: false,
                 ArchiveId: Guid archiveId
@@ -269,15 +267,8 @@ public sealed partial class Ui1GachaView
 
     private async Task<StorageFile?> PickImportFileAsync()
     {
-        if (pickerOwner is null) return null;
-        var picker = new FileOpenPicker
-        {
-            SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
-            ViewMode = PickerViewMode.List
-        };
-        picker.FileTypeFilter.Add(".json");
-        InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(pickerOwner));
-        return await picker.PickSingleFileAsync();
+        if (filePicker is null) return null;
+        return await filePicker.PickOpenFileAsync(".json");
     }
 
     private static GachaImportSource CreateImportSource(StorageFile file)

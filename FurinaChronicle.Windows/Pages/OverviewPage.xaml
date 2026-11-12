@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Copyright (c) 2026 DaKang233.
+  SPDX-License-Identifier: MIT
+-->
+<UserControl
+    x:Class="FurinaChronicle.Windows.Pages.OverviewPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    AutomationProperties.AutomationId="Ui4OverviewPage">
+    <Grid Padding="24" RowSpacing="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Spacing="4">
+            <TextBlock Text="概览" FontSize="28" FontWeight="SemiBold" />
+            <TextBlock
+                Text="本地隔离合成库的轻量聚合；不重建 Chronicle 投影。"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                TextWrapping="Wrap" />
+        </StackPanel>
+
+        <TextBlock
+            x:Name="StatusText"
+            Grid.Row="1"
+            TextWrapping="Wrap"
+            AutomationProperties.AutomationId="Ui4OverviewStatus"
+            AutomationProperties.LiveSetting="Polite" />
+        <TextBlock
+            x:Name="ErrorText"
+            Grid.Row="1"
+            Margin="0,22,0,0"
+            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+            TextWrapping="Wrap"
+            Visibility="Collapsed"
+            AutomationProperties.AutomationId="Ui4OverviewError" />
+
+        <Grid Grid.Row="2" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Border Padding="14" CornerRadius="8"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                <StackPanel Spacing="2">
+                    <TextBlock Text="本地档案" FontSize="12"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock x:Name="ArchiveCountText" FontSize="24" FontWeight="SemiBold"
+                        AutomationProperties.AutomationId="Ui4OverviewArchiveCount" />
+                </StackPanel>
+            </Border>
+            <Border Grid.Column="1" Padding="14" CornerRadius="8"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                <StackPanel Spacing="2">
+                    <TextBlock Text="账号副本" FontSize="12"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock x:Name="AccountCountText" FontSize="24" FontWeight="SemiBold"
+                        AutomationProperties.AutomationId="Ui4OverviewAccountCount" />
+                </StackPanel>
+            </Border>
+            <Border Grid.Column="2" Padding="14" CornerRadius="8"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                <StackPanel Spacing="2">
+                    <TextBlock Text="抽卡记录" FontSize="12"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock x:Name="RecordCountText" FontSize="24" FontWeight="SemiBold"
+                        AutomationProperties.AutomationId="Ui4OverviewRecordCount" />
+                </StackPanel>
+            </Border>
+            <Border Grid.Column="3" Padding="14" CornerRadius="8"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                <StackPanel Spacing="2">
+                    <TextBlock Text="身份待确认" FontSize="12"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock x:Name="UnresolvedCountText" FontSize="24" FontWeight="SemiBold"
+                        AutomationProperties.AutomationId="Ui4OverviewUnresolvedCount" />
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <Grid Grid.Row="3" ColumnSpacing="16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*" />
+                <ColumnDefinition Width="2*" />
+            </Grid.ColumnDefinitions>
+            <Grid RowSpacing="6">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <TextBlock Text="本地档案" FontSize="18" FontWeight="SemiBold" />
+                <ListView
+                    x:Name="ArchiveList"
+                    Grid.Row="1"
+                    SelectionMode="None"
+                    AutomationProperties.AutomationId="Ui4OverviewArchives">
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Padding="10,8" ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                    <TextBlock Text="{Binding LastActivity}"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        TextWrapping="Wrap" />
+                                </StackPanel>
+                                <TextBlock Grid.Column="1" VerticalAlignment="Center"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}">
+                                    <Run Text="{Binding AccountCount}" /><Run Text=" 个账号" />
+                                </TextBlock>
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+            </Grid>
+            <Grid Grid.Column="1" RowSpacing="6">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <TextBlock Text="最近活动" FontSize="18" FontWeight="SemiBold" />
+                <ListView
+                    x:Name="RecentList"
+                    Grid.Row="1"
+                    SelectionMode="None"
+                    AutomationProperties.AutomationId="Ui4OverviewRecent">
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Padding="10,6" Spacing="2">
+                                <TextBlock FontWeight="SemiBold" TextWrapping="Wrap">
+                                    <Run Text="{Binding ItemName}" /><Run Text=" · " /><Run Text="{Binding Rank}" />
+                                </TextBlock>
+                                <TextBlock Text="{Binding ArchiveName}"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding Time}" FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+                <TextBlock
+                    x:Name="NotesText"
+                    Grid.Row="2"
+                    Margin="0,10,0,0"
+                    FontSize="12"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    TextWrapping="Wrap"
+                    AutomationProperties.AutomationId="Ui4OverviewCoverage" />
+            </Grid>
+        </Grid>
+
+        <StackPanel Grid.Row="4" Orientation="Horizontal" Spacing="10">
+            <Button
+                x:Name="ContinueButton"
+                Content="打开数据 · 抽卡"
+                Click="OnContinue"
+                AutomationProperties.AutomationId="Ui4OverviewContinue"
+                AutomationProperties.Name="继续查看抽卡页" />
+            <Button
+                x:Name="ReloadButton"
+                Content="刷新概览"
+                Click="OnReload"
+                AutomationProperties.AutomationId="Ui4OverviewReload" />
+        </StackPanel>
+    </Grid>
+</UserControl>

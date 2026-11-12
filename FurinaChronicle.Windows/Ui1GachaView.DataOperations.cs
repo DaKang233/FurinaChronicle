@@ -129,7 +129,7 @@ public sealed partial class Ui1GachaView
 
     private async Task ImportPortableAsync()
     {
-        if (portableImporter is null || pickerOwner is null || importMode is null ||
+        if (portableImporter is null || filePicker is null || importMode is null ||
             state?.Snapshot is not { IsBusy: false, ArchiveId: Guid archiveId } snapshot)
         {
             ShowDataOperationStatus("请先选择档案并等待当前读取结束。", isError: true);
@@ -314,7 +314,7 @@ public sealed partial class Ui1GachaView
 
     private async Task ExportPortableAsync()
     {
-        if (portableExporter is null || environment is null || pickerOwner is null ||
+        if (portableExporter is null || environment is null || filePicker is null ||
             state?.Snapshot is not
             {
                 IsBusy: false,
@@ -424,15 +424,10 @@ public sealed partial class Ui1GachaView
                 await CloseDataProgressDialogAsync(exportDialog, exportShow);
             }
 
-            var picker = new FileSavePicker
-            {
-                SuggestedFileName = $"FurinaChronicle-Gacha-Portable-{DateTime.Today:yyyyMMdd}"
-            };
-            picker.FileTypeChoices.Add(
+            StorageFile? destination = await filePicker.PickSaveFileAsync(
+                $"FurinaChronicle-Gacha-Portable-{DateTime.Today:yyyyMMdd}",
                 "Furina Gacha Portable（抽卡数据集）",
-                new List<string> { ".zip" });
-            InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(pickerOwner));
-            StorageFile? destination = await picker.PickSaveFileAsync();
+                ".zip");
             if (destination is null)
             {
                 ShowDataOperationStatus("已取消保存，未写出 Portable 导出文件。");
@@ -1043,15 +1038,8 @@ public sealed partial class Ui1GachaView
 
     private async Task<StorageFile?> PickDataFileAsync(string extension)
     {
-        if (pickerOwner is null) return null;
-        var picker = new FileOpenPicker
-        {
-            SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
-            ViewMode = PickerViewMode.List
-        };
-        picker.FileTypeFilter.Add(extension);
-        InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(pickerOwner));
-        return await picker.PickSingleFileAsync();
+        if (filePicker is null) return null;
+        return await filePicker.PickOpenFileAsync(extension);
     }
 
     private (ContentDialog Dialog, Task ShowTask) ShowDataProgressDialog(

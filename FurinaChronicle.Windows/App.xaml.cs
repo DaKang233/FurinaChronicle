@@ -1,6 +1,7 @@
 // Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
+using FurinaChronicle.Windows.Composition;
 using Microsoft.UI.Xaml;
 
 namespace FurinaChronicle.Windows;
@@ -16,7 +17,8 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
-        window = new MainWindow();
+        WindowsComposition composition = WindowsComposition.Create();
+        window = new MainWindow(composition);
         window.Activate();
     }
 }

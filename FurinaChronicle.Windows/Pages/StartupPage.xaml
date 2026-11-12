@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Copyright (c) 2026 DaKang233.
+  SPDX-License-Identifier: MIT
+-->
+<UserControl
+    x:Class="FurinaChronicle.Windows.Pages.StartupPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid Padding="40">
+        <StackPanel MaxWidth="680" VerticalAlignment="Center" Spacing="14">
+            <TextBlock Text="FurinaChronicle" FontSize="30" FontWeight="SemiBold" />
+            <TextBlock
+                Text="正在打开隔离合成数据库；本宿主不会发现生产库或凭据。"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                TextWrapping="Wrap" />
+            <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                <ProgressRing x:Name="Progress" IsActive="True" Width="24" Height="24" />
+                <TextBlock
+                    x:Name="StatusText"
+                    VerticalAlignment="Center"
+                    TextWrapping="Wrap"
+                    AutomationProperties.AutomationId="Ui4StartupStatus"
+                    AutomationProperties.LiveSetting="Polite" />
+            </StackPanel>
+            <TextBlock
+                x:Name="DetailText"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                TextWrapping="Wrap"
+                FontFamily="Consolas"
+                FontSize="12"
+                AutomationProperties.AutomationId="Ui4StartupDetail" />
+            <Button
+                x:Name="RetryButton"
+                Content="重试初始化"
+                Click="OnRetry"
+                Visibility="Collapsed"
+                AutomationProperties.AutomationId="Ui4StartupRetry"
+                AutomationProperties.Name="重试初始化隔离数据库" />
+            <TextBlock
+                x:Name="VersionText"
+                FontSize="12"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                TextWrapping="Wrap" />
+        </StackPanel>
+    </Grid>
+</UserControl>

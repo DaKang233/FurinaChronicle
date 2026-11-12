@@ -266,14 +266,8 @@ public sealed partial class Ui1GachaView
 
     private async Task<string?> PickGameInstallationFolderAsync()
     {
-        if (pickerOwner is null) return null;
-        var picker = new FolderPicker
-        {
-            SuggestedStartLocation = PickerLocationId.ComputerFolder
-        };
-        picker.FileTypeFilter.Add("*");
-        InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(pickerOwner));
-        StorageFolder? folder = await picker.PickSingleFolderAsync();
+        if (filePicker is null) return null;
+        var folder = await filePicker.PickFolderAsync();
         return string.IsNullOrWhiteSpace(folder?.Path) ? null : folder.Path;
     }
 }
