@@ -91,16 +91,6 @@ public sealed partial class SqliteGachaAtomicChangeStore
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        if (request.Observations.Any(observation =>
-                observation.Mode != ChallengeMode.SpiralAbyss))
-        {
-            return Task.FromResult(new ArchiveOperationResult(
-                ChangeExecutionStatus.Conflict,
-                ChangeSetId: null,
-                AffectedRecordCount: 0,
-                "Only Spiral Abyss challenge observations are supported in Phase 8B.5."));
-        }
-
         DomainProposal[] proposals = request.Observations
             .Select(observation => DomainProposal.Immutable(
                 ChallengeObservationEntityKind,
@@ -213,11 +203,6 @@ public sealed partial class SqliteGachaAtomicChangeStore
             foreach (ChallengeObservation observation in
                      source.ChallengeObservations)
             {
-                if (observation.Mode != ChallengeMode.SpiralAbyss)
-                {
-                    return Task.FromResult(DomainConflict(
-                        "The Portable package contains an unsupported challenge mode."));
-                }
                 ChallengeObservation mapped = new(
                     observation.ObservationId,
                     accountPlan.TargetAccountId,
@@ -227,7 +212,10 @@ public sealed partial class SqliteGachaAtomicChangeStore
                     observation.PeriodEnd,
                     observation.Completeness,
                     observation.SpiralAbyssFloors,
-                    observation.Provenance);
+                    observation.Provenance,
+                    observation.Stages,
+                    observation.Difficulty,
+                    observation.MedalCount);
                 proposals.Add(DomainProposal.Immutable(
                     ChallengeObservationEntityKind,
                     mapped.ObservationId.ToString(),
@@ -2031,8 +2019,12 @@ public sealed partial class SqliteGachaAtomicChangeStore
         left.PeriodStart == right.PeriodStart &&
         left.PeriodEnd == right.PeriodEnd &&
         left.Completeness == right.Completeness &&
+        left.Difficulty == right.Difficulty &&
+        left.MedalCount == right.MedalCount &&
         JsonSerializer.Serialize(left.Floors, DomainJsonOptions) ==
-        JsonSerializer.Serialize(right.Floors, DomainJsonOptions);
+        JsonSerializer.Serialize(right.Floors, DomainJsonOptions) &&
+        JsonSerializer.Serialize(left.Stages, DomainJsonOptions) ==
+        JsonSerializer.Serialize(right.Stages, DomainJsonOptions);
 
     private sealed record DomainCommitEnvelope(
         OperationId OperationId,
@@ -2372,7 +2364,10 @@ public sealed partial class SqliteGachaAtomicChangeStore
         OffsetDateTimePayload? PeriodEnd,
         int Completeness,
         SpiralAbyssFloorPayload[] Floors,
-        ProvenancePayload Provenance)
+        ProvenancePayload Provenance,
+        ChallengeStagePayload[]? Stages = null,
+        int? Difficulty = null,
+        int? MedalCount = null)
     {
         public static ChallengeObservationPayload FromDomain(
             ChallengeObservation observation) =>
@@ -2387,7 +2382,12 @@ public sealed partial class SqliteGachaAtomicChangeStore
                 observation.SpiralAbyssFloors
                     .Select(SpiralAbyssFloorPayload.FromDomain)
                     .ToArray(),
-                ProvenancePayload.FromDomain(observation.Provenance));
+                ProvenancePayload.FromDomain(observation.Provenance),
+                observation.Stages
+                    .Select(ChallengeStagePayload.FromDomain)
+                    .ToArray(),
+                observation.Difficulty,
+                observation.MedalCount);
 
         public ChallengeObservation ToDomain() =>
             new(
@@ -2399,7 +2399,73 @@ public sealed partial class SqliteGachaAtomicChangeStore
                 PeriodEnd?.ToDomain(),
                 (DataCompleteness)Completeness,
                 Floors.Select(floor => floor.ToDomain()),
-                Provenance.ToDomain());
+                Provenance.ToDomain(),
+                (Stages ?? []).Select(stage => stage.ToDomain()),
+                Difficulty,
+                MedalCount);
+    }
+
+    private sealed record ChallengeStagePayload(
+        string StageId,
+        int? Score,
+        OccurrencePayload CompletedAt,
+        ChallengeParticipantPayload[]? Participants = null,
+        string[]? Buffs = null,
+        ChallengeEnemyPayload[]? Enemies = null)
+    {
+        public static ChallengeStagePayload FromDomain(
+            ChallengeStageResult stage) =>
+            new(
+                stage.StageId,
+                stage.Score,
+                OccurrencePayload.FromDomain(stage.CompletedAt),
+                stage.Participants
+                    .Select(ChallengeParticipantPayload.FromDomain)
+                    .ToArray(),
+                stage.Buffs.ToArray(),
+                stage.Enemies
+                    .Select(ChallengeEnemyPayload.FromDomain)
+                    .ToArray());
+
+        public ChallengeStageResult ToDomain() =>
+            new(
+                StageId,
+                Score,
+                CompletedAt.ToDomain(),
+                (Participants ?? []).Select(participant => participant.ToDomain()),
+                Buffs ?? [],
+                (Enemies ?? []).Select(enemy => enemy.ToDomain()));
+    }
+
+    private sealed record ChallengeParticipantPayload(
+        string Id,
+        string? Name,
+        string? IconUrl,
+        int? Level,
+        int? Rarity)
+    {
+        public static ChallengeParticipantPayload FromDomain(
+            ChallengeParticipant participant) =>
+            new(
+                participant.Id,
+                participant.Name,
+                participant.IconUrl,
+                participant.Level,
+                participant.Rarity);
+
+        public ChallengeParticipant ToDomain() =>
+            new(Id, Name, IconUrl, Level, Rarity);
+    }
+
+    private sealed record ChallengeEnemyPayload(
+        string? Name,
+        int? Level,
+        string? IconUrl)
+    {
+        public static ChallengeEnemyPayload FromDomain(ChallengeEnemy enemy) =>
+            new(enemy.Name, enemy.Level, enemy.IconUrl);
+
+        public ChallengeEnemy ToDomain() => new(Name, Level, IconUrl);
     }
 
     private sealed record SpiralAbyssFloorPayload(

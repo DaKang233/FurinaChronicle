@@ -101,6 +101,108 @@ public sealed record SpiralAbyssFloorResult
     public int Stars => Chambers.Sum(chamber => chamber.Stars);
 }
 
+public sealed record ChallengeParticipant
+{
+    public ChallengeParticipant(
+        string id,
+        string? name,
+        string? iconUrl,
+        int? level,
+        int? rarity)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        if (level is < 0 || rarity is < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(level),
+                "Participant level and rarity cannot be negative.");
+        }
+        Id = id.Trim();
+        Name = string.IsNullOrWhiteSpace(name) ? null : name.Trim();
+        IconUrl = string.IsNullOrWhiteSpace(iconUrl) ? null : iconUrl.Trim();
+        Level = level;
+        Rarity = rarity;
+    }
+
+    public string Id { get; }
+
+    public string? Name { get; }
+
+    public string? IconUrl { get; }
+
+    public int? Level { get; }
+
+    public int? Rarity { get; }
+}
+
+public sealed record ChallengeEnemy
+{
+    public ChallengeEnemy(string? name, int? level, string? iconUrl)
+    {
+        if (level is < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(level),
+                "Enemy level cannot be negative.");
+        }
+        Name = string.IsNullOrWhiteSpace(name) ? null : name.Trim();
+        Level = level;
+        IconUrl = string.IsNullOrWhiteSpace(iconUrl) ? null : iconUrl.Trim();
+    }
+
+    public string? Name { get; }
+
+    public int? Level { get; }
+
+    public string? IconUrl { get; }
+}
+
+public sealed record ChallengeStageResult
+{
+    public ChallengeStageResult(
+        string stageId,
+        int? score,
+        OccurrenceTime completedAt,
+        IEnumerable<ChallengeParticipant>? participants = null,
+        IEnumerable<string>? buffs = null,
+        IEnumerable<ChallengeEnemy>? enemies = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(stageId);
+        if (score is < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(score),
+                "Challenge stage score cannot be negative.");
+        }
+        ArgumentNullException.ThrowIfNull(completedAt);
+
+        StageId = stageId.Trim();
+        Score = score;
+        CompletedAt = completedAt;
+        Participants = (participants ?? []).ToArray();
+        Buffs = (buffs ?? [])
+            .Where(buff => !string.IsNullOrWhiteSpace(buff))
+            .Select(buff => buff.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        Enemies = (enemies ?? []).ToArray();
+    }
+
+    /// <summary>Official round id or a stable challenge name.</summary>
+    public string StageId { get; }
+
+    /// <summary>Medal flag for the theater or challenge seconds otherwise.</summary>
+    public int? Score { get; }
+
+    public OccurrenceTime CompletedAt { get; }
+
+    public IReadOnlyList<ChallengeParticipant> Participants { get; }
+
+    public IReadOnlyList<string> Buffs { get; }
+
+    public IReadOnlyList<ChallengeEnemy> Enemies { get; }
+}
+
 public sealed record ChallengeObservation
 {
     public ChallengeObservation(
@@ -112,7 +214,10 @@ public sealed record ChallengeObservation
         DateTimeOffset? periodEnd,
         DataCompleteness completeness,
         IEnumerable<SpiralAbyssFloorResult> spiralAbyssFloors,
-        RecordProvenance provenance)
+        RecordProvenance provenance,
+        IEnumerable<ChallengeStageResult>? stages = null,
+        int? difficulty = null,
+        int? medalCount = null)
     {
         if (gameAccountId == Guid.Empty)
         {
@@ -154,6 +259,28 @@ public sealed record ChallengeObservation
                 "Spiral Abyss floors cannot be attached to another challenge mode.",
                 nameof(spiralAbyssFloors));
         }
+        if (difficulty is < 0 || medalCount is < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(difficulty),
+                "Challenge difficulty and medal counts cannot be negative.");
+        }
+        ChallengeStageResult[] normalizedStages = (stages ?? [])
+            .OrderBy(stage => stage.StageId, StringComparer.Ordinal)
+            .ToArray();
+        if (normalizedStages.Select(stage => stage.StageId)
+            .Distinct(StringComparer.Ordinal).Count() != normalizedStages.Length)
+        {
+            throw new ArgumentException(
+                "A challenge observation cannot contain duplicate stages.",
+                nameof(stages));
+        }
+        if (mode == ChallengeMode.SpiralAbyss && normalizedStages.Length > 0)
+        {
+            throw new ArgumentException(
+                "Generic stages cannot be attached to Spiral Abyss.",
+                nameof(stages));
+        }
 
         ObservationId = observationId;
         GameAccountId = gameAccountId;
@@ -163,6 +290,9 @@ public sealed record ChallengeObservation
         PeriodEnd = periodEnd;
         Completeness = completeness;
         SpiralAbyssFloors = normalized;
+        Stages = normalizedStages;
+        Difficulty = difficulty;
+        MedalCount = medalCount;
         Provenance = provenance;
     }
 
@@ -181,6 +311,13 @@ public sealed record ChallengeObservation
     public DataCompleteness Completeness { get; }
 
     public IReadOnlyList<SpiralAbyssFloorResult> SpiralAbyssFloors { get; }
+
+    /// <summary>Mode-specific rounds or challenges for non-Abyss modes.</summary>
+    public IReadOnlyList<ChallengeStageResult> Stages { get; }
+
+    public int? Difficulty { get; }
+
+    public int? MedalCount { get; }
 
     public RecordProvenance Provenance { get; }
 }
