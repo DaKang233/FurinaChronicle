@@ -30,6 +30,11 @@ public sealed partial class ArchivePage : UserControl
         InitializeComponent();
     }
 
+    public event EventHandler? TransferRequested;
+
+    private void OnOpenArchiveTransfer(object sender, RoutedEventArgs e) =>
+        TransferRequested?.Invoke(this, EventArgs.Empty);
+
     public async Task EnterAsync(CancellationToken cancellationToken = default)
     {
         await state.EnterAsync(cancellationToken);
@@ -70,6 +75,7 @@ public sealed partial class ArchivePage : UserControl
             CreateArchiveButton.IsEnabled = idle;
             RenameArchiveButton.IsEnabled = idle && hasArchive;
             DeleteArchiveButton.IsEnabled = idle && hasArchive;
+            OpenArchiveTransferButton.IsEnabled = idle;
             AddAccountButton.IsEnabled = idle && hasArchive;
             EditAccountButton.IsEnabled = idle && hasAccount;
             DeleteAccountButton.IsEnabled = idle && hasAccount;

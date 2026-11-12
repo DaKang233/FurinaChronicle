@@ -173,6 +173,11 @@
                 Content="刷新概览"
                 Click="OnReload"
                 AutomationProperties.AutomationId="Ui4OverviewReload" />
+            <Button
+                x:Name="BackupRestoreButton"
+                Content="备份与恢复"
+                Click="OnBackupRestore"
+                AutomationProperties.AutomationId="Ui4OverviewBackupRestore" />
         </StackPanel>
     </Grid>
 </UserControl>

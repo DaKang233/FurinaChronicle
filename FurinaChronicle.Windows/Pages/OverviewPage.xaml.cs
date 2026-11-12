@@ -20,6 +20,8 @@ public sealed partial class OverviewPage : UserControl
 
     public event EventHandler? ContinueRequested;
 
+    public event EventHandler? BackupRestoreRequested;
+
     public async Task EnterAsync(CancellationToken cancellationToken = default)
     {
         await state.EnterAsync(cancellationToken);
@@ -51,6 +53,9 @@ public sealed partial class OverviewPage : UserControl
 
     private void OnContinue(object sender, RoutedEventArgs e) =>
         ContinueRequested?.Invoke(this, EventArgs.Empty);
+
+    private void OnBackupRestore(object sender, RoutedEventArgs e) =>
+        BackupRestoreRequested?.Invoke(this, EventArgs.Empty);
 
     private async void OnReload(object sender, RoutedEventArgs e) =>
         await EnterAsync();

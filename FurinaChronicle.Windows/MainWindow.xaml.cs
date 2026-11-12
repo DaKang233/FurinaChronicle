@@ -22,6 +22,7 @@ public sealed partial class MainWindow : Window
     private ArchivePage? archivePage;
     private HistoryPage? historyPage;
     private SettingsPage? settingsPage;
+    private ArchiveTransferPage? archiveTransferPage;
     private bool shellReady;
     private bool shellBuilt;
     private bool switching;
@@ -89,6 +90,31 @@ public sealed partial class MainWindow : Window
             switching = false;
             await ShowPageAsync("overview");
         }
+        catch (Exception exception)
+        {
+            // A page/service construction failure must degrade to the recoverable startup page,
+            // never to an unhandled XAML exception on the UI thread.
+            try
+            {
+                File.WriteAllText(
+                    Path.Combine(Path.GetTempPath(), "furina-ui4-buildshell-error.txt"),
+                    exception.ToString());
+            }
+            catch (Exception)
+            {
+            }
+
+            StartupHost.Visibility = Visibility.Visible;
+            Navigation.Visibility = Visibility.Collapsed;
+            shellReady = false;
+            startupPage.Render(new StartupSnapshot(
+                false,
+                false,
+                StartupFailureKind.Unknown,
+                "启动后页面初始化失败。",
+                $"{exception.GetType().Name}: {exception.Message}",
+                true));
+        }
         finally
         {
             startupRunning = false;
@@ -106,6 +132,7 @@ public sealed partial class MainWindow : Window
             Visibility = Visibility.Collapsed
         };
         overviewPage.ContinueRequested += OnContinueToGacha;
+        overviewPage.BackupRestoreRequested += OnOpenArchiveTransfer;
         PageHost.Children.Add(overviewPage);
 
         archivePage = new ArchivePage(
@@ -113,6 +140,7 @@ public sealed partial class MainWindow : Window
         {
             Visibility = Visibility.Collapsed
         };
+        archivePage.TransferRequested += OnOpenArchiveTransfer;
         PageHost.Children.Add(archivePage);
 
         historyPage = new HistoryPage(
@@ -129,7 +157,38 @@ public sealed partial class MainWindow : Window
             Visibility = Visibility.Collapsed
         };
         PageHost.Children.Add(settingsPage);
+
+        archiveTransferPage = new ArchiveTransferPage(
+            composition.Services.GetRequiredService<ArchiveTransferState>(),
+            composition.Services.GetRequiredService<IFilePickerService>(),
+            composition.Version)
+        {
+            Visibility = Visibility.Collapsed
+        };
+        archiveTransferPage.BackRequested += OnTransferBack;
+        archiveTransferPage.RestoreApplied += OnRestoreApplied;
+        PageHost.Children.Add(archiveTransferPage);
         shellBuilt = true;
+    }
+
+    private async void OnOpenArchiveTransfer(object? sender, EventArgs e)
+    {
+        if (!shellReady) return;
+        await ShowPageAsync("transfer");
+    }
+
+    private async void OnTransferBack(object? sender, EventArgs e)
+    {
+        if (!shellReady) return;
+        switching = true;
+        Navigation.SelectedItem = ArchiveDestination;
+        switching = false;
+        await ShowPageAsync("archives");
+    }
+
+    private void OnRestoreApplied(object? sender, EventArgs e)
+    {
+        // Overview and archive pages re-query on entry; no cached global selection is kept.
     }
 
     private async Task ApplyPersistedThemeAsync()
@@ -175,6 +234,7 @@ public sealed partial class MainWindow : Window
             if (archivePage is not null) archivePage.Visibility = Visibility.Collapsed;
             if (historyPage is not null) historyPage.Visibility = Visibility.Collapsed;
             if (settingsPage is not null) settingsPage.Visibility = Visibility.Collapsed;
+            if (archiveTransferPage is not null) archiveTransferPage.Visibility = Visibility.Collapsed;
             switch (tag)
             {
                 case "overview":
@@ -201,6 +261,11 @@ public sealed partial class MainWindow : Window
                     currentPageTag = tag;
                     settingsPage!.Visibility = Visibility.Visible;
                     await settingsPage.EnterAsync();
+                    break;
+                case "transfer":
+                    currentPageTag = tag;
+                    archiveTransferPage!.Visibility = Visibility.Visible;
+                    await archiveTransferPage.EnterAsync();
                     break;
             }
         }

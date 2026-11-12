@@ -57,6 +57,9 @@
                         AutomationProperties.AutomationId="Ui4RenameArchive" />
                     <Button x:Name="DeleteArchiveButton" Content="删除档案" Click="OnDeleteArchive"
                         AutomationProperties.AutomationId="Ui4DeleteArchive" />
+                    <Button x:Name="OpenArchiveTransferButton" Content="备份与恢复"
+                        Click="OnOpenArchiveTransfer"
+                        AutomationProperties.AutomationId="Ui4OpenArchiveTransfer" />
                 </StackPanel>
                 <ListView
                     x:Name="ArchiveList"

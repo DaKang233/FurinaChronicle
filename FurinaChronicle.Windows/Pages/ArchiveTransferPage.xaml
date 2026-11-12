@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Copyright (c) 2026 DaKang233.
+  SPDX-License-Identifier: MIT
+-->
+<UserControl
+    x:Class="FurinaChronicle.Windows.Pages.ArchiveTransferPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    AutomationProperties.AutomationId="Ui4ArchiveTransferPage">
+    <ScrollViewer Padding="24">
+        <StackPanel Spacing="14">
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Button x:Name="BackButton" Content="返回档案与账号" Click="OnBack"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="Ui4ArchiveTransferBack" />
+                <StackPanel Grid.Column="1" Spacing="2">
+                    <TextBlock Text="备份与恢复" FontSize="28" FontWeight="SemiBold" />
+                    <TextBlock
+                        Text="完整逻辑档案 .fca：可合并恢复，不是 SQLite 原始拷贝；本页不提供伪全量备份或热回切。"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        TextWrapping="Wrap" />
+                </StackPanel>
+            </Grid>
+
+            <StackPanel Spacing="2">
+                <TextBlock x:Name="StatusText" TextWrapping="Wrap"
+                    AutomationProperties.AutomationId="Ui4ArchiveTransferStatus"
+                    AutomationProperties.LiveSetting="Polite" />
+                <TextBlock x:Name="ErrorText" TextWrapping="Wrap" Visibility="Collapsed"
+                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                    AutomationProperties.AutomationId="Ui4ArchiveTransferError" />
+            </StackPanel>
+
+            <Border Padding="16" CornerRadius="8"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="导出完整逻辑档案（.fca）" FontSize="18" FontWeight="SemiBold" />
+                    <StackPanel Orientation="Horizontal" Spacing="16">
+                        <RadioButton x:Name="ExportAllRadio" Content="全部档案"
+                            GroupName="ArchiveExportScope"
+                            Checked="OnExportScopeChanged"
+                            AutomationProperties.AutomationId="Ui4ArchiveTransferExportAll" />
+                        <RadioButton x:Name="ExportSelectedRadio" Content="所选档案"
+                            GroupName="ArchiveExportScope"
+                            Checked="OnExportScopeChanged"
+                            AutomationProperties.AutomationId="Ui4ArchiveTransferExportSelected" />
+                    </StackPanel>
+                    <ComboBox x:Name="ExportArchivePicker" Header="所选档案" Width="360"
+                        DisplayMemberPath="Name" SelectionChanged="OnExportArchiveSelectionChanged"
+                        AutomationProperties.AutomationId="Ui4ArchiveTransferArchivePicker" />
+                    <TextBlock x:Name="ExportScopeText" FontSize="12"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        AutomationProperties.AutomationId="Ui4ArchiveTransferExportScope" />
+                    <Button x:Name="ExportButton" Content="导出 .fca" Click="OnExport"
+                        AutomationProperties.AutomationId="Ui4ArchiveTransferExport" />
+                </StackPanel>
+            </Border>
+
+            <Border Padding="16" CornerRadius="8"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="打开 .fca 并预览 Merge" FontSize="18" FontWeight="SemiBold" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button x:Name="OpenButton" Content="打开 .fca" Click="OnOpen"
+                            AutomationProperties.AutomationId="Ui4ArchiveTransferOpen" />
+                        <Button x:Name="ReplanButton" Content="重新生成预览" Click="OnReplan"
+                            AutomationProperties.AutomationId="Ui4ArchiveTransferReplan" />
+                        <Button x:Name="ResolveMappingsButton" Content="解析映射" Click="OnResolveMappings"
+                            AutomationProperties.AutomationId="Ui4ArchiveTransferResolveMappings" />
+                        <Button x:Name="ApplyButton" Content="应用 Merge" Click="OnApply"
+                            AutomationProperties.AutomationId="Ui4ArchiveTransferApply" />
+                        <Button x:Name="CancelSessionButton" Content="释放当前预览" Click="OnCancelSession"
+                            AutomationProperties.AutomationId="Ui4ArchiveTransferCancel" />
+                    </StackPanel>
+                    <CheckBox x:Name="ApplySettingsCheck" Content="应用包中的 Portable 设置（仅白名单设置，冲突需确认）"
+                        Checked="OnApplySettingsChanged" Unchecked="OnApplySettingsChanged"
+                        AutomationProperties.AutomationId="Ui4ArchiveTransferApplySettings" />
+                    <TextBlock Text="包摘要" FontSize="12"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock x:Name="PackageSummaryText" TextWrapping="Wrap"
+                        AutomationProperties.AutomationId="Ui4ArchiveTransferPackageSummary" />
+                    <TextBlock Text="恢复计划 / 边界" FontSize="12"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock x:Name="PlanSummaryText" TextWrapping="Wrap"
+                        AutomationProperties.AutomationId="Ui4ArchiveTransferPlanPreview" />
+                    <TextBlock Text="映射" FontSize="12"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock x:Name="MappingSummaryText" TextWrapping="Wrap"
+                        AutomationProperties.AutomationId="Ui4ArchiveTransferMapping" />
+                    <TextBlock Text="冲突 / 待确认 / Tombstone" FontSize="12"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock x:Name="DiagnosticSummaryText" TextWrapping="Wrap"
+                        AutomationProperties.AutomationId="Ui4ArchiveTransferDiagnostics" />
+                </StackPanel>
+            </Border>
+
+            <Border Padding="16" CornerRadius="8"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="设备本地恢复点（只读）" FontSize="18" FontWeight="SemiBold" />
+                    <TextBlock x:Name="RecoveryPointText" TextWrapping="Wrap"
+                        AutomationProperties.AutomationId="Ui4ArchiveTransferRecoveryPoint" />
+                    <TextBlock Text="本页只显示恢复点摘要，不提供主库切换/热回切。"
+                        FontSize="12" TextWrapping="Wrap"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

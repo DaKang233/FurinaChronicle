@@ -1,6 +1,7 @@
 // Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
+using FurinaChronicle.Infrastructure.Archives.Portable;
 using FurinaChronicle.Infrastructure.Diagnostics;
 using FurinaChronicle.Infrastructure.Gacha.Metadata;
 using FurinaChronicle.Infrastructure.Persistence.Sqlite;
@@ -8,6 +9,7 @@ using FurinaChronicle.Presentation.Gacha;
 using FurinaChronicle.Presentation.Management;
 using FurinaChronicle.Services.Abstractions;
 using FurinaChronicle.Services.Archives;
+using FurinaChronicle.Services.Archives.Portable;
 using FurinaChronicle.Services.Gacha;
 using FurinaChronicle.Services.Gacha.Abstractions;
 using FurinaChronicle.Services.Gacha.Analytics;
@@ -118,6 +120,12 @@ public sealed class WindowsComposition : IAsyncDisposable
         services.AddSingleton<ISettingsHistoryPort, ServiceSettingsHistoryPort>();
         services.AddSingleton<ISettingsApplicationPort, WindowsSettingsApplicationPort>();
         services.AddTransient<SettingsState>();
+        services.AddSingleton(sp => BuildArchiveTransferServiceSet(
+            sp.GetRequiredService<Ui1PreviewEnvironment>()));
+        services.AddSingleton<IArchiveTransferWorkspace>(
+            sp => sp.GetRequiredService<ArchiveTransferServiceSet>().Workspace);
+        services.AddSingleton<IArchiveTransferSource, ServiceArchiveTransferSource>();
+        services.AddTransient<ArchiveTransferState>();
         services.AddSingleton<IStartupProbe, WindowsStartupProbe>();
         services.AddTransient<StartupState>();
 
@@ -145,8 +153,33 @@ public sealed class WindowsComposition : IAsyncDisposable
         await provider.DisposeAsync();
     }
 
-    private static GachaPageServices BuildGachaPageServices(
-        Ui1PreviewEnvironment environment,
+    private static ArchiveTransferServiceSet BuildArchiveTransferServiceSet(
+        Ui1PreviewEnvironment environment)
+    {
+        var limits = new ArchivePortableLimits();
+        var reader = new ArchivePackageReader(limits);
+        var writer = new ArchivePackageWriter(limits);
+        var snapshots = new SqliteArchiveExportSnapshotFactory(
+            environment.Database,
+            TimeProvider.System,
+            new ArchiveSnapshotStorageOptions(
+                Path.Combine(environment.TemporaryDirectory, "archive-export-snapshots")));
+        var stager = new SqliteArchiveRestoreInputStager(
+            reader,
+            new ArchiveRestoreStorageOptions(
+                Path.Combine(environment.TemporaryDirectory, "archive-restore-sessions")),
+            limits);
+        var targetSnapshots = new SqliteArchiveRestoreTargetSnapshotFactory(snapshots);
+        var planner = new PlanArchiveRestore(targetSnapshots, TimeProvider.System);
+        return new ArchiveTransferServiceSet(
+            new ArchiveLogicalExporter(snapshots, writer, reader),
+            stager,
+            planner,
+            environment.Changes,
+            new WindowsArchiveTransferWorkspace(environment.TemporaryDirectory));
+    }
+
+    private static GachaPageServices BuildGachaPageServices(        Ui1PreviewEnvironment environment,
         IUiDispatcher dispatcher,
         IFilePickerService filePicker,
         TimeProvider timeProvider)
