@@ -47,6 +47,14 @@ public partial class HomePage : ContentPage
         Unloaded += OnPageUnloaded;
     }
 
+    private async void OnOpenChronicleClicked(object? sender, EventArgs e)
+    {
+        if (sender is not Button button) return;
+        button.IsEnabled = false;
+        try { await Shell.Current.GoToAsync("chronicle-page"); }
+        finally { button.IsEnabled = true; }
+    }
+
     private async void OnOpenChallengeHistoryClicked(object? sender, EventArgs e)
     {
         if (sender is not Button button) return;

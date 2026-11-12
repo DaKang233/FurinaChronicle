@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  Copyright (c) 2026 DaKang233.
+  SPDX-License-Identifier: MIT
+-->
+
+<ContentPage
+    x:Class="FurinaChronicle.App.UI.Pages.ChroniclePage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:chronicle="clr-namespace:FurinaChronicle.Presentation.Chronicle;assembly=FurinaChronicle.Presentation"
+    xmlns:viewModels="clr-namespace:FurinaChronicle.App.ViewModels"
+    x:DataType="viewModels:ChroniclePageViewModel"
+    SafeAreaEdges="All"
+    Title="游戏历程">
+    <Grid Padding="16,12,16,12" RowDefinitions="Auto,*" RowSpacing="8">
+        <VerticalStackLayout Grid.Row="0" Spacing="8">
+            <Label
+                FontAttributes="Bold"
+                FontSize="24"
+                Text="游戏历程" />
+            <Label
+                FontSize="12"
+                LineBreakMode="WordWrap"
+                Opacity="0.72"
+                Text="按时间回顾抽卡、挑战与角色武器的重要节点。发生、观察、采集与未注明时间分别标注，不会互相替代。" />
+
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                <Picker
+                    Title="档案"
+                    AutomationId="ChronicleArchivePicker"
+                    ItemsSource="{Binding ArchiveNames}"
+                    SelectedIndex="{Binding SelectedArchiveIndex, Mode=TwoWay}" />
+                <Picker
+                    Grid.Column="1"
+                    Title="账号范围"
+                    AutomationId="ChronicleAccountPicker"
+                    ItemsSource="{Binding AccountNames}"
+                    SelectedIndex="{Binding SelectedAccountIndex, Mode=TwoWay}" />
+            </Grid>
+
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                <Picker
+                    Title="时间线"
+                    AutomationId="ChronicleTimelinePicker"
+                    ItemsSource="{Binding TimelineNames}"
+                    SelectedIndex="{Binding SelectedTimelineIndex, Mode=TwoWay}" />
+                <Picker
+                    Grid.Column="1"
+                    Title="时间范围"
+                    AutomationId="ChronicleTimeRangePicker"
+                    ItemsSource="{Binding TimeRangeNames}"
+                    SelectedIndex="{Binding SelectedTimeRangeIndex, Mode=TwoWay}" />
+            </Grid>
+
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                <Button
+                    Command="{Binding ReloadCommand}"
+                    MinimumHeightRequest="44"
+                    Text="重新载入"
+                    AutomationId="ChronicleReloadButton" />
+                <Button
+                    Grid.Column="1"
+                    Command="{Binding LoadMoreCommand}"
+                    IsEnabled="{Binding CanLoadMore}"
+                    MinimumHeightRequest="44"
+                    Text="加载更多"
+                    AutomationId="ChronicleLoadMoreButton" />
+            </Grid>
+
+            <Button
+                x:Name="ToggleFiltersButton"
+                Clicked="OnToggleFiltersClicked"
+                MinimumHeightRequest="40"
+                Text="更多筛选"
+                AutomationId="ChronicleToggleFilters" />
+
+            <VerticalStackLayout
+                x:Name="AdvancedFilters"
+                IsVisible="False"
+                Spacing="8">
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                    <Picker
+                        Title="颗粒度"
+                        AutomationId="ChronicleGranularityPicker"
+                        ItemsSource="{Binding GranularityNames}"
+                        SelectedIndex="{Binding SelectedGranularityIndex, Mode=TwoWay}" />
+                    <Picker
+                        Grid.Column="1"
+                        Title="星级"
+                        AutomationId="ChronicleRankPicker"
+                        ItemsSource="{Binding RankNames}"
+                        SelectedIndex="{Binding SelectedRankIndex, Mode=TwoWay}" />
+                </Grid>
+                <Picker
+                    Title="领域"
+                    AutomationId="ChronicleDomainPicker"
+                    ItemsSource="{Binding DomainNames}"
+                    SelectedIndex="{Binding SelectedDomainIndex, Mode=TwoWay}" />
+                <HorizontalStackLayout Spacing="16">
+                    <HorizontalStackLayout Spacing="4">
+                        <Switch
+                            IsToggled="{Binding IncludeStateChanges, Mode=TwoWay}"
+                            AutomationId="ChronicleStateChangesSwitch" />
+                        <Label
+                            Text="状态变化"
+                            VerticalTextAlignment="Center" />
+                    </HorizontalStackLayout>
+                    <HorizontalStackLayout Spacing="4">
+                        <Switch
+                            IsToggled="{Binding IncludeUndated, Mode=TwoWay}"
+                            AutomationId="ChronicleUndatedSwitch" />
+                        <Label
+                            Text="未注明时间"
+                            VerticalTextAlignment="Center" />
+                    </HorizontalStackLayout>
+                </HorizontalStackLayout>
+            </VerticalStackLayout>
+
+            <Label
+                AutomationId="ChronicleStatus"
+                LineBreakMode="WordWrap"
+                Text="{Binding StatusMessage}" />
+
+            <Border
+                BackgroundColor="{AppThemeBinding Light=#FEF3C7, Dark=#4A3410}"
+                IsVisible="{Binding HasStaleMessage}"
+                Padding="12"
+                StrokeThickness="0"
+                StrokeShape="RoundRectangle 10">
+                <VerticalStackLayout Spacing="8">
+                    <Label
+                        AutomationId="ChronicleStaleMessage"
+                        FontAttributes="Bold"
+                        LineBreakMode="WordWrap"
+                        Text="{Binding StaleMessage}" />
+                    <Button
+                        Clicked="OnReloadClicked"
+                        MinimumHeightRequest="40"
+                        Text="重新载入"
+                        AutomationId="ChronicleStaleReloadButton" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Label
+                AutomationId="ChronicleError"
+                IsVisible="{Binding HasError}"
+                LineBreakMode="WordWrap"
+                Text="{Binding ErrorMessage}"
+                TextColor="{AppThemeBinding Light=#B91C1C, Dark=#FCA5A5}" />
+
+            <Label
+                AutomationId="ChronicleEmpty"
+                IsVisible="{Binding HasEmptyMessage}"
+                LineBreakMode="WordWrap"
+                Text="{Binding EmptyMessage}" />
+        </VerticalStackLayout>
+
+        <CollectionView
+            Grid.Row="1"
+            AutomationId="ChronicleEntryList"
+            ItemsSource="{Binding Entries}"
+            SelectionMode="None">
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="chronicle:ChronicleEntryDisplay">
+                    <Border
+                        Margin="0,0,0,8"
+                        Padding="12"
+                        StrokeShape="RoundRectangle 10">
+                        <VerticalStackLayout Spacing="4">
+                            <Label
+                                FontAttributes="Bold"
+                                FontSize="17"
+                                LineBreakMode="WordWrap"
+                                Text="{Binding Title}" />
+                            <Label
+                                FontSize="14"
+                                LineBreakMode="WordWrap"
+                                Text="{Binding Time.PrimaryText}" />
+                            <Label
+                                FontSize="12"
+                                LineBreakMode="WordWrap"
+                                Opacity="0.8"
+                                Text="{Binding DetailsText}" />
+                        </VerticalStackLayout>
+                    </Border>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+    </Grid>
+</ContentPage>

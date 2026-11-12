@@ -10,7 +10,9 @@ namespace FurinaChronicle.App;
 public partial class AppShell : Shell
 {
     private const string StartupRoute = "startup";
+    private const string ChronicleRoute = "chronicle-page";
     private readonly HomePage homePage;
+    private readonly ChroniclePage chroniclePage;
     private readonly GachaPage gachaPage;
     private readonly ArchiveHistoryPage archiveHistoryPage;
     private readonly UserPage userPage;
@@ -29,6 +31,7 @@ public partial class AppShell : Shell
     public AppShell(
         StartupPage startupPage,
         HomePage homePage,
+        ChroniclePage chroniclePage,
         GachaPage gachaPage,
         ArchiveHistoryPage archiveHistoryPage,
         ArchivePage archivePage,
@@ -42,6 +45,7 @@ public partial class AppShell : Shell
     {
         InitializeComponent();
         this.homePage = homePage;
+        this.chroniclePage = chroniclePage;
         this.gachaPage = gachaPage;
         this.archiveHistoryPage = archiveHistoryPage;
         this.archivePage = archivePage;
@@ -55,6 +59,7 @@ public partial class AppShell : Shell
         Routing.RegisterRoute(
             "backup-restore-detail",
             typeof(ArchiveTransferPage));
+        Routing.RegisterRoute(ChronicleRoute, typeof(ChroniclePage));
         Routing.RegisterRoute("challenge-history", typeof(ChallengeHistoryPage));
         Routing.RegisterRoute("character-history", typeof(CharacterHistoryPage));
         Items.Add(CreateContent("正在启动", StartupRoute, startupPage));
@@ -172,6 +177,7 @@ public partial class AppShell : Shell
         passportFlyoutHeader = new PassportFlyoutHeader(userPageViewModel);
         FlyoutHeader = passportFlyoutHeader;
         Items.Add(CreateFlyoutItem("主页", "home", homePage));
+        Items.Add(CreateFlyoutItem("游戏历程", "chronicle", chroniclePage));
         Items.Add(CreateFlyoutItem("抽卡记录", "gacha", gachaPage));
         Items.Add(CreateFlyoutItem("档案修改历史", "archive-history", archiveHistoryPage));
         Items.Add(CreateFlyoutItem("档案与账号管理", "archive", archivePage));

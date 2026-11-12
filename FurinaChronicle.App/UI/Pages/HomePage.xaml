@@ -78,6 +78,9 @@
                     </VerticalStackLayout>
                 </Border>
 
+                <Button Text="游戏历程（Chronicle）" Clicked="OnOpenChronicleClicked"
+                    MinimumHeightRequest="48" AutomationId="OpenChronicle" />
+
                 <Button Text="挑战历史" Clicked="OnOpenChallengeHistoryClicked"
                     MinimumHeightRequest="48" AutomationId="OpenChallengeHistory" />
 

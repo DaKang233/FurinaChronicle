@@ -24,6 +24,7 @@ internal static class PresentationServiceCollectionExtensions
         services.AddTransient<GachaPageViewModel>();
         services.AddTransient<GachaAnalysisViewModel>();
         services.AddTransient<ArchiveHistoryPageViewModel>();
+        services.AddTransient<ChroniclePageViewModel>();
         services.AddSingleton<ArchivePageViewModel>();
         services.AddSingleton<ArchiveTransferPageViewModel>();
         services.AddSingleton<UserPageViewModel>();
@@ -35,6 +36,7 @@ internal static class PresentationServiceCollectionExtensions
         services.AddTransient<GachaPage>();
         services.AddTransient<ArchiveHistoryPage>();
         services.AddSingleton<HomePage>();
+        services.AddTransient<ChroniclePage>();
         services.AddTransient<ChallengeHistoryPage>();
         services.AddTransient<CharacterHistoryPage>();
         services.AddSingleton<ISpiralAbyssSource, HoYoGameRecordSpiralAbyssSource>();
