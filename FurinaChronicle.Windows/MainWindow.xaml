@@ -31,8 +31,8 @@
                     AutomationProperties.AutomationId="Ui4NavigationOverview">
                     <NavigationViewItem.Icon><SymbolIcon Symbol="Home" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem x:Name="ChronicleDestination" Content="游戏历程（待交付）"
-                    Tag="chronicle" IsEnabled="False"
+                <NavigationViewItem x:Name="ChronicleDestination" Content="游戏历程"
+                    Tag="chronicle"
                     AutomationProperties.AutomationId="Ui4NavigationChronicle">
                     <NavigationViewItem.Icon><SymbolIcon Symbol="Clock" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
@@ -40,13 +40,13 @@
                     AutomationProperties.AutomationId="Ui1Navigation">
                     <NavigationViewItem.Icon><SymbolIcon Symbol="List" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem x:Name="CharactersDestination" Content="数据 · 角色与武器（待交付）"
-                    Tag="characters" IsEnabled="False"
+                <NavigationViewItem x:Name="CharactersDestination" Content="数据 · 角色与武器"
+                    Tag="characters"
                     AutomationProperties.AutomationId="Ui4NavigationCharacters">
                     <NavigationViewItem.Icon><SymbolIcon Symbol="People" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem x:Name="ChallengesDestination" Content="数据 · 周期挑战（待交付）"
-                    Tag="challenges" IsEnabled="False"
+                <NavigationViewItem x:Name="ChallengesDestination" Content="数据 · 周期挑战"
+                    Tag="challenges"
                     AutomationProperties.AutomationId="Ui4NavigationChallenges">
                     <NavigationViewItem.Icon><SymbolIcon Symbol="Flag" /></NavigationViewItem.Icon>
                 </NavigationViewItem>

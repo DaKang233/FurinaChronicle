@@ -2,14 +2,17 @@
 // SPDX-License-Identifier: MIT
 
 using FurinaChronicle.Infrastructure.Archives.Portable;
+using FurinaChronicle.Infrastructure.Chronicle;
 using FurinaChronicle.Infrastructure.Diagnostics;
 using FurinaChronicle.Infrastructure.Gacha.Metadata;
 using FurinaChronicle.Infrastructure.Persistence.Sqlite;
 using FurinaChronicle.Presentation.Gacha;
+using FurinaChronicle.Presentation.History;
 using FurinaChronicle.Presentation.Management;
 using FurinaChronicle.Services.Abstractions;
 using FurinaChronicle.Services.Archives;
 using FurinaChronicle.Services.Archives.Portable;
+using FurinaChronicle.Services.Chronicle;
 using FurinaChronicle.Services.Gacha;
 using FurinaChronicle.Services.Gacha.Abstractions;
 using FurinaChronicle.Services.Gacha.Analytics;
@@ -126,6 +129,36 @@ public sealed class WindowsComposition : IAsyncDisposable
             sp => sp.GetRequiredService<ArchiveTransferServiceSet>().Workspace);
         services.AddSingleton<IArchiveTransferSource, ServiceArchiveTransferSource>();
         services.AddTransient<ArchiveTransferState>();
+
+        // UI-5 pages: formal isolated Chronicle query service and page-local state machines.
+        services.AddSingleton<IChronicleQueryService>(sp =>
+        {
+            Ui1PreviewEnvironment environment =
+                sp.GetRequiredService<Ui1PreviewEnvironment>();
+            return new SqliteChronicleQueryService(
+                environment.Database,
+                sp.GetRequiredService<IGachaRecordRepository>(),
+                sp.GetRequiredService<IGameAccountRepository>(),
+                sp.GetRequiredService<IArchiveDomainHistoryStore>());
+        });
+        services.AddTransient(sp => new ChronicleWorkspaceState(
+            sp.GetRequiredService<IChronicleQueryService>(),
+            new GetPlayerArchives(sp.GetRequiredService<IPlayerArchiveRepository>()),
+            new GetGameAccounts(
+                sp.GetRequiredService<IPlayerArchiveRepository>(),
+                sp.GetRequiredService<IGameAccountRepository>())));
+        services.AddTransient(sp => new CharacterWeaponHistoryState(
+            sp.GetRequiredService<IArchiveDomainHistoryStore>(),
+            new GetPlayerArchives(sp.GetRequiredService<IPlayerArchiveRepository>()),
+            new GetGameAccounts(
+                sp.GetRequiredService<IPlayerArchiveRepository>(),
+                sp.GetRequiredService<IGameAccountRepository>())));
+        services.AddTransient(sp => new ChallengeHistoryState(
+            sp.GetRequiredService<IArchiveDomainHistoryStore>(),
+            new GetPlayerArchives(sp.GetRequiredService<IPlayerArchiveRepository>()),
+            new GetGameAccounts(
+                sp.GetRequiredService<IPlayerArchiveRepository>(),
+                sp.GetRequiredService<IGameAccountRepository>())));
         services.AddSingleton<IStartupProbe, WindowsStartupProbe>();
         services.AddTransient<StartupState>();
 

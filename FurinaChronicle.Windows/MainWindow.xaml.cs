@@ -1,6 +1,7 @@
 // Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
+using FurinaChronicle.Presentation.History;
 using FurinaChronicle.Presentation.Management;
 using FurinaChronicle.Windows.Composition;
 using FurinaChronicle.Windows.Pages;
@@ -23,6 +24,9 @@ public sealed partial class MainWindow : Window
     private HistoryPage? historyPage;
     private SettingsPage? settingsPage;
     private ArchiveTransferPage? archiveTransferPage;
+    private ChroniclePage? chroniclePage;
+    private CharacterWeaponPage? characterWeaponPage;
+    private ChallengePage? challengePage;
     private bool shellReady;
     private bool shellBuilt;
     private bool switching;
@@ -168,6 +172,27 @@ public sealed partial class MainWindow : Window
         archiveTransferPage.BackRequested += OnTransferBack;
         archiveTransferPage.RestoreApplied += OnRestoreApplied;
         PageHost.Children.Add(archiveTransferPage);
+
+        chroniclePage = new ChroniclePage(
+            composition.Services.GetRequiredService<ChronicleWorkspaceState>())
+        {
+            Visibility = Visibility.Collapsed
+        };
+        PageHost.Children.Add(chroniclePage);
+
+        characterWeaponPage = new CharacterWeaponPage(
+            composition.Services.GetRequiredService<CharacterWeaponHistoryState>())
+        {
+            Visibility = Visibility.Collapsed
+        };
+        PageHost.Children.Add(characterWeaponPage);
+
+        challengePage = new ChallengePage(
+            composition.Services.GetRequiredService<ChallengeHistoryState>())
+        {
+            Visibility = Visibility.Collapsed
+        };
+        PageHost.Children.Add(challengePage);
         shellBuilt = true;
     }
 
@@ -230,11 +255,17 @@ public sealed partial class MainWindow : Window
         {
             GachaView.Leave();
             GachaView.Visibility = Visibility.Collapsed;
+            chroniclePage?.Leave();
+            characterWeaponPage?.Leave();
+            challengePage?.Leave();
             if (overviewPage is not null) overviewPage.Visibility = Visibility.Collapsed;
             if (archivePage is not null) archivePage.Visibility = Visibility.Collapsed;
             if (historyPage is not null) historyPage.Visibility = Visibility.Collapsed;
             if (settingsPage is not null) settingsPage.Visibility = Visibility.Collapsed;
             if (archiveTransferPage is not null) archiveTransferPage.Visibility = Visibility.Collapsed;
+            if (chroniclePage is not null) chroniclePage.Visibility = Visibility.Collapsed;
+            if (characterWeaponPage is not null) characterWeaponPage.Visibility = Visibility.Collapsed;
+            if (challengePage is not null) challengePage.Visibility = Visibility.Collapsed;
             switch (tag)
             {
                 case "overview":
@@ -266,6 +297,21 @@ public sealed partial class MainWindow : Window
                     currentPageTag = tag;
                     archiveTransferPage!.Visibility = Visibility.Visible;
                     await archiveTransferPage.EnterAsync();
+                    break;
+                case "chronicle":
+                    currentPageTag = tag;
+                    chroniclePage!.Visibility = Visibility.Visible;
+                    await chroniclePage.EnterAsync();
+                    break;
+                case "characters":
+                    currentPageTag = tag;
+                    characterWeaponPage!.Visibility = Visibility.Visible;
+                    await characterWeaponPage.EnterAsync();
+                    break;
+                case "challenges":
+                    currentPageTag = tag;
+                    challengePage!.Visibility = Visibility.Visible;
+                    await challengePage.EnterAsync();
                     break;
             }
         }
