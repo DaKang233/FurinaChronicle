@@ -211,6 +211,7 @@
                     AcceptsReturn="True"
                     IsReadOnly="True"
                     TextWrapping="Wrap"
+                    AutomationProperties.Name="Markdown 报告（只读）"
                     AutomationProperties.AutomationId="Ui5ChronicleMarkdown" />
             </Grid>
         </Grid>
