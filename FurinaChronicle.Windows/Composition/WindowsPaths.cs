@@ -34,6 +34,14 @@ public sealed class WindowsPaths
         SelectionFilePath = Path.Combine(SettingsDirectory, "archive-selection.json");
         CredentialDirectory = Path.Combine(BaseDirectory, "UI4", "WinUI", "credentials");
         CredentialFilePath = Path.Combine(CredentialDirectory, "credentials.bin");
+        Ui6Directory = Path.Combine(BaseDirectory, "UI6");
+        MigrationTargetDirectory = Path.Combine(Ui6Directory, "Data");
+        MigrationTargetDatabasePath = Path.Combine(
+            MigrationTargetDirectory,
+            "furinachronicle.db3");
+        MigrationBackupDirectory = Path.Combine(Ui6Directory, "backups");
+        MigrationMarkerPath = Path.Combine(Ui6Directory, "migration.json");
+        SessionLockPath = Path.Combine(BaseDirectory, "session.lock");
     }
 
     public string BaseDirectory { get; }
@@ -45,6 +53,18 @@ public sealed class WindowsPaths
     public string CredentialDirectory { get; }
 
     public string CredentialFilePath { get; }
+
+    public string Ui6Directory { get; }
+
+    public string MigrationTargetDirectory { get; }
+
+    public string MigrationTargetDatabasePath { get; }
+
+    public string MigrationBackupDirectory { get; }
+
+    public string MigrationMarkerPath { get; }
+
+    public string SessionLockPath { get; }
 
     public string? ConfigurationError { get; }
 }

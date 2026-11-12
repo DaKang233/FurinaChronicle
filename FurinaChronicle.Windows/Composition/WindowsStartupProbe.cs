@@ -4,15 +4,18 @@
 using FurinaChronicle.Infrastructure.Diagnostics;
 using FurinaChronicle.Infrastructure.Persistence.Sqlite;
 using FurinaChronicle.Presentation.Management;
+using FurinaChronicle.Windows.Shell;
 
 namespace FurinaChronicle.Windows.Composition;
 
-// Isolated startup probe: writable preview root -> create the environment lazily -> open and
-// validate the isolated SQLite database. It never discovers production paths or credentials,
-// and it never constructs the environment before the root passed the write probe.
+// Isolated startup probe: writable preview root -> single-writer session lock -> create the
+// environment lazily -> open and validate the isolated SQLite database. It never discovers
+// production paths or credentials.
 public sealed class WindowsStartupProbe(
     WindowsPaths paths,
-    EnvironmentHolder holder) : IStartupProbe
+    EnvironmentHolder holder,
+    SessionLockManager sessionLock,
+    WindowsVersionInfo version) : IStartupProbe
 {
     public async Task<StartupProbeResult> RunAsync(CancellationToken cancellationToken = default)
     {
@@ -32,6 +35,24 @@ public sealed class WindowsStartupProbe(
         {
             return pathCheck;
         }
+
+        SessionLockResult lockResult = await sessionLock.AcquireAsync(
+            paths.SessionLockPath,
+            version.Version,
+            "WinUI",
+            cancellationToken);
+        if (!lockResult.Acquired)
+        {
+            return new(
+                false,
+                StartupFailureKind.SessionBusy,
+                "数据目录被其他实例占用。",
+                lockResult.Message);
+        }
+
+        string? lockWarning = lockResult.State == SessionLockState.RecoveredStale
+            ? lockResult.Message
+            : null;
 
         Ui1PreviewEnvironment environment;
         try
@@ -75,7 +96,10 @@ public sealed class WindowsStartupProbe(
                 true,
                 StartupFailureKind.None,
                 "隔离数据库已就绪。",
-                $"数据库：{environment.DatabasePath}");
+                $"数据库：{environment.DatabasePath}")
+            {
+                Warning = lockWarning
+            };
         }
         catch (OperationCanceledException)
         {

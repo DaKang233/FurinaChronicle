@@ -28,6 +28,7 @@ public sealed partial class MainWindow : Window
     private CharacterWeaponPage? characterWeaponPage;
     private ChallengePage? challengePage;
     private PassportPage? passportPage;
+    private MigrationPage? migrationPage;
     private bool shellReady;
     private bool shellBuilt;
     private bool switching;
@@ -47,6 +48,7 @@ public sealed partial class MainWindow : Window
         // guard passed (BuildShell), so an invalid FURINA_UI1_DIRECTORY can never throw out of
         // Application.OnLaunched before the startup failure page exists.
         composition.Services.GetRequiredService<IFilePickerService>().SetOwner(this);
+
 
         startupPage = new StartupPage();
         startupPage.SetVersion(
@@ -90,10 +92,13 @@ public sealed partial class MainWindow : Window
             StartupHost.Visibility = Visibility.Collapsed;
             Navigation.Visibility = Visibility.Visible;
             shellReady = true;
+            StartupWarningBar.Message = state.Snapshot.Warning ?? string.Empty;
+            StartupWarningBar.IsOpen = !string.IsNullOrWhiteSpace(state.Snapshot.Warning);
             switching = true;
             Navigation.SelectedItem = OverviewDestination;
             switching = false;
             await ShowPageAsync("overview");
+            await TryShowMigrationAsync();
         }
         catch (Exception exception)
         {
@@ -103,7 +108,7 @@ public sealed partial class MainWindow : Window
             {
                 File.WriteAllText(
                     Path.Combine(Path.GetTempPath(), "furina-ui4-buildshell-error.txt"),
-                    exception.ToString());
+                    LogSanitizer.SanitizeException(exception, "BuildShell"));
             }
             catch (Exception)
             {
@@ -202,7 +207,50 @@ public sealed partial class MainWindow : Window
         };
         passportPage.RefreshRequested += OnPassportRefreshRequested;
         PageHost.Children.Add(passportPage);
+
+        migrationPage = new MigrationPage(
+            composition.Services.GetRequiredService<ProductionMigrationState>())
+        {
+            Visibility = Visibility.Collapsed
+        };
+        migrationPage.CloseRequested += OnMigrationCloseRequested;
+        PageHost.Children.Add(migrationPage);
         shellBuilt = true;
+    }
+
+    private async void OnMigrationCloseRequested(object? sender, EventArgs e)
+    {
+        if (!shellReady) return;
+        await ShowPageAsync("overview");
+    }
+
+    private async Task TryShowMigrationAsync()
+    {
+        if (migrationPage is null) return;
+        await migrationPage.EnterAsync();
+        if (!migrationPage.ShouldPrompt) return;
+        hideCurrentPages();
+        currentPageTag = "migration";
+        migrationPage.Visibility = Visibility.Visible;
+    }
+
+    private void hideCurrentPages()
+    {
+        GachaView.Leave();
+        GachaView.Visibility = Visibility.Collapsed;
+        chroniclePage?.Leave();
+        characterWeaponPage?.Leave();
+        challengePage?.Leave();
+        if (overviewPage is not null) overviewPage.Visibility = Visibility.Collapsed;
+        if (archivePage is not null) archivePage.Visibility = Visibility.Collapsed;
+        if (historyPage is not null) historyPage.Visibility = Visibility.Collapsed;
+        if (settingsPage is not null) settingsPage.Visibility = Visibility.Collapsed;
+        if (archiveTransferPage is not null) archiveTransferPage.Visibility = Visibility.Collapsed;
+        if (chroniclePage is not null) chroniclePage.Visibility = Visibility.Collapsed;
+        if (characterWeaponPage is not null) characterWeaponPage.Visibility = Visibility.Collapsed;
+        if (challengePage is not null) challengePage.Visibility = Visibility.Collapsed;
+        if (passportPage is not null) passportPage.Visibility = Visibility.Collapsed;
+        if (migrationPage is not null) migrationPage.Visibility = Visibility.Collapsed;
     }
 
     private async void OnPassportRefreshRequested(object? sender, EventArgs e)
@@ -271,20 +319,7 @@ public sealed partial class MainWindow : Window
         switching = true;
         try
         {
-            GachaView.Leave();
-            GachaView.Visibility = Visibility.Collapsed;
-            chroniclePage?.Leave();
-            characterWeaponPage?.Leave();
-            challengePage?.Leave();
-            if (overviewPage is not null) overviewPage.Visibility = Visibility.Collapsed;
-            if (archivePage is not null) archivePage.Visibility = Visibility.Collapsed;
-            if (historyPage is not null) historyPage.Visibility = Visibility.Collapsed;
-            if (settingsPage is not null) settingsPage.Visibility = Visibility.Collapsed;
-            if (archiveTransferPage is not null) archiveTransferPage.Visibility = Visibility.Collapsed;
-            if (chroniclePage is not null) chroniclePage.Visibility = Visibility.Collapsed;
-            if (characterWeaponPage is not null) characterWeaponPage.Visibility = Visibility.Collapsed;
-            if (challengePage is not null) challengePage.Visibility = Visibility.Collapsed;
-            if (passportPage is not null) passportPage.Visibility = Visibility.Collapsed;
+            hideCurrentPages();
             switch (tag)
             {
                 case "overview":

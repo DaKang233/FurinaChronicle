@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Copyright (c) 2026 DaKang233.
+  SPDX-License-Identifier: MIT
+-->
+<UserControl
+    x:Class="FurinaChronicle.Windows.Pages.MigrationPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    AutomationProperties.AutomationId="Ui6MigrationPage">
+    <ScrollViewer Padding="24">
+        <StackPanel Spacing="14" MaxWidth="1100">
+            <StackPanel Spacing="4">
+                <TextBlock Text="从旧版复制迁移" FontSize="28" FontWeight="SemiBold" />
+                <TextBlock
+                    Text="仅隔离/合成夹具验收：源库只读、强制备份、副本校验、源库保留。生产凭据不迁移，需重新授权。"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    TextWrapping="Wrap"
+                    AutomationProperties.AutomationId="Ui6MigrationCredentialsNotice" />
+            </StackPanel>
+
+            <StackPanel Spacing="2">
+                <TextBlock x:Name="StatusText" TextWrapping="Wrap"
+                    AutomationProperties.AutomationId="Ui6MigrationStatus"
+                    AutomationProperties.LiveSetting="Polite" />
+                <TextBlock x:Name="ErrorText" TextWrapping="Wrap" Visibility="Collapsed"
+                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                    AutomationProperties.AutomationId="Ui6MigrationError" />
+                <ProgressRing x:Name="Progress" IsActive="False" Width="24" Height="24" />
+            </StackPanel>
+
+            <Border Padding="16" CornerRadius="8"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="只读探测" FontSize="18" FontWeight="SemiBold" />
+                    <TextBlock x:Name="SourceText" TextWrapping="Wrap"
+                        AutomationProperties.AutomationId="Ui6MigrationSource" />
+                    <TextBlock x:Name="TargetText" TextWrapping="Wrap"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        AutomationProperties.AutomationId="Ui6MigrationTarget" />
+                    <TextBlock x:Name="BackupText" TextWrapping="Wrap"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        AutomationProperties.AutomationId="Ui6MigrationBackup" />
+                    <TextBlock x:Name="MarkerText" TextWrapping="Wrap"
+                        AutomationProperties.AutomationId="Ui6MigrationMarker" />
+                    <TextBlock x:Name="LegacyText" TextWrapping="Wrap" Visibility="Collapsed"
+                        Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                        AutomationProperties.AutomationId="Ui6MigrationLegacy" />
+                </StackPanel>
+            </Border>
+
+            <Border Padding="16" CornerRadius="8"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="迁移操作" FontSize="18" FontWeight="SemiBold" />
+                    <CheckBox x:Name="ForceRemigrateCheck"
+                        Content="重新迁移（目标已存在且已有迁移标记时，需明确勾选）"
+                        Checked="OnForceChanged" Unchecked="OnForceChanged"
+                        AutomationProperties.AutomationId="Ui6MigrationForce" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button x:Name="StartButton" Content="开始只读校验并迁移"
+                            Click="OnStart"
+                            AutomationProperties.AutomationId="Ui6MigrationStart" />
+                        <Button x:Name="ContinueButton" Content="继续进入应用"
+                            Click="OnContinue" Visibility="Collapsed"
+                            AutomationProperties.AutomationId="Ui6MigrationContinue" />
+                        <Button x:Name="SkipButton" Content="稍后（继续隔离宿主）"
+                            Click="OnSkip"
+                            AutomationProperties.AutomationId="Ui6MigrationSkip" />
+                    </StackPanel>
+                    <TextBlock
+                        Text="流程：只读校验源库 → 强制一致性备份 → 复制到新宿主目录 → 副本校验 → 写迁移标记。任一步失败不切换，源库与已有目标不变。"
+                        FontSize="12" TextWrapping="Wrap"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+            </Border>
+
+            <Border Padding="16" CornerRadius="8"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="回退与凭据边界" FontSize="18" FontWeight="SemiBold" />
+                    <TextBlock x:Name="RollbackText" TextWrapping="Wrap"
+                        AutomationProperties.AutomationId="Ui6MigrationRollback" />
+                    <TextBlock
+                        Text="迁移副本通过校验后仍需 UI-6b 生产组合根/默认入口切换；当前构建继续使用隔离宿主，不会自动打开生产库。"
+                        FontSize="12" TextWrapping="Wrap"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

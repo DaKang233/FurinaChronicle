@@ -179,6 +179,20 @@ public sealed class WindowsComposition : IAsyncDisposable
                 sp.GetRequiredService<IGameAccountRepository>())));
         services.AddSingleton<IStartupProbe, WindowsStartupProbe>();
         services.AddTransient<StartupState>();
+        services.AddSingleton<IProcessIdentityPort, WindowsProcessIdentityPort>();
+        services.AddSingleton(sp => new SessionLockManager(
+            sp.GetRequiredService<IProcessIdentityPort>()));
+        services.AddSingleton(new ProductionMigrationPaths(
+            paths.MigrationTargetDirectory,
+            paths.MigrationTargetDatabasePath,
+            paths.MigrationBackupDirectory,
+            paths.MigrationMarkerPath));
+        services.AddSingleton<IProductionMigrationPort, WindowsProductionMigrationPort>();
+        services.AddTransient(sp => new ProductionMigrationState(
+            sp.GetRequiredService<IProductionMigrationPort>(),
+            sp.GetRequiredService<ProductionMigrationPaths>(),
+            version.UserVisibleName,
+            sp.GetRequiredService<TimeProvider>()));
 
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton(sp => BuildGachaPageServices(
