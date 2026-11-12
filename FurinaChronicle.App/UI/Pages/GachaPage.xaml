@@ -21,6 +21,7 @@
 
     <Grid>
         <ScrollView
+            x:Name="PageScroll"
             HorizontalScrollBarVisibility="Never"
             Orientation="Vertical"
             VerticalScrollBarVisibility="Always">
@@ -58,6 +59,20 @@
                             SelectedIndexChanged="OnAccountSelectionChanged"
                             SelectedItem="{Binding SelectedAccount, Mode=TwoWay}" />
                     </Grid>
+
+                    <!-- Failures stay visible after a page reload until the next user action (D1). -->
+                    <Border
+                        BackgroundColor="{AppThemeBinding Light=#FFF1F1, Dark=#3A2020}"
+                        IsVisible="{Binding HasError}"
+                        Padding="10,8"
+                        Stroke="{AppThemeBinding Light=#40B3261E, Dark=#40FFB4AB}"
+                        StrokeShape="RoundRectangle 8">
+                        <Label
+                            FontSize="12"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding ErrorMessage}"
+                            TextColor="{AppThemeBinding Light=#B3261E, Dark=#FFB4AB}" />
+                    </Border>
                 </VerticalStackLayout>
             </Border>
 

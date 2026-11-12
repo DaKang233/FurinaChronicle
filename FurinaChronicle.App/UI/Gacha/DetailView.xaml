@@ -44,14 +44,18 @@
             </HorizontalStackLayout>
         </ScrollView>
 
-        <ScrollView Grid.Row="2" Orientation="Horizontal">
-            <HorizontalStackLayout Spacing="8">
-                <Label Text="选择一条记录后：" VerticalTextAlignment="Center" />
-                <Button Clicked="OnCorrectRecordClicked" IsEnabled="{Binding IsNotBusy}" Text="纠正" />
-                <Button Clicked="OnDeleteRecordClicked" IsEnabled="{Binding IsNotBusy}" Text="普通删除（可撤销）" />
-                <Button Clicked="OnPurgeRecordClicked" IsEnabled="{Binding IsNotBusy}" Text="永久删除" />
-            </HorizontalStackLayout>
-        </ScrollView>
+        <!-- Wrapping keeps 纠正/普通删除/永久删除 reachable on narrow screens
+             without a horizontal scroll (D3). -->
+        <FlexLayout
+            Grid.Row="2"
+            AlignItems="Center"
+            Direction="Row"
+            Wrap="Wrap">
+            <Label Margin="0,0,8,4" Text="选中后：" VerticalTextAlignment="Center" />
+            <Button Margin="0,0,8,4" Clicked="OnCorrectRecordClicked" IsEnabled="{Binding IsNotBusy}" Text="纠正" />
+            <Button Margin="0,0,8,4" Clicked="OnDeleteRecordClicked" IsEnabled="{Binding IsNotBusy}" Text="普通删除（可撤销）" />
+            <Button Margin="0,0,8,4" Clicked="OnPurgeRecordClicked" IsEnabled="{Binding IsNotBusy}" Text="永久删除" />
+        </FlexLayout>
 
         <ScrollView Grid.Row="3" HorizontalScrollBarVisibility="Always" Orientation="Horizontal">
             <Grid RowDefinitions="Auto,*" WidthRequest="820">

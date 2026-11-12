@@ -7,6 +7,9 @@ namespace FurinaChronicle.App.UI.Pages;
 
 public partial class GachaRefreshProgressPage : ContentPage
 {
+    private readonly TaskCompletionSource<string?> closeRequested =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+
     private GachaPageViewModel ViewModel =>
         (GachaPageViewModel)BindingContext;
 
@@ -16,8 +19,24 @@ public partial class GachaRefreshProgressPage : ContentPage
         BindingContext = viewModel;
     }
 
+    /// <summary>
+    /// Completes when the user dismisses the progress page after a failure.
+    /// </summary>
+    public Task<string?> WaitForCloseAsync() => closeRequested.Task;
+
     protected override bool OnBackButtonPressed()
     {
-        return ViewModel.IsRefreshRunning || base.OnBackButtonPressed();
+        if (ViewModel.IsRefreshRunning)
+        {
+            return true;
+        }
+
+        closeRequested.TrySetResult(null);
+        return true;
+    }
+
+    private void OnCloseClicked(object? sender, EventArgs e)
+    {
+        closeRequested.TrySetResult(null);
     }
 }

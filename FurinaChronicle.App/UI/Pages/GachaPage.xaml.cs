@@ -19,9 +19,15 @@ public partial class GachaPage : ContentPage
     private const double MinimumAnalysisViewportHeight = 360;
     private const double MaximumAnalysisViewportHeight = 900;
     private const double AnalysisViewportHeightRatio = 0.65;
+    // The detail table needs the record list to stay usable, so the analysis
+    // host grows (and the outer page scrolls) while 明细表格 is the active tab.
+    private const double DetailViewportHeightRatio = 0.88;
+    private const double MinimumDetailViewportHeight = 480;
 
     private bool? loadedArchiveScope;
     private bool portableOperationRunning;
+    private Task pageRestoreTask = Task.CompletedTask;
+    private double lastPageHeight;
 
     private GachaPageViewModel ViewModel =>
         (GachaPageViewModel)BindingContext;
@@ -40,11 +46,13 @@ public partial class GachaPage : ContentPage
         }
     }
 
-    protected override async void OnAppearing()
+    protected override void OnAppearing()
     {
         base.OnAppearing();
         LoadScopePage(ViewModel.Analysis.IsArchiveMode);
-        await ViewModel.InitializeAsync();
+        // Tracked so a user action that resumes after a modal closes can wait
+        // for the page reload instead of racing it.
+        pageRestoreTask = ViewModel.InitializeAsync();
     }
 
     protected override void OnSizeAllocated(double width, double height)
@@ -55,10 +63,35 @@ public partial class GachaPage : ContentPage
             return;
         }
 
+        lastPageHeight = height;
+        ApplyAnalysisViewportHeight();
+    }
+
+    private void ApplyAnalysisViewportHeight()
+    {
+        if (lastPageHeight <= 0)
+        {
+            return;
+        }
+
+        bool detailMode = ViewModel.Analysis.IsDetailsVisible;
+        double ratio = detailMode
+            ? DetailViewportHeightRatio
+            : AnalysisViewportHeightRatio;
+        double minimum = detailMode
+            ? MinimumDetailViewportHeight
+            : MinimumAnalysisViewportHeight;
+        // Never request more than the page itself plus its scrolling margin;
+        // the outer ScrollView owns whatever surrounds the analysis host.
+        double maximum = Math.Max(
+            minimum,
+            Math.Min(
+                MaximumAnalysisViewportHeight,
+                lastPageHeight));
         double viewportHeight = Math.Clamp(
-            height * AnalysisViewportHeightRatio,
-            MinimumAnalysisViewportHeight,
-            MaximumAnalysisViewportHeight);
+            lastPageHeight * ratio,
+            Math.Min(minimum, maximum),
+            maximum);
         if (Math.Abs(GachaScopePageHost.HeightRequest - viewportHeight) >= 1)
         {
             // The fixed viewport keeps nested CollectionView controls bounded
@@ -74,6 +107,35 @@ public partial class GachaPage : ContentPage
         if (e.PropertyName == nameof(GachaAnalysisViewModel.IsArchiveMode))
         {
             LoadScopePage(ViewModel.Analysis.IsArchiveMode);
+        }
+
+        if (e.PropertyName == nameof(GachaAnalysisViewModel.IsDetailsVisible))
+        {
+            ApplyAnalysisViewportHeight();
+            if (ViewModel.Analysis.IsDetailsVisible)
+            {
+                _ = BringAnalysisHostIntoViewAsync();
+            }
+        }
+    }
+
+    private async Task BringAnalysisHostIntoViewAsync()
+    {
+        try
+        {
+            // The record table is the primary content of its section. Bringing
+            // the analysis host to the top of the page keeps the record list
+            // and the record actions reachable on narrow screens (D3).
+            await Task.Yield();
+            await MainThread.InvokeOnMainThreadAsync(() =>
+                PageScroll.ScrollToAsync(
+                    GachaScopePageHost,
+                    ScrollToPosition.Start,
+                    animated: true));
+        }
+        catch (Exception)
+        {
+            // Scrolling is best effort and must never break navigation.
         }
     }
 
@@ -186,6 +248,13 @@ public partial class GachaPage : ContentPage
             try
             {
                 await refresh();
+                // A failed refresh keeps the progress page (and its failure
+                // reason) visible until the user dismisses it (D1). Successful
+                // refreshes keep closing the progress page as before.
+                if (ViewModel.IsRefreshFailed)
+                {
+                    await progressPage.WaitForCloseAsync();
+                }
             }
             finally
             {
@@ -785,12 +854,16 @@ public partial class GachaPage : ContentPage
                 return;
             }
 
+            // Closing the options modal made the page reload; queue the export
+            // behind that reload instead of racing it (D4).
+            await pageRestoreTask;
             using GachaExportFile? file =
                 await ViewModel.CreateUigfExportAsync(
                     selection.GameAccountIds,
                     selection.Options);
             if (file is null)
             {
+                await ShowExportNotProducedAsync();
                 return;
             }
 
@@ -830,12 +903,16 @@ public partial class GachaPage : ContentPage
                 return;
             }
 
+            // Closing the options modal made the page reload; queue the export
+            // behind that reload instead of racing it (D4).
+            await pageRestoreTask;
             using GachaExportFile? file =
                 await ViewModel.CreateTableExportAsync(
                     selection.GameAccountIds,
                     selection.Options);
             if (file is null)
             {
+                await ShowExportNotProducedAsync();
                 return;
             }
 
@@ -877,6 +954,12 @@ public partial class GachaPage : ContentPage
         return true;
     }
 
+    private Task ShowExportNotProducedAsync() =>
+        DisplayAlertAsync(
+            "导出失败",
+            "导出文件未能生成，未写入任何文件。请重试；如果问题持续，请先点“重新加载”。",
+            "确定");
+
     private async Task SaveExportFileAsync(GachaExportFile file)
     {
         ExportSaveResult result =
@@ -897,7 +980,8 @@ public partial class GachaPage : ContentPage
         await DisplayAlertAsync(
             "导出完成",
             $"已导出 {file.Result.AccountCount} 个账号、" +
-            $"{file.Result.RecordCount} 条记录。\n{result.FilePath}",
+            $"{file.Result.RecordCount} 条记录。\n" +
+            $"位置：{result.FilePath ?? "由系统文档提供器管理"}",
             "确定");
     }
 }

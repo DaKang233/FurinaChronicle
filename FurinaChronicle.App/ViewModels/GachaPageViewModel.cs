@@ -45,6 +45,11 @@ public partial class GachaPageViewModel(
 	private readonly Dictionary<string, GachaRefreshItemDisplayItem>
 		refreshItemsByKey = new(StringComparer.Ordinal);
 
+	// Serializes page operations. The previous "drop the call when IsBusy"
+	// behaviour silently discarded user-requested exports whenever the page
+	// reload triggered by closing a modal was still running (D4).
+	private readonly SemaphoreSlim operationGate = new(1, 1);
+
 	public GachaAnalysisViewModel Analysis { get; } = analysis;
 
 	public ObservableCollection<PlayerArchive> Archives { get; } = [];
@@ -67,7 +72,13 @@ public partial class GachaPageViewModel(
 	public bool IsNotBusy => !IsBusy;
 
 	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(IsRefreshFailed))]
 	public partial bool IsRefreshRunning { get; set; }
+
+	// Keeps the refresh failure visible in the progress modal until the user
+	// dismisses it (D1).
+	public bool IsRefreshFailed =>
+		!IsRefreshRunning && !string.IsNullOrWhiteSpace(ErrorMessage);
 
 	[ObservableProperty]
 	public partial bool IsPortableImportRunning { get; set; }
@@ -110,7 +121,11 @@ public partial class GachaPageViewModel(
 	public partial GameAccount? SelectedAccount { get; set; }
 
 	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(HasError))]
+	[NotifyPropertyChangedFor(nameof(IsRefreshFailed))]
 	public partial string? ErrorMessage { get; set; }
+
+	public bool HasError => !string.IsNullOrWhiteSpace(ErrorMessage);
 
 	[ObservableProperty]
 	public partial string? ImportSummary { get; set; }
@@ -336,7 +351,7 @@ public partial class GachaPageViewModel(
 				await LoadSelectedArchiveCoreAsync(selectedAccountId);
 			}
 			await RefreshPassportSelectionCoreAsync();
-		});
+		}, preserveErrorMessage: true);
 	}
 
 	public async Task SelectArchiveAsync(PlayerArchive? archive)
@@ -556,7 +571,7 @@ public partial class GachaPageViewModel(
 				content.Dispose();
 				throw;
 			}
-		});
+		}, waitForBusy: true, rethrowError: true);
 		return file;
 	}
 
@@ -602,7 +617,7 @@ public partial class GachaPageViewModel(
 				content.Dispose();
 				throw;
 			}
-		});
+		}, waitForBusy: true, rethrowError: true);
 		return file;
 	}
 
@@ -1100,9 +1115,21 @@ public partial class GachaPageViewModel(
 		TotalRecordCount = 0;
 	}
 
-	private async Task ExecuteBusyAsync(Func<Task> operation)
+	private async Task ExecuteBusyAsync(
+		Func<Task> operation,
+		bool waitForBusy = false,
+		bool preserveErrorMessage = false,
+		bool rethrowError = false)
 	{
-		if (IsBusy)
+		// Every UI operation runs under one gate so that a page reload
+		// (OnAppearing) and a user-requested action can never be silently
+		// dropped: callers that must not lose work use waitForBusy and are
+		// queued behind the running operation instead of returning early.
+		if (waitForBusy)
+		{
+			await operationGate.WaitAsync();
+		}
+		else if (!operationGate.Wait(0))
 		{
 			return;
 		}
@@ -1110,20 +1137,32 @@ public partial class GachaPageViewModel(
 		try
 		{
 			IsBusy = true;
-			ErrorMessage = null;
+			if (!preserveErrorMessage)
+			{
+				ErrorMessage = null;
+			}
 			await operation();
 		}
 		catch (OperationCanceledException)
 		{
 			ErrorMessage = "操作已取消。";
+			if (rethrowError)
+			{
+				throw;
+			}
 		}
 		catch (Exception exception)
 		{
 			ErrorMessage = exception.Message;
+			if (rethrowError)
+			{
+				throw;
+			}
 		}
 		finally
 		{
 			IsBusy = false;
+			operationGate.Release();
 		}
 	}
 }

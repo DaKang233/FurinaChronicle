@@ -14,7 +14,13 @@
     Shell.NavBarIsVisible="False"
     Title="刷新抽卡记录">
 
-    <Grid Padding="18">
+    <Grid Padding="18" RowDefinitions="*,Auto" RowSpacing="12">
         <gacha:GachaRefreshProgressView />
+        <!-- A failed refresh stays on screen (with its reason) until dismissed. -->
+        <Button
+            Grid.Row="1"
+            Clicked="OnCloseClicked"
+            IsVisible="{Binding IsRefreshFailed}"
+            Text="关闭" />
     </Grid>
 </ContentPage>
