@@ -2,7 +2,7 @@
 
 状态：Accepted implementation；内部格式未发布
 
-本规范依赖 Accepted ADR 0017。首批生产支持只包括深境螺旋。
+本规范依赖 Accepted ADR 0017 与 ADR 0024。当前生产支持深境螺旋、幻想真境剧诗与幽境危战三类模式。
 
 ## 观察范围
 
@@ -20,12 +20,12 @@ Portable 保存全部不可变观察。重复引用同内容为 NoOp，同引用
 
 首版提供 Markdown，按账号、模式和期次列出全部观察、周期、来源、楼层／间、星数、实际完成时间和未知项。不输出未经领域规则确认的“完成”节点，不用周期末或抓取时间填充 `OccurredAt`。
 
-剧诗形状和未知完成时间只作为合成 fixture；未支持模式必须受控拒绝。
+剧诗／危战按阶段展示分数、阵容、增益与敌人；未知完成时间保持未知；未支持模式仍受控拒绝。
 
 ## Portable v1
 
-- 机器契约见 [JSON Schema](schemas/challenge-history-v1.schema.json)；格式名 `furina-domain-history`，`dataset_kind = 2`，版本 `1.0`。
-- 首版只接受 `SpiralAbyss`。剧诗和幽境危战枚举是未来领域入口，不代表生产支持。
+- 机器契约见 [JSON Schema](schemas/challenge-history-v1.schema.json)；格式名 `furina-domain-history`，`dataset_kind = 2`，版本 `1.1`（旧 `1.0` 可读，无 Migrator）。
+- `mode` 接受 `1` 深境螺旋、`2` 幻想真境剧诗、`3` 幽境危战；其他值拒绝。\n- 观察可选携带 `stages`（阶段 ID、分数、完成时间、阵容、增益、敌人）、`difficulty`、`medal_count`；缺失按空值读取。\n- Chronicle 完成节点仍只由 ADR 0019 的深境螺旋 12-3 规则产生；剧诗／危战不产生完成节点。
 - Portable 保存全部不可变观察和 provenance，不保存本机 Undo、Tombstone、操作重试结果或派生“当前”视图。
 - 同 ObservationId 同业务内容、同稳定来源记录重试及相邻可信时点同内容均为 NoOp；同来源不同内容或同可信时刻矛盾为 Conflict；可信 A→B→A 保留。
 - Plan 与 Apply 使用同一判重语义；目标改变、指纹改变、未知顺序或 future major 均在提交前拒绝。父实体、观察、Receipt 和 ChangeSet 同事务。

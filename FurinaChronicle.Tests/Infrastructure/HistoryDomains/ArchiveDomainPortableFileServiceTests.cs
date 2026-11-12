@@ -193,6 +193,96 @@ public sealed class ArchiveDomainPortableFileServiceTests
     }
 
     [Fact]
+    public async Task ChallengeDataset_CarriesTheaterAndStygianStageDetails()
+    {
+        await using PortableContext source = await PortableContext.CreateAsync();
+        PlayerArchive archive = await source.AddArchiveAndAccountAsync();
+        GameAccount account = Assert.Single(
+            await source.Accounts.GetByArchiveIdAsync(archive.Id));
+        ChallengeObservation theater = Challenge(
+            account.Id,
+            ChallengeMode.ImaginariumTheater,
+            "31",
+            [new ChallengeStageResult(
+                "1",
+                1,
+                OccurrenceTime.Unknown,
+                [new ChallengeParticipant(
+                    "10000093", "闲云", "https://example.invalid/a.png", 90, 5)],
+                ["元素战技强化"],
+                [new ChallengeEnemy(
+                    "深渊法师", 90, "https://example.invalid/e.png")])],
+            difficulty: 4,
+            medalCount: 9);
+        ChallengeObservation stygian = Challenge(
+            account.Id,
+            ChallengeMode.StygianOnslaught,
+            "5269013",
+            [new ChallengeStageResult(
+                "怪物A",
+                60,
+                OccurrenceTime.Unknown,
+                [new ChallengeParticipant("10000093", null, "side", 90, null)],
+                [],
+                [new ChallengeEnemy("怪物A", 90, "monster")])],
+            difficulty: 6,
+            medalCount: null);
+        Assert.Equal(
+            ChangeExecutionStatus.Applied,
+            (await source.Store.CommitChallengeObservationsAsync(
+                ChallengeRequest([theater, stygian]))).Status);
+
+        using var exported = new MemoryStream();
+        await source.Files.ExportAsync(
+            archive.Id,
+            ArchiveDomainDatasetKind.ChallengeHistory,
+            exported,
+            TestTime());
+        exported.Position = 0;
+        ArchiveDomainPortablePackage package =
+            await source.Files.ReadAsync(exported);
+
+        Assert.Equal(1, package.FormatMinor);
+        ArchiveDomainPortableAccount exportedAccount =
+            Assert.Single(package.Accounts);
+        Assert.Equal(2, exportedAccount.ChallengeObservations.Count);
+        ChallengeObservation exportedTheater =
+            Assert.Single(exportedAccount.ChallengeObservations.Where(
+                item => item.Mode == ChallengeMode.ImaginariumTheater));
+        ChallengeStageResult theaterStage = Assert.Single(
+            exportedTheater.Stages);
+        Assert.Equal("闲云", Assert.Single(theaterStage.Participants).Name);
+        Assert.Equal(["元素战技强化"], theaterStage.Buffs);
+        Assert.Equal(9, exportedTheater.MedalCount);
+        Assert.Equal(4, exportedTheater.Difficulty);
+
+        await using PortableContext target = await PortableContext.CreateAsync();
+        ArchiveDomainPortablePlan plan = await target.Files.PlanAsync(package);
+        Assert.Equal(ChangeExecutionStatus.Applied,
+            (await target.Store.ApplyArchiveDomainPortableAsync(
+                ApplyRequest(package, plan))).Status);
+        GameAccount imported = Assert.Single(
+            await target.Accounts.GetByArchiveIdAsync(plan.TargetArchiveId));
+        ChallengeObservation importedStygian = Assert.Single(
+            (await target.Store.GetChallengeObservationsAsync(imported.Id))
+            .Where(item => item.Mode == ChallengeMode.StygianOnslaught));
+        Assert.Equal(60, Assert.Single(importedStygian.Stages).Score);
+        Assert.Equal("怪物A", Assert.Single(
+            importedStygian.Stages[0].Enemies).Name);
+
+        using var markdown = new StringWriter();
+        await source.Files.ExportMarkdownAsync(
+            archive.Id,
+            ArchiveDomainDatasetKind.ChallengeHistory,
+            markdown);
+        string text = markdown.ToString();
+        Assert.Contains("ImaginariumTheater", text);
+        Assert.Contains("闲云", text);
+        Assert.Contains("元素战技强化", text);
+        Assert.Contains("深渊法师", text);
+    }
+
+    [Fact]
     public async Task Apply_WhenTargetChangesAfterPlan_RollsBackNewParents()
     {
         await using PortableContext source = await PortableContext.CreateAsync();
@@ -362,6 +452,30 @@ public sealed class ArchiveDomainPortableFileServiceTests
                 new DataSourceReference(
                     "miyoushe",
                     sourceRecordId: "abyss-2026-10-upper")));
+
+    private static ChallengeObservation Challenge(
+        Guid accountId,
+        ChallengeMode mode,
+        string seasonId,
+        IReadOnlyList<ChallengeStageResult> stages,
+        int? difficulty,
+        int? medalCount) =>
+        new(
+            ChallengeObservationId.New(),
+            accountId,
+            mode,
+            seasonId,
+            TestTime().AddDays(-2),
+            TestTime().AddDays(14),
+            DataCompleteness.Partial,
+            [],
+            new RecordProvenance(
+                DataOrigin.OfficialApi,
+                new RecordTimestamps(ObservedAt: TestTime()),
+                new DataSourceReference("miyoushe", sourceRecordId: seasonId)),
+            stages,
+            difficulty,
+            medalCount);
 
     private static DateTimeOffset TestTime() =>
         new(2026, 10, 18, 10, 0, 0, TimeSpan.FromHours(8));

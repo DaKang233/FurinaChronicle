@@ -89,7 +89,7 @@ public sealed class ArchiveDomainPortableFileService(
         var package = new ArchiveDomainPortablePackage(
             datasetKind,
             FormatMajor: 1,
-            FormatMinor: 0,
+            FormatMinor: 1,
             PackageFingerprint: string.Empty,
             archive.Id,
             archive.Name,
@@ -370,7 +370,7 @@ public sealed class ArchiveDomainPortableFileService(
                 {
                     await destination.WriteLineAsync(
                         $"- `{observation.SeasonId}` / `{observation.ObservationId}`：" +
-                        $"{observation.Completeness}，观察时间 " +
+                        $"{observation.Mode}，{observation.Completeness}，观察时间 " +
                         $"{FormatTime(observation.Provenance.Timestamps.ObservedAt)}，" +
                         $"周期 {FormatTime(observation.PeriodStart)} 至 " +
                         $"{FormatTime(observation.PeriodEnd)}，来源 " +
@@ -388,6 +388,50 @@ public sealed class ArchiveDomainPortableFileService(
                                 $"    - 第 {chamber.Chamber} 间：" +
                                 $"{chamber.Stars} 星，" +
                                 $"完成时间 {FormatOccurrence(chamber.CompletedAt)}");
+                        }
+                    }
+                    if (observation.Difficulty is not null ||
+                        observation.MedalCount is not null)
+                    {
+                        await destination.WriteLineAsync(
+                            $"  - 难度 {observation.Difficulty?.ToString() ?? "未知"}，" +
+                            $"奖章 {observation.MedalCount?.ToString() ?? "未知"}");
+                    }
+                    foreach (ChallengeStageResult stage in observation.Stages)
+                    {
+                        await destination.WriteLineAsync(
+                            $"  - `{EscapeMarkdown(stage.StageId)}`：" +
+                            $"分数 {stage.Score?.ToString() ?? "未知"}，" +
+                            $"完成时间 {FormatOccurrence(stage.CompletedAt)}");
+                        if (stage.Participants.Count > 0)
+                        {
+                            await destination.WriteLineAsync(
+                                "    - 阵容：" + string.Join(
+                                    "、",
+                                    stage.Participants.Select(participant =>
+                                        participant.Name is { } name
+                                            ? participant.Level is int level
+                                                ? $"{name}(Lv.{level})"
+                                                : name
+                                            : participant.Id)));
+                        }
+                        if (stage.Buffs.Count > 0)
+                        {
+                            await destination.WriteLineAsync(
+                                "    - 增益：" + string.Join(
+                                    "、", stage.Buffs.Select(EscapeMarkdown)));
+                        }
+                        if (stage.Enemies.Count > 0)
+                        {
+                            await destination.WriteLineAsync(
+                                "    - 敌人：" + string.Join(
+                                    "、",
+                                    stage.Enemies.Select(enemy =>
+                                        enemy.Name is { } enemyName
+                                            ? enemy.Level is int level
+                                                ? $"{enemyName}(Lv.{level})"
+                                                : enemyName
+                                            : "未知")));
                         }
                     }
                 }
@@ -493,7 +537,10 @@ public sealed class ArchiveDomainPortableFileService(
                     challenge.PeriodEnd,
                     challenge.Completeness,
                     challenge.SpiralAbyssFloors,
-                    challenge.Provenance);
+                    challenge.Provenance,
+                    challenge.Stages,
+                    challenge.Difficulty,
+                    challenge.MedalCount);
                 ChallengePlanDecision decision = ClassifyChallenge(
                     existing,
                     mapped);
@@ -587,8 +634,12 @@ public sealed class ArchiveDomainPortableFileService(
         left.PeriodStart == right.PeriodStart &&
         left.PeriodEnd == right.PeriodEnd &&
         left.Completeness == right.Completeness &&
+        left.Difficulty == right.Difficulty &&
+        left.MedalCount == right.MedalCount &&
         JsonSerializer.Serialize(left.SpiralAbyssFloors, CompactJson) ==
-        JsonSerializer.Serialize(right.SpiralAbyssFloors, CompactJson);
+        JsonSerializer.Serialize(right.SpiralAbyssFloors, CompactJson) &&
+        JsonSerializer.Serialize(left.Stages, CompactJson) ==
+        JsonSerializer.Serialize(right.Stages, CompactJson);
 
     private enum ChallengePlanDecision
     {
@@ -907,7 +958,30 @@ public sealed class ArchiveDomainPortableFileService(
         DateTimeOffset? PeriodEnd,
         DataCompleteness Completeness,
         IReadOnlyList<SpiralAbyssFloorWire> SpiralAbyssFloors,
-        RecordProvenance Provenance);
+        RecordProvenance Provenance,
+        IReadOnlyList<ChallengeStageWire>? Stages = null,
+        int? Difficulty = null,
+        int? MedalCount = null);
+
+    private sealed record ChallengeStageWire(
+        string StageId,
+        int? Score,
+        OccurrenceTime CompletedAt,
+        IReadOnlyList<ChallengeParticipantWire>? Participants = null,
+        IReadOnlyList<string>? Buffs = null,
+        IReadOnlyList<ChallengeEnemyWire>? Enemies = null);
+
+    private sealed record ChallengeParticipantWire(
+        string Id,
+        string? Name,
+        string? IconUrl,
+        int? Level,
+        int? Rarity);
+
+    private sealed record ChallengeEnemyWire(
+        string? Name,
+        int? Level,
+        string? IconUrl);
 
     private sealed record SpiralAbyssFloorWire(
         int Floor,
@@ -987,7 +1061,27 @@ public sealed class ArchiveDomainPortableFileService(
                                 chamber.Chamber,
                                 chamber.Stars,
                                 chamber.CompletedAt)))),
-                wire.Provenance);
+                wire.Provenance,
+                (wire.Stages ?? []).Select(stage =>
+                    new ChallengeStageResult(
+                        stage.StageId,
+                        stage.Score,
+                        stage.CompletedAt,
+                        (stage.Participants ?? []).Select(participant =>
+                            new ChallengeParticipant(
+                                participant.Id,
+                                participant.Name,
+                                participant.IconUrl,
+                                participant.Level,
+                                participant.Rarity)),
+                        stage.Buffs ?? [],
+                        (stage.Enemies ?? []).Select(enemy =>
+                            new ChallengeEnemy(
+                                enemy.Name,
+                                enemy.Level,
+                                enemy.IconUrl)))),
+                wire.Difficulty,
+                wire.MedalCount);
         }
 
         public override void Write(
@@ -1014,7 +1108,28 @@ public sealed class ArchiveDomainPortableFileService(
                                     chamber.Stars,
                                     chamber.CompletedAt)).ToArray()))
                         .ToArray(),
-                    value.Provenance),
+                    value.Provenance,
+                    value.Stages.Select(stage =>
+                        new ChallengeStageWire(
+                            stage.StageId,
+                            stage.Score,
+                            stage.CompletedAt,
+                            stage.Participants.Select(participant =>
+                                new ChallengeParticipantWire(
+                                    participant.Id,
+                                    participant.Name,
+                                    participant.IconUrl,
+                                    participant.Level,
+                                    participant.Rarity)).ToArray(),
+                            stage.Buffs.ToArray(),
+                            stage.Enemies.Select(enemy =>
+                                new ChallengeEnemyWire(
+                                    enemy.Name,
+                                    enemy.Level,
+                                    enemy.IconUrl)).ToArray()))
+                        .ToArray(),
+                    value.Difficulty,
+                    value.MedalCount),
                 options);
     }
 

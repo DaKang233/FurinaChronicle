@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://www.dakang233.com/schemas/furina-challenge-history/1/dataset.schema.json",
-  "title": "Furina challenge history Portable v1",
+  "title": "Furina challenge history Portable v1.1",
   "type": "object",
   "required": ["format", "package"],
   "properties": {
@@ -66,6 +66,40 @@
       },
       "additionalProperties": true
     },
+    "participant": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": ["string", "null"] },
+        "icon_url": { "type": ["string", "null"] },
+        "level": { "type": ["integer", "null"], "minimum": 0 },
+        "rarity": { "type": ["integer", "null"], "minimum": 0 }
+      },
+      "additionalProperties": true
+    },
+    "enemy": {
+      "type": "object",
+      "properties": {
+        "name": { "type": ["string", "null"] },
+        "level": { "type": ["integer", "null"], "minimum": 0 },
+        "icon_url": { "type": ["string", "null"] }
+      },
+      "additionalProperties": true
+    },
+    "stage": {
+      "type": "object",
+      "required": ["stage_id", "completed_at"],
+      "properties": {
+        "stage_id": { "type": "string", "minLength": 1 },
+        "score": { "type": ["integer", "null"] },
+        "completed_at": { "$ref": "#/$defs/occurrence" },
+        "participants": { "type": "array", "items": { "$ref": "#/$defs/participant" } },
+        "buffs": { "type": "array", "items": { "type": "string" } },
+        "enemies": { "type": "array", "items": { "$ref": "#/$defs/enemy" } }
+      },
+      "additionalProperties": true
+    },
     "chamber": {
       "type": "object",
       "required": ["chamber", "stars", "completed_at"],
@@ -92,12 +126,15 @@
       "properties": {
         "observation_id": { "$ref": "#/$defs/guid" },
         "game_account_id": { "$ref": "#/$defs/guid" },
-        "mode": { "const": 1 },
+        "mode": { "enum": [1, 2, 3] },
         "season_id": { "type": "string", "minLength": 1 },
         "period_start": { "type": ["string", "null"], "format": "date-time" },
         "period_end": { "type": ["string", "null"], "format": "date-time" },
         "completeness": { "enum": [0, 1, 2] },
         "spiral_abyss_floors": { "type": "array", "items": { "$ref": "#/$defs/floor" } },
+        "stages": { "type": "array", "items": { "$ref": "#/$defs/stage" } },
+        "difficulty": { "type": ["integer", "null"], "minimum": 0 },
+        "medal_count": { "type": ["integer", "null"], "minimum": 0 },
         "provenance": { "$ref": "#/$defs/source" }
       },
       "additionalProperties": true

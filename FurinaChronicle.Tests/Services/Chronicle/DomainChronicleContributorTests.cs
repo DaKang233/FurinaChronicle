@@ -84,6 +84,43 @@ public sealed class DomainChronicleContributorTests
     }
 
     [Fact]
+    public void TheaterAndStygian_DoNotCreateCompletionNodes()
+    {
+        ChallengeObservation theater = new(
+            new ChallengeObservationId(
+                Guid.Parse("00000000-0000-4000-8000-000000000031")),
+            AccountId, ChallengeMode.ImaginariumTheater, "31", null, null,
+            DataCompleteness.Partial, [],
+            Provenance(31),
+            [new ChallengeStageResult("1", 1, OccurrenceTime.Unknown)],
+            difficulty: 4,
+            medalCount: 9);
+        ChallengeObservation stygian = new(
+            new ChallengeObservationId(
+                Guid.Parse("00000000-0000-4000-8000-000000000032")),
+            AccountId, ChallengeMode.StygianOnslaught, "5269013", null, null,
+            DataCompleteness.Partial, [],
+            Provenance(32),
+            [new ChallengeStageResult("怪物A", 60, OccurrenceTime.Unknown)],
+            difficulty: 6,
+            medalCount: null);
+
+        IReadOnlyList<ChronicleEntry> result =
+            new ChallengeChronicleContributor().Project(
+                AccountId, [theater, stygian]);
+
+        Assert.Equal(2, result.Count);
+        Assert.DoesNotContain(result, item =>
+            item.Kind == ChronicleEntryKind.ChallengeCompleted);
+        Assert.All(result, item =>
+            Assert.False(item.Timelines.HasFlag(ChronicleTimeline.Main)));
+        Assert.Contains(result, item =>
+            item.SummaryArguments["mode"] == "ImaginariumTheater");
+        Assert.Contains(result, item =>
+            item.SummaryArguments["mode"] == "StygianOnslaught");
+    }
+
+    [Fact]
     public void OnlyCatalogMarkedAchievementsEnterMainTimeline()
     {
         var facts = new[]

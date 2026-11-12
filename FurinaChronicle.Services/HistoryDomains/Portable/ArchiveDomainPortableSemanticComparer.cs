@@ -168,6 +168,9 @@ public static class ArchiveDomainPortableSemanticComparer
                 challenge.PeriodEnd,
                 challenge.Completeness,
                 challenge.SpiralAbyssFloors,
+                challenge.Stages,
+                challenge.Difficulty,
+                challenge.MedalCount,
                 challenge.Provenance))
             .OrderBy(challenge => challenge.ObservationId.ToString(), StringComparer.Ordinal)
             .ToArray());
@@ -239,5 +242,8 @@ public static class ArchiveDomainPortableSemanticComparer
         DateTimeOffset? PeriodEnd,
         DataCompleteness Completeness,
         IReadOnlyList<SpiralAbyssFloorResult> SpiralAbyssFloors,
+        IReadOnlyList<ChallengeStageResult> Stages,
+        int? Difficulty,
+        int? MedalCount,
         RecordProvenance Provenance);
 }
