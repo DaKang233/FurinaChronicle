@@ -21,6 +21,7 @@
 - [UI-6 生产切换评审](project/UI6_PRODUCTION_SWITCH_REVIEW.md)
 - [WinUI 发布与默认入口](project/UI6_RELEASE_PACKAGING.md)
 - [UI-6 无障碍与性能记录](project/UI6_ACCESSIBILITY_PERFORMANCE.md)
+- [UI-6 双端收口实施记录](project/UI6_IMPLEMENTATION.md)
 - [Phase 8C.5 产品流程实施记录](project/PHASE_8C5_IMPLEMENTATION.md)
 - [Phase 8C.6 双向往返验收规范](specifications/PHASE_8C6_ROUNDTRIP_ACCEPTANCE.md)
 - [Phase 8C.6 工程实施与设备验收状态](project/PHASE_8C6_IMPLEMENTATION.md)
