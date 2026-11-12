@@ -1,0 +1,244 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Copyright (c) 2026 DaKang233.
+  SPDX-License-Identifier: MIT
+-->
+<UserControl
+    x:Class="FurinaChronicle.Windows.Pages.ChroniclePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    AutomationProperties.AutomationId="Ui5ChroniclePage">
+    <Grid Padding="24" RowSpacing="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Spacing="4">
+            <TextBlock Text="游戏历程" FontSize="28" FontWeight="SemiBold" />
+            <TextBlock
+                Text="按时间回顾抽卡、挑战与角色武器的重要节点。发生、观察、采集与未注明时间分别标注，不会互相替代；本页只读。"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                TextWrapping="Wrap" />
+        </StackPanel>
+
+        <Grid Grid.Row="1" RowSpacing="8">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Grid ColumnSpacing="10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="2*" />
+                    <ColumnDefinition Width="2*" />
+                    <ColumnDefinition Width="2*" />
+                    <ColumnDefinition Width="2*" />
+                    <ColumnDefinition Width="2*" />
+                </Grid.ColumnDefinitions>
+                <ComboBox
+                    x:Name="ArchivePicker"
+                    Header="档案"
+                    DisplayMemberPath="Label"
+                    HorizontalAlignment="Stretch"
+                    SelectionChanged="OnArchiveSelectionChanged"
+                    AutomationProperties.AutomationId="Ui5ChronicleArchivePicker" />
+                <ComboBox
+                    x:Name="AccountPicker"
+                    Grid.Column="1"
+                    Header="账号范围"
+                    DisplayMemberPath="Label"
+                    HorizontalAlignment="Stretch"
+                    SelectionChanged="OnAccountSelectionChanged"
+                    AutomationProperties.AutomationId="Ui5ChronicleAccountPicker" />
+                <ComboBox
+                    x:Name="TimelinePicker"
+                    Grid.Column="2"
+                    Header="时间线"
+                    DisplayMemberPath="Label"
+                    HorizontalAlignment="Stretch"
+                    SelectionChanged="OnTimelineSelectionChanged"
+                    AutomationProperties.AutomationId="Ui5ChronicleTimelinePicker" />
+                <ComboBox
+                    x:Name="GranularityPicker"
+                    Grid.Column="3"
+                    Header="颗粒度"
+                    DisplayMemberPath="Label"
+                    HorizontalAlignment="Stretch"
+                    SelectionChanged="OnGranularitySelectionChanged"
+                    AutomationProperties.AutomationId="Ui5ChronicleGranularityPicker" />
+                <ComboBox
+                    x:Name="TimeRangePicker"
+                    Grid.Column="4"
+                    Header="时间范围"
+                    DisplayMemberPath="Label"
+                    HorizontalAlignment="Stretch"
+                    SelectionChanged="OnTimeRangeSelectionChanged"
+                    AutomationProperties.AutomationId="Ui5ChronicleTimeRangePicker" />
+            </Grid>
+            <Grid Grid.Row="1" ColumnSpacing="10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="2*" />
+                    <ColumnDefinition Width="2*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <ComboBox
+                    x:Name="DomainPicker"
+                    Header="领域"
+                    DisplayMemberPath="Label"
+                    HorizontalAlignment="Stretch"
+                    SelectionChanged="OnDomainSelectionChanged"
+                    AutomationProperties.AutomationId="Ui5ChronicleDomainPicker" />
+                <ComboBox
+                    x:Name="RankPicker"
+                    Grid.Column="1"
+                    Header="星级"
+                    DisplayMemberPath="Label"
+                    HorizontalAlignment="Stretch"
+                    SelectionChanged="OnRankSelectionChanged"
+                    AutomationProperties.AutomationId="Ui5ChronicleRankPicker" />
+                <ToggleSwitch
+                    x:Name="StateChangesSwitch"
+                    Grid.Column="2"
+                    Header="状态变化"
+                    IsOn="False"
+                    Toggled="OnStateChangesToggled"
+                    AutomationProperties.AutomationId="Ui5ChronicleStateChanges" />
+                <ToggleSwitch
+                    x:Name="UndatedSwitch"
+                    Grid.Column="3"
+                    Header="未注明时间"
+                    IsOn="True"
+                    Toggled="OnUndatedToggled"
+                    AutomationProperties.AutomationId="Ui5ChronicleUndated" />
+            </Grid>
+        </Grid>
+
+        <StackPanel Grid.Row="2" Spacing="3">
+            <TextBlock
+                x:Name="StatusText"
+                TextWrapping="Wrap"
+                AutomationProperties.AutomationId="Ui5ChronicleStatus"
+                AutomationProperties.LiveSetting="Polite" />
+            <TextBlock
+                x:Name="StaleText"
+                Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                TextWrapping="Wrap"
+                Visibility="Collapsed"
+                AutomationProperties.AutomationId="Ui5ChronicleStale" />
+            <TextBlock
+                x:Name="ErrorText"
+                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                TextWrapping="Wrap"
+                Visibility="Collapsed"
+                AutomationProperties.AutomationId="Ui5ChronicleError" />
+            <TextBlock
+                x:Name="EmptyText"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                TextWrapping="Wrap"
+                Visibility="Collapsed"
+                AutomationProperties.AutomationId="Ui5ChronicleEmpty" />
+        </StackPanel>
+
+        <Grid Grid.Row="3" ColumnSpacing="16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*" />
+                <ColumnDefinition Width="2*" />
+            </Grid.ColumnDefinitions>
+            <ListView
+                x:Name="EntryList"
+                SelectionMode="Single"
+                SelectionChanged="OnEntrySelectionChanged"
+                AutomationProperties.AutomationId="Ui5ChronicleEntryList">
+                <ListView.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel Padding="8,6" Spacing="3">
+                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding Time.PrimaryText}" TextWrapping="Wrap" />
+                            <TextBlock
+                                Text="{Binding Time.DetailText}"
+                                FontSize="12"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                TextWrapping="Wrap" />
+                            <TextBlock
+                                Text="{Binding SummaryLine}"
+                                FontSize="12"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+
+            <Grid Grid.Column="1" RowSpacing="8">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <TextBlock
+                    x:Name="DetailTitleText"
+                    FontWeight="SemiBold"
+                    TextWrapping="Wrap"
+                    AutomationProperties.AutomationId="Ui5ChronicleDetailTitle" />
+                <ScrollViewer Grid.Row="1">
+                    <TextBlock
+                        x:Name="DetailBodyText"
+                        TextWrapping="Wrap"
+                        IsTextSelectionEnabled="True"
+                        AutomationProperties.AutomationId="Ui5ChronicleDetail" />
+                </ScrollViewer>
+                <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8">
+                    <Button
+                        x:Name="GenerateReportButton"
+                        Content="生成 Markdown 报告"
+                        Click="OnGenerateReport"
+                        AutomationProperties.AutomationId="Ui5ChronicleGenerateReport" />
+                    <Button
+                        x:Name="CopyReportButton"
+                        Content="复制报告"
+                        Click="OnCopyReport"
+                        AutomationProperties.AutomationId="Ui5ChronicleCopyReport" />
+                </StackPanel>
+                <TextBox
+                    x:Name="ReportBox"
+                    Grid.Row="3"
+                    Height="150"
+                    AcceptsReturn="True"
+                    IsReadOnly="True"
+                    TextWrapping="Wrap"
+                    AutomationProperties.AutomationId="Ui5ChronicleMarkdown" />
+            </Grid>
+        </Grid>
+
+        <Grid Grid.Row="4" ColumnSpacing="10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Button
+                x:Name="ReloadButton"
+                Content="重新载入"
+                Click="OnReload"
+                AutomationProperties.AutomationId="Ui5ChronicleReload" />
+            <Button
+                x:Name="LoadMoreButton"
+                Grid.Column="1"
+                Content="加载更多"
+                Click="OnLoadMore"
+                AutomationProperties.AutomationId="Ui5ChronicleLoadMore" />
+            <TextBlock
+                x:Name="PageText"
+                Grid.Column="2"
+                VerticalAlignment="Center"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                AutomationProperties.AutomationId="Ui5ChroniclePaging" />
+        </Grid>
+    </Grid>
+</UserControl>
