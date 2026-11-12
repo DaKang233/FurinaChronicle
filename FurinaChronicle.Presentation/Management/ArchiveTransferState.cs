@@ -751,7 +751,16 @@ public sealed class ArchiveTransferState(
 
     private static string Describe(Exception exception) => exception switch
     {
-        ArchivePackageException packageException => packageException.Code switch
+        ArchivePackageException packageException => DescribePackageError(packageException),
+        InvalidDataException or FormatException or System.Text.Json.JsonException =>
+            "所选文件不是有效的完整逻辑档案；未写入任何数据。",
+        EndOfStreamException =>
+            "文件被截断或损坏，无法作为完整逻辑档案读取；未写入任何数据。",
+        _ => ManagementTexts.DescribeOperationFailure(exception)
+    };
+
+    private static string DescribePackageError(ArchivePackageException packageException) =>
+        packageException.Code switch
         {
             ArchivePackageErrorCode.UnsupportedVersion =>
                 "包版本不受支持；未写入任何数据。",
@@ -768,9 +777,7 @@ public sealed class ArchiveTransferState(
             ArchivePackageErrorCode.UnknownRequiredDataset =>
                 "包声明了当前版本不支持的必需数据集；未写入任何数据。",
             _ => "读取逻辑档案失败；未写入任何数据。"
-        },
-        _ => ManagementTexts.DescribeOperationFailure(exception)
-    };
+        };
 
     private PlayerArchive RequireSelectedArchive() =>
         Snapshot.SelectedArchive ??

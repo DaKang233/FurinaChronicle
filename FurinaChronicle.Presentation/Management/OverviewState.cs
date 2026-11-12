@@ -114,7 +114,8 @@ public sealed class ServiceOverviewSource(
             unresolved.Count == 0
                 ? "身份待确认账号：无"
                 : $"身份待确认账号：{unresolved.Count} 个（前往档案与账号页处理）",
-            "游戏历程、角色与武器、周期挑战：待 UI-5 交付，本页不提供伪入口"
+            "游戏历程、角色与武器、周期挑战：已交付；隔离种子仅含抽卡事实，" +
+                "角色/武器与挑战页为空态"
         };
         string status = archives.Count == 0
             ? "本地隔离库尚未创建档案。请前往档案与账号页创建。"

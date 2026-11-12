@@ -30,7 +30,7 @@ public sealed class Ui4ManagementIntegrationTests
             Assert.Equal(71, state.Snapshot.TotalGachaRecords);
             Assert.Equal(3, state.Snapshot.Archives.Count);
             Assert.Equal(5, state.Snapshot.RecentActivities.Count);
-            Assert.Contains(state.Snapshot.CoverageNotes, note => note.Contains("待 UI-5"));
+            Assert.Contains(state.Snapshot.CoverageNotes, note => note.Contains("已交付"));
             Assert.Contains(
                 state.Snapshot.Archives,
                 archive => archive.Name == "01 合成档案" && archive.RecordCount == 68);

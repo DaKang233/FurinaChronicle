@@ -210,6 +210,7 @@ public sealed class Ui4ArchiveTransferIntegrationTests
 
             Assert.False(result.Succeeded);
             Assert.NotNull(state.Snapshot.Error);
+            Assert.Contains("有效", result.Message);
             Assert.Equal(
                 archiveCount,
                 (await environment.Archives.GetAllAsync(default)).Count);
