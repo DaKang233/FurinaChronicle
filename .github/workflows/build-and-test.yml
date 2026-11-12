@@ -75,10 +75,27 @@ jobs:
           global-json-file: global.json
           workloads: maui
 
-      - name: Publish unpackaged Windows application
+      - name: Publish the default Windows host (WinUI 3, unpackaged, self-contained)
         shell: pwsh
         run: |
-          $outputPath = Join-Path $env:GITHUB_WORKSPACE 'artifacts\windows\win-x64'
+          $outputPath = Join-Path $env:GITHUB_WORKSPACE 'artifacts\windows-winui\win-x64'
+          .\eng\Publish-WinUI.ps1 -OutputDirectory $outputPath -NoArchive
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+      - name: Upload the default Windows host
+        uses: actions/upload-artifact@v7
+        with:
+          name: FurinaChronicle-windows-win-x64-${{ github.sha }}
+          path: artifacts/windows-winui/win-x64
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish the legacy MAUI Windows host (retained for one release cycle)
+        shell: pwsh
+        run: |
+          $outputPath = Join-Path $env:GITHUB_WORKSPACE 'artifacts\windows-legacy\win-x64'
           dotnet publish .\FurinaChronicle.App\FurinaChronicle.App.csproj `
             --framework net10.0-windows10.0.19041.0 `
             --configuration Release `
@@ -95,38 +112,11 @@ jobs:
 
           Copy-Item .\README.md, .\LICENSE.txt, .\THIRD-PARTY-NOTICES.txt $outputPath
 
-      - name: Upload Windows application
+      - name: Upload the legacy MAUI Windows host
         uses: actions/upload-artifact@v7
         with:
-          name: FurinaChronicle-windows-win-x64-${{ github.sha }}
-          path: artifacts/windows/win-x64
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Publish independent WinUI 3 preview host
-        shell: pwsh
-        run: |
-          $outputPath = Join-Path $env:GITHUB_WORKSPACE 'artifacts\windows-preview\win-x64'
-          dotnet publish .\FurinaChronicle.Windows\FurinaChronicle.Windows.csproj `
-            --configuration Release `
-            --runtime win-x64 `
-            --self-contained true `
-            --output $outputPath `
-            -p:WindowsPackageType=None `
-            -p:WindowsAppSDKSelfContained=true `
-            -p:FurinaRequireReliableVersion=true
-
-          if ($LASTEXITCODE -ne 0) {
-            exit $LASTEXITCODE
-          }
-
-          Copy-Item .\README.md, .\LICENSE.txt, .\THIRD-PARTY-NOTICES.txt $outputPath
-
-      - name: Upload independent WinUI 3 preview host
-        uses: actions/upload-artifact@v7
-        with:
-          name: FurinaChronicle-windows-preview-win-x64-${{ github.sha }}
-          path: artifacts/windows-preview/win-x64
+          name: FurinaChronicle-windows-legacy-win-x64-${{ github.sha }}
+          path: artifacts/windows-legacy/win-x64
           if-no-files-found: error
           retention-days: 30
 
