@@ -87,3 +87,70 @@ Lead Windows UIA（真实发布产物 + 隔离库直查，共 71 项 Pass）：
   存储、SToken 刷新为 UI-4 后续子阶段；生产库/凭据迁移在 UI-6 评审前不接入。
 - Android 侧管理页已存在（MAUI），UI-4 的四目的地信息架构与设置组补齐纳入 Android
   UI 收口工作包。
+
+## WP-A3a：备份与恢复（逻辑档案导出 + Merge）
+
+提交：`d260557`（状态机与集成测试）、`ef5563c`（备份恢复页）。
+
+- **导出**：使用正式 `ArchiveLogicalExporter` 生成完整逻辑档案 `.fca`（全部档案或所选档案），
+  经窗口关联保存对话框；先写隔离宿主临时文件、导出器校验后发布到目标（跨卷复制兜底），
+  失败/取消清理临时与空目标；结果含档案/账号/当前事实/修订计数。文案明确它是
+  “逻辑档案（可合并/替换恢复），不是 SQLite 原始拷贝”。
+- **打开与 Merge**：`SqliteArchiveRestoreInputStager` 校验格式/版本/截断/哈希/资源限制
+  （失败不写库）；`PlanArchiveRestore` 生成 Merge 计划，预览包含来源、档案/账号映射、
+  新增/复用/冲突/Tombstone、设置差异、缺失 Dataset≠清空、提交失败不改变原数据、无热回切；
+  映射支持现有候选/新建唯一名，解析后自动重新规划；提交前校验包指纹、计划指纹与
+  `CheckFreshnessAsync`，目标变化拒绝旧计划；`SqliteGachaAtomicChangeStore` 原子应用并返回
+  Receipt/影响计数；重复提交按 Receipt 幂等。
+- **错误分类**：无效包/版本/哈希/截断/资源限制/计划冲突/计划过期/清理空间不足分别提示；
+  无效容器/JSON/截断映射为“所选文件不是有效的完整逻辑档案/文件被截断或损坏……未写入任何数据。”
+  （D6 修复，提交 `cd73a1d`）。
+- **恢复点**：只读摘要（时间/长度/Schema/校验状态），不提供热回切。
+- **入口**：概览页与档案页“备份与恢复”，不新增导航项；页面只使用隔离库。
+- **未完成**：Scoped Replace（范围选择/不可重叠校验/缺失 Dataset 不清空/Tombstone 独立确认/
+  破坏性确认/Receipt）明确留待后续；页面无 Replace 控件。
+
+## WP-A3b：登录账号、隔离凭据与 SToken 刷新
+
+提交：`65c26f0`（状态机与测试）、`0be68ec`（DPAPI 凭据、登录页、SToken 刷新）。
+
+- **隔离凭据存储**：`DpapiPassportCredentialStore` 使用 DPAPI CurrentUser + 固定 entropy 加密
+  保存到 `<FURINA_UI1_DIRECTORY>/UI4/WinUI/credentials/credentials.bin`；实现
+  `IPassportAccountStore`（刷新服务读取秘密的唯一边界）与 `IIsolatedCredentialStore`（安全元数据
+  列表/保存/删除/清除/失效标记）；损坏/解密失败退化空列表并显示警告，不删除档案；删除/清除
+  只删凭据，不动档案/账号/抽卡事实。文件与自检均无 SToken/MID 明文。
+- **登录账号页**：启用页脚“登录账号”；列表显示标签、脱敏 MID、绑定 UID、更新时间、
+  可用/失效；手动添加（SToken/MID 密码框 + 绑定 UID + 标签，本地格式校验）、删除/清除
+  （确认文案明确不删档案）、失效/损坏提示、抽卡刷新入口；页面明确标注仅隔离宿主，
+  生产凭据迁移待 UI-6 评审；任何状态/异常/日志/报告不含秘密。
+- **SToken 刷新**：Windows 侧组合真实 `MiHoYoSTokenGachaUrlProvider`/`MiHoYoGachaLogClient`/
+  `RefreshGachaRecords`（未改 `Ui1PreviewEnvironment`）；抽卡数据操作新增“通过登录账号刷新…”；
+  目标账号与 Full 模式开始时快照；凭据必须绑定当前账号 UID；无凭据/UID 不匹配/凭据失效/
+  网络失败/接口 UID 不一致分别给出明确中文原因且不写库；提交阶段不可取消；成功后按原范围刷新。
+  **真实成功网络路径 Blocked**（无授权环境，成功逻辑由 fake executor 测试覆盖）。
+
+## 更新后的验证
+
+| 检查 | 结果 |
+|---|---|
+| WP-A3a Release 回归 | 919/919（914 + 5：导出全部/所选、空目标 Merge、冲突、计划过期、无效包） |
+| WP-A3b Release 回归 | **958/958**（950 + 8：凭据/失效/UID/网络失败/Full 快照/秘密不外泄） |
+| WinUI 构建/发布 | 每次 0 警告 0 错误；发布含许可文件 |
+| DPAPI 自检 | PASS（加密文件无明文、脱敏、删除/清除生效、损坏退化警告） |
+| 版权头 | Pass |
+
+Lead Windows UIA（隔离库直查）：
+
+- A3a：t1 导出 4 项（含再打开校验）、t2 空目标 Merge 4 项（数据库 68+3 恢复）、
+  t3 无效包 4 项（D6 后明确文案、不写库）。
+- A3b：登录账号页 12 项（隔离提示、空列表、添加、脱敏、凭据文件无明文、删除、
+  档案事实不变）。
+- 回归：u1 30 项（UI-4 管理闭环）、u2 4 项（D5 启动失败不崩溃）、UI-5 三页 11 项。
+- 证据：`wt/ui4-winui/artifacts/ui4-winui/lead-acceptance/uia/*.json` 与 `shots/`。
+
+## UI-4 剩余边界（进入 UI-6 评审）
+
+- Scoped Replace 与恢复点切换未实现（只读摘要）；不提供热回切。
+- SToken 成功刷新需授权环境实测；当前仅错误路径与 fake executor 覆盖。
+- 窗口位置恢复、第二实例激活未实现，与生产单写者/切换方案一起评审。
+- 生产库发现、备份、凭据迁移与默认入口切换必须在 UI-6 切换前单独评审并获维护者确认。

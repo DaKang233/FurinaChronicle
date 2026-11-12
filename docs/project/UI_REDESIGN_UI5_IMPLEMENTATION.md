@@ -55,3 +55,42 @@ UI-5 目标（计划 §11、§18）：Chronicle、角色与武器、周期挑战
 - 独立 WinUI Chronicle 页待 UI-4 组合根就绪后复用同一展示层与状态机；UC-5 的
   WinUI 角色与武器/周期挑战页、MAUI 四目的地导航与“数据”中心页为后续子阶段。
 - 观察/采集时间不声明业务精度，展示为秒级并明确“不适用”；“今年”按页面本地时区计算。
+
+## UI-5-2：独立 WinUI 三个领域页
+
+提交：`2a146cb`（页面与状态）、`d536f5d`（接线与导航）。
+
+- **平台无关状态**（`Presentation/History`）：`HistoryPageSupport`（观察视图/标签/选项构建，
+  复用 `CharacterObservationCard`/`ChallengeObservationCard`/`ChronicleTimeDisplay`）、
+  `CharacterWeaponHistoryState`、`ChallengeHistoryState`、`ChronicleWorkspaceState`
+  （复用 `ChronicleQueryController`/`ChroniclePageState`）。
+- **ChroniclePage**：档案/账号局部选择、时间线/粒度/时间范围/领域/星级/状态变化/未注明时间
+  筛选、键集分页+加载更多、GenerationId 混代拒绝、游标失效清空+显式重载、游标过期保留+
+  提示、四种空态、错误脱敏、详情 + 本地化 Markdown 只读/复制。
+- **CharacterWeaponPage**：正式 `IArchiveDomainHistoryStore` 查询；角色/武器列表、最新观察
+  默认 + 历史切换（服务倒序）、来源/观察/采集时间/完整度/证据标签、缺失等级/命座保持未知、
+  空态、切换取消旧查询。
+- **ChallengePage**：三模式（深境螺旋/剧诗/危战）、期次选择、阶段/难度/奖章/最优秒数、
+  逐幕阵容/增益/逐怪、最新+历史观察、空态、缺失字段未知、模式/期次切换取消旧查询。
+- **接线**：组合根注册正式 `SqliteChronicleQueryService` 与三个页面状态（惰性解析）；
+  `MainWindow` 实例化三页、增加导航分支、切页调用 `Leave()` 取消在途查询；启用
+  “游戏历程/数据·角色与武器/数据·周期挑战”原占位并移除待交付文案。
+- **数据态**：隔离种子只有抽卡事实，角色/武器与挑战页在标准种子上为空态（不伪造领域种子）；
+  数据态由 24 项状态测试 + `Ui5WiringIntegrationTests`（正式查询服务 + 隔离库）覆盖。
+
+### 验证
+
+| 检查 | 结果 |
+|---|---|
+| 新增状态/页面测试 | 24 项（观察视图、角色/武器历史、挑战模式/期次、Chronicle 分页/失效/取消、空态） |
+| 接线集成测试 | `Ui5WiringIntegrationTests`：Chronicle 产生非空条目、领域页空态无错误 |
+| Release 全量回归 | 938/938（分支基线），接线后 **950/950**（master） |
+| 构建 | WinUI Release 0 警告 0 错误（首次全量编译出现既有 2 个 Infrastructure CS8602，重编译归零） |
+| Lead UIA | 11 项 Pass：概览覆盖文案已交付、三个导航启用、Chronicle/角色武器/挑战页可达与截图 |
+
+### 已知限制
+
+- UIA 数据态：角色/武器与挑战页在隔离种子上为空态；如需 UIA 数据态需增加隔离合成观察种子
+  （当前未做，避免伪造领域事实）。
+- 挑战期次列表来自观察聚合，数据量极大时需优化。
+- 页面只读，Markdown 仅显示/复制，不写文件、不重新导入；无元数据时回退稳定 ID。
