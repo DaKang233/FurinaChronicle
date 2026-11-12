@@ -56,8 +56,8 @@
                     AutomationProperties.AutomationId="Ui4NavigationArchives">
                     <NavigationViewItem.Icon><SymbolIcon Symbol="Folder" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem x:Name="HistoryDestination" Content="操作历史（待交付）"
-                    Tag="history" IsEnabled="False"
+                <NavigationViewItem x:Name="HistoryDestination" Content="操作历史"
+                    Tag="history"
                     AutomationProperties.AutomationId="Ui4NavigationHistory">
                     <NavigationViewItem.Icon><SymbolIcon Symbol="Repair" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
@@ -66,8 +66,8 @@
                     AutomationProperties.AutomationId="Ui4NavigationPassport">
                     <NavigationViewItem.Icon><SymbolIcon Symbol="Contact" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem x:Name="SettingsDestination" Content="设置（待交付）"
-                    Tag="settings" IsEnabled="False"
+                <NavigationViewItem x:Name="SettingsDestination" Content="设置"
+                    Tag="settings"
                     AutomationProperties.AutomationId="Ui4NavigationSettings">
                     <NavigationViewItem.Icon><SymbolIcon Symbol="Setting" /></NavigationViewItem.Icon>
                 </NavigationViewItem>

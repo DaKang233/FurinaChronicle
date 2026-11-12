@@ -3,6 +3,7 @@
 
 using FurinaChronicle.Infrastructure.Diagnostics;
 using FurinaChronicle.Infrastructure.Gacha.Metadata;
+using FurinaChronicle.Infrastructure.Persistence.Sqlite;
 using FurinaChronicle.Presentation.Gacha;
 using FurinaChronicle.Presentation.Management;
 using FurinaChronicle.Services.Abstractions;
@@ -24,6 +25,11 @@ namespace FurinaChronicle.Windows.Composition;
 // The single composition root for the isolated WinUI host. Registrations are intentionally local
 // to FurinaChronicle.Windows for now; the platform-agnostic subset can be extracted into a shared
 // composition project once the MAUI composition no longer carries platform dependencies.
+//
+// Important: constructing this composition must not create the isolated database or touch the
+// configured data directory. The environment is created lazily only after the startup guard has
+// proven the root writable, so an invalid FURINA_UI1_DIRECTORY shows the startup failure page
+// instead of throwing out of Application.OnLaunched.
 public sealed class WindowsComposition : IAsyncDisposable
 {
     private readonly ServiceProvider provider;
@@ -31,18 +37,18 @@ public sealed class WindowsComposition : IAsyncDisposable
     private WindowsComposition(
         ServiceProvider provider,
         WindowsPaths paths,
-        Ui1PreviewEnvironment environment,
+        EnvironmentHolder environmentHolder,
         WindowsVersionInfo version)
     {
         this.provider = provider;
         Paths = paths;
-        Environment = environment;
+        EnvironmentHolder = environmentHolder;
         Version = version;
     }
 
     public WindowsPaths Paths { get; }
 
-    public Ui1PreviewEnvironment Environment { get; }
+    public EnvironmentHolder EnvironmentHolder { get; }
 
     public WindowsVersionInfo Version { get; }
 
@@ -51,7 +57,7 @@ public sealed class WindowsComposition : IAsyncDisposable
     public static WindowsComposition Create()
     {
         var paths = new WindowsPaths();
-        var environment = new Ui1PreviewEnvironment(paths.BaseDirectory, "WinUI");
+        var environmentHolder = new EnvironmentHolder(paths);
         var version = WindowsVersionInfo.FromAssembly(typeof(WindowsComposition).Assembly);
         var dispatcherQueue = DispatcherQueue.GetForCurrentThread()
             ?? throw new InvalidOperationException("The WinUI composition root must run on the UI thread.");
@@ -61,22 +67,31 @@ public sealed class WindowsComposition : IAsyncDisposable
 
         var services = new ServiceCollection();
         services.AddSingleton(paths);
-        services.AddSingleton(environment);
+        services.AddSingleton(environmentHolder);
         services.AddSingleton(version);
         services.AddSingleton<IUiDispatcher>(dispatcher);
         services.AddSingleton<IFilePickerService>(filePicker);
         services.AddSingleton<IArchiveSelectionStore>(selectionStore);
 
-        services.AddSingleton(environment.Archives);
-        services.AddSingleton<IPlayerArchiveRepository>(environment.Archives);
-        services.AddSingleton(environment.Accounts);
-        services.AddSingleton<IGameAccountRepository>(environment.Accounts);
-        services.AddSingleton(environment.Records);
-        services.AddSingleton<IGachaRecordRepository>(environment.Records);
-        services.AddSingleton(environment.Changes);
-        services.AddSingleton<IGachaAtomicChangeStore>(environment.Changes);
-        services.AddSingleton<IArchiveOperationHistoryStore>(environment.Changes);
-        services.AddSingleton<IArchiveDomainHistoryStore>(environment.Changes);
+        // Environment and repositories are resolved lazily; nothing below is constructed until a
+        // page or the startup probe asks for it after the path guard passed.
+        services.AddSingleton(sp => sp.GetRequiredService<EnvironmentHolder>().GetRequired());
+        services.AddSingleton(sp => sp.GetRequiredService<Ui1PreviewEnvironment>().Archives);
+        services.AddSingleton(sp => sp.GetRequiredService<Ui1PreviewEnvironment>().Accounts);
+        services.AddSingleton(sp => sp.GetRequiredService<Ui1PreviewEnvironment>().Records);
+        services.AddSingleton(sp => sp.GetRequiredService<Ui1PreviewEnvironment>().Changes);
+        services.AddSingleton<IPlayerArchiveRepository>(
+            sp => sp.GetRequiredService<SqlitePlayerArchiveRepository>());
+        services.AddSingleton<IGameAccountRepository>(
+            sp => sp.GetRequiredService<SqliteGameAccountRepository>());
+        services.AddSingleton<IGachaRecordRepository>(
+            sp => sp.GetRequiredService<SqliteGachaRecordRepository>());
+        services.AddSingleton<IGachaAtomicChangeStore>(
+            sp => sp.GetRequiredService<SqliteGachaAtomicChangeStore>());
+        services.AddSingleton<IArchiveOperationHistoryStore>(
+            sp => sp.GetRequiredService<SqliteGachaAtomicChangeStore>());
+        services.AddSingleton<IArchiveDomainHistoryStore>(
+            sp => sp.GetRequiredService<SqliteGachaAtomicChangeStore>());
 
         services.AddSingleton<GetPlayerArchives>();
         services.AddSingleton<GetGameAccounts>();
@@ -91,24 +106,27 @@ public sealed class WindowsComposition : IAsyncDisposable
         services.AddSingleton<DeleteGameAccount>();
         services.AddSingleton<ArchiveSelectionService>();
         services.AddSingleton<ManageGachaHistory>();
-        // Metadata/icon cache are part of the shared environment; registered for pages that need
-        // them later. They are externally owned and disposed by Ui1PreviewEnvironment.
-        services.AddSingleton<IGachaItemIconCache>(environment.GachaIconCache);
-        services.AddSingleton<IGachaItemMetadataProvider>(new EmptyGachaItemMetadataProvider());
 
         services.AddSingleton<IArchiveManagementSource, ServiceArchiveManagementSource>();
         services.AddTransient<ArchiveManagementState>();
         services.AddSingleton<IOverviewSource, ServiceOverviewSource>();
         services.AddTransient<OverviewState>();
+        services.AddSingleton<IArchiveHistorySource, ServiceArchiveHistorySource>();
+        services.AddTransient<ArchiveHistoryState>();
+        services.AddSingleton<ISettingsAppearanceStore, JsonAppearanceSettingsStore>();
+        services.AddSingleton<ISettingsStoragePort, WindowsSettingsStoragePort>();
+        services.AddSingleton<ISettingsHistoryPort, ServiceSettingsHistoryPort>();
+        services.AddSingleton<ISettingsApplicationPort, WindowsSettingsApplicationPort>();
+        services.AddTransient<SettingsState>();
         services.AddSingleton<IStartupProbe, WindowsStartupProbe>();
         services.AddTransient<StartupState>();
 
+        services.AddSingleton(TimeProvider.System);
         services.AddSingleton(sp => BuildGachaPageServices(
-            environment,
+            sp.GetRequiredService<Ui1PreviewEnvironment>(),
             dispatcher,
             filePicker,
             sp.GetRequiredService<TimeProvider>()));
-        services.AddSingleton(TimeProvider.System);
 
         return new WindowsComposition(
             services.BuildServiceProvider(new ServiceProviderOptions
@@ -117,15 +135,14 @@ public sealed class WindowsComposition : IAsyncDisposable
                 ValidateScopes = false
             }),
             paths,
-            environment,
+            environmentHolder,
             version);
     }
 
     public async ValueTask DisposeAsync()
     {
+        // The container owns the factory-created Ui1PreviewEnvironment and disposes it here.
         await provider.DisposeAsync();
-        // The environment instance is externally owned by this composition root.
-        await Environment.DisposeAsync();
     }
 
     private static GachaPageServices BuildGachaPageServices(

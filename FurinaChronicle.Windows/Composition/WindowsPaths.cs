@@ -12,11 +12,24 @@ public sealed class WindowsPaths
     public WindowsPaths()
     {
         string? configured = Environment.GetEnvironmentVariable(PreviewDirectoryVariable);
-        BaseDirectory = Path.GetFullPath(string.IsNullOrWhiteSpace(configured)
-            ? Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "FurinaChronicle")
-            : configured);
+        string fallback = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "FurinaChronicle");
+        try
+        {
+            BaseDirectory = Path.GetFullPath(string.IsNullOrWhiteSpace(configured)
+                ? fallback
+                : configured);
+        }
+        catch (Exception)
+        {
+            // Never throw from Application.OnLaunched for a malformed environment variable;
+            // the startup guard reports it on the failure page instead.
+            BaseDirectory = Path.GetFullPath(fallback);
+            ConfigurationError =
+                $"{PreviewDirectoryVariable} 不是有效路径；请指定一个绝对可写目录。";
+        }
+
         SettingsDirectory = Path.Combine(BaseDirectory, "UI4", "WinUI", "settings");
         SelectionFilePath = Path.Combine(SettingsDirectory, "archive-selection.json");
     }
@@ -26,4 +39,6 @@ public sealed class WindowsPaths
     public string SettingsDirectory { get; }
 
     public string SelectionFilePath { get; }
+
+    public string? ConfigurationError { get; }
 }

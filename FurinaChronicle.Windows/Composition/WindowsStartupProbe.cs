@@ -7,23 +7,40 @@ using FurinaChronicle.Presentation.Management;
 
 namespace FurinaChronicle.Windows.Composition;
 
-// Isolated startup probe: writable preview root -> open/validate isolated SQLite. It never
-// discovers production paths or credentials, and metadata/network availability is not part of
-// this gate so local pages stay usable offline.
+// Isolated startup probe: writable preview root -> create the environment lazily -> open and
+// validate the isolated SQLite database. It never discovers production paths or credentials,
+// and it never constructs the environment before the root passed the write probe.
 public sealed class WindowsStartupProbe(
-    Ui1PreviewEnvironment environment,
-    WindowsPaths paths) : IStartupProbe
+    WindowsPaths paths,
+    EnvironmentHolder holder) : IStartupProbe
 {
     public async Task<StartupProbeResult> RunAsync(CancellationToken cancellationToken = default)
     {
+        if (paths.ConfigurationError is { } configurationError)
+        {
+            return new(
+                false,
+                StartupFailureKind.DirectoryNotWritable,
+                "隔离数据目录配置无效。",
+                configurationError);
+        }
+
+        StartupProbeResult pathCheck = IsolatedStartupGuard.CheckAndPrepare(
+            paths.BaseDirectory,
+            WindowsPaths.PreviewDirectoryVariable);
+        if (!pathCheck.Succeeded)
+        {
+            return pathCheck;
+        }
+
+        Ui1PreviewEnvironment environment;
         try
         {
-            Directory.CreateDirectory(paths.BaseDirectory);
-            string probePath = Path.Combine(
-                paths.BaseDirectory,
-                $".ui4-write-probe-{Guid.NewGuid():N}.tmp");
-            await File.WriteAllTextAsync(probePath, "ok", cancellationToken);
-            File.Delete(probePath);
+            environment = await holder.GetOrCreateAsync(cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (UnauthorizedAccessException)
         {
@@ -31,15 +48,24 @@ public sealed class WindowsStartupProbe(
                 false,
                 StartupFailureKind.DirectoryNotWritable,
                 "隔离数据目录不可写。",
-                $"无法写入 {paths.BaseDirectory}；请检查 FURINA_UI1_DIRECTORY 的访问权限。");
+                $"无法在该目录创建隔离数据库结构；请检查 {WindowsPaths.PreviewDirectoryVariable} " +
+                "的访问权限后重试。");
         }
-        catch (IOException exception) when (exception is not DirectoryNotFoundException)
+        catch (IOException)
         {
             return new(
                 false,
-                StartupFailureKind.DirectoryNotWritable,
-                "隔离数据目录不可写或磁盘不可用。",
-                $"无法写入 {paths.BaseDirectory}；请检查目录与磁盘状态。");
+                StartupFailureKind.DatabaseOpenFailed,
+                "隔离数据库无法创建。",
+                "目录可能被其他进程占用或路径不可用；未发现生产库路径。");
+        }
+        catch (Exception)
+        {
+            return new(
+                false,
+                StartupFailureKind.Unknown,
+                "隔离数据库初始化失败。",
+                "创建隔离环境时出现未预期错误；请重试。");
         }
 
         try

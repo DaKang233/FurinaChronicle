@@ -55,6 +55,15 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="..\LICENSE.txt" Link="LICENSE.txt"
+          CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="PreserveNewest" />
+    <None Include="..\THIRD-PARTY-NOTICES.txt" Link="THIRD-PARTY-NOTICES.txt"
+          CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\FurinaChronicle.Core\FurinaChronicle.Core.csproj" />
     <ProjectReference Include="..\FurinaChronicle.Services\FurinaChronicle.Services.csproj" />
     <ProjectReference Include="..\FurinaChronicle.Infrastructure\FurinaChronicle.Infrastructure.csproj" />
