@@ -80,6 +80,65 @@
                     <CheckBox x:Name="ApplySettingsCheck" Content="应用包中的 Portable 设置（仅白名单设置，冲突需确认）"
                         Checked="OnApplySettingsChanged" Unchecked="OnApplySettingsChanged"
                         AutomationProperties.AutomationId="Ui4ArchiveTransferApplySettings" />
+                    <ComboBox x:Name="RecoveryModePicker" Header="恢复模式" Width="360"
+                        SelectionChanged="OnRecoveryModeChanged"
+                        AutomationProperties.AutomationId="Ui4ArchiveTransferMode" />
+                    <Border x:Name="ReplaceScopeEditor" Padding="12" CornerRadius="6"
+                        Visibility="Collapsed"
+                        Background="{ThemeResource LayerFillColorDefaultBrush}">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Scoped Replace 范围（不可重叠）" FontWeight="SemiBold" />
+                            <TextBlock
+                                Text="选择 Archive / Account / Domain；同一档案/账号/领域不能重复覆盖。缺失 Dataset 不会被视为清空；未声明数据集会被服务拒绝。Tombstone 需独立确认；无热回切。"
+                                FontSize="12" TextWrapping="Wrap"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <ComboBox x:Name="ReplaceArchivePicker" Header="来源档案"
+                                    DisplayMemberPath="Name" SelectionChanged="OnReplaceScopeInputChanged"
+                                    AutomationProperties.AutomationId="Ui4ArchiveTransferReplaceArchive" />
+                                <ComboBox x:Name="ReplaceKindPicker" Grid.Column="1" Header="范围类型"
+                                    SelectionChanged="OnReplaceScopeInputChanged"
+                                    AutomationProperties.AutomationId="Ui4ArchiveTransferReplaceKind" />
+                            </Grid>
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <ComboBox x:Name="ReplaceAccountPicker" Header="来源账号"
+                                    DisplayMemberPath="Label" SelectionChanged="OnReplaceScopeInputChanged"
+                                    AutomationProperties.AutomationId="Ui4ArchiveTransferReplaceAccount" />
+                                <ComboBox x:Name="ReplaceDomainPicker" Grid.Column="1" Header="领域"
+                                    SelectionChanged="OnReplaceScopeInputChanged"
+                                    AutomationProperties.AutomationId="Ui4ArchiveTransferReplaceDomain" />
+                            </Grid>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button x:Name="ReplaceAddScopeButton" Content="加入范围"
+                                    Click="OnAddReplaceScope"
+                                    AutomationProperties.AutomationId="Ui4ArchiveTransferReplaceAdd" />
+                                <Button x:Name="ReplaceRemoveScopeButton" Content="移除所选范围"
+                                    Click="OnRemoveReplaceScope"
+                                    AutomationProperties.AutomationId="Ui4ArchiveTransferReplaceRemove" />
+                                <Button x:Name="ReplaceClearScopesButton" Content="清除范围"
+                                    Click="OnClearReplaceScopes"
+                                    AutomationProperties.AutomationId="Ui4ArchiveTransferReplaceClear" />
+                            </StackPanel>
+                            <ListView x:Name="ReplaceScopeList" MaxHeight="140"
+                                SelectionMode="Single"
+                                SelectionChanged="OnReplaceScopeSelectionChanged"
+                                AutomationProperties.AutomationId="Ui4ArchiveTransferReplaceScopeList">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Label}" TextWrapping="Wrap" />
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                        </StackPanel>
+                    </Border>
                     <TextBlock Text="包摘要" FontSize="12"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     <TextBlock x:Name="PackageSummaryText" TextWrapping="Wrap"
@@ -105,7 +164,7 @@
                     <TextBlock Text="设备本地恢复点（只读）" FontSize="18" FontWeight="SemiBold" />
                     <TextBlock x:Name="RecoveryPointText" TextWrapping="Wrap"
                         AutomationProperties.AutomationId="Ui4ArchiveTransferRecoveryPoint" />
-                    <TextBlock Text="本页只显示恢复点摘要，不提供主库切换/热回切。"
+                    <TextBlock Text="本页只读：当前服务仅提供恢复点摘要，不提供恢复点应用/主库切换/热回切。"
                         FontSize="12" TextWrapping="Wrap"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 </StackPanel>

@@ -21,6 +21,22 @@ public sealed partial class ArchiveTransferPage : UserControl
     private readonly IFilePickerService filePicker;
     private readonly WindowsVersionInfo version;
     private bool rendering;
+    private static readonly string[] ModeLabels =
+        ["Merge（补充/合并）", "Scoped Replace（明确范围替换）"];
+    private static readonly string[] KindLabels =
+        ["整个档案", "单个账号", "单一领域"];
+    private static readonly string[] DomainLabels =
+        ["抽卡", "角色/武器观察", "手工获取", "挑战观察"];
+    private static readonly ArchiveReplaceDomain[] Domains =
+    [
+        ArchiveReplaceDomain.Gacha,
+        ArchiveReplaceDomain.ItemObservation,
+        ArchiveReplaceDomain.ManualAcquisition,
+        ArchiveReplaceDomain.ChallengeObservation
+    ];
+    private Guid? replaceArchiveId;
+    private Guid? replaceAccountId;
+    private int replaceKindIndex;
 
     public ArchiveTransferPage(
         ArchiveTransferState state,
@@ -33,6 +49,12 @@ public sealed partial class ArchiveTransferPage : UserControl
         InitializeComponent();
         rendering = true;
         ExportAllRadio.IsChecked = true;
+        RecoveryModePicker.ItemsSource = ModeLabels;
+        RecoveryModePicker.SelectedIndex = 0;
+        ReplaceKindPicker.ItemsSource = KindLabels;
+        ReplaceKindPicker.SelectedIndex = 0;
+        ReplaceDomainPicker.ItemsSource = DomainLabels;
+        ReplaceDomainPicker.SelectedIndex = 0;
         rendering = false;
     }
 
@@ -75,6 +97,18 @@ public sealed partial class ArchiveTransferPage : UserControl
             RecoveryPointText.Text = snapshot.RecoveryPointSummary;
             ApplySettingsCheck.IsChecked = snapshot.ApplyPortableSettings;
             ApplySettingsCheck.IsEnabled = snapshot.HasPackage && !snapshot.IsBusy;
+            RecoveryModePicker.SelectedIndex =
+                snapshot.Mode == ArchiveRestoreMode.Replace ? 1 : 0;
+            RecoveryModePicker.IsEnabled = snapshot.HasPackage && !snapshot.IsBusy;
+            ReplaceScopeEditor.Visibility = snapshot.IsReplaceMode
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+            RenderReplaceScopeEditor(snapshot);
+            ReplaceScopeList.ItemsSource = snapshot.ReplaceSelections
+                .Select(selection => new ReplaceScopeRow(
+                    selection,
+                    state.DescribeReplaceSelection(selection)))
+                .ToArray();
             ExportButton.IsEnabled = !snapshot.IsBusy &&
                 (snapshot.ExportAllArchives || snapshot.SelectedArchive is not null);
             OpenButton.IsEnabled = !snapshot.IsBusy;
@@ -90,6 +124,137 @@ public sealed partial class ArchiveTransferPage : UserControl
         {
             rendering = false;
         }
+    }
+
+    private void RenderReplaceScopeEditor(ArchiveTransferSnapshot snapshot)
+    {
+        IReadOnlyList<ArchiveCatalogArchive> archives = snapshot.PackageArchives;
+        ReplaceArchivePicker.ItemsSource = archives;
+        ArchiveCatalogArchive? archive = archives.FirstOrDefault(
+            item => item.ArchiveReference == replaceArchiveId) ?? archives.FirstOrDefault();
+        replaceArchiveId = archive?.ArchiveReference;
+        ReplaceArchivePicker.SelectedItem = archive;
+        ReplaceKindPicker.SelectedIndex = replaceKindIndex;
+        ArchiveCatalogAccount[] accounts = archive?.Accounts.ToArray() ?? [];
+        ReplaceAccountPicker.ItemsSource = accounts
+            .Select(account => new AccountOption(account))
+            .ToArray();
+        ArchiveCatalogAccount? account = accounts.FirstOrDefault(
+            item => item.AccountReference == replaceAccountId) ?? accounts.FirstOrDefault();
+        replaceAccountId = account?.AccountReference;
+        ReplaceAccountPicker.SelectedItem = ReplaceAccountPicker.ItemsSource is
+            IReadOnlyList<AccountOption> options
+            ? options.FirstOrDefault(item => item.Account.AccountReference == replaceAccountId)
+            : null;
+        if (ReplaceDomainPicker.SelectedIndex < 0) ReplaceDomainPicker.SelectedIndex = 0;
+        bool isAccountScope = replaceKindIndex is 1 or 2;
+        bool isDomainScope = replaceKindIndex == 2;
+        ReplaceAccountPicker.Visibility = isAccountScope ? Visibility.Visible : Visibility.Collapsed;
+        ReplaceDomainPicker.Visibility = isDomainScope ? Visibility.Visible : Visibility.Collapsed;
+        bool canAdd = !snapshot.IsBusy && snapshot.IsReplaceMode && archive is not null &&
+            (!isAccountScope || account is not null) &&
+            (!isDomainScope || ReplaceDomainPicker.SelectedIndex >= 0);
+        ReplaceAddScopeButton.IsEnabled = canAdd;
+        ReplaceRemoveScopeButton.IsEnabled = !snapshot.IsBusy &&
+            ReplaceScopeList.SelectedItem is ReplaceScopeRow;
+        ReplaceClearScopesButton.IsEnabled = !snapshot.IsBusy &&
+            snapshot.ReplaceSelections.Count > 0;
+    }
+
+    private void OnReplaceScopeInputChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (rendering) return;
+        if (ReplaceArchivePicker.SelectedItem is ArchiveCatalogArchive archive)
+        {
+            if (archive.ArchiveReference != replaceArchiveId)
+            {
+                replaceAccountId = null;
+            }
+
+            replaceArchiveId = archive.ArchiveReference;
+        }
+
+        if (ReplaceAccountPicker.SelectedItem is AccountOption account)
+        {
+            replaceAccountId = account.Account.AccountReference;
+        }
+
+        replaceKindIndex = Math.Max(0, ReplaceKindPicker.SelectedIndex);
+        RenderReplaceScopeEditor(state.Snapshot);
+    }
+
+    private async void OnRecoveryModeChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (rendering || RecoveryModePicker.SelectedIndex < 0) return;
+        ArchiveRestoreMode mode = RecoveryModePicker.SelectedIndex == 1
+            ? ArchiveRestoreMode.Replace
+            : ArchiveRestoreMode.Merge;
+        ArchiveTransferActionResult result = await state.SetModeAsync(mode);
+        Render();
+        if (!result.Succeeded && state.Snapshot.HasPackage &&
+            mode == ArchiveRestoreMode.Merge)
+        {
+            await ShowMessageAsync("模式未切换", result.Message);
+        }
+    }
+
+    private async void OnAddReplaceScope(object sender, RoutedEventArgs e)
+    {
+        if (ReplaceArchivePicker.SelectedItem is not ArchiveCatalogArchive archive)
+        {
+            await ShowMessageAsync("未选择档案", "请先选择来源档案。");
+            return;
+        }
+
+        ArchiveReplaceScopeKind kind = replaceKindIndex switch
+        {
+            1 => ArchiveReplaceScopeKind.Account,
+            2 => ArchiveReplaceScopeKind.Domain,
+            _ => ArchiveReplaceScopeKind.Archive
+        };
+        Guid? accountId = kind == ArchiveReplaceScopeKind.Archive
+            ? null
+            : ReplaceAccountPicker.SelectedItem is AccountOption account
+                ? account.Account.AccountReference
+                : null;
+        ArchiveReplaceDomain? domain = kind == ArchiveReplaceScopeKind.Domain &&
+            ReplaceDomainPicker.SelectedIndex >= 0
+            ? Domains[ReplaceDomainPicker.SelectedIndex]
+            : null;
+        if (kind != ArchiveReplaceScopeKind.Archive && accountId is null)
+        {
+            await ShowMessageAsync("未选择账号", "账号/领域范围必须选择来源账号。");
+            return;
+        }
+
+        var selection = new ArchiveReplaceSelection(
+            archive.ArchiveReference,
+            kind,
+            kind == ArchiveReplaceScopeKind.Archive ? null : accountId,
+            domain);
+        ArchiveTransferActionResult result = await state.AddReplaceSelectionAsync(selection);
+        Render();
+        if (!result.Succeeded) await ShowMessageAsync("Replace 范围未加入", result.Message);
+    }
+
+    private async void OnRemoveReplaceScope(object sender, RoutedEventArgs e)
+    {
+        if (ReplaceScopeList.SelectedItem is not ReplaceScopeRow row) return;
+        await state.RemoveReplaceSelectionAsync(row.Selection);
+        Render();
+    }
+
+    private async void OnClearReplaceScopes(object sender, RoutedEventArgs e)
+    {
+        await state.ClearReplaceSelectionsAsync();
+        Render();
+    }
+
+    private void OnReplaceScopeSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (rendering) return;
+        ReplaceRemoveScopeButton.IsEnabled = !state.Snapshot.IsBusy &&
+            ReplaceScopeList.SelectedItem is ReplaceScopeRow;
     }
 
     private static bool HasUnresolvedMappings(ArchiveRestorePlan? plan) =>
@@ -424,16 +589,17 @@ public sealed partial class ArchiveTransferPage : UserControl
         var finalConfirm = new ContentDialog
         {
             XamlRoot = XamlRoot,
-            Title = "确认提交 Merge",
-            PrimaryButtonText = "提交 Merge",
+            Title = plan.Mode == ArchiveRestoreMode.Replace
+                ? "确认破坏性 Scoped Replace"
+                : "确认提交 Merge",
+            PrimaryButtonText = plan.Mode == ArchiveRestoreMode.Replace
+                ? "提交 Replace"
+                : "提交 Merge",
             CloseButtonText = "取消",
             DefaultButton = ContentDialogButton.Close,
             Content = new TextBlock
             {
-                Text = state.Snapshot.PlanSummary + Environment.NewLine + Environment.NewLine +
-                    "本次为逻辑档案 Merge：来源缺失的 Dataset 不会清空目标，Tombstone 独立处理，" +
-                    "提交失败不改变原数据；不提供热回切。" + Environment.NewLine +
-                    state.Snapshot.DiagnosticSummary,
+                Text = state.BuildApplyConfirmationText(),
                 TextWrapping = TextWrapping.Wrap
             }
         };
@@ -498,6 +664,17 @@ public sealed partial class ArchiveTransferPage : UserControl
         };
         await dialog.ShowAsync();
     }
+
+    public sealed record AccountOption(ArchiveCatalogAccount Account)
+    {
+        public string Label => string.IsNullOrWhiteSpace(Account.DisplayName)
+            ? Account.LegacyUid
+            : $"{Account.LegacyUid} · {Account.DisplayName}";
+    }
+
+    public sealed record ReplaceScopeRow(
+        ArchiveReplaceSelection Selection,
+        string Label);
 
     private sealed record MappingChoice(string Label, Guid? TargetArchiveId);
 }
