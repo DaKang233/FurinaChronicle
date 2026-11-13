@@ -10,6 +10,13 @@ public sealed class SessionLockTests
     [Fact]
     public async Task LiveHolderIsRejectedAndNormalReleaseRemovesLock()
     {
+        if (!OperatingSystem.IsWindows())
+        {
+            // FileShare-based single-writer rejection is enforced by Windows, and the WinUI host
+            // itself is Windows-only. Stale takeover and idempotency remain covered on every OS.
+            return;
+        }
+
         string directory = TempDirectory();
         string path = Path.Combine(directory, "session.lock");
         var process = new FakeProcess(100, DateTimeOffset.UtcNow.AddMinutes(-1))

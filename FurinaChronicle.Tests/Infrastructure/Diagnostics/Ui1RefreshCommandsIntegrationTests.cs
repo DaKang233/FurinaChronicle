@@ -31,6 +31,13 @@ public sealed class Ui1RefreshCommandsIntegrationTests
     [Fact]
     public async Task WindowsCacheProviderRefreshImportsAndUpdatesIsolatedFacts()
     {
+        if (!OperatingSystem.IsWindows())
+        {
+            // The real Windows web-cache provider is Windows-only; the coordinator/gateway logic
+            // is covered cross-platform by GachaWindowsCacheRefreshTests.
+            return;
+        }
+
         string directory = TempDirectory();
         try
         {
