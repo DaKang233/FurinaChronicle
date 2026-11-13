@@ -5,23 +5,23 @@ using FurinaChronicle.Infrastructure.Diagnostics;
 
 namespace FurinaChronicle.Windows.Composition;
 
-// Lazily owns the one isolated environment. Construction is deferred until the startup guard has
-// proven the root directory writable, so a bad FURINA_UI1_DIRECTORY can never throw from the
+// Lazily owns the one host environment (production or isolated). Construction is deferred until
+// the startup gate has proven the actual data root usable, so a bad path can never throw from the
 // application launch path before the error UI exists.
 public sealed class EnvironmentHolder(WindowsPaths paths)
 {
     private readonly SemaphoreSlim gate = new(1, 1);
-    private Ui1PreviewEnvironment? environment;
+    private WindowsHostEnvironment? environment;
 
-    public Ui1PreviewEnvironment? Current => environment;
+    public WindowsHostEnvironment? Current => environment;
 
-    public async Task<Ui1PreviewEnvironment> GetOrCreateAsync(
+    public async Task<WindowsHostEnvironment> GetOrCreateAsync(
         CancellationToken cancellationToken = default)
     {
         await gate.WaitAsync(cancellationToken);
         try
         {
-            return environment ??= new Ui1PreviewEnvironment(paths.BaseDirectory, "WinUI");
+            return environment ??= new WindowsHostEnvironment(paths);
         }
         finally
         {
@@ -29,7 +29,7 @@ public sealed class EnvironmentHolder(WindowsPaths paths)
         }
     }
 
-    public Ui1PreviewEnvironment GetRequired() =>
+    public WindowsHostEnvironment GetRequired() =>
         environment ?? throw new InvalidOperationException(
-            "The isolated environment is not ready; the startup gate must pass first.");
+            "The host environment is not ready; the startup gate must pass first.");
 }

@@ -11,7 +11,7 @@ namespace FurinaChronicle.Windows.Composition;
 // The page keeps per-instance UI state; only stateless coordinators and the isolated environment
 // are singletons.
 public sealed record GachaPageServices(
-    Ui1PreviewEnvironment Environment,
+    WindowsHostEnvironment Environment,
     ServiceGachaReadOnlySource Source,
     IUiDispatcher Dispatcher,
     IFilePickerService FilePicker,

@@ -1,7 +1,7 @@
 // Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
-using FurinaChronicle.Infrastructure.Diagnostics;
+using FurinaChronicle.Windows.Composition;
 using FurinaChronicle.Presentation.Gacha;
 using FurinaChronicle.Services.Archives;
 using FurinaChronicle.Services.Gacha;
@@ -21,7 +21,7 @@ public sealed partial class Ui1GachaView
     private bool importBusy;
     private bool entered;
 
-    private void EnsureImportComposition(Ui1PreviewEnvironment preview)
+    private void EnsureImportComposition(WindowsHostEnvironment preview)
     {
         importMode ??= new GachaImportModeState();
         importCoordinator ??= new GachaImportCoordinator(

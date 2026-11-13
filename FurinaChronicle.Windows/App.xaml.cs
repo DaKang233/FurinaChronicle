@@ -32,7 +32,7 @@ public partial class App : Application
 
         // Same-data-directory instances are refused before any environment/database is opened.
         var paths = new WindowsPaths();
-        singleInstance = SingleInstanceGuard.TryAcquire(paths.BaseDirectory);
+        singleInstance = SingleInstanceGuard.TryAcquire(paths.DataRoot);
         if (singleInstance is null)
         {
             Environment.Exit(0);

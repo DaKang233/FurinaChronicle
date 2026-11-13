@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.IO;
-using FurinaChronicle.Infrastructure.Diagnostics;
+using FurinaChronicle.Windows.Composition;
 using FurinaChronicle.Presentation.Gacha;
 using FurinaChronicle.Services.Archives;
 using FurinaChronicle.Services.Gacha;
@@ -20,7 +20,7 @@ public sealed partial class Ui1GachaView
     private GachaWindowsCacheRefreshCoordinator? windowsCacheRefresh;
     private GachaTeyvatHelperImportCoordinator? teyvatImport;
 
-    private void EnsureFinalCommandComposition(Ui1PreviewEnvironment preview)
+    private void EnsureFinalCommandComposition(WindowsHostEnvironment preview)
     {
         var planning = new ServiceGachaImportPlanningSource(
             new GetPlayerArchives(preview.Archives),

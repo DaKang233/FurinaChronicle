@@ -1,7 +1,7 @@
 // Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
-using FurinaChronicle.Infrastructure.Diagnostics;
+using FurinaChronicle.Windows.Composition;
 using FurinaChronicle.Infrastructure.Gacha.Exporting;
 using FurinaChronicle.Infrastructure.Gacha.Metadata;
 using FurinaChronicle.Infrastructure.Gacha.Uigf.V4_2;
@@ -52,7 +52,7 @@ public sealed partial class Ui1GachaView
         }
     }
 
-    private async Task ExportAsync(Ui1PreviewEnvironment preview, GachaReadOnlySnapshot snapshot,
+    private async Task ExportAsync(WindowsHostEnvironment preview, GachaReadOnlySnapshot snapshot,
         Guid archiveId, CancellationToken token)
     {
         try

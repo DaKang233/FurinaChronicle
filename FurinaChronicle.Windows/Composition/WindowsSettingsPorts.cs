@@ -73,7 +73,7 @@ public sealed class JsonAppearanceSettingsStore(WindowsPaths paths) : ISettingsA
 // content, credential values or full user paths.
 public sealed class WindowsSettingsStoragePort(
     WindowsPaths paths,
-    Ui1PreviewEnvironment environment) : ISettingsStoragePort
+    WindowsHostEnvironment environment) : ISettingsStoragePort
 {
     public string DataRootPath => environment.RootDirectory;
 
@@ -144,8 +144,9 @@ public sealed class WindowsSettingsStoragePort(
             $"DatabaseBytes: {GetDatabaseSizeBytes()?.ToString() ?? "unknown"}" + Environment.NewLine +
             $"CacheBytes: {GetCacheSizeBytes()?.ToString() ?? "unknown"}" + Environment.NewLine +
             "DataContent: omitted" + Environment.NewLine +
-            "Credentials: not used by this host" + Environment.NewLine +
-            "ProductionDatabase: not discovered" + Environment.NewLine;
+            "Credentials: DPAPI local (values omitted)" + Environment.NewLine +
+            $"DatabaseMode: {(environment.IsSynthetic ? "Isolated" : "Production")}" + Environment.NewLine +
+            "ProductionDatabase: same-as-MAUI (path omitted)" + Environment.NewLine;
         await File.WriteAllTextAsync(path, content, cancellationToken);
         return fileName;
     }

@@ -3,48 +3,82 @@
 
 namespace FurinaChronicle.Windows.Composition;
 
-// Resolves only the isolated preview root. Production database discovery is deliberately absent
-// (ADR 0020): UI-4 still runs exclusively on the synthetic UI-1 database.
+// Resolves the one data root the Windows host may open. There are exactly two modes:
+//  - explicit FURINA_UI1_DIRECTORY => isolated synthetic host (never probes production);
+//  - otherwise => the MAUI production app-data root and the same furinachronicle.db3 file.
+// No file contents are read here; only path composition and metadata are used.
 public sealed class WindowsPaths
 {
     public const string PreviewDirectoryVariable = "FURINA_UI1_DIRECTORY";
+    public const string ProductionDirectoryVariable = "FURINA_UI6_PRODUCTION_DIRECTORY";
 
     public WindowsPaths()
     {
-        string? configured = Environment.GetEnvironmentVariable(PreviewDirectoryVariable);
+        string? isolated = Environment.GetEnvironmentVariable(PreviewDirectoryVariable);
+        string? production = Environment.GetEnvironmentVariable(ProductionDirectoryVariable);
+        IsIsolated = !string.IsNullOrWhiteSpace(isolated);
         string fallback = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "FurinaChronicle");
+            "User Name",
+            "com.companyname.furinachronicle.app");
+        string configured = IsIsolated ? isolated! : string.IsNullOrWhiteSpace(production)
+            ? fallback
+            : production;
         try
         {
-            BaseDirectory = Path.GetFullPath(string.IsNullOrWhiteSpace(configured)
-                ? fallback
-                : configured);
+            BaseDirectory = Path.GetFullPath(configured);
         }
         catch (Exception)
         {
-            // Never throw from Application.OnLaunched for a malformed environment variable;
-            // the startup guard reports it on the failure page instead.
             BaseDirectory = Path.GetFullPath(fallback);
-            ConfigurationError =
-                $"{PreviewDirectoryVariable} 不是有效路径；请指定一个绝对可写目录。";
+            ConfigurationError = IsIsolated
+                ? $"{PreviewDirectoryVariable} 不是有效路径；请指定一个绝对可写目录。"
+                : $"{ProductionDirectoryVariable} 不是有效路径；请指定一个绝对目录。";
+        }
+
+        if (IsIsolated)
+        {
+            DataRoot = Path.Combine(BaseDirectory, "UI1", "WinUI");
+            DatabasePath = Path.Combine(DataRoot, "ui1-preview.db3");
+            MetadataDirectory = Path.Combine(DataRoot, "metadata");
+            ImageCacheDirectory = Path.Combine(DataRoot, "images");
+            TemporaryDirectory = Path.Combine(DataRoot, "temp");
+        }
+        else
+        {
+            DataRoot = BaseDirectory;
+            DatabasePath = Path.Combine(DataRoot, "Data", "furinachronicle.db3");
+            MetadataDirectory = Path.Combine(DataRoot, "Data", "metadata");
+            ImageCacheDirectory = Path.Combine(DataRoot, "Cache", "images");
+            TemporaryDirectory = Path.Combine(DataRoot, "Cache", "ui6-temp");
         }
 
         SettingsDirectory = Path.Combine(BaseDirectory, "UI4", "WinUI", "settings");
         SelectionFilePath = Path.Combine(SettingsDirectory, "archive-selection.json");
         CredentialDirectory = Path.Combine(BaseDirectory, "UI4", "WinUI", "credentials");
         CredentialFilePath = Path.Combine(CredentialDirectory, "credentials.bin");
-        Ui6Directory = Path.Combine(BaseDirectory, "UI6");
-        MigrationTargetDirectory = Path.Combine(Ui6Directory, "Data");
-        MigrationTargetDatabasePath = Path.Combine(
-            MigrationTargetDirectory,
-            "furinachronicle.db3");
-        MigrationBackupDirectory = Path.Combine(Ui6Directory, "backups");
-        MigrationMarkerPath = Path.Combine(Ui6Directory, "migration.json");
-        SessionLockPath = Path.Combine(BaseDirectory, "session.lock");
+        BackupsDirectory = Path.Combine(DataRoot, "Backups");
+        AdoptionMarkerPath = Path.Combine(DataRoot, "UI6", "host-adoption.json");
+        SessionLockPath = Path.Combine(DataRoot, "session.lock");
     }
 
+    // Kept for callers that need the configured root (isolated root or production data root).
     public string BaseDirectory { get; }
+
+    // The actual single-writer/data root: production app-data root or UI1/WinUI.
+    public string DataRoot { get; }
+
+    public bool IsIsolated { get; }
+
+    public bool IsProduction => !IsIsolated;
+
+    public string DatabasePath { get; }
+
+    public string MetadataDirectory { get; }
+
+    public string ImageCacheDirectory { get; }
+
+    public string TemporaryDirectory { get; }
 
     public string SettingsDirectory { get; }
 
@@ -54,15 +88,9 @@ public sealed class WindowsPaths
 
     public string CredentialFilePath { get; }
 
-    public string Ui6Directory { get; }
+    public string BackupsDirectory { get; }
 
-    public string MigrationTargetDirectory { get; }
-
-    public string MigrationTargetDatabasePath { get; }
-
-    public string MigrationBackupDirectory { get; }
-
-    public string MigrationMarkerPath { get; }
+    public string AdoptionMarkerPath { get; }
 
     public string SessionLockPath { get; }
 

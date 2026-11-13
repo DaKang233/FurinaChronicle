@@ -4,28 +4,28 @@
   SPDX-License-Identifier: MIT
 -->
 <UserControl
-    x:Class="FurinaChronicle.Windows.Pages.MigrationPage"
+    x:Class="FurinaChronicle.Windows.Pages.HostAdoptionPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    AutomationProperties.AutomationId="Ui6MigrationPage">
+    AutomationProperties.AutomationId="Ui6HostAdoptionPage">
     <ScrollViewer Padding="24">
         <StackPanel Spacing="14" MaxWidth="1100">
             <StackPanel Spacing="4">
-                <TextBlock Text="从旧版复制迁移" FontSize="28" FontWeight="SemiBold" />
+                <TextBlock Text="使用现有数据（同一数据库）" FontSize="28" FontWeight="SemiBold" />
                 <TextBlock
-                    Text="仅隔离/合成夹具验收：源库只读、强制备份、副本校验、源库保留。生产凭据不迁移，需重新授权。"
+                    Text="WinUI 将直接打开 MAUI 宿主使用的同一个 furinachronicle.db3；不复制、不移动、不切换路径。接管前强制备份，失败不写标记、不改原库。"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     TextWrapping="Wrap"
-                    AutomationProperties.AutomationId="Ui6MigrationCredentialsNotice" />
+                    AutomationProperties.AutomationId="Ui6AdoptionIntro" />
             </StackPanel>
 
             <StackPanel Spacing="2">
                 <TextBlock x:Name="StatusText" TextWrapping="Wrap"
-                    AutomationProperties.AutomationId="Ui6MigrationStatus"
+                    AutomationProperties.AutomationId="Ui6AdoptionStatus"
                     AutomationProperties.LiveSetting="Polite" />
                 <TextBlock x:Name="ErrorText" TextWrapping="Wrap" Visibility="Collapsed"
                     Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                    AutomationProperties.AutomationId="Ui6MigrationError" />
+                    AutomationProperties.AutomationId="Ui6AdoptionError" />
                 <ProgressRing x:Name="Progress" IsActive="False" Width="24" Height="24" />
             </StackPanel>
 
@@ -33,43 +33,36 @@
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                 <StackPanel Spacing="6">
                     <TextBlock Text="只读探测" FontSize="18" FontWeight="SemiBold" />
-                    <TextBlock x:Name="SourceText" TextWrapping="Wrap"
-                        AutomationProperties.AutomationId="Ui6MigrationSource" />
-                    <TextBlock x:Name="TargetText" TextWrapping="Wrap"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        AutomationProperties.AutomationId="Ui6MigrationTarget" />
+                    <TextBlock x:Name="DatabaseText" TextWrapping="Wrap"
+                        AutomationProperties.AutomationId="Ui6AdoptionDatabase" />
                     <TextBlock x:Name="BackupText" TextWrapping="Wrap"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        AutomationProperties.AutomationId="Ui6MigrationBackup" />
+                        AutomationProperties.AutomationId="Ui6AdoptionBackup" />
                     <TextBlock x:Name="MarkerText" TextWrapping="Wrap"
-                        AutomationProperties.AutomationId="Ui6MigrationMarker" />
+                        AutomationProperties.AutomationId="Ui6AdoptionMarker" />
                     <TextBlock x:Name="LegacyText" TextWrapping="Wrap" Visibility="Collapsed"
                         Foreground="{ThemeResource SystemFillColorCautionBrush}"
-                        AutomationProperties.AutomationId="Ui6MigrationLegacy" />
+                        AutomationProperties.AutomationId="Ui6AdoptionLegacy" />
                 </StackPanel>
             </Border>
 
             <Border Padding="16" CornerRadius="8"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                 <StackPanel Spacing="8">
-                    <TextBlock Text="迁移操作" FontSize="18" FontWeight="SemiBold" />
-                    <CheckBox x:Name="ForceRemigrateCheck"
-                        Content="重新迁移（目标已存在且已有迁移标记时，需明确勾选）"
-                        Checked="OnForceChanged" Unchecked="OnForceChanged"
-                        AutomationProperties.AutomationId="Ui6MigrationForce" />
+                    <TextBlock Text="接管操作" FontSize="18" FontWeight="SemiBold" />
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button x:Name="StartButton" Content="开始只读校验并迁移"
-                            Click="OnStart"
-                            AutomationProperties.AutomationId="Ui6MigrationStart" />
-                        <Button x:Name="ContinueButton" Content="继续进入应用"
-                            Click="OnContinue" Visibility="Collapsed"
-                            AutomationProperties.AutomationId="Ui6MigrationContinue" />
-                        <Button x:Name="SkipButton" Content="稍后（继续隔离宿主）"
-                            Click="OnSkip"
-                            AutomationProperties.AutomationId="Ui6MigrationSkip" />
+                        <Button x:Name="AdoptButton" Content="接管现有数据（同一数据库）"
+                            Click="OnAdopt"
+                            AutomationProperties.AutomationId="Ui6AdoptionAdopt" />
+                        <Button x:Name="InitializeButton" Content="初始化新生产库（不播种）"
+                            Click="OnInitialize"
+                            AutomationProperties.AutomationId="Ui6AdoptionInitialize" />
+                        <Button x:Name="RetryButton" Content="重新探测"
+                            Click="OnRetry"
+                            AutomationProperties.AutomationId="Ui6AdoptionRetry" />
                     </StackPanel>
                     <TextBlock
-                        Text="流程：只读校验源库 → 强制一致性备份 → 复制到新宿主目录 → 副本校验 → 写迁移标记。任一步失败不切换，源库与已有目标不变。"
+                        Text="接管流程：只读校验 application_id/Schema/quick_check → 强制备份到生产数据目录 Backups/ → 写脱敏接管标记 UI6/host-adoption.json → 以同一路径进入应用。"
                         FontSize="12" TextWrapping="Wrap"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 </StackPanel>
@@ -80,9 +73,9 @@
                 <StackPanel Spacing="6">
                     <TextBlock Text="回退与凭据边界" FontSize="18" FontWeight="SemiBold" />
                     <TextBlock x:Name="RollbackText" TextWrapping="Wrap"
-                        AutomationProperties.AutomationId="Ui6MigrationRollback" />
+                        AutomationProperties.AutomationId="Ui6AdoptionRollback" />
                     <TextBlock
-                        Text="迁移副本通过校验后仍需 UI-6b 生产组合根/默认入口切换；当前构建继续使用隔离宿主，不会自动打开生产库。"
+                        Text="WinUI 与 MAUI 不可同时运行同一数据库。接管后如需回退：关闭 WinUI，直接用旧 MAUI 打开原库；不要删除原库或 Backups。"
                         FontSize="12" TextWrapping="Wrap"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 </StackPanel>

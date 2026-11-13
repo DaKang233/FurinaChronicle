@@ -10,7 +10,8 @@ public enum StartupFailureKind
     DatabaseOpenFailed = 2,
     SchemaIncompatible = 3,
     Unknown = 4,
-    SessionBusy = 5
+    SessionBusy = 5,
+    ProductionAdoptionRequired = 6
 }
 
 public sealed record StartupProbeResult(
@@ -49,6 +50,7 @@ public sealed record StartupSnapshot(
         StartupFailureKind.SchemaIncompatible => "数据库版本不兼容",
         StartupFailureKind.Unknown => "未知启动错误",
         StartupFailureKind.SessionBusy => "数据目录被占用",
+        StartupFailureKind.ProductionAdoptionRequired => "需要接管现有数据",
         _ => "已就绪"
     };
 }

@@ -4,7 +4,7 @@
 using System.Globalization;
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.History;
-using FurinaChronicle.Infrastructure.Diagnostics;
+using FurinaChronicle.Windows.Composition;
 using FurinaChronicle.Presentation.Gacha;
 using FurinaChronicle.Presentation.Management;
 using FurinaChronicle.Services.Archives;
@@ -31,7 +31,7 @@ public sealed partial class Ui1GachaView
     private Task? dataOperationTask;
     private GachaReadOnlyRow? selectedRow;
 
-    private void EnsureDataOperationComposition(Ui1PreviewEnvironment preview)
+    private void EnsureDataOperationComposition(WindowsHostEnvironment preview)
     {
         var planning = new ServiceGachaImportPlanningSource(
             new GetPlayerArchives(preview.Archives),

@@ -28,7 +28,7 @@ public sealed partial class MainWindow : Window
     private CharacterWeaponPage? characterWeaponPage;
     private ChallengePage? challengePage;
     private PassportPage? passportPage;
-    private MigrationPage? migrationPage;
+    private HostAdoptionPage? adoptionPage;
     private bool shellReady;
     private bool shellBuilt;
     private bool switching;
@@ -56,6 +56,13 @@ public sealed partial class MainWindow : Window
             $"Commit {composition.Version.Commit}");
         startupPage.RetryRequested += OnRetryStartup;
         StartupHost.Children.Add(startupPage);
+        adoptionPage = new HostAdoptionPage(
+            composition.Services.GetRequiredService<HostAdoptionState>())
+        {
+            Visibility = Visibility.Collapsed
+        };
+        adoptionPage.Completed += OnAdoptionCompleted;
+        StartupHost.Children.Add(adoptionPage);
 
         RootGrid.Loaded += OnRootLoaded;
         Closed += OnClosed;
@@ -70,8 +77,19 @@ public sealed partial class MainWindow : Window
         await RunStartupAsync();
     }
 
-    private async void OnRetryStartup(object? sender, EventArgs e) =>
+    private async void OnRetryStartup(object? sender, EventArgs e)
+    {
+        if (adoptionPage is not null) adoptionPage.Visibility = Visibility.Collapsed;
+        startupPage.Visibility = Visibility.Visible;
         await RunStartupAsync();
+    }
+
+    private async void OnAdoptionCompleted(object? sender, EventArgs e)
+    {
+        if (adoptionPage is not null) adoptionPage.Visibility = Visibility.Collapsed;
+        startupPage.Visibility = Visibility.Visible;
+        await RunStartupAsync();
+    }
 
     private async Task RunStartupAsync()
     {
@@ -85,6 +103,19 @@ public sealed partial class MainWindow : Window
             StartupState state = composition.Services.GetRequiredService<StartupState>();
             await state.InitializeAsync();
             startupPage.Render(state.Snapshot);
+            if (state.Snapshot.FailureKind ==
+                StartupFailureKind.ProductionAdoptionRequired)
+            {
+                startupPage.Visibility = Visibility.Collapsed;
+                if (adoptionPage is not null)
+                {
+                    adoptionPage.Visibility = Visibility.Visible;
+                    await adoptionPage.EnterAsync();
+                }
+
+                return;
+            }
+
             if (!state.Snapshot.IsReady) return;
 
             BuildShell();
@@ -98,7 +129,6 @@ public sealed partial class MainWindow : Window
             Navigation.SelectedItem = OverviewDestination;
             switching = false;
             await ShowPageAsync("overview");
-            await TryShowMigrationAsync();
         }
         catch (Exception exception)
         {
@@ -207,31 +237,7 @@ public sealed partial class MainWindow : Window
         };
         passportPage.RefreshRequested += OnPassportRefreshRequested;
         PageHost.Children.Add(passportPage);
-
-        migrationPage = new MigrationPage(
-            composition.Services.GetRequiredService<ProductionMigrationState>())
-        {
-            Visibility = Visibility.Collapsed
-        };
-        migrationPage.CloseRequested += OnMigrationCloseRequested;
-        PageHost.Children.Add(migrationPage);
         shellBuilt = true;
-    }
-
-    private async void OnMigrationCloseRequested(object? sender, EventArgs e)
-    {
-        if (!shellReady) return;
-        await ShowPageAsync("overview");
-    }
-
-    private async Task TryShowMigrationAsync()
-    {
-        if (migrationPage is null) return;
-        await migrationPage.EnterAsync();
-        if (!migrationPage.ShouldPrompt) return;
-        hideCurrentPages();
-        currentPageTag = "migration";
-        migrationPage.Visibility = Visibility.Visible;
     }
 
     private void hideCurrentPages()
@@ -250,7 +256,6 @@ public sealed partial class MainWindow : Window
         if (characterWeaponPage is not null) characterWeaponPage.Visibility = Visibility.Collapsed;
         if (challengePage is not null) challengePage.Visibility = Visibility.Collapsed;
         if (passportPage is not null) passportPage.Visibility = Visibility.Collapsed;
-        if (migrationPage is not null) migrationPage.Visibility = Visibility.Collapsed;
     }
 
     private async void OnPassportRefreshRequested(object? sender, EventArgs e)

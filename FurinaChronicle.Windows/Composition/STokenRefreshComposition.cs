@@ -11,7 +11,7 @@ using FurinaChronicle.Services.Passport;
 namespace FurinaChronicle.Windows.Composition;
 
 // Isolated-host SToken refresh composition. The real MiHoYo provider/client are constructed on the
-// Windows side; Ui1PreviewEnvironment's UnavailableSTokenUrlProvider is untouched. Network calls are
+// Windows side; WindowsHostEnvironment's UnavailableSTokenUrlProvider is untouched. Network calls are
 // only made when the user explicitly starts a refresh with a locally stored credential.
 public sealed class STokenRefreshComposition : IAsyncDisposable
 {
@@ -19,7 +19,7 @@ public sealed class STokenRefreshComposition : IAsyncDisposable
     private readonly MiHoYoGachaLogClient client;
 
     public STokenRefreshComposition(
-        Ui1PreviewEnvironment environment,
+        WindowsHostEnvironment environment,
         IPassportAccountStore passportAccountStore)
     {
         provider = new MiHoYoSTokenGachaUrlProvider();

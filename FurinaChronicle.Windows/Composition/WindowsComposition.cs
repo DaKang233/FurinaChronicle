@@ -82,10 +82,10 @@ public sealed class WindowsComposition : IAsyncDisposable
         // Environment and repositories are resolved lazily; nothing below is constructed until a
         // page or the startup probe asks for it after the path guard passed.
         services.AddSingleton(sp => sp.GetRequiredService<EnvironmentHolder>().GetRequired());
-        services.AddSingleton(sp => sp.GetRequiredService<Ui1PreviewEnvironment>().Archives);
-        services.AddSingleton(sp => sp.GetRequiredService<Ui1PreviewEnvironment>().Accounts);
-        services.AddSingleton(sp => sp.GetRequiredService<Ui1PreviewEnvironment>().Records);
-        services.AddSingleton(sp => sp.GetRequiredService<Ui1PreviewEnvironment>().Changes);
+        services.AddSingleton(sp => sp.GetRequiredService<WindowsHostEnvironment>().Archives);
+        services.AddSingleton(sp => sp.GetRequiredService<WindowsHostEnvironment>().Accounts);
+        services.AddSingleton(sp => sp.GetRequiredService<WindowsHostEnvironment>().Records);
+        services.AddSingleton(sp => sp.GetRequiredService<WindowsHostEnvironment>().Changes);
         services.AddSingleton<IPlayerArchiveRepository>(
             sp => sp.GetRequiredService<SqlitePlayerArchiveRepository>());
         services.AddSingleton<IGameAccountRepository>(
@@ -125,7 +125,7 @@ public sealed class WindowsComposition : IAsyncDisposable
         services.AddSingleton<ISettingsApplicationPort, WindowsSettingsApplicationPort>();
         services.AddTransient<SettingsState>();
         services.AddSingleton(sp => BuildArchiveTransferServiceSet(
-            sp.GetRequiredService<Ui1PreviewEnvironment>()));
+            sp.GetRequiredService<WindowsHostEnvironment>()));
         services.AddSingleton<IArchiveTransferWorkspace>(
             sp => sp.GetRequiredService<ArchiveTransferServiceSet>().Workspace);
         services.AddSingleton<IArchiveTransferSource, ServiceArchiveTransferSource>();
@@ -141,7 +141,7 @@ public sealed class WindowsComposition : IAsyncDisposable
             sp => sp.GetRequiredService<DpapiPassportCredentialStore>());
         services.AddTransient<PassportCredentialState>();
         services.AddSingleton(sp => new STokenRefreshComposition(
-            sp.GetRequiredService<Ui1PreviewEnvironment>(),
+            sp.GetRequiredService<WindowsHostEnvironment>(),
             sp.GetRequiredService<IPassportAccountStore>()));
         services.AddSingleton(sp =>
             sp.GetRequiredService<STokenRefreshComposition>().Refresher);
@@ -151,8 +151,8 @@ public sealed class WindowsComposition : IAsyncDisposable
         // UI-5 pages: formal isolated Chronicle query service and page-local state machines.
         services.AddSingleton<IChronicleQueryService>(sp =>
         {
-            Ui1PreviewEnvironment environment =
-                sp.GetRequiredService<Ui1PreviewEnvironment>();
+            WindowsHostEnvironment environment =
+                sp.GetRequiredService<WindowsHostEnvironment>();
             return new SqliteChronicleQueryService(
                 environment.Database,
                 sp.GetRequiredService<IGachaRecordRepository>(),
@@ -182,21 +182,22 @@ public sealed class WindowsComposition : IAsyncDisposable
         services.AddSingleton<IProcessIdentityPort, WindowsProcessIdentityPort>();
         services.AddSingleton(sp => new SessionLockManager(
             sp.GetRequiredService<IProcessIdentityPort>()));
-        services.AddSingleton(new ProductionMigrationPaths(
-            paths.MigrationTargetDirectory,
-            paths.MigrationTargetDatabasePath,
-            paths.MigrationBackupDirectory,
-            paths.MigrationMarkerPath));
-        services.AddSingleton<IProductionMigrationPort, WindowsProductionMigrationPort>();
-        services.AddTransient(sp => new ProductionMigrationState(
-            sp.GetRequiredService<IProductionMigrationPort>(),
-            sp.GetRequiredService<ProductionMigrationPaths>(),
+        services.AddSingleton(new HostAdoptionPaths(
+            paths.IsProduction,
+            paths.DataRoot,
+            paths.DatabasePath,
+            paths.BackupsDirectory,
+            paths.AdoptionMarkerPath));
+        services.AddSingleton<IHostAdoptionPort, WindowsHostAdoptionPort>();
+        services.AddTransient(sp => new HostAdoptionState(
+            sp.GetRequiredService<IHostAdoptionPort>(),
+            sp.GetRequiredService<HostAdoptionPaths>(),
             version.UserVisibleName,
             sp.GetRequiredService<TimeProvider>()));
 
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton(sp => BuildGachaPageServices(
-            sp.GetRequiredService<Ui1PreviewEnvironment>(),
+            sp.GetRequiredService<WindowsHostEnvironment>(),
             dispatcher,
             filePicker,
             sp.GetRequiredService<TimeProvider>(),
@@ -215,12 +216,12 @@ public sealed class WindowsComposition : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        // The container owns the factory-created Ui1PreviewEnvironment and disposes it here.
+        // The container owns the factory-created WindowsHostEnvironment and disposes it here.
         await provider.DisposeAsync();
     }
 
     private static ArchiveTransferServiceSet BuildArchiveTransferServiceSet(
-        Ui1PreviewEnvironment environment)
+        WindowsHostEnvironment environment)
     {
         var limits = new ArchivePortableLimits();
         var reader = new ArchivePackageReader(limits);
@@ -246,7 +247,7 @@ public sealed class WindowsComposition : IAsyncDisposable
     }
 
     private static GachaPageServices BuildGachaPageServices(
-        Ui1PreviewEnvironment environment,
+        WindowsHostEnvironment environment,
         IUiDispatcher dispatcher,
         IFilePickerService filePicker,
         TimeProvider timeProvider,

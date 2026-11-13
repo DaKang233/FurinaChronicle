@@ -12,7 +12,7 @@ namespace FurinaChronicle.Windows;
 
 public sealed partial class Ui1GachaView : UserControl
 {
-    private Ui1PreviewEnvironment? environment;
+    private WindowsHostEnvironment? environment;
     private ServiceGachaReadOnlySource? source;
     private IUiDispatcher? dispatcher;
     private IFilePickerService? filePicker;
