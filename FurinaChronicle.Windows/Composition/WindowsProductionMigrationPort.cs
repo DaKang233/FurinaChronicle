@@ -24,6 +24,24 @@ public sealed class WindowsProductionMigrationPort(WindowsPaths paths)
     {
         string? configured = Environment.GetEnvironmentVariable(SourceDirectoryVariable);
         bool synthetic = !string.IsNullOrWhiteSpace(configured);
+        bool explicitIsolatedMode =
+            !synthetic &&
+            !string.IsNullOrWhiteSpace(
+                Environment.GetEnvironmentVariable("FURINA_UI1_DIRECTORY"));
+        if (explicitIsolatedMode)
+        {
+            // An explicit isolated data root (tests, validation, developer runs) must never
+            // probe or prompt for the production store. Production probing only happens for
+            // the default entry point, which does not set FURINA_UI1_DIRECTORY.
+            return Task.FromResult(new ProductionSourceInfo(
+                null,
+                false,
+                0,
+                null,
+                false,
+                "显式隔离模式（FURINA_UI1_DIRECTORY）：不探测生产数据。"));
+        }
+
         string? databasePath;
         if (synthetic)
         {
