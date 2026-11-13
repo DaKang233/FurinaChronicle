@@ -12,11 +12,10 @@
 
 工作流首先在 Linux 执行 `FurinaChronicle.Tests` 的 Release 测试。测试通过后，分别在 Windows 托管运行器上生成：
 
-- **默认 Windows 宿主**：独立 WinUI 3 `FurinaChronicle.Windows` 的 `win-x64`、自包含且不打包的 Release 应用，由 `eng/Publish-WinUI.ps1` 统一发布；
-- **旧 MAUI Windows 宿主**：`net10.0-windows10.0.19041.0`、`win-x64`、自包含且不打包的 Legacy 产物，保留一个发布周期用于回退；
+- **Windows 宿主**：独立 WinUI 3 `FurinaChronicle.Windows` 的 `win-x64`、自包含且不打包的 Release 应用，由 `eng/Publish-WinUI.ps1` 统一发布；
 - `net10.0-android`、内嵌程序集的 Android Release APK。
 
-WinUI 宿主默认读取隔离数据目录；生产库迁移必须在首次启动时由用户确认，按 [UI-6 生产切换评审](../project/UI6_PRODUCTION_SWITCH_REVIEW.md) 的复制迁移方案执行。旧 MAUI 宿主在保留期内仍可打开原有生产数据，二者不得同时写同一数据目录。独立 Android UI-1 验收包的本地命令见 [UI-1 DSH 验收指南](UI1_DSH_ACCEPTANCE_GUIDE.md)，普通 Android CI 包仍走现有应用入口。
+旧 MAUI Windows 宿主保留在源码中，仅用于兼容性、基本功能查看与验证，不进入 CI 产物，也没有专门的 UI 设计优化；需要时可在本地手动构建。WinUI 宿主直接使用与旧 MAUI 宿主相同的生产数据库文件（就地读写，不复制迁移），首次启动会做只读校验与强制备份并要求用户确认。两者不得同时运行；WinUI 会检测旧宿主进程并阻止写入。独立 Android UI-1 验收包的本地命令见 [UI-1 DSH 验收指南](UI1_DSH_ACCEPTANCE_GUIDE.md)，普通 Android CI 包仍走现有应用入口。
 
 仓库根目录的 `global.json` 将 SDK 限定在 .NET 10，并允许使用当前 .NET 10 的最新功能带和补丁版本，避免托管运行器预装更高主版本 SDK 后错误选择其他 SDK 或 MAUI 工作负载。
 
@@ -49,12 +48,11 @@ Windows PowerShell 可用下列命令生成密钥库文件的 Base64 文本，�
 
 ## 发布物
 
-每次成功运行会生成三个应用 artifact：
+每次成功运行会生成两个应用 artifact：
 
-- `FurinaChronicle-windows-win-x64-<commit>`：**默认 Windows 宿主**（独立 WinUI 3，unpackaged、自包含）；
-- `FurinaChronicle-windows-legacy-win-x64-<commit>`：旧 MAUI Windows 宿主，保留一个发布周期用于回退；
+- `FurinaChronicle-windows-win-x64-<commit>`：Windows 宿主（独立 WinUI 3，unpackaged、自包含）；已移除 MAUI Windows x64 编译；
 - `FurinaChronicle-android-<commit>`。
 
-默认 Windows 宿主的本地等价发布命令见 [WinUI 发布与默认入口](../project/UI6_RELEASE_PACKAGING.md)；发布脚本会生成 `BUILD-INFO.txt` 与 `SHA256SUMS.txt`。Android artifact 同时包含 `SHA256SUMS.txt`。三个 artifact 均附带仓库的 `README.md`、`LICENSE.txt` 与 `THIRD-PARTY-NOTICES.txt`。
+Windows 宿主的本地等价发布命令见 [WinUI 发布与默认入口](../project/UI6_RELEASE_PACKAGING.md)；发布脚本会生成 `BUILD-INFO.txt` 与 `SHA256SUMS.txt`。Android artifact 同时包含 `SHA256SUMS.txt`。两个 artifact 均附带仓库的 `README.md`、`LICENSE.txt` 与 `THIRD-PARTY-NOTICES.txt`。
 
 工作流只生成 GitHub Actions artifact，不会自动创建 GitHub Release，也不会自动部署到网站。公开发布仍是独立、可审计的操作。

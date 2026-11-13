@@ -504,3 +504,15 @@ Get-Content 'FurinaChronicle.App/Platforms/Windows/App.xaml.cs'
 
 
 实现状态见 [UI-6 双端收口实施记录](UI6_IMPLEMENTATION.md)：打包/CI 默认入口、单实例、迁移向导前置与日志/无障碍已交付；生产组合根与真实数据演练为剩余发布步骤。
+## 10. 后续修订（2026-11-13，用户指示，覆盖 D3/D5）
+
+- **D3 修订**：不再采用“复制迁移到新宿主目录”。WinUI 宿主**直接使用与 MAUI Windows 宿主相同的
+  生产数据库文件**（同一路径、就地读写）；首次使用现有库时做只读校验、强制备份并写接管标记，
+  失败不修改原库。`FURINA_UI1_DIRECTORY` 保留为显式隔离/测试模式。
+- **D5 修订**：旧 MAUI Windows 宿主**长期保留**，用于兼容性、基本功能查看与验证；它不再进入 CI
+  构建产物，也没有专门的 UI 设计优化。两个宿主不得同时运行。
+- **CI 修订**：Windows job 只构建 WinUI 3 宿主，已移除 MAUI Windows x64 编译；Android job 保持
+  MAUI Android 构建。
+- **单写者**：WinUI 使用数据根 `session.lock` 并检测旧 MAUI 进程；旧宿主不识别该锁，因此需要用户
+  先关闭其中一个。真正的并发双写保护仍需后续跨宿主协调（当前以进程检测与文档约束为准）。
+- 其余决策（D1/D2/D4/D6/D7/D12）不变。

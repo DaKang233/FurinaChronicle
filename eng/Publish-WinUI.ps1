@@ -80,8 +80,8 @@ $buildInfo = @(
     "Configuration: $Configuration"
     "Runtime: $Runtime"
     "Packaging: unpackaged, self-contained"
-    "Data: isolated UI-1 preview data until the production migration wizard is completed"
-    "Note: production database migration must be confirmed by the user on first start."
+    "Data: shares the MAUI Windows production database in place (first start validates and backs it up); set FURINA_UI1_DIRECTORY for isolated test data"
+    "Note: do not run the MAUI and WinUI hosts against the same database at the same time."
 ) -join [Environment]::NewLine
 Set-Content -LiteralPath (Join-Path $outputPath "BUILD-INFO.txt") -Value $buildInfo -Encoding utf8NoBOM
 
@@ -104,4 +104,4 @@ if (-not $NoArchive) {
 }
 
 Write-Host "Done: $outputPath"
-Write-Host "Next: run FurinaChronicle.Windows.exe and follow the first-start migration prompt."
+Write-Host "Next: run FurinaChronicle.Windows.exe and follow the first-start data adoption prompt."

@@ -58,7 +58,7 @@ jobs:
           retention-days: 14
 
   windows:
-    name: Windows Release (win-x64)
+    name: Windows Release (WinUI, win-x64)
     needs: test
     runs-on: windows-latest
     timeout-minutes: 45
@@ -69,13 +69,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up .NET and .NET MAUI for Windows
+      - name: Set up .NET
         uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
-          workloads: maui
 
-      - name: Publish the default Windows host (WinUI 3, unpackaged, self-contained)
+      - name: Publish the Windows host (WinUI 3, unpackaged, self-contained)
         shell: pwsh
         run: |
           $outputPath = Join-Path $env:GITHUB_WORKSPACE 'artifacts\windows-winui\win-x64'
@@ -84,42 +83,13 @@ jobs:
             exit $LASTEXITCODE
           }
 
-      - name: Upload the default Windows host
+      - name: Upload the Windows host
         uses: actions/upload-artifact@v7
         with:
           name: FurinaChronicle-windows-win-x64-${{ github.sha }}
           path: artifacts/windows-winui/win-x64
           if-no-files-found: error
           retention-days: 30
-
-      - name: Publish the legacy MAUI Windows host (retained for one release cycle)
-        shell: pwsh
-        run: |
-          $outputPath = Join-Path $env:GITHUB_WORKSPACE 'artifacts\windows-legacy\win-x64'
-          dotnet publish .\FurinaChronicle.App\FurinaChronicle.App.csproj `
-            --framework net10.0-windows10.0.19041.0 `
-            --configuration Release `
-            --output $outputPath `
-            -p:RuntimeIdentifierOverride=win-x64 `
-            -p:WindowsPackageType=None `
-            -p:WindowsAppSDKSelfContained=true `
-            -p:SelfContained=true `
-            -p:FurinaRequireReliableVersion=true
-
-          if ($LASTEXITCODE -ne 0) {
-            exit $LASTEXITCODE
-          }
-
-          Copy-Item .\README.md, .\LICENSE.txt, .\THIRD-PARTY-NOTICES.txt $outputPath
-
-      - name: Upload the legacy MAUI Windows host
-        uses: actions/upload-artifact@v7
-        with:
-          name: FurinaChronicle-windows-legacy-win-x64-${{ github.sha }}
-          path: artifacts/windows-legacy/win-x64
-          if-no-files-found: error
-          retention-days: 30
-
   android:
     name: Android Release APK
     needs: test
