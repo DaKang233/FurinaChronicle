@@ -43,6 +43,8 @@ internal static class Phase8BValidationTool
                     Path.GetFullPath(args[1]),
                     Path.GetFullPath(args[2])),
                 "inspect" => await InspectAsync(Path.GetFullPath(args[1])),
+                "roundtrip" when args.Length == 3 => await RoundtripAsync(
+                    Path.GetFullPath(args[1]), Path.GetFullPath(args[2])),
                 "backup" when args.Length == 3 => await BackupAsync(
                     Path.GetFullPath(args[1]),
                     Path.GetFullPath(args[2])),
@@ -68,7 +70,31 @@ internal static class Phase8BValidationTool
         Console.WriteLine("  generate <output-directory>");
         Console.WriteLine("  compare <expected.json> <actual.json>");
         Console.WriteLine("  inspect <portable.json>");
+        Console.WriteLine("  roundtrip <source.json> <new-export.json>");
         Console.WriteLine("  backup <source.db3> <new-destination.db3>");
+    }
+
+    private static async Task<int> RoundtripAsync(string sourcePath, string outputPath)
+    {
+        await using ValidationContext context = await ValidationContext.CreateAsync();
+        await using FileStream source = File.OpenRead(sourcePath);
+        ArchiveDomainPortablePackage package = await context.Files.ReadAsync(source);
+        ArchiveDomainPortablePlan plan = await context.Files.PlanAsync(package);
+        ArchiveOperationResult result = await context.Store.ApplyArchiveDomainPortableAsync(
+            new ArchiveDomainPortableApplyRequest(OperationId.New(), package, plan,
+                DateTimeOffset.UtcNow, "Isolated Portable roundtrip"));
+        if (result.Status != ChangeExecutionStatus.Applied)
+        {
+            throw new InvalidOperationException($"Portable apply returned {result.Status}.");
+        }
+
+        await using (var output = new FileStream(outputPath, FileMode.CreateNew, FileAccess.Write))
+        {
+            await context.Files.ExportAsync(plan.TargetArchiveId, package.DatasetKind, output, DateTimeOffset.UtcNow);
+        }
+
+        Console.WriteLine($"Applied {result.AffectedRecordCount} records in a fresh database.");
+        return await CompareAsync(sourcePath, outputPath);
     }
 
     private static async Task<int> GenerateAsync(string outputDirectory)
@@ -646,7 +672,9 @@ internal static class Phase8BValidationTool
                 Challenge(first.Id, 2, 9, BaseTime.AddDays(-1), false),
                 Challenge(first.Id, 3, 6, BaseTime, false),
                 Challenge(first.Id, 4, 9, BaseTime.AddHours(-6), false),
-                Challenge(second.Id, 5, 3, BaseTime.AddHours(2), true)
+                Challenge(second.Id, 5, 3, BaseTime.AddHours(2), true),
+                StageChallenge(first.Id, ChallengeMode.ImaginariumTheater, 6, 1, 4, 9),
+                StageChallenge(second.Id, ChallengeMode.StygianOnslaught, 7, 63, 6, null)
             ];
             ArchiveOperationResult result =
                 await Store.CommitChallengeObservationsAsync(
@@ -743,6 +771,35 @@ internal static class Phase8BValidationTool
 
         private static Guid SequenceGuid(int prefix, int sequence) =>
             Guid.Parse($"{prefix:D8}-0000-0000-0000-{sequence:D12}");
+
+        private static ChallengeObservation StageChallenge(
+            Guid accountId,
+            ChallengeMode mode,
+            int sequence,
+            int score,
+            int difficulty,
+            int? medalCount) => new(
+            new ChallengeObservationId(SequenceGuid(85000000, sequence)),
+            accountId,
+            mode,
+            $"synthetic-{sequence}",
+            BaseTime.AddDays(-5),
+            BaseTime.AddDays(10),
+            DataCompleteness.Complete,
+            [],
+            new RecordProvenance(
+                DataOrigin.OfficialApi,
+                new RecordTimestamps(ObservedAt: BaseTime, FetchedAt: BaseTime.AddSeconds(20)),
+                new DataSourceReference("phase8b7-synthetic-provider", sourceRecordId: $"stage-{sequence}")),
+            [new ChallengeStageResult(
+                $"round-{sequence}",
+                score,
+                OccurrenceTime.At(BaseTime.AddMinutes(-1), TimePrecision.Second),
+                [new ChallengeParticipant("10000093", "合成角色", null, 90, 5)],
+                ["合成增益"],
+                [new ChallengeEnemy("合成敌人", 95, null)])],
+            difficulty,
+            medalCount);
 
         private static T AssertSingle<T>(IReadOnlyList<T> items) =>
             items.Count == 1

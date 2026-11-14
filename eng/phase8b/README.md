@@ -21,6 +21,13 @@ Compare a source file and a device re-export:
 dotnet run --project .\eng\phase8b\FurinaChronicle.Phase8BValidation -- compare <source.json> <reexported.json>
 ```
 
+Import a device export into a fresh temporary Windows database, export it to a new
+file, and compare both files semantically:
+
+```powershell
+dotnet run --project .\eng\phase8b\FurinaChronicle.Phase8BValidation -- roundtrip <device-export.json> <new-export.json>
+```
+
 Create a consistent SQLite backup for the Windows application-upgrade check.
 The destination must not already exist:
 
