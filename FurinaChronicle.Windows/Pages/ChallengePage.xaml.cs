@@ -3,6 +3,7 @@
 
 using FurinaChronicle.Core.Challenges;
 using FurinaChronicle.Presentation.History;
+using FurinaChronicle.Windows.Composition;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -20,10 +21,13 @@ public sealed partial class ChallengePage : UserControl
 
     private readonly ChallengeHistoryState state;
     private bool rendering;
+    private readonly WindowsHistoryCollection collection;
+    private CancellationTokenSource? activeCollection;
 
-    public ChallengePage(ChallengeHistoryState state)
+    public ChallengePage(ChallengeHistoryState state, WindowsHistoryCollection collection)
     {
         this.state = state ?? throw new ArgumentNullException(nameof(state));
+        this.collection = collection;
         InitializeComponent();
         ModePicker.ItemsSource = Modes
             .Select(HistoryLabels.Mode)
@@ -37,7 +41,36 @@ public sealed partial class ChallengePage : UserControl
         Render();
     }
 
-    public void Leave() => state.Cancel();
+    public void Leave()
+    {
+        activeCollection?.Cancel();
+        state.Cancel();
+    }
+
+    private async void OnCollect(object sender, RoutedEventArgs e)
+    {
+        if (activeCollection is not null ||
+            state.Snapshot.SelectedArchiveId is not Guid archive ||
+            state.Snapshot.SelectedAccountId is not Guid account) return;
+
+        using var cancellation = new CancellationTokenSource();
+        activeCollection = cancellation;
+        CollectButton.IsEnabled = false;
+        CollectionStatus.Text = "正在准备采集…";
+        try
+        {
+            string? result = await collection.RunAsync(XamlRoot, archive, account, state.Snapshot.Mode, cancellation.Token);
+            CollectionStatus.Text = result ?? "已取消采集。";
+            await state.ReloadAsync(cancellation.Token);
+        }
+        catch (OperationCanceledException) { CollectionStatus.Text = "采集已取消。"; }
+        catch { CollectionStatus.Text = "采集未完成，请检查登录和网络后重试。"; }
+        finally
+        {
+            activeCollection = null;
+            Render();
+        }
+    }
 
     private void Render()
     {
@@ -72,6 +105,7 @@ public sealed partial class ChallengePage : UserControl
             PreviousButton.IsEnabled = snapshot.HasPrevious && !snapshot.IsBusy;
             NextButton.IsEnabled = snapshot.HasNext && !snapshot.IsBusy;
             ReloadButton.IsEnabled = !snapshot.IsBusy;
+            CollectButton.IsEnabled = !snapshot.IsBusy && activeCollection is null && snapshot.SelectedAccountId is not null;
             PageText.Text = snapshot.PageText;
             AutomationProperties.SetName(
                 StatusText,

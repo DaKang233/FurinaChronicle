@@ -10,9 +10,7 @@ using FurinaChronicle.Services.Passport;
 
 namespace FurinaChronicle.Windows.Composition;
 
-// Isolated-host credential vault. The file is encrypted with DPAPI (CurrentUser); neither the
-// file nor any exception/status text contains a plaintext SToken/MID. Only isolated data is used:
-// production credential migration stays behind the UI-6 review.
+// WinUI credential vault. Credentials are encrypted with DPAPI (CurrentUser).
 public sealed class DpapiPassportCredentialStore :
     IIsolatedCredentialStore,
     IPassportAccountStore
@@ -44,10 +42,13 @@ public sealed class DpapiPassportCredentialStore :
                 item.Id,
                 item.DisplayName,
                 CredentialValidation.MaskMid(item.Mid),
-                item.Aid,
+                item.BoundRoleUid ?? (item.LoginMethod is null ? item.Aid : string.Empty),
                 item.UpdatedAt,
                 item.IsUsable,
-                item.FailureReason))
+                item.FailureReason,
+                item.RoleUids,
+                item.Realm == PassportRealm.MainlandChina &&
+                    !string.IsNullOrWhiteSpace(item.SToken) && !string.IsNullOrWhiteSpace(item.Mid)))
             .ToArray();
 
     public async Task<Guid> SaveAsync(
@@ -74,7 +75,7 @@ public sealed class DpapiPassportCredentialStore :
             Payload payload = await ReadCoreAsync(cancellationToken);
             DateTimeOffset now = DateTimeOffset.Now;
             StoredEntry? existing = payload.Entries.FirstOrDefault(item =>
-                string.Equals(item.Aid, normalizedUid, StringComparison.Ordinal));
+                item.LoginMethod is null && string.Equals(item.Aid, normalizedUid, StringComparison.Ordinal));
             Guid id = existing?.Id ?? Guid.NewGuid();
             StoredEntry entry = new(
                 id,
@@ -202,17 +203,7 @@ public sealed class DpapiPassportCredentialStore :
             Payload payload = await ReadCoreAsync(cancellationToken);
             StoredEntry? existing = payload.Entries.FirstOrDefault(item =>
                 item.Id == account.Id);
-            StoredEntry entry = new(
-                account.Id,
-                existing?.Aid ?? account.Aid,
-                account.Mid ?? existing?.Mid ?? string.Empty,
-                account.Credentials.SToken ?? existing?.SToken ?? string.Empty,
-                account.DisplayName ?? existing?.DisplayName,
-                existing?.DeviceId ?? account.Device.DeviceId,
-                existing?.CreatedAt ?? account.CreatedAt,
-                account.UpdatedAt,
-                true,
-                null);
+            StoredEntry entry = FromAccount(account, existing);
             List<StoredEntry> entries = payload.Entries
                 .Where(item => item.Id != account.Id)
                 .Append(entry)
@@ -239,17 +230,7 @@ public sealed class DpapiPassportCredentialStore :
             StoredEntry? current = payload.Entries.FirstOrDefault(item =>
                 item.Id == original.Id);
             if (current is null || current.UpdatedAt != original.UpdatedAt) return false;
-            StoredEntry entry = new(
-                updated.Id,
-                current.Aid,
-                updated.Mid ?? current.Mid,
-                updated.Credentials.SToken ?? current.SToken,
-                updated.DisplayName ?? current.DisplayName,
-                current.DeviceId,
-                current.CreatedAt,
-                updated.UpdatedAt,
-                true,
-                null);
+            StoredEntry entry = FromAccount(updated, current);
             await WriteAsync(
                 new Payload(
                     PayloadVersion,
@@ -259,6 +240,28 @@ public sealed class DpapiPassportCredentialStore :
                         .ToList()),
                 cancellationToken);
             return true;
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    public async Task UpdateRolesAsync(PassportAccount account, IReadOnlyList<PassportGameRole> roles,
+        CancellationToken cancellationToken = default)
+    {
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            Payload payload = await ReadCoreAsync(cancellationToken);
+            int index = payload.Entries.FindIndex(item =>
+                item.Id == account.Id && item.UpdatedAt == account.UpdatedAt);
+            if (index < 0) return;
+            payload.Entries[index] = payload.Entries[index] with
+            {
+                RoleUids = roles.Select(role => role.Uid).Distinct(StringComparer.Ordinal).ToArray()
+            };
+            await WriteAsync(payload, cancellationToken);
         }
         finally
         {
@@ -305,6 +308,7 @@ public sealed class DpapiPassportCredentialStore :
                 PayloadVersion,
                 payload.Entries.Where(IsValidEntry).ToList());
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception)
         {
             loadWarning =
@@ -332,9 +336,19 @@ public sealed class DpapiPassportCredentialStore :
         entry is not null &&
         entry.Id != Guid.Empty &&
         !string.IsNullOrWhiteSpace(entry.Aid) &&
-        !string.IsNullOrWhiteSpace(entry.SToken) &&
-        !string.IsNullOrWhiteSpace(entry.Mid) &&
-        !string.IsNullOrWhiteSpace(entry.Aid);
+        !string.IsNullOrWhiteSpace(entry.DeviceId) &&
+        (!string.IsNullOrWhiteSpace(entry.SToken) || !string.IsNullOrWhiteSpace(entry.LToken) ||
+            !string.IsNullOrWhiteSpace(entry.CookieToken));
+
+    private static StoredEntry FromAccount(PassportAccount account, StoredEntry? existing) =>
+        new(account.Id, account.Aid, account.Mid, account.Credentials.SToken,
+            account.DisplayName, account.Device.DeviceId, account.CreatedAt, account.UpdatedAt,
+            true, null, account.LoginMethod, account.Realm, account.Credentials.LToken,
+            account.Credentials.CookieToken, account.Credentials.STokenUpdatedAt,
+            account.Credentials.LTokenUpdatedAt, account.Credentials.CookieTokenUpdatedAt,
+            account.Credentials.SessionVerifiedAt, account.Device.DeviceFingerprint,
+            existing?.BoundRoleUid ?? (existing is { LoginMethod: null } ? existing.Aid : null),
+            existing?.RoleUids);
 
     private static PassportAccount ToAccount(StoredEntry entry) =>
         new(
@@ -342,18 +356,19 @@ public sealed class DpapiPassportCredentialStore :
             entry.Aid,
             entry.Mid,
             entry.DisplayName,
-            PassportLoginMethod.ManualCookie,
+            entry.LoginMethod ?? PassportLoginMethod.ManualCookie,
             new PassportCredentials(
                 entry.SToken,
-                null,
-                null,
-                entry.UpdatedAt,
-                null,
-                null,
-                null),
-            new PassportDeviceIdentity(entry.DeviceId, null),
+                entry.LToken,
+                entry.CookieToken,
+                entry.STokenUpdatedAt ?? (entry.LoginMethod is null ? entry.UpdatedAt : null),
+                entry.LTokenUpdatedAt,
+                entry.CookieTokenUpdatedAt,
+                entry.SessionVerifiedAt),
+            new PassportDeviceIdentity(entry.DeviceId, entry.DeviceFingerprint),
             entry.CreatedAt,
-            entry.UpdatedAt);
+            entry.UpdatedAt,
+            entry.Realm);
 
     private static string SafeReason(string? reason) =>
         string.IsNullOrWhiteSpace(reason)
@@ -367,14 +382,25 @@ public sealed class DpapiPassportCredentialStore :
     private sealed record StoredEntry(
         Guid Id,
         string Aid,
-        string Mid,
-        string SToken,
+        string? Mid,
+        string? SToken,
         string? DisplayName,
         string DeviceId,
         DateTimeOffset CreatedAt,
         DateTimeOffset UpdatedAt,
         bool IsUsable,
-        string? FailureReason)
+        string? FailureReason,
+        PassportLoginMethod? LoginMethod = null,
+        PassportRealm Realm = PassportRealm.MainlandChina,
+        string? LToken = null,
+        string? CookieToken = null,
+        DateTimeOffset? STokenUpdatedAt = null,
+        DateTimeOffset? LTokenUpdatedAt = null,
+        DateTimeOffset? CookieTokenUpdatedAt = null,
+        DateTimeOffset? SessionVerifiedAt = null,
+        string? DeviceFingerprint = null,
+        string? BoundRoleUid = null,
+        string[]? RoleUids = null)
     {
     }
 }

@@ -43,7 +43,6 @@
                     Header="档案"
                     DisplayMemberPath="Label"
                     HorizontalAlignment="Stretch"
-                    SelectionChanged="OnArchiveSelectionChanged"
                     AutomationProperties.AutomationId="Ui5ChronicleArchivePicker" />
                 <ComboBox
                     x:Name="AccountPicker"
@@ -51,7 +50,6 @@
                     Header="账号范围"
                     DisplayMemberPath="Label"
                     HorizontalAlignment="Stretch"
-                    SelectionChanged="OnAccountSelectionChanged"
                     AutomationProperties.AutomationId="Ui5ChronicleAccountPicker" />
                 <ComboBox
                     x:Name="TimelinePicker"
@@ -59,7 +57,6 @@
                     Header="时间线"
                     DisplayMemberPath="Label"
                     HorizontalAlignment="Stretch"
-                    SelectionChanged="OnTimelineSelectionChanged"
                     AutomationProperties.AutomationId="Ui5ChronicleTimelinePicker" />
                 <ComboBox
                     x:Name="GranularityPicker"
@@ -67,7 +64,6 @@
                     Header="颗粒度"
                     DisplayMemberPath="Label"
                     HorizontalAlignment="Stretch"
-                    SelectionChanged="OnGranularitySelectionChanged"
                     AutomationProperties.AutomationId="Ui5ChronicleGranularityPicker" />
                 <ComboBox
                     x:Name="TimeRangePicker"
@@ -75,7 +71,6 @@
                     Header="时间范围"
                     DisplayMemberPath="Label"
                     HorizontalAlignment="Stretch"
-                    SelectionChanged="OnTimeRangeSelectionChanged"
                     AutomationProperties.AutomationId="Ui5ChronicleTimeRangePicker" />
             </Grid>
             <Grid Grid.Row="1" ColumnSpacing="10">
@@ -91,7 +86,6 @@
                     Header="领域"
                     DisplayMemberPath="Label"
                     HorizontalAlignment="Stretch"
-                    SelectionChanged="OnDomainSelectionChanged"
                     AutomationProperties.AutomationId="Ui5ChronicleDomainPicker" />
                 <ComboBox
                     x:Name="RankPicker"
@@ -99,21 +93,18 @@
                     Header="星级"
                     DisplayMemberPath="Label"
                     HorizontalAlignment="Stretch"
-                    SelectionChanged="OnRankSelectionChanged"
                     AutomationProperties.AutomationId="Ui5ChronicleRankPicker" />
                 <ToggleSwitch
                     x:Name="StateChangesSwitch"
                     Grid.Column="2"
                     Header="状态变化"
                     IsOn="False"
-                    Toggled="OnStateChangesToggled"
                     AutomationProperties.AutomationId="Ui5ChronicleStateChanges" />
                 <ToggleSwitch
                     x:Name="UndatedSwitch"
                     Grid.Column="3"
                     Header="未注明时间"
                     IsOn="True"
-                    Toggled="OnUndatedToggled"
                     AutomationProperties.AutomationId="Ui5ChronicleUndated" />
             </Grid>
         </Grid>
@@ -152,7 +143,6 @@
             <ListView
                 x:Name="EntryList"
                 SelectionMode="Single"
-                SelectionChanged="OnEntrySelectionChanged"
                 AutomationProperties.AutomationId="Ui5ChronicleEntryList">
                 <ListView.ItemTemplate>
                     <DataTemplate>

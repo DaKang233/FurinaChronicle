@@ -14,7 +14,18 @@ public sealed record IsolatedCredentialSummary(
     string BoundRoleUid,
     DateTimeOffset UpdatedAt,
     bool IsUsable,
-    string? FailureReason);
+    string? FailureReason,
+    IReadOnlyList<string>? RoleUids = null,
+    bool CanRefreshGacha = true)
+{
+    public bool MatchesRole(string uid) =>
+        string.Equals(BoundRoleUid, uid, StringComparison.Ordinal) ||
+        RoleUids?.Contains(uid, StringComparer.Ordinal) == true;
+
+    public string RoleLabel => RoleUids is { Count: > 0 }
+        ? string.Join("、", RoleUids)
+        : string.IsNullOrEmpty(BoundRoleUid) ? "尚未读取角色" : BoundRoleUid;
+}
 
 public interface IIsolatedCredentialStore
 {

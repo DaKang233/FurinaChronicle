@@ -1,14 +1,14 @@
 // Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
-using FurinaChronicle.Infrastructure.Diagnostics;
+using FurinaChronicle.Infrastructure.Persistence.Sqlite;
 
 namespace FurinaChronicle.Windows.Composition;
 
 // Lazily owns the one host environment (production or isolated). Construction is deferred until
 // the startup gate has proven the actual data root usable, so a bad path can never throw from the
 // application launch path before the error UI exists.
-public sealed class EnvironmentHolder(WindowsPaths paths)
+public sealed class EnvironmentHolder(WindowsPaths paths, SqliteDatabaseSession databaseSession)
 {
     private readonly SemaphoreSlim gate = new(1, 1);
     private WindowsHostEnvironment? environment;
@@ -21,7 +21,7 @@ public sealed class EnvironmentHolder(WindowsPaths paths)
         await gate.WaitAsync(cancellationToken);
         try
         {
-            return environment ??= new WindowsHostEnvironment(paths);
+            return environment ??= new WindowsHostEnvironment(paths, databaseSession);
         }
         finally
         {

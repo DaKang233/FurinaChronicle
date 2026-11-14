@@ -8,6 +8,7 @@ using FurinaChronicle.Core.Inventory;
 using FurinaChronicle.Core.Metadata;
 using FurinaChronicle.Services.Abstractions;
 using FurinaChronicle.Services.Gacha.Abstractions;
+using FurinaChronicle.Services.Gacha.Metadata;
 
 namespace FurinaChronicle.Infrastructure.Metadata;
 
@@ -39,8 +40,15 @@ public sealed class CompositeDomainMetadataService(
             return primary;
         }
 
-        GachaItemMetadata? item = await fallback.FindByIdAsync(
-            GachaGame.GenshinImpact, typeId, cancellationToken);
+        GachaItemMetadata? item;
+        try
+        {
+            item = await fallback.FindByIdAsync(GachaGame.GenshinImpact, typeId, cancellationToken);
+        }
+        catch (GachaMetadataUnavailableException)
+        {
+            return null;
+        }
         return item is null
             ? null
             : new DomainItemMetadata(

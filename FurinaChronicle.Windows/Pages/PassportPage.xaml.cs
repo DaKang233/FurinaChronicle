@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 using FurinaChronicle.Presentation.Management;
+using FurinaChronicle.Presentation.Notifications;
+using FurinaChronicle.Services.Passport;
+using FurinaChronicle.Windows.Composition;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -11,11 +14,24 @@ namespace FurinaChronicle.Windows.Pages;
 public sealed partial class PassportPage : UserControl
 {
     private readonly PassportCredentialState state;
+    private readonly MainlandPassportLoginService mainland;
+    private readonly HoYoLabPassportLoginService overseas;
+    private readonly IMiHoYoAccountProfileClient profiles;
+    private readonly DpapiPassportCredentialStore credentials;
+    private readonly INotificationCenter notifications;
     private bool rendering;
+    private bool signingIn;
 
-    public PassportPage(PassportCredentialState state)
+    public PassportPage(PassportCredentialState state, MainlandPassportLoginService mainland,
+        HoYoLabPassportLoginService overseas, IMiHoYoAccountProfileClient profiles,
+        DpapiPassportCredentialStore credentials, INotificationCenter notifications)
     {
         this.state = state;
+        this.mainland = mainland;
+        this.overseas = overseas;
+        this.profiles = profiles;
+        this.credentials = credentials;
+        this.notifications = notifications;
         InitializeComponent();
     }
 
@@ -51,21 +67,23 @@ public sealed partial class PassportPage : UserControl
             IsolatedCredentialSummary? selected = snapshot.SelectedCredential;
             DetailTitleText.Text = selected is null
                 ? "未选择凭据"
-                : selected.Label ?? $"UID {selected.BoundRoleUid}";
+                : selected.Label ?? "通行证";
             DetailBodyText.Text = selected is null
                 ? "添加凭据后在此查看绑定角色 UID、脱敏 MID、更新时间和可用状态；不显示 SToken。"
                 : $"MID：{selected.MaskedMid}（脱敏）\n" +
-                    $"绑定角色 UID：{selected.BoundRoleUid}\n" +
+                    $"绑定角色 UID：{selected.RoleLabel}\n" +
                     $"更新时间：{selected.UpdatedAt:yyyy-MM-dd HH:mm:ss zzz}\n" +
                     $"状态：{(selected.IsUsable ? "可用" : "失效")}" +
                     (string.IsNullOrWhiteSpace(selected.FailureReason)
                         ? string.Empty
                         : $"\n原因：{selected.FailureReason}") +
                     "\nSToken：不在界面显示。";
-            DeleteButton.IsEnabled = !snapshot.IsBusy && selected is not null;
-            ClearButton.IsEnabled = !snapshot.IsBusy && snapshot.HasCredentials;
-            AddButton.IsEnabled = !snapshot.IsBusy;
-            RefreshButton.IsEnabled = !snapshot.IsBusy;
+            bool canEdit = !snapshot.IsBusy && !signingIn;
+            DeleteButton.IsEnabled = canEdit && selected is not null;
+            ClearButton.IsEnabled = canEdit && snapshot.HasCredentials;
+            AddButton.IsEnabled = canEdit;
+            LoginButton.IsEnabled = canEdit;
+            RefreshButton.IsEnabled = canEdit;
         }
         finally
         {
@@ -107,7 +125,7 @@ public sealed partial class PassportPage : UserControl
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
-            Title = "手动添加隔离宿主凭据",
+            Title = "手动添加抽卡刷新凭据",
             PrimaryButtonText = "保存",
             CloseButtonText = "取消",
             DefaultButton = ContentDialogButton.Primary,
@@ -118,8 +136,7 @@ public sealed partial class PassportPage : UserControl
                 {
                     new TextBlock
                     {
-                        Text = "仅保存到本机隔离宿主（DPAPI CurrentUser 加密）；" +
-                            "不会显示、记录或回传 SToken/MID。生产凭据迁移待 UI-6 评审。",
+                        Text = "用于绑定角色的抽卡刷新。凭据由 Windows 加密保存在本机。",
                         TextWrapping = TextWrapping.Wrap
                     },
                     sTokenBox,
@@ -142,6 +159,7 @@ public sealed partial class PassportPage : UserControl
             uidBox.Text,
             labelBox.Text);
         Render();
+        Report("保存登录凭据", result);
         if (!result.Succeeded)
         {
             await ShowMessageAsync("凭据未保存", result.Message);
@@ -168,6 +186,7 @@ public sealed partial class PassportPage : UserControl
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
         PassportCredentialActionResult result = await state.DeleteSelectedAsync();
         Render();
+        Report("删除登录凭据", result);
         if (!result.Succeeded) await ShowMessageAsync("凭据未删除", result.Message);
     }
 
@@ -190,14 +209,51 @@ public sealed partial class PassportPage : UserControl
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
         PassportCredentialActionResult result = await state.ClearAsync();
         Render();
+        Report("清除全部登录凭据", result);
         if (!result.Succeeded) await ShowMessageAsync("凭据未清除", result.Message);
     }
 
     private async void OnRefresh(object sender, RoutedEventArgs e)
     {
-        await state.RefreshAsync();
+        Guid? selected = state.Snapshot.SelectedCredentialId;
+        signingIn = true;
         Render();
+        string? notice = null;
+        try
+        {
+            if (selected is Guid id && await credentials.GetByIdAsync(id) is { Credentials.LToken: not null } account)
+            {
+                var profile = await profiles.GetAsync(account);
+                await credentials.UpdateRolesAsync(account, profile.Roles);
+                notice = $"已更新 {profile.Roles.Count} 个角色。";
+            }
+            await state.RefreshAsync();
+        }
+        catch { notice = "角色列表暂未更新，请检查网络或重新登录。"; }
+        finally
+        {
+            signingIn = false;
+            Render();
+            if (notice is not null)
+            {
+                StatusText.Text = notice;
+                notifications.Publish(new(
+                    notice.StartsWith("已更新", StringComparison.Ordinal)
+                        ? NotificationSeverity.Success
+                        : NotificationSeverity.Warning,
+                    NotificationCategory.Passport,
+                    "刷新角色列表",
+                    notice));
+            }
+        }
     }
+
+    private void Report(string operation, PassportCredentialActionResult result) =>
+        notifications.Publish(new(
+            result.Succeeded ? NotificationSeverity.Success : NotificationSeverity.Warning,
+            NotificationCategory.Passport,
+            operation,
+            result.Message));
 
     private void OnOpenGachaRefresh(object sender, RoutedEventArgs e) =>
         RefreshRequested?.Invoke(this, EventArgs.Empty);
@@ -217,10 +273,10 @@ public sealed partial class PassportPage : UserControl
     public sealed record CredentialRow(IsolatedCredentialSummary Credential)
     {
         public string DisplayLabel =>
-            Credential.Label ?? $"绑定 UID {Credential.BoundRoleUid}";
+            Credential.Label ?? "通行证";
 
         public string DetailLabel =>
-            $"MID {Credential.MaskedMid} · UID {Credential.BoundRoleUid} · " +
+            $"MID {Credential.MaskedMid} · 角色 {Credential.RoleLabel} · " +
             $"{(Credential.IsUsable ? "可用" : "失效")} · " +
             $"{Credential.UpdatedAt:yyyy-MM-dd HH:mm:ss}";
     }

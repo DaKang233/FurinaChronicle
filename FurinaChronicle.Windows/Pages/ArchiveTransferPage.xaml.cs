@@ -4,8 +4,10 @@
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.History;
 using FurinaChronicle.Presentation.Management;
+using FurinaChronicle.Presentation.Notifications;
 using FurinaChronicle.Services.Archives.Portable;
 using FurinaChronicle.Services.History;
+using FurinaChronicle.Services.HistoryDomains.Portable;
 using FurinaChronicle.Windows.Composition;
 using FurinaChronicle.Windows.Shell;
 using Microsoft.UI.Xaml;
@@ -20,6 +22,9 @@ public sealed partial class ArchiveTransferPage : UserControl
     private readonly ArchiveTransferState state;
     private readonly IFilePickerService filePicker;
     private readonly WindowsVersionInfo version;
+    private readonly IArchiveDomainPortableFileService portable;
+    private readonly IArchiveDomainPortableApplier portableApplier;
+    private readonly INotificationCenter notifications;
     private bool rendering;
     private static readonly string[] ModeLabels =
         ["Merge（补充/合并）", "Scoped Replace（明确范围替换）"];
@@ -41,11 +46,17 @@ public sealed partial class ArchiveTransferPage : UserControl
     public ArchiveTransferPage(
         ArchiveTransferState state,
         IFilePickerService filePicker,
-        WindowsVersionInfo version)
+        WindowsVersionInfo version,
+        IArchiveDomainPortableFileService portable,
+        IArchiveDomainPortableApplier portableApplier,
+        INotificationCenter notifications)
     {
         this.state = state;
         this.filePicker = filePicker;
         this.version = version;
+        this.portable = portable;
+        this.portableApplier = portableApplier;
+        this.notifications = notifications;
         InitializeComponent();
         rendering = true;
         ExportAllRadio.IsChecked = true;
@@ -55,6 +66,7 @@ public sealed partial class ArchiveTransferPage : UserControl
         ReplaceKindPicker.SelectedIndex = 0;
         ReplaceDomainPicker.ItemsSource = DomainLabels;
         ReplaceDomainPicker.SelectedIndex = 0;
+        PortableKindPicker.SelectedIndex = 0;
         rendering = false;
     }
 
@@ -90,6 +102,11 @@ public sealed partial class ArchiveTransferPage : UserControl
                 : snapshot.SelectedArchive is null
                     ? "范围：请选择档案"
                     : $"范围：档案“{snapshot.SelectedArchive.Name}”";
+            Guid? portableArchive = (PortableArchivePicker.SelectedItem as PlayerArchive)?.Id;
+            PortableArchivePicker.ItemsSource = snapshot.Archives;
+            PortableArchivePicker.SelectedItem = snapshot.Archives.FirstOrDefault(a => a.Id == portableArchive)
+                ?? snapshot.Archives.FirstOrDefault();
+            SetPortableButtons();
             PackageSummaryText.Text = snapshot.PackageSummary;
             PlanSummaryText.Text = snapshot.PlanSummary;
             MappingSummaryText.Text = snapshot.MappingSummary;

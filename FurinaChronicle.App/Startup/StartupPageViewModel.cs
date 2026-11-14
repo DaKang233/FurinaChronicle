@@ -39,7 +39,13 @@ public partial class StartupPageViewModel(ApplicationStartupService startupServi
 
         try
         {
-            await startupService.InitializeAsync(cancellationToken);
+            if (!await startupService.InitializeAsync(cancellationToken))
+            {
+                StatusMessage = "数据库正在被其他实例使用。";
+                ErrorMessage = "请关闭正在使用此数据库的 WinUI 或 MAUI 宿主，再重新启动本应用。";
+                IsFailed = true;
+                return false;
+            }
 
             StatusMessage = "初始化完成。";
             return true;

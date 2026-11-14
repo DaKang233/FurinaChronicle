@@ -513,6 +513,8 @@ Get-Content 'FurinaChronicle.App/Platforms/Windows/App.xaml.cs'
   构建产物，也没有专门的 UI 设计优化。两个宿主不得同时运行。
 - **CI 修订**：Windows job 只构建 WinUI 3 宿主，已移除 MAUI Windows x64 编译；Android job 保持
   MAUI Android 构建。
-- **单写者**：WinUI 使用数据根 `session.lock` 并检测旧 MAUI 进程；旧宿主不识别该锁，因此需要用户
-  先关闭其中一个。真正的并发双写保护仍需后续跨宿主协调（当前以进程检测与文档约束为准）。
+- **单写者（2026-11-14 补记）**：两套 Windows 宿主在启动时独占同一数据库的
+  `.initialize.lock`，并在使用数据库期间持续持有。WinUI 首次接管期间也持锁。
+  旧版 MAUI 先启动时，WinUI 继续通过进程探测拒绝接管；WinUI 先启动时，旧版 MAUI
+  初始化数据库也需要同一个侧文件。关闭当前宿主后，另一个宿主可重新打开同一数据库。
 - 其余决策（D1/D2/D4/D6/D7/D12）不变。

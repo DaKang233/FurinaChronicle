@@ -5,10 +5,19 @@ using FurinaChronicle.Infrastructure.Archives.Portable;
 using FurinaChronicle.Infrastructure.Chronicle;
 using FurinaChronicle.Infrastructure.Diagnostics;
 using FurinaChronicle.Infrastructure.Gacha.Metadata;
+using FurinaChronicle.Infrastructure.Gacha.Metadata.Abstractions;
+using FurinaChronicle.Infrastructure.Gacha.Metadata.Localization;
+using FurinaChronicle.Infrastructure.Gacha.Metadata.Persistence;
+using FurinaChronicle.Infrastructure.Gacha.Metadata.Remote;
+using FurinaChronicle.Infrastructure.HistoryDomains.Portable;
+using FurinaChronicle.Infrastructure.HistoryDomains.Collecting;
+using FurinaChronicle.Infrastructure.Metadata;
+using FurinaChronicle.Infrastructure.Passport;
 using FurinaChronicle.Infrastructure.Persistence.Sqlite;
 using FurinaChronicle.Presentation.Gacha;
 using FurinaChronicle.Presentation.History;
 using FurinaChronicle.Presentation.Management;
+using FurinaChronicle.Presentation.Notifications;
 using FurinaChronicle.Services.Abstractions;
 using FurinaChronicle.Services.Archives;
 using FurinaChronicle.Services.Archives.Portable;
@@ -21,6 +30,8 @@ using FurinaChronicle.Services.Gacha.Portable;
 using FurinaChronicle.Services.Gacha.Writing;
 using FurinaChronicle.Services.History;
 using FurinaChronicle.Services.HistoryDomains;
+using FurinaChronicle.Services.HistoryDomains.Portable;
+using FurinaChronicle.Services.HistoryDomains.Collecting;
 using FurinaChronicle.Services.Passport;
 using FurinaChronicle.Windows.Shell;
 using Microsoft.Extensions.DependencyInjection;
@@ -63,7 +74,8 @@ public sealed class WindowsComposition : IAsyncDisposable
     public static WindowsComposition Create()
     {
         var paths = new WindowsPaths();
-        var environmentHolder = new EnvironmentHolder(paths);
+        var databaseSession = new SqliteDatabaseSession(new SqliteDatabaseOptions(paths.DatabasePath));
+        var environmentHolder = new EnvironmentHolder(paths, databaseSession);
         var version = WindowsVersionInfo.FromAssembly(typeof(WindowsComposition).Assembly);
         var dispatcherQueue = DispatcherQueue.GetForCurrentThread()
             ?? throw new InvalidOperationException("The WinUI composition root must run on the UI thread.");
@@ -73,10 +85,13 @@ public sealed class WindowsComposition : IAsyncDisposable
 
         var services = new ServiceCollection();
         services.AddSingleton(paths);
+        services.AddSingleton(_ => databaseSession);
         services.AddSingleton(environmentHolder);
         services.AddSingleton(version);
         services.AddSingleton<IUiDispatcher>(dispatcher);
         services.AddSingleton<IFilePickerService>(filePicker);
+        services.AddSingleton<INotificationCenter>(sp => new NotificationCenter(
+            sp.GetRequiredService<IUiDispatcher>()));
         services.AddSingleton<IArchiveSelectionStore>(selectionStore);
 
         // Environment and repositories are resolved lazily; nothing below is constructed until a
@@ -98,6 +113,20 @@ public sealed class WindowsComposition : IAsyncDisposable
             sp => sp.GetRequiredService<SqliteGachaAtomicChangeStore>());
         services.AddSingleton<IArchiveDomainHistoryStore>(
             sp => sp.GetRequiredService<SqliteGachaAtomicChangeStore>());
+        services.AddSingleton<IArchiveDomainPortableApplier>(
+            sp => sp.GetRequiredService<SqliteGachaAtomicChangeStore>());
+        services.AddSingleton<IArchiveDomainPortableFileService, ArchiveDomainPortableFileService>();
+        services.AddSingleton(sp => new SnapMetadataClient(new SnapMetadataOptions(
+            Path.Combine(paths.MetadataDirectory, "SnapMetadata"))));
+        if (paths.IsProduction)
+        {
+            services.AddSingleton(new GachaMetadataOptions(Path.Combine(paths.MetadataDirectory, "genshin-metadata.db3")));
+            services.AddSingleton<GachaMetadataDatabase>();
+            services.AddSingleton<IGachaMetadataRemoteSource, GenshinCalculatorMetadataSource>();
+            services.AddSingleton<IGachaLocalizationSource, EmbeddedGachaLocalizationSource>();
+            services.AddSingleton<IGachaItemMetadataProvider, SqliteGachaItemMetadataProvider>();
+            services.AddSingleton<IDomainMetadataService, CompositeDomainMetadataService>();
+        }
 
         services.AddSingleton<GetPlayerArchives>();
         services.AddSingleton<GetGameAccounts>();
@@ -139,6 +168,21 @@ public sealed class WindowsComposition : IAsyncDisposable
             sp => sp.GetRequiredService<DpapiPassportCredentialStore>());
         services.AddSingleton<IPassportAccountStore>(
             sp => sp.GetRequiredService<DpapiPassportCredentialStore>());
+        services.AddSingleton<MiHoYoPassportClient>();
+        services.AddSingleton<IDeviceFingerprintProvider, MiHoYoDeviceFingerprintClient>();
+        services.AddSingleton<IMainlandPassportClient, MainlandPassportClient>();
+        services.AddSingleton<IHoYoLabPassportClient, HoYoLabPassportClient>();
+        services.AddSingleton<IMiHoYoAccountProfileClient, MiHoYoAccountProfileClient>();
+        services.AddTransient<PassportAccountWriter>();
+        services.AddTransient<MainlandPassportLoginService>();
+        services.AddTransient<HoYoLabPassportLoginService>();
+        services.AddSingleton<ISpiralAbyssSource, HoYoGameRecordSpiralAbyssSource>();
+        services.AddSingleton<IChallengeModeSource, HoYoGameRecordChallengeModeSource>();
+        services.AddSingleton<ICharacterWeaponSource, HoYoGameRecordCharacterWeaponSource>();
+        services.AddSingleton<CollectSpiralAbyss>();
+        services.AddSingleton<CollectChallengeMode>();
+        services.AddSingleton<CollectCharacterWeapon>();
+        services.AddTransient<WindowsHistoryCollection>();
         services.AddTransient<PassportCredentialState>();
         services.AddSingleton(sp => new STokenRefreshComposition(
             sp.GetRequiredService<WindowsHostEnvironment>(),
@@ -165,18 +209,8 @@ public sealed class WindowsComposition : IAsyncDisposable
             new GetGameAccounts(
                 sp.GetRequiredService<IPlayerArchiveRepository>(),
                 sp.GetRequiredService<IGameAccountRepository>())));
-        services.AddTransient(sp => new CharacterWeaponHistoryState(
-            sp.GetRequiredService<IArchiveDomainHistoryStore>(),
-            new GetPlayerArchives(sp.GetRequiredService<IPlayerArchiveRepository>()),
-            new GetGameAccounts(
-                sp.GetRequiredService<IPlayerArchiveRepository>(),
-                sp.GetRequiredService<IGameAccountRepository>())));
-        services.AddTransient(sp => new ChallengeHistoryState(
-            sp.GetRequiredService<IArchiveDomainHistoryStore>(),
-            new GetPlayerArchives(sp.GetRequiredService<IPlayerArchiveRepository>()),
-            new GetGameAccounts(
-                sp.GetRequiredService<IPlayerArchiveRepository>(),
-                sp.GetRequiredService<IGameAccountRepository>())));
+        services.AddTransient<CharacterWeaponHistoryState>();
+        services.AddTransient<ChallengeHistoryState>();
         services.AddSingleton<IStartupProbe, WindowsStartupProbe>();
         services.AddTransient<StartupState>();
         services.AddSingleton<IProcessIdentityPort, WindowsProcessIdentityPort>();

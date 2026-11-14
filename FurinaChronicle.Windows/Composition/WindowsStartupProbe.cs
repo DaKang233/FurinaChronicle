@@ -10,13 +10,14 @@ namespace FurinaChronicle.Windows.Composition;
 
 // Startup gate for both host modes:
 //  - explicit isolated root: writable guard + session lock + synthetic environment;
-//  - production: read-only metadata/adoption gate first; only after a verified adoption marker
-//    does it take the same database root's lock and open the same furinachronicle.db3 in place.
+//  - production: acquire the shared database session before inspection and adoption;
+//    open the database for writing only after a verified adoption marker.
 // The production path is never opened before the user confirms adoption.
 public sealed class WindowsStartupProbe(
     WindowsPaths paths,
     EnvironmentHolder holder,
     SessionLockManager sessionLock,
+    SqliteDatabaseSession databaseSession,
     HostAdoptionState adoption,
     WindowsVersionInfo version) : IStartupProbe
 {
@@ -32,20 +33,39 @@ public sealed class WindowsStartupProbe(
                 configurationError);
         }
 
-        string? adoptionWarning;
         if (paths.IsIsolated)
         {
             StartupProbeResult pathCheck = IsolatedStartupGuard.CheckAndPrepare(
                 paths.DataRoot,
                 WindowsPaths.PreviewDirectoryVariable);
             if (!pathCheck.Succeeded) return pathCheck;
-            adoptionWarning = null;
         }
         else
         {
+            try
+            {
+                if (!databaseSession.TryAcquire())
+                {
+                    return new(false, StartupFailureKind.SessionBusy, "数据库正在被其他实例使用。",
+                        "请关闭正在使用此数据库的 MAUI 或 WinUI 宿主，然后重试。");
+                }
+            }
+            catch (UnauthorizedAccessException exception)
+            {
+                return new(false, StartupFailureKind.DirectoryNotWritable, "无法建立数据库会话锁。",
+                    $"Windows 拒绝访问（0x{exception.HResult:X8}）。请检查调试进程的权限。\n" +
+                    $"锁文件：{databaseSession.DatabasePath}.initialize.lock");
+            }
+            catch (IOException)
+            {
+                return new(false, StartupFailureKind.DirectoryNotWritable, "数据库目录不可用。",
+                    "无法建立数据库会话锁，请检查数据目录。");
+            }
+
             await adoption.EnterAsync(cancellationToken);
             if (adoption.Snapshot.LegacyHostRunning)
             {
+                databaseSession.Dispose();
                 return new(
                     false,
                     StartupFailureKind.SessionBusy,
@@ -64,8 +84,6 @@ public sealed class WindowsStartupProbe(
                     Warning = adoption.Snapshot.Error
                 };
             }
-
-            adoptionWarning = null;
         }
 
         SessionLockResult lockResult = await sessionLock.AcquireAsync(
@@ -129,7 +147,7 @@ public sealed class WindowsStartupProbe(
                 paths.IsIsolated ? "隔离数据库已就绪。" : "生产数据库已就绪。",
                 $"数据库：{environment.DatabasePath}")
             {
-                Warning = lockWarning ?? adoptionWarning
+                Warning = lockWarning
             };
         }
         catch (OperationCanceledException)

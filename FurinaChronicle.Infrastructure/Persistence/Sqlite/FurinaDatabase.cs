@@ -34,17 +34,23 @@ public sealed class FurinaDatabase : IAsyncDisposable
     private const int CurrentApplicationId = 0x46554348;
 
     private readonly SemaphoreSlim initializeGate = new(1, 1);
+    private readonly SqliteDatabaseSession? session;
     private bool initialized;
 
     internal SQLiteAsyncConnection Connection { get; }
 
     internal string DatabasePath { get; }
 
-    public FurinaDatabase(SqliteDatabaseOptions options)
+    public FurinaDatabase(SqliteDatabaseOptions options, SqliteDatabaseSession? session = null)
     {
         ArgumentNullException.ThrowIfNull(options);
 
         DatabasePath = options.DatabasePath;
+        this.session = session;
+        if (session is not null && !string.Equals(session.DatabasePath, DatabasePath, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException("The session must protect this database.", nameof(session));
+        }
         string? directory = Path.GetDirectoryName(DatabasePath);
         if (!string.IsNullOrWhiteSpace(directory))
         {
@@ -64,6 +70,11 @@ public sealed class FurinaDatabase : IAsyncDisposable
     public async Task InitializeAsync(
         CancellationToken cancellationToken = default)
     {
+        if (session is { IsHeld: false })
+        {
+            throw new InvalidOperationException("The host must acquire the database session before initialization.");
+        }
+
         if (initialized)
         {
             return;
@@ -77,9 +88,11 @@ public sealed class FurinaDatabase : IAsyncDisposable
                 return;
             }
 
-            await Connection.SetBusyTimeoutAsync(TimeSpan.FromSeconds(5));
             cancellationToken.ThrowIfCancellationRequested();
-            using FileStream initializationLock = await AcquireInitializationLockAsync(cancellationToken);
+            using FileStream? initializationLock = session is null
+                ? await AcquireInitializationLockAsync(cancellationToken)
+                : null;
+            await Connection.SetBusyTimeoutAsync(TimeSpan.FromSeconds(5));
             await Connection.ExecuteAsync("PRAGMA foreign_keys = ON;");
 
             int schemaVersion = await Connection.ExecuteScalarAsync<int>(
@@ -177,14 +190,13 @@ public sealed class FurinaDatabase : IAsyncDisposable
     private async Task<FileStream> AcquireInitializationLockAsync(CancellationToken cancellationToken)
     {
         // Keep the sidecar in place so competing processes always lock the same file.
-        string path = DatabasePath + ".initialize.lock";
         long startedAt = Stopwatch.GetTimestamp();
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
             try
             {
-                return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+                return SqliteDatabaseSession.OpenInitializationLock(DatabasePath);
             }
             catch (IOException exception)
             {

@@ -11,7 +11,7 @@
         <StackPanel MaxWidth="680" VerticalAlignment="Center" Spacing="14">
             <TextBlock Text="FurinaChronicle" FontSize="30" FontWeight="SemiBold" />
             <TextBlock
-                Text="正在打开隔离合成数据库；本宿主不会发现生产库或凭据。"
+                x:Name="StartupIntro"
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                 TextWrapping="Wrap" />
             <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
@@ -36,7 +36,7 @@
                 Click="OnRetry"
                 Visibility="Collapsed"
                 AutomationProperties.AutomationId="Ui4StartupRetry"
-                AutomationProperties.Name="重试初始化隔离数据库" />
+                AutomationProperties.Name="重试初始化数据库" />
             <TextBlock
                 x:Name="VersionText"
                 FontSize="12"

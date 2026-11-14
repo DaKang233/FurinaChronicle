@@ -12,10 +12,11 @@ namespace FurinaChronicle.Windows.Composition;
 
 // Windows-side adoption port. It only inspects file metadata until the user confirms; the source
 // database is opened read-only for validation/backup and is never copied, moved or schema-migrated.
-public sealed class WindowsHostAdoptionPort(WindowsPaths paths) : IHostAdoptionPort
+public sealed class WindowsHostAdoptionPort(WindowsPaths paths, SqliteDatabaseSession databaseSession) : IHostAdoptionPort
 {
     private static readonly JsonSerializerOptions JsonOptions =
         new(JsonSerializerDefaults.Web);
+    private bool legacyCheckPassed;
 
     public Task<HostDatabaseInfo> InspectDatabaseAsync(
         CancellationToken cancellationToken = default)
@@ -175,7 +176,7 @@ public sealed class WindowsHostAdoptionPort(WindowsPaths paths) : IHostAdoptionP
     {
         string? directory = Path.GetDirectoryName(databasePath);
         if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
-        var database = new FurinaDatabase(new SqliteDatabaseOptions(databasePath));
+        var database = new FurinaDatabase(new SqliteDatabaseOptions(databasePath), databaseSession);
         try
         {
             await database.InitializeAsync(cancellationToken);
@@ -220,6 +221,10 @@ public sealed class WindowsHostAdoptionPort(WindowsPaths paths) : IHostAdoptionP
     public Task<bool> IsLegacyHostRunningAsync(
         CancellationToken cancellationToken = default)
     {
+        // After the first successful probe, later MAUI launches cannot initialize while
+        // this host still holds the shared sidecar. They must not invalidate an adoption.
+        if (legacyCheckPassed && databaseSession.IsHeld) return Task.FromResult(false);
+
         string[] knownNames =
         [
             "FurinaChronicle.App",
@@ -253,25 +258,7 @@ public sealed class WindowsHostAdoptionPort(WindowsPaths paths) : IHostAdoptionP
         {
         }
 
-        // The MAUI initialization lock is a conservative second signal.
-        string legacyLock = paths.DatabasePath + ".initialize.lock";
-        if (!File.Exists(legacyLock)) return Task.FromResult(false);
-        try
-        {
-            using var probe = new FileStream(
-                legacyLock,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.None);
-            return Task.FromResult(false);
-        }
-        catch (IOException)
-        {
-            return Task.FromResult(true);
-        }
-        catch (Exception)
-        {
-            return Task.FromResult(true);
-        }
+        legacyCheckPassed = databaseSession.IsHeld;
+        return Task.FromResult(false);
     }
 }

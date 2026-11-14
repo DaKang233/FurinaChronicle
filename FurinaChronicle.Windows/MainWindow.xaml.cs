@@ -3,8 +3,12 @@
 
 using FurinaChronicle.Presentation.History;
 using FurinaChronicle.Presentation.Management;
+using FurinaChronicle.Presentation.Notifications;
+using FurinaChronicle.Services.HistoryDomains.Portable;
+using FurinaChronicle.Services.Passport;
 using FurinaChronicle.Windows.Composition;
 using FurinaChronicle.Windows.Pages;
+using FurinaChronicle.Windows.Shell;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
@@ -18,6 +22,7 @@ namespace FurinaChronicle.Windows;
 public sealed partial class MainWindow : Window
 {
     private readonly WindowsComposition composition;
+    private readonly INotificationCenter notificationCenter;
     private readonly StartupPage startupPage;
     private OverviewPage? overviewPage;
     private ArchivePage? archivePage;
@@ -28,6 +33,7 @@ public sealed partial class MainWindow : Window
     private CharacterWeaponPage? characterWeaponPage;
     private ChallengePage? challengePage;
     private PassportPage? passportPage;
+    private NotificationCenterPanel? notificationCenterPanel;
     private HostAdoptionPage? adoptionPage;
     private bool shellReady;
     private bool shellBuilt;
@@ -48,9 +54,10 @@ public sealed partial class MainWindow : Window
         // guard passed (BuildShell), so an invalid FURINA_UI1_DIRECTORY can never throw out of
         // Application.OnLaunched before the startup failure page exists.
         composition.Services.GetRequiredService<IFilePickerService>().SetOwner(this);
+        notificationCenter = composition.Services.GetRequiredService<INotificationCenter>();
 
 
-        startupPage = new StartupPage();
+        startupPage = new StartupPage(composition.Paths.IsIsolated);
         startupPage.SetVersion(
             $"{composition.Version.UserVisibleName} · Phase {composition.Version.PhaseLabel} · " +
             $"Commit {composition.Version.Commit}");
@@ -176,7 +183,8 @@ public sealed partial class MainWindow : Window
         PageHost.Children.Add(overviewPage);
 
         archivePage = new ArchivePage(
-            composition.Services.GetRequiredService<ArchiveManagementState>())
+            composition.Services.GetRequiredService<ArchiveManagementState>(),
+            notificationCenter)
         {
             Visibility = Visibility.Collapsed
         };
@@ -201,7 +209,10 @@ public sealed partial class MainWindow : Window
         archiveTransferPage = new ArchiveTransferPage(
             composition.Services.GetRequiredService<ArchiveTransferState>(),
             composition.Services.GetRequiredService<IFilePickerService>(),
-            composition.Version)
+            composition.Version,
+            composition.Services.GetRequiredService<IArchiveDomainPortableFileService>(),
+            composition.Services.GetRequiredService<IArchiveDomainPortableApplier>(),
+            notificationCenter)
         {
             Visibility = Visibility.Collapsed
         };
@@ -217,21 +228,38 @@ public sealed partial class MainWindow : Window
         PageHost.Children.Add(chroniclePage);
 
         characterWeaponPage = new CharacterWeaponPage(
-            composition.Services.GetRequiredService<CharacterWeaponHistoryState>())
+            composition.Services.GetRequiredService<CharacterWeaponHistoryState>(),
+            composition.Services.GetRequiredService<WindowsHistoryCollection>())
         {
             Visibility = Visibility.Collapsed
         };
         PageHost.Children.Add(characterWeaponPage);
 
         challengePage = new ChallengePage(
-            composition.Services.GetRequiredService<ChallengeHistoryState>())
+            composition.Services.GetRequiredService<ChallengeHistoryState>(),
+            composition.Services.GetRequiredService<WindowsHistoryCollection>())
         {
             Visibility = Visibility.Collapsed
         };
         PageHost.Children.Add(challengePage);
 
+        notificationCenterPanel = new NotificationCenterPanel(notificationCenter)
+        {
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Bottom,
+            Margin = new Thickness(0, 0, 16, 16),
+            Visibility = Visibility.Collapsed
+        };
+        Canvas.SetZIndex(notificationCenterPanel, 100);
+        RootGrid.Children.Add(notificationCenterPanel);
+
         passportPage = new PassportPage(
-            composition.Services.GetRequiredService<PassportCredentialState>())
+            composition.Services.GetRequiredService<PassportCredentialState>(),
+            composition.Services.GetRequiredService<MainlandPassportLoginService>(),
+            composition.Services.GetRequiredService<HoYoLabPassportLoginService>(),
+            composition.Services.GetRequiredService<IMiHoYoAccountProfileClient>(),
+            composition.Services.GetRequiredService<DpapiPassportCredentialStore>(),
+            notificationCenter)
         {
             Visibility = Visibility.Collapsed
         };

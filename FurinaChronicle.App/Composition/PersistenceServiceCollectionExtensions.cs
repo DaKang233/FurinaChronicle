@@ -65,6 +65,9 @@ internal static class PersistenceServiceCollectionExtensions
         Debug.WriteLine($"FurinaChronicle database: {databasePath}");
 
         services.AddSingleton(new SqliteDatabaseOptions(databasePath));
+#if WINDOWS
+        services.AddSingleton<SqliteDatabaseSession>();
+#endif
         services.AddSingleton<FurinaDatabase>();
         services.AddSingleton<
             IHistoryStorageCapacityProvider,

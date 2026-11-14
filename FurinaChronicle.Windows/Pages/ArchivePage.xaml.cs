@@ -3,6 +3,7 @@
 
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Presentation.Management;
+using FurinaChronicle.Presentation.Notifications;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -22,11 +23,15 @@ public sealed partial class ArchivePage : UserControl
     ];
 
     private readonly ArchiveManagementState state;
+    private readonly INotificationCenter notifications;
     private bool renderGuard;
 
-    public ArchivePage(ArchiveManagementState state)
+    public ArchivePage(
+        ArchiveManagementState state,
+        INotificationCenter notifications)
     {
         this.state = state;
+        this.notifications = notifications;
         InitializeComponent();
     }
 
@@ -120,6 +125,7 @@ public sealed partial class ArchivePage : UserControl
         if (name is null) return;
         await state.CreateArchiveAsync(name);
         Render();
+        Report("创建档案");
     }
 
     private async void OnRenameArchive(object sender, RoutedEventArgs e)
@@ -130,6 +136,7 @@ public sealed partial class ArchivePage : UserControl
         if (name is null) return;
         await state.RenameArchiveAsync(name);
         Render();
+        Report("重命名档案");
     }
 
     private async void OnDeleteArchive(object sender, RoutedEventArgs e)
@@ -152,6 +159,7 @@ public sealed partial class ArchivePage : UserControl
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
         await state.DeleteArchiveAsync();
         Render();
+        Report("删除档案");
     }
 
     private async void OnAddAccount(object sender, RoutedEventArgs e)
@@ -167,6 +175,7 @@ public sealed partial class ArchivePage : UserControl
         if (input is null) return;
         await state.AddAccountAsync(input.Uid, input.Region, input.DisplayName);
         Render();
+        Report("添加游戏账号");
     }
 
     private async void OnEditAccount(object sender, RoutedEventArgs e)
@@ -192,6 +201,7 @@ public sealed partial class ArchivePage : UserControl
             resolved ? row.Account.ServerRegion : input.Region,
             input.DisplayName);
         Render();
+        Report("编辑游戏账号");
     }
 
     private async void OnDeleteAccount(object sender, RoutedEventArgs e)
@@ -214,6 +224,18 @@ public sealed partial class ArchivePage : UserControl
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
         await state.DeleteAccountAsync();
         Render();
+        Report("删除游戏账号");
+    }
+
+    private void Report(string operation)
+    {
+        ArchiveManagementSnapshot snapshot = state.Snapshot;
+        bool failed = !string.IsNullOrWhiteSpace(snapshot.Error);
+        notifications.Publish(new(
+            failed ? NotificationSeverity.Error : NotificationSeverity.Information,
+            NotificationCategory.Archive,
+            operation,
+            failed ? snapshot.Error! : snapshot.Status));
     }
 
     private async Task<string?> PromptAsync(string title, string message, string initialValue)

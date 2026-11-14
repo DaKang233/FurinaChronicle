@@ -25,6 +25,18 @@ public sealed partial class ChroniclePage : UserControl
         DomainPicker.ItemsSource = state.DomainOptions;
         RankPicker.ItemsSource = state.RankOptions;
         AutomationProperties.SetName(this, "游戏历程");
+
+        // Subscribe only after XAML has connected all controls and set their initial values.
+        ArchivePicker.SelectionChanged += OnArchiveSelectionChanged;
+        AccountPicker.SelectionChanged += OnAccountSelectionChanged;
+        TimelinePicker.SelectionChanged += OnTimelineSelectionChanged;
+        GranularityPicker.SelectionChanged += OnGranularitySelectionChanged;
+        TimeRangePicker.SelectionChanged += OnTimeRangeSelectionChanged;
+        DomainPicker.SelectionChanged += OnDomainSelectionChanged;
+        RankPicker.SelectionChanged += OnRankSelectionChanged;
+        StateChangesSwitch.Toggled += OnStateChangesToggled;
+        UndatedSwitch.Toggled += OnUndatedToggled;
+        EntryList.SelectionChanged += OnEntrySelectionChanged;
     }
 
     public async Task EnterAsync(CancellationToken cancellationToken = default)
@@ -133,14 +145,11 @@ public sealed partial class ChroniclePage : UserControl
         {
             return;
         }
-        int index = AccountPicker.SelectedIndex;
-        if (index < 0)
+        if (AccountPicker.SelectedItem is not HistoryChoice choice)
         {
             return;
         }
-        Guid? accountId = index == 0
-            ? null
-            : state.Snapshot.AccountChoices[index].Id;
+        Guid? accountId = choice.Id == Guid.Empty ? null : choice.Id;
         await state.SelectAccountAsync(accountId);
         Render();
     }
@@ -149,7 +158,7 @@ public sealed partial class ChroniclePage : UserControl
         object sender,
         SelectionChangedEventArgs e)
     {
-        if (rendering)
+        if (rendering || TimelinePicker.SelectedIndex < 0)
         {
             return;
         }
@@ -162,7 +171,7 @@ public sealed partial class ChroniclePage : UserControl
         object sender,
         SelectionChangedEventArgs e)
     {
-        if (rendering)
+        if (rendering || GranularityPicker.SelectedIndex < 0)
         {
             return;
         }
@@ -175,7 +184,7 @@ public sealed partial class ChroniclePage : UserControl
         object sender,
         SelectionChangedEventArgs e)
     {
-        if (rendering)
+        if (rendering || TimeRangePicker.SelectedIndex < 0)
         {
             return;
         }
@@ -188,7 +197,7 @@ public sealed partial class ChroniclePage : UserControl
         object sender,
         SelectionChangedEventArgs e)
     {
-        if (rendering)
+        if (rendering || DomainPicker.SelectedIndex < 0)
         {
             return;
         }
@@ -201,7 +210,7 @@ public sealed partial class ChroniclePage : UserControl
         object sender,
         SelectionChangedEventArgs e)
     {
-        if (rendering)
+        if (rendering || RankPicker.SelectedIndex < 0)
         {
             return;
         }

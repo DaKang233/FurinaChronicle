@@ -111,6 +111,24 @@ public sealed class PassportCredentialAndSTokenTests
     }
 
     [Fact]
+    public async Task PlanUsesVerifiedRoleAndSkipsCredentialsWithoutSTokenCapability()
+    {
+        var store = new FakeCredentialStore();
+        store.Add();
+        store.Entries[0] = store.Entries[0] with { CanRefreshGacha = false };
+        store.Add(BoundUid: "");
+        store.Entries[1] = store.Entries[1] with { RoleUids = [BoundUid] };
+        var account = Account();
+        var coordinator = new GachaSTokenRefreshCoordinator(
+            store, new FakeAccountRepository(account), new FakeExecutor());
+
+        GachaSTokenRefreshPlanResult result = await coordinator.PlanAsync(account.Id);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(store.Entries[1].Id, result.Plan!.PassportAccountId);
+    }
+
+    [Fact]
     public async Task PlanFreezesFullModeAndExecuteUsesSnapshot()
     {
         var store = new FakeCredentialStore();

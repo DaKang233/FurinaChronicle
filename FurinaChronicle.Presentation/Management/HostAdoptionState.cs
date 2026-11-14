@@ -249,7 +249,7 @@ public sealed class HostAdoptionState(
             try
             {
                 fullValidation = await port.ValidateFullDatabaseAsync(
-                    paths.DatabasePath,
+                    backupPath,
                     validationCopyPath,
                     cancellationToken);
             }
@@ -404,9 +404,9 @@ public sealed class HostAdoptionState(
     {
         string backup = Snapshot.Marker?.BackupFileName ??
             "接管时写入的 Backups 强制备份";
-        return "回退边界：数据库未被复制/移动；关闭 WinUI 后可直接用旧 MAUI 宿主打开同一库。" +
-            "接管前强制备份保留在 Backups；不要删除原库或备份。回退=回到接管点，" +
-            "接管后写入的数据不会被带回。" + Environment.NewLine +
+        return "关闭 WinUI 后，可以用 MAUI 宿主打开同一数据库，保留接管后写入的数据。" +
+            "如果需要恢复接管前的状态，请关闭两个宿主，并使用 Backups 中的接管前备份。" +
+            "备份仅包含接管前的数据。" + Environment.NewLine +
             $"备份文件：{backup}；凭据不会迁移，请重新登录/粘贴 SToken。";
     }
 

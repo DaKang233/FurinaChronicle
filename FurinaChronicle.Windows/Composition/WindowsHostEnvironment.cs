@@ -27,8 +27,7 @@ namespace FurinaChronicle.Windows.Composition;
 
 // The shared WinUI data environment. Production mode opens the same furinachronicle.db3 file as
 // the MAUI Windows host and never seeds synthetic rows; isolated mode keeps the UI-1 synthetic
-// fixture for tests/verification. The environment never owns a second session lock: the host lock
-// lives at WindowsPaths.SessionLockPath.
+// fixture for tests/verification. The composition root owns the shared production lease.
 public sealed class WindowsHostEnvironment : IAsyncDisposable
 {
     private readonly SemaphoreSlim gate = new(1, 1);
@@ -37,7 +36,7 @@ public sealed class WindowsHostEnvironment : IAsyncDisposable
     private readonly TeyvatHelperUigfClient teyvatHelperClient;
     private bool initialized;
 
-    public WindowsHostEnvironment(WindowsPaths paths)
+    public WindowsHostEnvironment(WindowsPaths paths, SqliteDatabaseSession databaseSession)
     {
         RootDirectory = paths.DataRoot;
         DatabasePath = paths.DatabasePath;
@@ -45,7 +44,7 @@ public sealed class WindowsHostEnvironment : IAsyncDisposable
         ImageCacheDirectory = paths.ImageCacheDirectory;
         TemporaryDirectory = paths.TemporaryDirectory;
         IsSynthetic = paths.IsIsolated;
-        Database = new(new SqliteDatabaseOptions(DatabasePath));
+        Database = new(new SqliteDatabaseOptions(DatabasePath), paths.IsProduction ? databaseSession : null);
         Archives = new(Database);
         Accounts = new(Database);
         Records = new(Database);

@@ -20,7 +20,7 @@
         <StackPanel Spacing="4">
             <TextBlock Text="概览" FontSize="28" FontWeight="SemiBold" />
             <TextBlock
-                Text="本地隔离合成库的轻量聚合；不重建 Chronicle 投影。"
+                Text="查看本地档案、抽卡记录和最近活动。"
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                 TextWrapping="Wrap" />
         </StackPanel>

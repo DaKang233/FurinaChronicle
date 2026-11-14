@@ -84,7 +84,7 @@ public sealed partial class Ui1GachaView
                     Spacing = 10,
                     Children =
                     {
-                        new TextBlock { Text = $"隔离合成档案：{archive}\n导出所选账号的完整记录，当前筛选和分页仅用于查看。", TextWrapping = TextWrapping.Wrap },
+                        new TextBlock { Text = $"档案：{archive}\n导出所选账号的完整记录，当前筛选和分页仅用于查看。", TextWrapping = TextWrapping.Wrap },
                         scope, format
                     }
                 }

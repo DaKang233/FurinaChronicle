@@ -13,6 +13,12 @@ com.google.android.material:material 1.12.0. Its declared license expression
 is MIT AND Apache-2.0.
 Source: https://github.com/xamarin/AndroidX
 
+QRCoder 1.7.0
+Copyright (c) 2013-2025 Raffael Herrmann
+Copyright (c) 2024-2025 Shane Krueger
+Licensed under the MIT License reproduced below.
+Source: https://github.com/Shane32/QRCoder
+
 Snap.Metadata
 Copyright (c) 2022 DGP Studio
 Licensed under the MIT License.

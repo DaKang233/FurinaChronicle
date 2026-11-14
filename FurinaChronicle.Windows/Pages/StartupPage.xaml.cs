@@ -10,9 +10,12 @@ namespace FurinaChronicle.Windows.Pages;
 
 public sealed partial class StartupPage : UserControl
 {
-    public StartupPage()
+    public StartupPage(bool isIsolated)
     {
         InitializeComponent();
+        StartupIntro.Text = isIsolated
+            ? "正在打开隔离合成数据库；本宿主不会发现生产库或凭据。"
+            : "正在检查 Windows 业务数据库与接管状态。";
     }
 
     public event EventHandler? RetryRequested;

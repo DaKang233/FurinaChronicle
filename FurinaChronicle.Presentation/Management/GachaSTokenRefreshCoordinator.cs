@@ -16,13 +16,12 @@ public sealed record GachaSTokenRefreshPlan(
     IsolatedCredentialSummary Credential)
 {
     public string ConfirmationText =>
-        $"将通过本机隔离宿主登录凭据刷新：\n" +
+        $"将通过本机 WinUI 登录凭据刷新：\n" +
         $"目标账号：UID {TargetAccount.Uid}（{TargetAccount.ServerRegion}）\n" +
         $"模式：{(Mode == GachaImportMode.Full ? "全量刷新（流程开始时快照）" : "增量刷新")}\n" +
         $"凭据：{Credential.Label ?? "未命名"} · MID {Credential.MaskedMid} · " +
-        $"绑定 UID {Credential.BoundRoleUid}\n" +
-        "提交阶段不可取消；不会显示、记录或回显 SToken/MID/完整链接。\n" +
-        "仅使用本机隔离宿主凭据，生产凭据迁移待 UI-6 评审。";
+        $"绑定 UID {TargetAccount.Uid}\n" +
+        "提交阶段不可取消；不会显示或记录凭据和完整链接。";
 }
 
 public sealed record GachaSTokenRefreshPlanResult(
@@ -82,12 +81,11 @@ public sealed class GachaSTokenRefreshCoordinator(
             return new(
                 false,
                 null,
-                "本机隔离宿主没有已保存的登录凭据；请先在“登录账号”页添加。");
+                "本机 WinUI 没有已保存的登录凭据；请先在“登录账号”页添加。");
         }
 
         IsolatedCredentialSummary[] matching = stored
-            .Where(item => string.Equals(
-                item.BoundRoleUid, account.Uid, StringComparison.Ordinal))
+            .Where(item => item.CanRefreshGacha && item.MatchesRole(account.Uid))
             .ToArray();
         if (matching.Length == 0)
         {
@@ -127,7 +125,8 @@ public sealed class GachaSTokenRefreshCoordinator(
             await credentials.ListAsync(CancellationToken.None);
         IsolatedCredentialSummary? current = stored.FirstOrDefault(item =>
             item.Id == plan.PassportAccountId &&
-            string.Equals(item.BoundRoleUid, plan.TargetAccount.Uid, StringComparison.Ordinal) &&
+            item.CanRefreshGacha &&
+            item.MatchesRole(plan.TargetAccount.Uid) &&
             item.IsUsable);
         if (current is null)
         {

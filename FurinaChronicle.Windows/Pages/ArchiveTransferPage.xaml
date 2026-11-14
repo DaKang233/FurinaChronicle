@@ -21,7 +21,7 @@
                 <StackPanel Grid.Column="1" Spacing="2">
                     <TextBlock Text="备份与恢复" FontSize="28" FontWeight="SemiBold" />
                     <TextBlock
-                        Text="完整逻辑档案 .fca：可合并恢复，不是 SQLite 原始拷贝；本页不提供伪全量备份或热回切。"
+                        Text="备份完整档案，或交换角色、武器和挑战历史。"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                         TextWrapping="Wrap" />
                 </StackPanel>
@@ -58,6 +58,28 @@
                         AutomationProperties.AutomationId="Ui4ArchiveTransferExportScope" />
                     <Button x:Name="ExportButton" Content="导出 .fca" Click="OnExport"
                         AutomationProperties.AutomationId="Ui4ArchiveTransferExport" />
+                </StackPanel>
+            </Border>
+
+            <Border Padding="16" CornerRadius="8"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="分类数据交换" FontSize="18" FontWeight="SemiBold" />
+                    <ComboBox x:Name="PortableArchivePicker" Header="档案" DisplayMemberPath="Name"
+                        PlaceholderText="选择导出档案或导入目标" />
+                    <ComboBox x:Name="PortableKindPicker" Header="导出类别">
+                        <x:String>角色与武器历史</x:String>
+                        <x:String>挑战历史</x:String>
+                    </ComboBox>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button x:Name="ExportPortableButton" Content="导出 Portable" Click="OnExportPortable"
+                            AutomationProperties.AutomationId="DomainPortableExport" />
+                        <Button x:Name="ExportDomainMarkdownButton" Content="导出 Markdown" Click="OnExportDomainMarkdown"
+                            AutomationProperties.AutomationId="DomainMarkdownExport" />
+                        <Button x:Name="ImportPortableButton" Content="导入 Portable" Click="OnImportPortable"
+                            AutomationProperties.AutomationId="DomainPortableImport" />
+                    </StackPanel>
+                    <TextBlock x:Name="PortableStatus" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
                 </StackPanel>
             </Border>
 

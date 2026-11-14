@@ -18,7 +18,7 @@
         <StackPanel Spacing="4">
             <TextBlock Text="档案与账号" FontSize="28" FontWeight="SemiBold" />
             <TextBlock
-                Text="管理隔离库中的档案与游戏账号副本；选择只属于本页，不写入全局当前账号。"
+                Text="管理本地档案及其游戏账号。"
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                 TextWrapping="Wrap" />
         </StackPanel>

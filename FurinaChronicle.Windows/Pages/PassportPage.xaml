@@ -13,7 +13,7 @@
             <StackPanel Spacing="4">
                 <TextBlock Text="登录账号" FontSize="28" FontWeight="SemiBold" />
                 <TextBlock
-                    Text="仅隔离宿主：凭据用 Windows DPAPI 加密保存到 UI4/WinUI/credentials；不连接生产库或生产凭据。生产凭据迁移待 UI-6 评审。"
+                    Text="登录凭据由 Windows 加密保存在本机。首次使用 WinUI 时请重新登录。"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     TextWrapping="Wrap"
                     AutomationProperties.AutomationId="Ui4PassportIsolationNotice" />
@@ -43,6 +43,8 @@
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
                     <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button x:Name="LoginButton" Content="登录" Click="OnLogin"
+                            AutomationProperties.AutomationId="PassportLogin" />
                         <Button x:Name="AddButton" Content="手动添加凭据" Click="OnAddCredential"
                             AutomationProperties.AutomationId="Ui4PassportAdd" />
                         <Button x:Name="RefreshButton" Content="刷新列表" Click="OnRefresh"
@@ -85,7 +87,7 @@
                                 AutomationProperties.AutomationId="Ui4PassportOpenGachaRefresh" />
                         </StackPanel>
                         <TextBlock
-                            Text="删除/清除只删除本机隔离宿主凭据，不删除档案、账号或抽卡事实。SToken/MID 永不回显。"
+                            Text="退出登录后，本地档案和记录仍可使用。"
                             FontSize="12" TextWrapping="Wrap"
                             Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                         <TextBlock

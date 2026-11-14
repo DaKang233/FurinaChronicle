@@ -13,7 +13,7 @@
             <StackPanel Spacing="4">
                 <TextBlock Text="设置" FontSize="28" FontWeight="SemiBold" />
                 <TextBlock
-                    Text="只作用于隔离合成宿主；不连接生产库，不提供伪全量备份。"
+                    Text="管理 WinUI 外观、数据存储和撤销历史。"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     TextWrapping="Wrap" />
             </StackPanel>
@@ -38,7 +38,7 @@
                         SelectionChanged="OnThemeSelectionChanged"
                         AutomationProperties.AutomationId="Ui4SettingsTheme" />
                     <TextBlock
-                        Text="主题持久化到隔离宿主自己的设置文件（UI4/WinUI/settings），不写入 MAUI Preferences。"
+                        Text="主题设置保存在本机 WinUI 设置中。"
                         FontSize="12"
                         TextWrapping="Wrap"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
@@ -49,11 +49,11 @@
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                 <StackPanel Spacing="8">
                     <TextBlock Text="数据与存储" FontSize="18" FontWeight="SemiBold" />
-                    <TextBlock Text="隔离数据根" FontSize="12"
+                    <TextBlock Text="数据目录" FontSize="12"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     <TextBlock x:Name="DataRootText" TextWrapping="Wrap"
                         AutomationProperties.AutomationId="Ui4SettingsDataRoot" />
-                    <TextBlock Text="隔离数据库" FontSize="12"
+                    <TextBlock Text="数据库" FontSize="12"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     <TextBlock x:Name="DatabasePathText" TextWrapping="Wrap"
                         AutomationProperties.AutomationId="Ui4SettingsDatabasePath" />
