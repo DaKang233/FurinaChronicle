@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 using FurinaChronicle.Core.Passport;
+using FurinaChronicle.Presentation.Diagnostics;
 using FurinaChronicle.Presentation.Notifications;
 using FurinaChronicle.Services.Passport;
 using FurinaChronicle.Windows.Composition;
@@ -45,32 +46,47 @@ public sealed partial class PassportPage
                 PassportAccountProfile profile = await profiles.GetAsync(account);
                 await credentials.UpdateRolesAsync(account, profile.Roles);
                 await EnterAsync();
-                StatusText.Text = $"登录完成，已读取 {profile.Roles.Count} 个角色。";
-            notifications.Publish(new(
-                NotificationSeverity.Success,
-                NotificationCategory.Passport,
-                "登录完成",
-                StatusText.Text));
+                notifications.Publish(new(
+                    NotificationSeverity.Information,
+                    NotificationCategory.Passport,
+                    "登录完成",
+                    $"已读取 {profile.Roles.Count} 个角色。")
+                {
+                    TaskKey = NotificationTaskKeys.PassportRefresh,
+                });
             }
-            catch
+            catch (Exception exception)
             {
-                StatusText.Text = "凭据已加密保存，角色列表暂未读取。可稍后点击“刷新列表”。";
+                diagnostics.Report(new DiagnosticEvent(
+                    NotificationCategory.Passport,
+                    "passport-login",
+                    "登录后读取角色失败",
+                    "凭据已加密保存，角色列表暂未读取；可稍后刷新列表。",
+                    DiagnosticSeverity.Warning,
+                    exception)
+                {
+                    TaskKey = NotificationTaskKeys.PassportRefresh,
+                });
             }
         }
         catch (OperationCanceledException)
         {
-            StatusText.Text = "登录已取消。";
+            // The user cancelled the sign-in; no failure feedback is required.
         }
-        catch
+        catch (Exception exception)
         {
-            await ShowMessageAsync("登录未完成", "请检查凭据、网络和安全验证结果后重试。");
+            diagnostics.Report(new DiagnosticEvent(
+                NotificationCategory.Passport,
+                "passport-login",
+                "登录未完成",
+                "请检查凭据、网络和安全验证结果后重试。",
+                DiagnosticSeverity.Warning,
+                exception));
         }
         finally
         {
             signingIn = false;
-            string status = StatusText.Text;
             Render();
-            StatusText.Text = status;
         }
     }
 

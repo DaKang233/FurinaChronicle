@@ -4,6 +4,7 @@
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.History;
 using FurinaChronicle.Presentation.Management;
+using FurinaChronicle.Presentation.Diagnostics;
 using FurinaChronicle.Presentation.Notifications;
 using FurinaChronicle.Services.Archives.Portable;
 using FurinaChronicle.Services.History;
@@ -19,6 +20,7 @@ namespace FurinaChronicle.Windows.Pages;
 
 public sealed partial class ArchiveTransferPage : UserControl
 {
+    private readonly IDiagnosticService diagnostics;
     private readonly ArchiveTransferState state;
     private readonly IFilePickerService filePicker;
     private readonly WindowsVersionInfo version;
@@ -49,7 +51,8 @@ public sealed partial class ArchiveTransferPage : UserControl
         WindowsVersionInfo version,
         IArchiveDomainPortableFileService portable,
         IArchiveDomainPortableApplier portableApplier,
-        INotificationCenter notifications)
+        INotificationCenter notifications,
+        IDiagnosticService diagnostics)
     {
         this.state = state;
         this.filePicker = filePicker;
@@ -57,6 +60,7 @@ public sealed partial class ArchiveTransferPage : UserControl
         this.portable = portable;
         this.portableApplier = portableApplier;
         this.notifications = notifications;
+        this.diagnostics = diagnostics;
         InitializeComponent();
         rendering = true;
         ExportAllRadio.IsChecked = true;
@@ -78,6 +82,14 @@ public sealed partial class ArchiveTransferPage : UserControl
     {
         await state.EnterAsync(cancellationToken);
         Render();
+        if (!string.IsNullOrWhiteSpace(state.Snapshot.Error))
+        {
+            ReportFailure(
+                "archive.page",
+                "archive-page-enter",
+                "读取备份与恢复信息失败",
+                state.Snapshot.Error);
+        }
     }
 
     private void Render()
@@ -86,11 +98,6 @@ public sealed partial class ArchiveTransferPage : UserControl
         try
         {
             ArchiveTransferSnapshot snapshot = state.Snapshot;
-            StatusText.Text = snapshot.Status;
-            ErrorText.Text = snapshot.Error ?? string.Empty;
-            ErrorText.Visibility = string.IsNullOrWhiteSpace(snapshot.Error)
-                ? Visibility.Collapsed
-                : Visibility.Visible;
             ExportAllRadio.IsChecked = snapshot.ExportAllArchives;
             ExportSelectedRadio.IsChecked = !snapshot.ExportAllArchives;
             ExportArchivePicker.ItemsSource = snapshot.Archives;
@@ -107,31 +114,38 @@ public sealed partial class ArchiveTransferPage : UserControl
             PortableArchivePicker.SelectedItem = snapshot.Archives.FirstOrDefault(a => a.Id == portableArchive)
                 ?? snapshot.Archives.FirstOrDefault();
             SetPortableButtons();
-            PackageSummaryText.Text = snapshot.PackageSummary;
-            PlanSummaryText.Text = snapshot.PlanSummary;
-            MappingSummaryText.Text = snapshot.MappingSummary;
-            DiagnosticSummaryText.Text = snapshot.DiagnosticSummary;
             RecoveryPointText.Text = snapshot.RecoveryPointSummary;
             ApplySettingsCheck.IsChecked = snapshot.ApplyPortableSettings;
             ApplySettingsCheck.IsEnabled = snapshot.HasPackage && !snapshot.IsBusy;
+            ApplySettingsCheck.Visibility = snapshot.HasPackage
+                ? Visibility.Visible
+                : Visibility.Collapsed;
             RecoveryModePicker.SelectedIndex =
                 snapshot.Mode == ArchiveRestoreMode.Replace ? 1 : 0;
             RecoveryModePicker.IsEnabled = snapshot.HasPackage && !snapshot.IsBusy;
-            ReplaceScopeEditor.Visibility = snapshot.IsReplaceMode
+            RecoveryModePicker.Visibility = snapshot.HasPackage
                 ? Visibility.Visible
                 : Visibility.Collapsed;
+            ReplaceScopeExpander.Visibility = snapshot.IsReplaceMode
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+            if (!snapshot.IsReplaceMode) ReplaceScopeExpander.IsExpanded = false;
             RenderReplaceScopeEditor(snapshot);
             ReplaceScopeList.ItemsSource = snapshot.ReplaceSelections
                 .Select(selection => new ReplaceScopeRow(
                     selection,
                     state.DescribeReplaceSelection(selection)))
                 .ToArray();
+            ShowPreviewButton.Visibility = snapshot.HasPlan
+                ? Visibility.Visible
+                : Visibility.Collapsed;
             ExportButton.IsEnabled = !snapshot.IsBusy &&
                 (snapshot.ExportAllArchives || snapshot.SelectedArchive is not null);
             OpenButton.IsEnabled = !snapshot.IsBusy;
             ReplanButton.IsEnabled = snapshot.HasPackage && !snapshot.IsBusy;
             ResolveMappingsButton.IsEnabled = snapshot.HasPlan && !snapshot.IsBusy &&
                 HasUnresolvedMappings(snapshot.Plan);
+            ApplyButton.Content = snapshot.IsReplaceMode ? "应用 Scoped Replace" : "应用合并";
             ApplyButton.IsEnabled = !snapshot.IsBusy && snapshot.Plan is { } plan &&
                 !HasBlockingPlanIssues(plan);
             CancelSessionButton.IsEnabled = snapshot.HasPackage && !snapshot.IsBusy;
@@ -211,7 +225,10 @@ public sealed partial class ArchiveTransferPage : UserControl
         if (!result.Succeeded && state.Snapshot.HasPackage &&
             mode == ArchiveRestoreMode.Merge)
         {
-            await ShowMessageAsync("模式未切换", result.Message);
+            ReportWarning(
+                NotificationTaskKeys.ArchivePlan,
+                "模式未切换",
+                result.Message);
         }
     }
 
@@ -219,7 +236,10 @@ public sealed partial class ArchiveTransferPage : UserControl
     {
         if (ReplaceArchivePicker.SelectedItem is not ArchiveCatalogArchive archive)
         {
-            await ShowMessageAsync("未选择档案", "请先选择来源档案。");
+            ReportWarning(
+                NotificationTaskKeys.ArchiveReplaceScope,
+                "未选择档案",
+                "请先选择来源档案。");
             return;
         }
 
@@ -240,7 +260,10 @@ public sealed partial class ArchiveTransferPage : UserControl
             : null;
         if (kind != ArchiveReplaceScopeKind.Archive && accountId is null)
         {
-            await ShowMessageAsync("未选择账号", "账号/领域范围必须选择来源账号。");
+            ReportWarning(
+                NotificationTaskKeys.ArchiveReplaceScope,
+                "未选择账号",
+                "账号/领域范围必须选择来源账号。");
             return;
         }
 
@@ -251,7 +274,13 @@ public sealed partial class ArchiveTransferPage : UserControl
             domain);
         ArchiveTransferActionResult result = await state.AddReplaceSelectionAsync(selection);
         Render();
-        if (!result.Succeeded) await ShowMessageAsync("Replace 范围未加入", result.Message);
+        if (!result.Succeeded)
+        {
+            ReportWarning(
+                NotificationTaskKeys.ArchiveReplaceScope,
+                "Replace 范围未加入",
+                result.Message);
+        }
     }
 
     private async void OnRemoveReplaceScope(object sender, RoutedEventArgs e)
@@ -309,12 +338,12 @@ public sealed partial class ArchiveTransferPage : UserControl
             $"FurinaChronicle_Archive_{DateTime.Now:yyyyMMdd_HHmmss}",
             "Furina Archive（完整逻辑档案）",
             ".fca");
-        if (destination is null)
-        {
-            await ShowMessageAsync("已取消导出", "未选择保存位置，未写出文件。");
-            return;
-        }
+        if (destination is null) return;
 
+        PublishProgress(
+            NotificationTaskKeys.ArchiveExportFca,
+            "导出完整备份",
+            "正在生成并校验 .fca 文件…");
         var generator = new ArchiveGeneratorInfo(
             "FurinaChronicle",
             version.Version,
@@ -327,8 +356,22 @@ public sealed partial class ArchiveTransferPage : UserControl
         if (!result.Succeeded)
         {
             TryDeleteEmptyDestination(destination.Path);
-            await ShowMessageAsync("导出未完成", result.Message);
+            ReportFailure(
+                NotificationTaskKeys.ArchiveExportFca,
+                "archive.export.fca",
+                "导出完整备份失败",
+                result.Message);
+            return;
         }
+
+        Action? openFolder = CreateOpenFolderAction(destination.Path);
+        PublishSuccess(
+            NotificationTaskKeys.ArchiveExportFca,
+            "完整备份已导出",
+            $"已保存到 {DescribeSavedLocation(destination.Path, destination.Name)}。" +
+            Environment.NewLine + result.Message,
+            openFolder is null ? null : "打开文件夹",
+            openFolder);
     }
 
     private static void TryDeleteEmptyDestination(string path)
@@ -350,28 +393,89 @@ public sealed partial class ArchiveTransferPage : UserControl
     {
         StorageFile? file = await filePicker.PickOpenFileAsync(".fca");
         if (file is null) return;
+        PublishProgress(
+            NotificationTaskKeys.ArchiveOpenPackage,
+            "打开完整备份",
+            "正在读取并校验 .fca 包…");
         ArchiveTransferActionResult result = await state.OpenPackageAsync(file.Path);
         Render();
         if (!result.Succeeded)
         {
-            await ShowMessageAsync("无法读取 .fca", result.Message);
+            ReportFailure(
+                NotificationTaskKeys.ArchiveOpenPackage,
+                "archive.open.fca",
+                "无法打开 .fca",
+                result.Message);
+            return;
         }
-        else if (HasUnresolvedMappings(state.Snapshot.Plan))
-        {
-            await ShowMessageAsync(
-                "需要解析映射",
-                "预览包含需要手动选择的档案或账号映射。请点击“解析映射”完成选择后再提交。");
-        }
+
+        string mappingHint = HasUnresolvedMappings(state.Snapshot.Plan)
+            ? Environment.NewLine + "预览包含需要手动选择的映射，请使用“解析映射”。"
+            : string.Empty;
+        PublishSuccess(
+            NotificationTaskKeys.ArchiveOpenPackage,
+            "完整备份已打开",
+            state.Snapshot.PackageSummary + mappingHint);
     }
 
     private async void OnReplan(object sender, RoutedEventArgs e)
     {
+        PublishProgress(
+            NotificationTaskKeys.ArchivePlan,
+            "生成恢复预览",
+            "正在根据当前映射与范围生成预览…");
         ArchiveTransferActionResult result = await state.PlanAsync();
         Render();
         if (!result.Succeeded)
         {
-            await ShowMessageAsync("预览未生成", result.Message);
+            ReportFailure(
+                NotificationTaskKeys.ArchivePlan,
+                "archive.plan",
+                "恢复预览未生成",
+                result.Message);
+            return;
         }
+
+        PublishSuccess(
+            NotificationTaskKeys.ArchivePlan,
+            "恢复预览已生成",
+            state.Snapshot.PlanSummary);
+    }
+
+    private async void OnShowPreview(object sender, RoutedEventArgs e)
+    {
+        ArchiveTransferSnapshot snapshot = state.Snapshot;
+        if (!snapshot.HasPlan)
+        {
+            PublishWarning(
+                NotificationTaskKeys.ArchivePlan,
+                "没有可查看的预览",
+                "请先打开备份并生成恢复预览。");
+            return;
+        }
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "恢复预览与影响",
+            CloseButtonText = "关闭",
+            Content = new ScrollViewer
+            {
+                MaxHeight = 520,
+                Content = new TextBlock
+                {
+                    Text = string.Join(
+                        Environment.NewLine + Environment.NewLine,
+                        new[] { snapshot.PackageSummary, snapshot.PlanSummary,
+                            snapshot.MappingSummary, snapshot.DiagnosticSummary }
+                            .Where(text => !string.IsNullOrWhiteSpace(text))),
+                    TextWrapping = TextWrapping.Wrap,
+                    IsTextSelectionEnabled = true
+                }
+            }
+        };
+        AutomationProperties.SetAutomationId(dialog, "Ui4ArchiveTransferPreviewDialog");
+        await dialog.ShowAsync();
     }
 
     private async void OnApplySettingsChanged(object sender, RoutedEventArgs e)
@@ -390,22 +494,26 @@ public sealed partial class ArchiveTransferPage : UserControl
             Render();
             if (state.Snapshot.Plan is not { } plan)
             {
-                await ShowMessageAsync("没有预览", "请先生成恢复预览。");
+                ReportWarning(
+                    NotificationTaskKeys.ArchivePlan,
+                    "没有预览",
+                    "请先生成恢复预览。");
                 return;
             }
 
             if (HasBlockingPlanIssues(plan))
             {
-                await ShowMessageAsync(
+                ReportWarning(
+                    NotificationTaskKeys.ArchivePlan,
                     "仍有阻塞项",
-                    state.Snapshot.DiagnosticSummary +
-                    Environment.NewLine +
-                    "请处理冲突/待确认项后重新生成预览；数据库未改变。");
+                    "预览仍有映射、冲突或待确认项；请打开“查看预览与冲突”处理，数据库未改变。");
             }
         }
         catch (Exception exception)
         {
-            await ShowMessageAsync(
+            ReportFailure(
+                NotificationTaskKeys.ArchivePlan,
+                "archive.plan",
                 "映射失败",
                 ManagementTexts.DescribeOperationFailure(exception));
         }
@@ -476,7 +584,11 @@ public sealed partial class ArchiveTransferPage : UserControl
             Render();
             if (!result.Succeeded)
             {
-                await ShowMessageAsync("映射未应用", result.Message);
+                ReportFailure(
+                    NotificationTaskKeys.ArchivePlan,
+                    "archive.plan",
+                    "映射未应用",
+                    result.Message);
                 return false;
             }
         }
@@ -493,7 +605,10 @@ public sealed partial class ArchiveTransferPage : UserControl
             if (mapping is null) return true;
             if (mapping.TargetArchiveId is not Guid targetArchiveId)
             {
-                await ShowMessageAsync("账号映射未完成", "请先解析目标档案映射。");
+                ReportWarning(
+                    NotificationTaskKeys.ArchivePlan,
+                    "账号映射未完成",
+                    "请先解析目标档案映射。");
                 return false;
             }
 
@@ -551,7 +666,11 @@ public sealed partial class ArchiveTransferPage : UserControl
             Render();
             if (!result.Succeeded)
             {
-                await ShowMessageAsync("账号映射未应用", result.Message);
+                ReportFailure(
+                    NotificationTaskKeys.ArchivePlan,
+                    "archive.plan",
+                    "账号映射未应用",
+                    result.Message);
                 return false;
             }
         }
@@ -564,7 +683,10 @@ public sealed partial class ArchiveTransferPage : UserControl
         if (state.Snapshot.Plan is not { } plan) return;
         if (HasBlockingPlanIssues(plan))
         {
-            await ShowMessageAsync("无法提交", "预览仍存在未解决的映射、冲突或确认项。");
+            ReportWarning(
+                NotificationTaskKeys.ArchiveApply,
+                "无法提交恢复",
+                "预览仍存在未解决的映射、冲突或确认项；数据库未改变。");
             return;
         }
 
@@ -579,7 +701,7 @@ public sealed partial class ArchiveTransferPage : UserControl
             var confirm = new ContentDialog
             {
                 XamlRoot = XamlRoot,
-                Title = "确认 Merge 前置项",
+                Title = "确认恢复前置项",
                 PrimaryButtonText = "接受并继续",
                 CloseButtonText = "取消",
                 DefaultButton = ContentDialogButton.Close,
@@ -596,7 +718,10 @@ public sealed partial class ArchiveTransferPage : UserControl
             Render();
             if (state.Snapshot.Plan is not { } next || !next.CanApply)
             {
-                await ShowMessageAsync("仍需处理", state.Snapshot.DiagnosticSummary);
+                ReportWarning(
+                    NotificationTaskKeys.ArchiveApply,
+                    "仍需处理",
+                    "预览仍有阻塞项；请打开“查看预览与冲突”处理后再提交，数据库未改变。");
                 return;
             }
 
@@ -623,6 +748,10 @@ public sealed partial class ArchiveTransferPage : UserControl
         AutomationProperties.SetAutomationId(finalConfirm, "Ui4ArchiveTransferApplyDialog");
         if (await finalConfirm.ShowAsync() != ContentDialogResult.Primary) return;
 
+        PublishProgress(
+            NotificationTaskKeys.ArchiveApply,
+            plan.Mode == ArchiveRestoreMode.Replace ? "应用 Scoped Replace" : "应用 Merge",
+            "正在校验目标并提交恢复…");
         ArchiveTransferApplyOutcome outcome = await state.ApplyAsync();
         if (outcome.Result?.Status == ChangeExecutionStatus.NeedsConfirmation &&
             outcome.Result.CleanupPlan is HistoryCleanupPlan cleanup)
@@ -648,13 +777,31 @@ public sealed partial class ArchiveTransferPage : UserControl
             {
                 outcome = await state.ApplyAsync(cleanup.ConfirmationId);
             }
+            else
+            {
+                ClearProgress(NotificationTaskKeys.ArchiveApply);
+                return;
+            }
         }
 
         Render();
-        await ShowMessageAsync(
-            outcome.Succeeded ? "恢复结果" : "恢复未提交",
-            outcome.Message);
-        if (outcome.Succeeded) RestoreApplied?.Invoke(this, EventArgs.Empty);
+        if (!outcome.Succeeded)
+        {
+            ReportFailure(
+                NotificationTaskKeys.ArchiveApply,
+                "archive.apply",
+                "恢复未提交",
+                outcome.Message);
+            return;
+        }
+
+        PublishSuccess(
+            NotificationTaskKeys.ArchiveApply,
+            plan.Mode == ArchiveRestoreMode.Replace ? "Scoped Replace 已提交" : "Merge 已提交",
+            outcome.Message,
+            "刷新备份列表",
+            CreateReloadAction());
+        RestoreApplied?.Invoke(this, EventArgs.Empty);
     }
 
     private async void OnCancelSession(object sender, RoutedEventArgs e)
@@ -670,16 +817,180 @@ public sealed partial class ArchiveTransferPage : UserControl
         BackRequested?.Invoke(this, EventArgs.Empty);
     }
 
-    private async Task ShowMessageAsync(string title, string message)
+    private void PublishProgress(string taskKey, string title, string message)
     {
-        var dialog = new ContentDialog
+        notifications.Publish(new NotificationRequest(
+            NotificationSeverity.Information,
+            NotificationCategory.Archive,
+            title,
+            message)
         {
-            XamlRoot = XamlRoot,
-            Title = title,
-            CloseButtonText = "确定",
-            Content = new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap }
+            TaskKey = taskKey,
+            IsInProgress = true
+        });
+    }
+
+    private void PublishSuccess(
+        string taskKey,
+        string title,
+        string message,
+        string? actionLabel = null,
+        Action? action = null)
+    {
+        notifications.Publish(new NotificationRequest(
+            NotificationSeverity.Success,
+            NotificationCategory.Archive,
+            title,
+            message)
+        {
+            TaskKey = taskKey,
+            IsInProgress = false,
+            ActionLabel = actionLabel,
+            Action = action
+        });
+    }
+
+    private void PublishWarning(
+        string taskKey,
+        string title,
+        string message,
+        string? actionLabel = null,
+        Action? action = null)
+    {
+        notifications.Publish(new NotificationRequest(
+            NotificationSeverity.Warning,
+            NotificationCategory.Archive,
+            title,
+            message)
+        {
+            TaskKey = taskKey,
+            IsInProgress = false,
+            ActionLabel = actionLabel,
+            Action = action
+        });
+    }
+
+    private void ReportFailure(
+        string taskKey,
+        string operation,
+        string title,
+        string message,
+        Exception? exception = null)
+    {
+        diagnostics.Report(new DiagnosticEvent(
+            NotificationCategory.Archive,
+            operation,
+            title,
+            message,
+            DiagnosticSeverity.Error,
+            exception,
+            taskKey));
+    }
+
+    private void ReportWarning(
+        string taskKey,
+        string title,
+        string message,
+        Exception? exception = null)
+    {
+        diagnostics.Report(new DiagnosticEvent(
+            NotificationCategory.Archive,
+            taskKey,
+            title,
+            message,
+            DiagnosticSeverity.Warning,
+            exception,
+            taskKey));
+    }
+
+    private void ClearProgress(string taskKey)
+    {
+        AppNotification? running = notifications.FindByTask(taskKey);
+        if (running is { IsInProgress: true }) notifications.Remove(running.Id);
+    }
+
+    private Action CreateReloadAction() =>
+        () => _ = ReloadArchiveAsync();
+
+    private async Task ReloadArchiveAsync()
+    {
+        if (!IsLoaded) return;
+        try
+        {
+            await state.EnterAsync();
+            Render();
+        }
+        catch (Exception exception)
+        {
+            ReportWarning(
+                "archive.page",
+                "刷新备份列表失败",
+                "无法重新读取备份列表；可稍后重试。",
+                exception);
+        }
+    }
+
+    private Action? CreateOpenFolderAction(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path) ||
+            path.Contains("content://", StringComparison.OrdinalIgnoreCase) ||
+            !Path.IsPathFullyQualified(path) || !File.Exists(path))
+        {
+            return null;
+        }
+
+        return () =>
+        {
+            try
+            {
+                if (!File.Exists(path))
+                {
+                    ReportWarning(
+                        "archive.export.fca",
+                        "文件已不存在",
+                        "导出文件已被移动或删除，无法打开所在文件夹。");
+                    return;
+                }
+
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "explorer.exe",
+                    Arguments = $"/select,\"{path}\"",
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception exception)
+            {
+                ReportWarning(
+                    "archive.export.fca",
+                    "无法打开文件夹",
+                    "导出文件仍在，但无法打开所在文件夹；可从保存位置手动打开。",
+                    exception);
+            }
         };
-        await dialog.ShowAsync();
+    }
+
+    private static string DescribeSavedLocation(string? path, string fileName)
+    {
+        if (string.IsNullOrWhiteSpace(path) ||
+            path.Contains("content://", StringComparison.OrdinalIgnoreCase) ||
+            !Path.IsPathFullyQualified(path))
+        {
+            return $"保存对话框所选位置 / {fileName}";
+        }
+
+        string? folder = Path.GetDirectoryName(path);
+        if (string.IsNullOrWhiteSpace(folder)) return fileName;
+        string downloads = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) +
+            Path.DirectorySeparatorChar + "Downloads";
+        string documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+        string desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+        string label =
+            string.Equals(folder, downloads, StringComparison.OrdinalIgnoreCase) ? "下载目录" :
+            string.Equals(folder, documents, StringComparison.OrdinalIgnoreCase) ? "文档" :
+            string.Equals(folder, desktop, StringComparison.OrdinalIgnoreCase) ? "桌面" :
+            "所选文件夹";
+        return $"{label} / {fileName}";
     }
 
     public sealed record AccountOption(ArchiveCatalogAccount Account)

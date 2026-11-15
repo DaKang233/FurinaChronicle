@@ -13,22 +13,10 @@
             <StackPanel Spacing="4">
                 <TextBlock Text="登录账号" FontSize="28" FontWeight="SemiBold" />
                 <TextBlock
-                    Text="登录凭据由 Windows 加密保存在本机。首次使用 WinUI 时请重新登录。"
+                    Text="凭据由 Windows 加密保存在本机；不会显示 SToken。"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     TextWrapping="Wrap"
                     AutomationProperties.AutomationId="Ui4PassportIsolationNotice" />
-            </StackPanel>
-
-            <StackPanel Spacing="2">
-                <TextBlock x:Name="StatusText" TextWrapping="Wrap"
-                    AutomationProperties.AutomationId="Ui4PassportStatus"
-                    AutomationProperties.LiveSetting="Polite" />
-                <TextBlock x:Name="ErrorText" TextWrapping="Wrap" Visibility="Collapsed"
-                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                    AutomationProperties.AutomationId="Ui4PassportError" />
-                <TextBlock x:Name="LoadWarningText" TextWrapping="Wrap" Visibility="Collapsed"
-                    Foreground="{ThemeResource SystemFillColorCautionBrush}"
-                    AutomationProperties.AutomationId="Ui4PassportLoadWarning" />
             </StackPanel>
 
             <Grid ColumnSpacing="16">

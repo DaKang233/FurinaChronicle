@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 using FurinaChronicle.Presentation.Management;
+using FurinaChronicle.Presentation.Notifications;
+using FurinaChronicle.Presentation.Diagnostics;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -10,11 +12,14 @@ namespace FurinaChronicle.Windows.Pages;
 
 public sealed partial class OverviewPage : UserControl
 {
+    private readonly IDiagnosticService diagnostics;
     private readonly OverviewState state;
+    private string? lastLoadError;
 
-    public OverviewPage(OverviewState state)
+    public OverviewPage(OverviewState state, IDiagnosticService diagnostics)
     {
         this.state = state;
+        this.diagnostics = diagnostics;
         InitializeComponent();
     }
 
@@ -24,31 +29,51 @@ public sealed partial class OverviewPage : UserControl
 
     public async Task EnterAsync(CancellationToken cancellationToken = default)
     {
-        await state.EnterAsync(cancellationToken);
-        Render();
+        try
+        {
+            await state.EnterAsync(cancellationToken);
+            Render();
+        }
+        catch (Exception exception)
+        {
+            diagnostics.Report(new DiagnosticEvent(
+                NotificationCategory.System,
+                "overview-load",
+                "概览读取失败",
+                "概览暂未载入；可重试。",
+                DiagnosticSeverity.Error,
+                exception));
+        }
     }
 
     private void Render()
     {
         OverviewSnapshot snapshot = state.Snapshot;
-        StatusText.Text = snapshot.Status;
-        ErrorText.Text = snapshot.Error ?? string.Empty;
-        ErrorText.Visibility = string.IsNullOrWhiteSpace(snapshot.Error)
-            ? Visibility.Collapsed
-            : Visibility.Visible;
+        ReportLoadError(snapshot.Error);
         ArchiveCountText.Text = snapshot.ArchiveCount.ToString();
         AccountCountText.Text = snapshot.AccountCount.ToString();
         RecordCountText.Text = snapshot.TotalGachaRecords.ToString();
         UnresolvedCountText.Text = snapshot.UnresolvedCount.ToString();
         ArchiveList.ItemsSource = snapshot.Archives;
         RecentList.ItemsSource = snapshot.RecentActivities;
-        NotesText.Text = string.Join(Environment.NewLine, snapshot.CoverageNotes);
         ContinueButton.Content = snapshot.ContinueTargetLabel;
         AutomationProperties.SetName(ContinueButton, snapshot.ContinueTargetLabel);
         ReloadButton.IsEnabled = !snapshot.IsBusy;
-        AutomationProperties.SetName(
-            StatusText,
-            snapshot.IsBusy ? "概览正在载入" : "概览状态");
+    }
+
+    private void ReportLoadError(string? error)
+    {
+        if (string.IsNullOrWhiteSpace(error) || error == lastLoadError)
+        {
+            return;
+        }
+        lastLoadError = error;
+        diagnostics.Report(new DiagnosticEvent(
+            NotificationCategory.System,
+            "overview-load",
+            "概览读取失败",
+            error,
+            DiagnosticSeverity.Error));
     }
 
     private void OnContinue(object sender, RoutedEventArgs e) =>

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 using FurinaChronicle.Presentation.Management;
+using FurinaChronicle.Presentation.Diagnostics;
 using FurinaChronicle.Presentation.Notifications;
 using FurinaChronicle.Services.Passport;
 using FurinaChronicle.Windows.Composition;
@@ -13,6 +14,7 @@ namespace FurinaChronicle.Windows.Pages;
 
 public sealed partial class PassportPage : UserControl
 {
+    private readonly IDiagnosticService diagnostics;
     private readonly PassportCredentialState state;
     private readonly MainlandPassportLoginService mainland;
     private readonly HoYoLabPassportLoginService overseas;
@@ -21,10 +23,12 @@ public sealed partial class PassportPage : UserControl
     private readonly INotificationCenter notifications;
     private bool rendering;
     private bool signingIn;
+    private string? lastLoadIssue;
 
     public PassportPage(PassportCredentialState state, MainlandPassportLoginService mainland,
         HoYoLabPassportLoginService overseas, IMiHoYoAccountProfileClient profiles,
-        DpapiPassportCredentialStore credentials, INotificationCenter notifications)
+        DpapiPassportCredentialStore credentials, INotificationCenter notifications,
+        IDiagnosticService diagnostics)
     {
         this.state = state;
         this.mainland = mainland;
@@ -32,6 +36,7 @@ public sealed partial class PassportPage : UserControl
         this.profiles = profiles;
         this.credentials = credentials;
         this.notifications = notifications;
+        this.diagnostics = diagnostics;
         InitializeComponent();
     }
 
@@ -39,8 +44,21 @@ public sealed partial class PassportPage : UserControl
 
     public async Task EnterAsync(CancellationToken cancellationToken = default)
     {
-        await state.EnterAsync(cancellationToken);
-        Render();
+        try
+        {
+            await state.EnterAsync(cancellationToken);
+            Render();
+        }
+        catch (Exception exception)
+        {
+            diagnostics.Report(new DiagnosticEvent(
+                NotificationCategory.Passport,
+                "passport-load",
+                "登录凭据读取失败",
+                "登录凭据暂未载入；可重试。",
+                DiagnosticSeverity.Error,
+                exception));
+        }
     }
 
     private void Render()
@@ -49,15 +67,7 @@ public sealed partial class PassportPage : UserControl
         try
         {
             PassportCredentialSnapshot snapshot = state.Snapshot;
-            StatusText.Text = snapshot.Status;
-            ErrorText.Text = snapshot.Error ?? string.Empty;
-            ErrorText.Visibility = string.IsNullOrWhiteSpace(snapshot.Error)
-                ? Visibility.Collapsed
-                : Visibility.Visible;
-            LoadWarningText.Text = snapshot.LoadWarning ?? string.Empty;
-            LoadWarningText.Visibility = string.IsNullOrWhiteSpace(snapshot.LoadWarning)
-                ? Visibility.Collapsed
-                : Visibility.Visible;
+            ReportLoadIssue(snapshot.Error, snapshot.LoadWarning);
             CredentialRow[] rows = snapshot.Credentials
                 .Select(item => new CredentialRow(item))
                 .ToArray();
@@ -159,11 +169,7 @@ public sealed partial class PassportPage : UserControl
             uidBox.Text,
             labelBox.Text);
         Render();
-        Report("保存登录凭据", result);
-        if (!result.Succeeded)
-        {
-            await ShowMessageAsync("凭据未保存", result.Message);
-        }
+        Report("保存登录凭据", NotificationTaskKeys.PassportSave, result);
     }
 
     private async void OnDeleteCredential(object sender, RoutedEventArgs e)
@@ -186,8 +192,7 @@ public sealed partial class PassportPage : UserControl
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
         PassportCredentialActionResult result = await state.DeleteSelectedAsync();
         Render();
-        Report("删除登录凭据", result);
-        if (!result.Succeeded) await ShowMessageAsync("凭据未删除", result.Message);
+        Report("删除登录凭据", NotificationTaskKeys.PassportDelete, result);
     }
 
     private async void OnClearCredentials(object sender, RoutedEventArgs e)
@@ -209,8 +214,7 @@ public sealed partial class PassportPage : UserControl
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
         PassportCredentialActionResult result = await state.ClearAsync();
         Render();
-        Report("清除全部登录凭据", result);
-        if (!result.Succeeded) await ShowMessageAsync("凭据未清除", result.Message);
+        Report("清除全部登录凭据", NotificationTaskKeys.PassportClear, result);
     }
 
     private async void OnRefresh(object sender, RoutedEventArgs e)
@@ -229,46 +233,79 @@ public sealed partial class PassportPage : UserControl
             }
             await state.RefreshAsync();
         }
-        catch { notice = "角色列表暂未更新，请检查网络或重新登录。"; }
+        catch (Exception exception)
+        {
+            notice = "角色列表暂未更新，请检查网络或重新登录。";
+            diagnostics.Report(new DiagnosticEvent(
+                NotificationCategory.Passport,
+                "passport-refresh",
+                "刷新角色列表失败",
+                notice,
+                DiagnosticSeverity.Warning,
+                exception));
+        }
         finally
         {
             signingIn = false;
             Render();
-            if (notice is not null)
+            if (notice is not null && notice.StartsWith("已更新", StringComparison.Ordinal))
             {
-                StatusText.Text = notice;
                 notifications.Publish(new(
-                    notice.StartsWith("已更新", StringComparison.Ordinal)
-                        ? NotificationSeverity.Success
-                        : NotificationSeverity.Warning,
+                    NotificationSeverity.Information,
                     NotificationCategory.Passport,
                     "刷新角色列表",
-                    notice));
+                    notice)
+                {
+                    TaskKey = NotificationTaskKeys.PassportRefresh,
+                });
             }
         }
     }
 
-    private void Report(string operation, PassportCredentialActionResult result) =>
+    private void Report(string operation, string taskKey, PassportCredentialActionResult result)
+    {
+        if (!result.Succeeded)
+        {
+            diagnostics.Report(new DiagnosticEvent(
+                NotificationCategory.Passport,
+                "passport",
+                operation,
+                result.Message,
+                DiagnosticSeverity.Warning)
+            {
+                TaskKey = taskKey,
+            });
+            return;
+        }
+
         notifications.Publish(new(
-            result.Succeeded ? NotificationSeverity.Success : NotificationSeverity.Warning,
+            NotificationSeverity.Information,
             NotificationCategory.Passport,
             operation,
-            result.Message));
+            result.Message)
+        {
+            TaskKey = taskKey,
+        });
+    }
+
+    private void ReportLoadIssue(string? error, string? warning)
+    {
+        string? issue = !string.IsNullOrWhiteSpace(error) ? error : warning;
+        if (string.IsNullOrWhiteSpace(issue) || issue == lastLoadIssue)
+        {
+            return;
+        }
+        lastLoadIssue = issue;
+        diagnostics.Report(new DiagnosticEvent(
+            NotificationCategory.Passport,
+            "passport-load",
+            "登录凭据读取异常",
+            issue,
+            DiagnosticSeverity.Warning));
+    }
 
     private void OnOpenGachaRefresh(object sender, RoutedEventArgs e) =>
         RefreshRequested?.Invoke(this, EventArgs.Empty);
-
-    private async Task ShowMessageAsync(string title, string message)
-    {
-        var dialog = new ContentDialog
-        {
-            XamlRoot = XamlRoot,
-            Title = title,
-            CloseButtonText = "确定",
-            Content = new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap }
-        };
-        await dialog.ShowAsync();
-    }
 
     public sealed record CredentialRow(IsolatedCredentialSummary Credential)
     {

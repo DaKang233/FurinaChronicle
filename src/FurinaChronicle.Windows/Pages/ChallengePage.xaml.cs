@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 using FurinaChronicle.Core.Challenges;
+using FurinaChronicle.Presentation.Diagnostics;
 using FurinaChronicle.Presentation.History;
+using FurinaChronicle.Presentation.Notifications;
 using FurinaChronicle.Windows.Composition;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -19,15 +21,22 @@ public sealed partial class ChallengePage : UserControl
         ChallengeMode.StygianOnslaught,
     ];
 
+    private readonly IDiagnosticService diagnostics;
     private readonly ChallengeHistoryState state;
-    private bool rendering;
     private readonly WindowsHistoryCollection collection;
+    private bool rendering;
+    private string? lastReportedFailure;
     private CancellationTokenSource? activeCollection;
 
-    public ChallengePage(ChallengeHistoryState state, WindowsHistoryCollection collection)
+    public ChallengePage(
+        ChallengeHistoryState state,
+        WindowsHistoryCollection collection,
+        IDiagnosticService diagnostics)
     {
         this.state = state ?? throw new ArgumentNullException(nameof(state));
         this.collection = collection;
+        this.diagnostics = diagnostics ??
+            throw new ArgumentNullException(nameof(diagnostics));
         InitializeComponent();
         ModePicker.ItemsSource = Modes
             .Select(HistoryLabels.Mode)
@@ -37,8 +46,16 @@ public sealed partial class ChallengePage : UserControl
 
     public async Task EnterAsync(CancellationToken cancellationToken = default)
     {
-        await state.EnterAsync(cancellationToken);
-        Render();
+        SetLoading(true);
+        try
+        {
+            await state.EnterAsync(cancellationToken);
+        }
+        finally
+        {
+            SetLoading(false);
+            Render();
+        }
     }
 
     public void Leave()
@@ -51,24 +68,62 @@ public sealed partial class ChallengePage : UserControl
     {
         if (activeCollection is not null ||
             state.Snapshot.SelectedArchiveId is not Guid archive ||
-            state.Snapshot.SelectedAccountId is not Guid account) return;
+            state.Snapshot.SelectedAccountId is not Guid account)
+        {
+            return;
+        }
 
         using var cancellation = new CancellationTokenSource();
         activeCollection = cancellation;
         CollectButton.IsEnabled = false;
-        CollectionStatus.Text = "正在准备采集…";
+        SetLoading(true);
         try
         {
-            string? result = await collection.RunAsync(XamlRoot, archive, account, state.Snapshot.Mode, cancellation.Token);
-            CollectionStatus.Text = result ?? "已取消采集。";
-            await state.ReloadAsync(cancellation.Token);
+            string? result = await collection.RunAsync(
+                XamlRoot,
+                archive,
+                account,
+                state.Snapshot.Mode,
+                cancellation.Token);
+            if (result is not null)
+            {
+                ReportStartRejection(result);
+                await state.ReloadAsync(cancellation.Token);
+            }
         }
-        catch (OperationCanceledException) { CollectionStatus.Text = "采集已取消。"; }
-        catch { CollectionStatus.Text = "采集未完成，请检查登录和网络后重试。"; }
+        catch (OperationCanceledException)
+        {
+            // User cancelled the confirmation or the page went away.
+        }
+        catch (Exception exception)
+        {
+            SafeReport(new DiagnosticEvent(
+                NotificationCategory.Collection,
+                "采集最新记录",
+                "挑战采集失败",
+                "采集未完成，请检查登录和网络后重试。",
+                DiagnosticSeverity.Error,
+                exception));
+        }
         finally
         {
             activeCollection = null;
+            SetLoading(false);
             Render();
+        }
+    }
+
+    private void ReportStartRejection(string result)
+    {
+        if (result.StartsWith("请选择身份已确认", StringComparison.Ordinal) ||
+            result.StartsWith("请在“登录账号”", StringComparison.Ordinal))
+        {
+            SafeReport(new DiagnosticEvent(
+                NotificationCategory.Collection,
+                "采集最新记录",
+                "无法开始采集",
+                result,
+                DiagnosticSeverity.Warning));
         }
     }
 
@@ -93,28 +148,59 @@ public sealed partial class ChallengePage : UserControl
                 : -1;
             ObservationList.ItemsSource = snapshot.Observations;
             ObservationList.SelectedItem = snapshot.SelectedObservation;
-            StatusText.Text = snapshot.Status;
-            ErrorText.Text = snapshot.Error ?? string.Empty;
-            ErrorText.Visibility = string.IsNullOrWhiteSpace(snapshot.Error)
-                ? Visibility.Collapsed
-                : Visibility.Visible;
             EmptyText.Text = snapshot.EmptyMessage;
-            EmptyText.Visibility = string.IsNullOrWhiteSpace(snapshot.EmptyMessage)
-                ? Visibility.Collapsed
-                : Visibility.Visible;
+            EmptyText.Visibility = string.IsNullOrWhiteSpace(snapshot.Error) &&
+                !string.IsNullOrWhiteSpace(snapshot.EmptyMessage)
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
             PreviousButton.IsEnabled = snapshot.HasPrevious && !snapshot.IsBusy;
             NextButton.IsEnabled = snapshot.HasNext && !snapshot.IsBusy;
             ReloadButton.IsEnabled = !snapshot.IsBusy;
-            CollectButton.IsEnabled = !snapshot.IsBusy && activeCollection is null && snapshot.SelectedAccountId is not null;
+            CollectButton.IsEnabled = !snapshot.IsBusy &&
+                activeCollection is null &&
+                snapshot.SelectedAccountId is not null;
             PageText.Text = snapshot.PageText;
-            AutomationProperties.SetName(
-                StatusText,
-                snapshot.IsBusy ? "周期挑战正在载入" : "周期挑战状态");
+            ReportFailureState(snapshot);
             RenderDetail();
         }
         finally
         {
             rendering = false;
+        }
+    }
+
+    private void ReportFailureState(ChallengeHistorySnapshot snapshot)
+    {
+        if (snapshot.IsBusy)
+        {
+            return;
+        }
+        if (!string.IsNullOrWhiteSpace(snapshot.Error))
+        {
+            if (!string.Equals(lastReportedFailure, snapshot.Error, StringComparison.Ordinal))
+            {
+                lastReportedFailure = snapshot.Error;
+                SafeReport(new DiagnosticEvent(
+                    NotificationCategory.Collection,
+                    "读取挑战观察",
+                    "挑战观察读取失败",
+                    "观察记录可能未完整显示，请稍后刷新。",
+                    DiagnosticSeverity.Error));
+            }
+            return;
+        }
+        lastReportedFailure = null;
+    }
+
+    private void SafeReport(DiagnosticEvent diagnostic)
+    {
+        try
+        {
+            diagnostics.Report(diagnostic);
+        }
+        catch (Exception)
+        {
+            // A failing notification/log path must never break the page.
         }
     }
 
@@ -130,6 +216,32 @@ public sealed partial class ChallengePage : UserControl
                 : $"挑战观察详情：{view.Title}");
     }
 
+    private async Task RunAsync(Func<Task> operation)
+    {
+        SetLoading(true);
+        try
+        {
+            await operation();
+        }
+        finally
+        {
+            SetLoading(false);
+            Render();
+        }
+    }
+
+    private void SetLoading(bool loading)
+    {
+        LoadingRing.IsActive = loading;
+        LoadingRing.Visibility = loading ? Visibility.Visible : Visibility.Collapsed;
+        ReloadButton.IsEnabled = !loading;
+        PreviousButton.IsEnabled = !loading && state.Snapshot.HasPrevious;
+        NextButton.IsEnabled = !loading && state.Snapshot.HasNext;
+        CollectButton.IsEnabled = !loading &&
+            activeCollection is null &&
+            state.Snapshot.SelectedAccountId is not null;
+    }
+
     private async void OnArchiveSelectionChanged(
         object sender,
         SelectionChangedEventArgs e)
@@ -143,8 +255,8 @@ public sealed partial class ChallengePage : UserControl
         {
             return;
         }
-        await state.SelectArchiveAsync(state.Snapshot.Archives[index].Id);
-        Render();
+        await RunAsync(() => state.SelectArchiveAsync(
+            state.Snapshot.Archives[index].Id));
     }
 
     private async void OnAccountSelectionChanged(
@@ -160,8 +272,8 @@ public sealed partial class ChallengePage : UserControl
         {
             return;
         }
-        await state.SelectAccountAsync(state.Snapshot.Accounts[index].Id);
-        Render();
+        await RunAsync(() => state.SelectAccountAsync(
+            state.Snapshot.Accounts[index].Id));
     }
 
     private async void OnModeSelectionChanged(
@@ -177,8 +289,7 @@ public sealed partial class ChallengePage : UserControl
         {
             return;
         }
-        await state.SetModeAsync(Modes[index]);
-        Render();
+        await RunAsync(() => state.SetModeAsync(Modes[index]));
     }
 
     private async void OnSeasonSelectionChanged(
@@ -193,8 +304,7 @@ public sealed partial class ChallengePage : UserControl
         {
             return;
         }
-        await state.SetSeasonAsync(season);
-        Render();
+        await RunAsync(() => state.SetSeasonAsync(season));
     }
 
     private void OnObservationSelectionChanged(
@@ -213,20 +323,17 @@ public sealed partial class ChallengePage : UserControl
 
     private async void OnReload(object sender, RoutedEventArgs e)
     {
-        await state.ReloadAsync();
-        Render();
+        await RunAsync(() => state.ReloadAsync());
     }
 
     private async void OnPrevious(object sender, RoutedEventArgs e)
     {
-        await state.PreviousPageAsync();
-        Render();
+        await RunAsync(() => state.PreviousPageAsync());
     }
 
     private async void OnNext(object sender, RoutedEventArgs e)
     {
-        await state.NextPageAsync();
-        Render();
+        await RunAsync(() => state.NextPageAsync());
     }
 
     private static int IndexOf(

@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 using FurinaChronicle.Presentation.Chronicle;
+using FurinaChronicle.Presentation.Diagnostics;
 using FurinaChronicle.Presentation.History;
+using FurinaChronicle.Presentation.Notifications;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -12,12 +14,18 @@ namespace FurinaChronicle.Windows.Pages;
 
 public sealed partial class ChroniclePage : UserControl
 {
+    private readonly IDiagnosticService diagnostics;
     private readonly ChronicleWorkspaceState state;
     private bool rendering;
+    private string? lastReportedFailure;
 
-    public ChroniclePage(ChronicleWorkspaceState state)
+    public ChroniclePage(
+        ChronicleWorkspaceState state,
+        IDiagnosticService diagnostics)
     {
         this.state = state ?? throw new ArgumentNullException(nameof(state));
+        this.diagnostics = diagnostics ??
+            throw new ArgumentNullException(nameof(diagnostics));
         InitializeComponent();
         TimelinePicker.ItemsSource = state.TimelineOptions;
         GranularityPicker.ItemsSource = state.GranularityOptions;
@@ -41,8 +49,16 @@ public sealed partial class ChroniclePage : UserControl
 
     public async Task EnterAsync(CancellationToken cancellationToken = default)
     {
-        await state.EnterAsync(cancellationToken);
-        Render();
+        SetLoading(true);
+        try
+        {
+            await state.EnterAsync(cancellationToken);
+        }
+        finally
+        {
+            SetLoading(false);
+            Render();
+        }
     }
 
     public void Leave() => state.Cancel();
@@ -83,25 +99,19 @@ public sealed partial class ChroniclePage : UserControl
 
             EntryList.ItemsSource = snapshot.Entries;
             EntryList.SelectedItem = snapshot.SelectedEntry;
-            StatusText.Text = snapshot.Status;
-            StaleText.Text = snapshot.StaleMessage ?? string.Empty;
-            StaleText.Visibility = string.IsNullOrWhiteSpace(snapshot.StaleMessage)
-                ? Visibility.Collapsed
-                : Visibility.Visible;
-            ErrorText.Text = snapshot.Error ?? string.Empty;
-            ErrorText.Visibility = string.IsNullOrWhiteSpace(snapshot.Error)
-                ? Visibility.Collapsed
-                : Visibility.Visible;
+            bool stale = !string.IsNullOrWhiteSpace(snapshot.StaleMessage);
+            StalePanel.Visibility = stale ? Visibility.Visible : Visibility.Collapsed;
+            StaleText.Text = stale ? ShortStale(snapshot.StaleMessage!) : string.Empty;
             EmptyText.Text = snapshot.EmptyMessage ?? string.Empty;
-            EmptyText.Visibility = string.IsNullOrWhiteSpace(snapshot.EmptyMessage)
-                ? Visibility.Collapsed
-                : Visibility.Visible;
+            EmptyText.Visibility = !stale &&
+                string.IsNullOrWhiteSpace(snapshot.Error) &&
+                !string.IsNullOrWhiteSpace(snapshot.EmptyMessage)
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
             ReloadButton.IsEnabled = !snapshot.IsBusy;
             LoadMoreButton.IsEnabled = snapshot.HasMore && !snapshot.IsBusy;
             PageText.Text = $"{snapshot.Entries.Count} 条已载入";
-            AutomationProperties.SetName(
-                StatusText,
-                snapshot.IsBusy ? "游戏历程正在载入" : "游戏历程状态");
+            ReportFailureState(snapshot);
             RenderDetail();
         }
         finally
@@ -120,6 +130,108 @@ public sealed partial class ChroniclePage : UserControl
             entry is null ? "历程详情" : $"历程详情：{entry.Title}");
     }
 
+    private void ReportFailureState(ChronicleWorkspaceSnapshot snapshot)
+    {
+        if (snapshot.IsBusy)
+        {
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(snapshot.StaleMessage))
+        {
+            ReportOnce(
+                $"stale|{snapshot.StaleMessage}",
+                "读取游戏历程",
+                "游戏历程视图已失效",
+                ShortStale(snapshot.StaleMessage),
+                DiagnosticSeverity.Warning);
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(snapshot.Error))
+        {
+            ReportOnce(
+                $"error|{snapshot.Error}",
+                "读取游戏历程",
+                "游戏历程读取失败",
+                "记录可能未完整显示，请稍后刷新。",
+                DiagnosticSeverity.Error);
+            return;
+        }
+
+        lastReportedFailure = null;
+    }
+
+    private void ReportOnce(
+        string key,
+        string operation,
+        string title,
+        string message,
+        DiagnosticSeverity severity)
+    {
+        if (string.Equals(lastReportedFailure, key, StringComparison.Ordinal))
+        {
+            return;
+        }
+        lastReportedFailure = key;
+        SafeReport(new DiagnosticEvent(
+            NotificationCategory.Chronicle,
+            operation,
+            title,
+            message,
+            severity));
+    }
+
+    private void SafeReport(DiagnosticEvent diagnostic)
+    {
+        try
+        {
+            diagnostics.Report(diagnostic);
+        }
+        catch (Exception)
+        {
+            // A failing notification/log path must never break the page.
+        }
+    }
+
+    private static string ShortStale(string message)
+    {
+        if (message.Contains("过期", StringComparison.Ordinal))
+        {
+            return "浏览快照已过期，请重新载入。";
+        }
+        if (message.Contains("纠正", StringComparison.Ordinal) ||
+            message.Contains("删除", StringComparison.Ordinal) ||
+            message.Contains("撤销", StringComparison.Ordinal))
+        {
+            return "时间线数据已变化，请重新载入。";
+        }
+        return "当前视图已失效，请重新载入。";
+    }
+
+    private async Task RunAsync(Func<Task> operation)
+    {
+        SetLoading(true);
+        try
+        {
+            await operation();
+        }
+        finally
+        {
+            SetLoading(false);
+            Render();
+        }
+    }
+
+    private void SetLoading(bool loading)
+    {
+        LoadingRing.IsActive = loading;
+        LoadingRing.Visibility = loading ? Visibility.Visible : Visibility.Collapsed;
+        ReloadButton.IsEnabled = !loading;
+        LoadMoreButton.IsEnabled = !loading && state.Snapshot.HasMore;
+        StaleReloadButton.IsEnabled = !loading;
+    }
+
     private async void OnArchiveSelectionChanged(
         object sender,
         SelectionChangedEventArgs e)
@@ -133,8 +245,8 @@ public sealed partial class ChroniclePage : UserControl
         {
             return;
         }
-        await state.SelectArchiveAsync(state.Snapshot.Archives[index].Id);
-        Render();
+        await RunAsync(() => state.SelectArchiveAsync(
+            state.Snapshot.Archives[index].Id));
     }
 
     private async void OnAccountSelectionChanged(
@@ -150,8 +262,7 @@ public sealed partial class ChroniclePage : UserControl
             return;
         }
         Guid? accountId = choice.Id == Guid.Empty ? null : choice.Id;
-        await state.SelectAccountAsync(accountId);
-        Render();
+        await RunAsync(() => state.SelectAccountAsync(accountId));
     }
 
     private async void OnTimelineSelectionChanged(
@@ -162,9 +273,8 @@ public sealed partial class ChroniclePage : UserControl
         {
             return;
         }
-        await state.SetTimelineAsync(
-            state.TimelineOptions[TimelinePicker.SelectedIndex].Value);
-        Render();
+        await RunAsync(() => state.SetTimelineAsync(
+            state.TimelineOptions[TimelinePicker.SelectedIndex].Value));
     }
 
     private async void OnGranularitySelectionChanged(
@@ -175,9 +285,8 @@ public sealed partial class ChroniclePage : UserControl
         {
             return;
         }
-        await state.SetGranularityAsync(
-            state.GranularityOptions[GranularityPicker.SelectedIndex].Value);
-        Render();
+        await RunAsync(() => state.SetGranularityAsync(
+            state.GranularityOptions[GranularityPicker.SelectedIndex].Value));
     }
 
     private async void OnTimeRangeSelectionChanged(
@@ -188,9 +297,8 @@ public sealed partial class ChroniclePage : UserControl
         {
             return;
         }
-        await state.SetTimeRangeAsync(
-            state.TimeRangeOptions[TimeRangePicker.SelectedIndex].Value);
-        Render();
+        await RunAsync(() => state.SetTimeRangeAsync(
+            state.TimeRangeOptions[TimeRangePicker.SelectedIndex].Value));
     }
 
     private async void OnDomainSelectionChanged(
@@ -201,9 +309,8 @@ public sealed partial class ChroniclePage : UserControl
         {
             return;
         }
-        await state.SetDomainAsync(
-            state.DomainOptions[DomainPicker.SelectedIndex].Value);
-        Render();
+        await RunAsync(() => state.SetDomainAsync(
+            state.DomainOptions[DomainPicker.SelectedIndex].Value));
     }
 
     private async void OnRankSelectionChanged(
@@ -214,9 +321,8 @@ public sealed partial class ChroniclePage : UserControl
         {
             return;
         }
-        await state.SetRankAsync(
-            state.RankOptions[RankPicker.SelectedIndex].Value);
-        Render();
+        await RunAsync(() => state.SetRankAsync(
+            state.RankOptions[RankPicker.SelectedIndex].Value));
     }
 
     private async void OnStateChangesToggled(
@@ -227,8 +333,8 @@ public sealed partial class ChroniclePage : UserControl
         {
             return;
         }
-        await state.SetIncludeStateChangesAsync(StateChangesSwitch.IsOn);
-        Render();
+        await RunAsync(() => state.SetIncludeStateChangesAsync(
+            StateChangesSwitch.IsOn));
     }
 
     private async void OnUndatedToggled(object sender, RoutedEventArgs e)
@@ -237,8 +343,8 @@ public sealed partial class ChroniclePage : UserControl
         {
             return;
         }
-        await state.SetIncludeUndatedAsync(UndatedSwitch.IsOn);
-        Render();
+        await RunAsync(() => state.SetIncludeUndatedAsync(
+            UndatedSwitch.IsOn));
     }
 
     private void OnEntrySelectionChanged(
@@ -256,14 +362,12 @@ public sealed partial class ChroniclePage : UserControl
 
     private async void OnReload(object sender, RoutedEventArgs e)
     {
-        await state.ReloadAsync();
-        Render();
+        await RunAsync(() => state.ReloadAsync());
     }
 
     private async void OnLoadMore(object sender, RoutedEventArgs e)
     {
-        await state.LoadMoreAsync();
-        Render();
+        await RunAsync(() => state.LoadMoreAsync());
     }
 
     private void OnGenerateReport(object sender, RoutedEventArgs e)
@@ -279,9 +383,16 @@ public sealed partial class ChroniclePage : UserControl
             package.SetText(ReportBox.Text ?? string.Empty);
             Clipboard.SetContent(package);
         }
-        catch (Exception)
+        catch (Exception exception)
         {
-            ReportBox.Text += Environment.NewLine + "（复制到剪贴板失败；请手动选择文本。）";
+            ReportBox.SelectAll();
+            SafeReport(new DiagnosticEvent(
+                NotificationCategory.Chronicle,
+                "复制报告",
+                "复制失败",
+                "无法写入剪贴板，请手动选择报告文本。",
+                DiagnosticSeverity.Warning,
+                exception));
         }
     }
 

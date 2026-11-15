@@ -22,25 +22,41 @@ public sealed partial class ArchiveTransferPage
     private async void OnExportDomainMarkdown(object sender, RoutedEventArgs e) =>
         await ExportDomainAsync(markdown: true);
 
+    private void ShowPortableValidation(string message)
+    {
+        PortableValidationText.Text = message;
+        PortableValidationText.Visibility = Visibility.Visible;
+        AutomationProperties.SetName(PortableValidationText, $"分类数据提示：{message}");
+    }
+
+    private void ClearPortableValidation()
+    {
+        PortableValidationText.Text = string.Empty;
+        PortableValidationText.Visibility = Visibility.Collapsed;
+    }
+
     private async Task ExportDomainAsync(bool markdown)
     {
         if (PortableArchivePicker.SelectedItem is not PlayerArchive archive)
         {
-            PortableStatus.Text = "请选择要导出的档案。";
-            notifications.Publish(new(
-                NotificationSeverity.Warning,
-                NotificationCategory.Archive,
-                "导出分类数据",
-                PortableStatus.Text));
+            ShowPortableValidation("请选择要导出的档案。");
             return;
         }
 
+        ClearPortableValidation();
         var kind = PortableKindPicker.SelectedIndex == 1
             ? ArchiveDomainDatasetKind.ChallengeHistory
             : ArchiveDomainDatasetKind.CharacterWeaponHistory;
-        string slug = kind == ArchiveDomainDatasetKind.ChallengeHistory ? "challenges" : "characters-weapons";
-        await RunPortableAsync(async () =>
+        string slug = kind == ArchiveDomainDatasetKind.ChallengeHistory
+            ? "challenges"
+            : "characters-weapons";
+        string taskKey = markdown
+            ? NotificationTaskKeys.DomainMarkdownExport
+            : NotificationTaskKeys.DomainPortableExport;
+        string title = markdown ? "导出分类 Markdown" : "导出分类 Portable";
+        await RunPortableAsync(taskKey, title, async () =>
         {
+            PublishProgress(taskKey, title, "正在生成分类数据文件…");
             // Generate the whole file before prompting for a destination.
             string temporary = Path.GetTempFileName();
             try
@@ -54,7 +70,11 @@ public sealed partial class ArchiveTransferPage
                     }
                     else
                     {
-                        await portable.ExportAsync(archive.Id, kind, output, DateTimeOffset.UtcNow);
+                        await portable.ExportAsync(
+                            archive.Id,
+                            kind,
+                            output,
+                            DateTimeOffset.UtcNow);
                     }
                 }
 
@@ -64,18 +84,19 @@ public sealed partial class ArchiveTransferPage
                     markdown ? ".md" : ".json");
                 if (destination is null)
                 {
-                    PortableStatus.Text = "已取消导出。";
+                    ClearProgress(taskKey);
                     return;
                 }
 
                 StorageFile staged = await StorageFile.GetFileFromPathAsync(temporary);
                 await staged.CopyAndReplaceAsync(destination);
-                PortableStatus.Text = $"已导出 {destination.Name}。";
-                notifications.Publish(new(
-                    NotificationSeverity.Success,
-                    NotificationCategory.Archive,
-                    markdown ? "导出分类 Markdown" : "导出分类 Portable",
-                    PortableStatus.Text));
+                Action? openFolder = CreateOpenFolderAction(destination.Path);
+                PublishSuccess(
+                    taskKey,
+                    title + "完成",
+                    $"已保存到 {DescribeSavedLocation(destination.Path, destination.Name)}。",
+                    openFolder is null ? null : "打开文件夹",
+                    openFolder);
             }
             finally
             {
@@ -87,98 +108,196 @@ public sealed partial class ArchiveTransferPage
     private async void OnImportPortable(object sender, RoutedEventArgs e)
     {
         if (portableBusy) return;
-        await RunPortableAsync(async () =>
-        {
-            StorageFile? file = await filePicker.PickOpenFileAsync(".json");
-            if (file is null) return;
-            await using Stream source = await file.OpenStreamForReadAsync();
-            ArchiveDomainPortablePackage package = await portable.ReadAsync(source);
-            var targetPicker = new ComboBox { Header = "导入目标", HorizontalAlignment = HorizontalAlignment.Stretch };
-            targetPicker.Items.Add("按来源档案名称匹配或创建");
-            IReadOnlyList<PlayerArchive> targets = state.Snapshot.Archives;
-            foreach (PlayerArchive archive in targets)
+        await RunPortableAsync(
+            NotificationTaskKeys.DomainPortableImport,
+            "导入分类 Portable",
+            async () =>
             {
-                targetPicker.Items.Add(archive.Name);
-            }
-            targetPicker.SelectedIndex = 0;
-            if (!await ConfirmPortableAsync("选择导入目标", "继续预览", targetPicker)) return;
-            int targetIndex = targetPicker.SelectedIndex - 1;
-            PlayerArchive? target = targetIndex >= 0 ? targets[targetIndex] : null;
-            ArchiveDomainPortablePlan plan = await portable.PlanAsync(package, target?.Id);
-            string summary = $"来源档案：{package.SourceArchiveName}\n" +
-                $"目标：{target?.Name ?? package.SourceArchiveName}（{(plan.CreateArchive ? "新建" : "现有")}）\n" +
-                $"账号映射：{plan.Accounts.Count}，新增：{plan.AddCount}，跳过：{plan.SkipCount}，冲突：{plan.ConflictCount}";
-            if (plan.ConflictCount > 0)
-            {
-                await ShowMessageAsync("导入存在冲突", summary + "\n" + string.Join("\n", plan.Conflicts.Take(5)));
-                notifications.Publish(new(
-                    NotificationSeverity.Warning,
-                    NotificationCategory.Archive,
-                    "分类 Portable 导入",
-                    $"导入存在 {plan.ConflictCount} 项冲突，未提交。"));
-                return;
-            }
-            if (!await ConfirmPortableAsync("确认分类 Portable 导入", "导入",
-                new TextBlock { Text = summary, TextWrapping = TextWrapping.Wrap })) return;
-
-            var request = new ArchiveDomainPortableApplyRequest(
-                OperationId.New(), package, plan, DateTimeOffset.UtcNow, "分类 Portable 导入");
-            ArchiveOperationResult result = await portableApplier.ApplyArchiveDomainPortableAsync(request);
-            if (result.Status == ChangeExecutionStatus.NeedsConfirmation && result.CleanupPlan is { } cleanup)
-            {
-                var details = new TextBlock
+                StorageFile? file = await filePicker.PickOpenFileAsync(".json");
+                if (file is null) return;
+                PublishProgress(
+                    NotificationTaskKeys.DomainPortableImport,
+                    "导入分类 Portable",
+                    "正在读取并校验分类 Portable…");
+                await using Stream source = await file.OpenStreamForReadAsync();
+                ArchiveDomainPortablePackage package = await portable.ReadAsync(source);
+                var targetPicker = new ComboBox
                 {
-                    Text = $"需要回收较早的撤销材料以继续。可回收 {cleanup.ReclaimableBytes} 字节。",
-                    TextWrapping = TextWrapping.Wrap
+                    Header = "导入目标",
+                    HorizontalAlignment = HorizontalAlignment.Stretch
                 };
-                if (!await ConfirmPortableAsync("撤销材料空间不足", "清理并重试", details)) return;
-                result = await portableApplier.ApplyArchiveDomainPortableAsync(
-                    request with { CleanupConfirmationId = cleanup.ConfirmationId });
-            }
+                targetPicker.Items.Add("按来源档案名称匹配或创建");
+                IReadOnlyList<PlayerArchive> targets = state.Snapshot.Archives;
+                foreach (PlayerArchive archive in targets)
+                {
+                    targetPicker.Items.Add(archive.Name);
+                }
 
-            if (result.Status == ChangeExecutionStatus.Applied)
-            {
-                PortableStatus.Text = $"导入完成，写入 {result.AffectedRecordCount} 项。";
-                notifications.Publish(new(
-                    NotificationSeverity.Success,
-                    NotificationCategory.Archive,
-                    "分类 Portable 导入",
-                    PortableStatus.Text));
-                RestoreApplied?.Invoke(this, EventArgs.Empty);
-                try { await EnterAsync(); }
-                catch { PortableStatus.Text += " 刷新档案列表失败，请重新打开此页。"; }
-            }
-            else
-            {
-                PortableStatus.Text = result.Status == ChangeExecutionStatus.NoOp
-                    ? "没有新增记录，已有数据保持原样。"
-                    : "导入未提交，请重新预览后重试。";
-                notifications.Publish(new(
-                    result.Status == ChangeExecutionStatus.NoOp
-                        ? NotificationSeverity.Information
-                        : NotificationSeverity.Warning,
-                    NotificationCategory.Archive,
-                    "分类 Portable 导入",
-                    PortableStatus.Text));
-            }
-        });
+                targetPicker.SelectedIndex = 0;
+                if (!await ConfirmPortableAsync("选择导入目标", "继续预览", targetPicker))
+                {
+                    ClearProgress(NotificationTaskKeys.DomainPortableImport);
+                    return;
+                }
+
+                int targetIndex = targetPicker.SelectedIndex - 1;
+                PlayerArchive? target = targetIndex >= 0 ? targets[targetIndex] : null;
+                ArchiveDomainPortablePlan plan = await portable.PlanAsync(package, target?.Id);
+                string summary = $"来源档案：{package.SourceArchiveName}\n" +
+                    $"目标：{target?.Name ?? package.SourceArchiveName}" +
+                    $"（{(plan.CreateArchive ? "新建" : "现有")}）\n" +
+                    $"账号映射：{plan.Accounts.Count}，新增：{plan.AddCount}，" +
+                    $"跳过：{plan.SkipCount}，冲突：{plan.ConflictCount}";
+                if (plan.ConflictCount > 0)
+                {
+                    await ShowPortableConflictPreviewAsync(
+                        "导入存在冲突",
+                        summary + Environment.NewLine +
+                        string.Join(Environment.NewLine, plan.Conflicts.Take(5)));
+                    ReportWarning(
+                        NotificationTaskKeys.DomainPortableImport,
+                        "分类 Portable 导入未提交",
+                        $"导入存在 {plan.ConflictCount} 项冲突，未提交。");
+                    return;
+                }
+
+                if (!await ConfirmPortableAsync(
+                    "确认分类 Portable 导入",
+                    "导入",
+                    new TextBlock { Text = summary, TextWrapping = TextWrapping.Wrap }))
+                {
+                    ClearProgress(NotificationTaskKeys.DomainPortableImport);
+                    return;
+                }
+
+                PublishProgress(
+                    NotificationTaskKeys.DomainPortableImport,
+                    "导入分类 Portable",
+                    "正在以原子变更集写入分类 Portable…");
+                var request = new ArchiveDomainPortableApplyRequest(
+                    OperationId.New(),
+                    package,
+                    plan,
+                    DateTimeOffset.UtcNow,
+                    "分类 Portable 导入");
+                ArchiveOperationResult result =
+                    await portableApplier.ApplyArchiveDomainPortableAsync(request);
+                if (result.Status == ChangeExecutionStatus.NeedsConfirmation &&
+                    result.CleanupPlan is { } cleanup)
+                {
+                    var details = new TextBlock
+                    {
+                        Text = $"需要回收较早的撤销材料以继续。可回收 {cleanup.ReclaimableBytes} 字节。",
+                        TextWrapping = TextWrapping.Wrap
+                    };
+                    if (!await ConfirmPortableAsync("撤销材料空间不足", "清理并重试", details))
+                    {
+                        ClearProgress(NotificationTaskKeys.DomainPortableImport);
+                        return;
+                    }
+
+                    result = await portableApplier.ApplyArchiveDomainPortableAsync(
+                        request with { CleanupConfirmationId = cleanup.ConfirmationId });
+                }
+
+                if (result.Status == ChangeExecutionStatus.Applied)
+                {
+                    RestoreApplied?.Invoke(this, EventArgs.Empty);
+                    bool refreshed = await RefreshPortableImportAsync();
+                    if (refreshed)
+                    {
+                        PublishSuccess(
+                            NotificationTaskKeys.DomainPortableImport,
+                            "分类 Portable 导入完成",
+                            $"已导入 {result.AffectedRecordCount} 项；目标：{target?.Name ?? package.SourceArchiveName}。");
+                    }
+                    else
+                    {
+                        PublishWarning(
+                            NotificationTaskKeys.DomainPortableImport,
+                            "分类 Portable 已导入",
+                            $"已导入 {result.AffectedRecordCount} 项，列表更新失败；数据已保存，只需重新加载显示。",
+                            "重新加载",
+                            CreateReloadAction());
+                    }
+                }
+                else if (result.Status == ChangeExecutionStatus.NoOp)
+                {
+                    PublishSuccess(
+                        NotificationTaskKeys.DomainPortableImport,
+                        "分类 Portable 导入完成",
+                        "没有新增记录，已有数据保持原样。");
+                }
+                else
+                {
+                    ReportFailure(
+                        NotificationTaskKeys.DomainPortableImport,
+                        "archive.domain.portable.import",
+                        "分类 Portable 导入未提交",
+                        result.Status == ChangeExecutionStatus.Conflict
+                            ? "目标状态或预览已变化，请重新导入；未写入任何数据。"
+                            : "导入未提交，请重新预览后重试。");
+                }
+            });
     }
 
-    private async Task RunPortableAsync(Func<Task> operation)
+    private async Task<bool> RefreshPortableImportAsync()
+    {
+        try
+        {
+            await state.EnterAsync();
+            Render();
+            return string.IsNullOrWhiteSpace(state.Snapshot.Error);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    private async Task ShowPortableConflictPreviewAsync(string title, string details)
+    {
+        var dialog = new ContentDialog
+        {
+            Title = title,
+            CloseButtonText = "关闭",
+            XamlRoot = XamlRoot,
+            Content = new ScrollViewer
+            {
+                MaxHeight = 360,
+                Content = new TextBlock
+                {
+                    Text = details,
+                    TextWrapping = TextWrapping.Wrap,
+                    IsTextSelectionEnabled = true
+                }
+            }
+        };
+        AutomationProperties.SetAutomationId(dialog, "DomainPortableConflictDialog");
+        await dialog.ShowAsync();
+    }
+
+    private async Task RunPortableAsync(
+        string taskKey,
+        string operationTitle,
+        Func<Task> operation)
     {
         if (portableBusy || state.Snapshot.IsBusy) return;
         portableBusy = true;
         SetPortableButtons();
-        PortableStatus.Text = string.Empty;
-        try { await operation(); }
+        ClearPortableValidation();
+        try
+        {
+            await operation();
+        }
         catch (Exception exception)
         {
-            PortableStatus.Text = $"分类数据操作未完成。{Presentation.Management.LogSanitizer.Sanitize(exception.Message)}";
-            notifications.Publish(new(
-                NotificationSeverity.Error,
-                NotificationCategory.Archive,
-                "分类数据操作",
-                PortableStatus.Text));
+            ReportFailure(
+                taskKey,
+                taskKey,
+                operationTitle + "失败",
+                "分类数据操作未完成；未确认写入的数据请重新载入核对。",
+                exception);
         }
         finally
         {

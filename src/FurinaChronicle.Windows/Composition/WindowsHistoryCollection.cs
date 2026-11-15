@@ -64,30 +64,75 @@ public sealed class WindowsHistoryCollection(
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return null;
         token.ThrowIfCancellationRequested();
         PassportAccount selected = available[picker.SelectedIndex];
-        if (mode is null)
+        string subject = mode switch
         {
-            CharacterWeaponCollectionResult result =
-                await characterWeapon.ExecuteAsync(archiveId, accountId, selected, token);
-            return Report(result.Commit, result.Status.ToString(), "角色与武器");
-        }
-        if (mode == ChallengeMode.SpiralAbyss)
+            null => "角色与武器",
+            ChallengeMode.SpiralAbyss => "深境螺旋",
+            ChallengeMode.ImaginariumTheater => "幻想真境剧诗",
+            _ => "幽境危战",
+        };
+        string taskKey = mode switch
         {
-            SpiralAbyssCollectionResult result = await abyss.ExecuteAsync(archiveId, accountId, selected, token,
-                verificationPrompt: new WindowsPassportVerification(root).VerifyGeetestAsync);
-            return Report(result.Commit, result.Status.ToString(), "深境螺旋");
+            null => NotificationTaskKeys.HistoryCollectCharacter,
+            ChallengeMode.SpiralAbyss => NotificationTaskKeys.HistoryCollectAbyss,
+            _ => NotificationTaskKeys.HistoryCollectChallenge,
+        };
+        notifications.Publish(new(
+            NotificationSeverity.Information,
+            NotificationCategory.Collection,
+            $"{subject}采集",
+            "正在采集…")
+        {
+            TaskKey = taskKey,
+            IsInProgress = true,
+        });
+        try
+        {
+            if (mode is null)
+            {
+                CharacterWeaponCollectionResult result =
+                    await characterWeapon.ExecuteAsync(archiveId, accountId, selected, token);
+                return Report(result.Commit, result.Status.ToString(), subject, taskKey);
+            }
+            if (mode == ChallengeMode.SpiralAbyss)
+            {
+                SpiralAbyssCollectionResult result = await abyss.ExecuteAsync(
+                    archiveId,
+                    accountId,
+                    selected,
+                    token,
+                    verificationPrompt: new WindowsPassportVerification(root).VerifyGeetestAsync);
+                return Report(result.Commit, result.Status.ToString(), subject, taskKey);
+            }
+            ChallengeModeCollectionResult other =
+                await challenge.ExecuteAsync(archiveId, accountId, selected, mode.Value, token);
+            return Report(other.Commit, other.Status.ToString(), subject, taskKey);
         }
-        ChallengeModeCollectionResult other =
-            await challenge.ExecuteAsync(archiveId, accountId, selected, mode.Value, token);
-        return Report(
-            other.Commit,
-            other.Status.ToString(),
-            mode == ChallengeMode.ImaginariumTheater ? "幻想真境剧诗" : "幽境危战");
+        catch (OperationCanceledException)
+        {
+            ClearProgress(taskKey);
+            throw;
+        }
+        catch (Exception)
+        {
+            ClearProgress(taskKey);
+            throw;
+        }
+    }
+
+    private void ClearProgress(string taskKey)
+    {
+        if (notifications.FindByTask(taskKey) is { } running)
+        {
+            notifications.Remove(running.Id);
+        }
     }
 
     private string Report(
         ArchiveOperationResult? commit,
         string status,
-        string subject)
+        string subject,
+        string taskKey)
     {
         string message = Describe(commit, status);
         NotificationSeverity severity = commit?.Status switch
@@ -100,7 +145,10 @@ public sealed class WindowsHistoryCollection(
             severity,
             NotificationCategory.Collection,
             $"{subject}采集",
-            message));
+            message)
+        {
+            TaskKey = taskKey,
+        });
         return message;
     }
 

@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 using FurinaChronicle.Core.Archives;
+using FurinaChronicle.Presentation.Diagnostics;
 using FurinaChronicle.Presentation.Management;
+using FurinaChronicle.Presentation.Notifications;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -11,15 +13,24 @@ namespace FurinaChronicle.Windows.Pages;
 
 public sealed partial class SettingsPage : UserControl
 {
+    private readonly INotificationCenter notifications;
+    private readonly IDiagnosticService diagnostics;
     private static readonly string[] ThemeLabels = ["跟随系统", "浅色", "深色"];
 
     private readonly SettingsState state;
     private readonly Action<SettingsTheme> applyTheme;
     private bool renderGuard;
+    private string? lastLoadError;
 
-    public SettingsPage(SettingsState state, Action<SettingsTheme> applyTheme)
+    public SettingsPage(
+        SettingsState state,
+        Action<SettingsTheme> applyTheme,
+        INotificationCenter notifications,
+        IDiagnosticService diagnostics)
     {
         this.state = state;
+        this.notifications = notifications;
+        this.diagnostics = diagnostics;
         this.applyTheme = applyTheme;
         InitializeComponent();
         ThemePicker.ItemsSource = ThemeLabels;
@@ -27,9 +38,22 @@ public sealed partial class SettingsPage : UserControl
 
     public async Task EnterAsync(CancellationToken cancellationToken = default)
     {
-        await state.EnterAsync(cancellationToken);
-        applyTheme(state.Snapshot.Theme);
-        Render();
+        try
+        {
+            await state.EnterAsync(cancellationToken);
+            applyTheme(state.Snapshot.Theme);
+            Render();
+        }
+        catch (Exception exception)
+        {
+            diagnostics.Report(new DiagnosticEvent(
+                NotificationCategory.System,
+                "settings-load",
+                "设置读取失败",
+                "设置暂未载入；可重试。",
+                DiagnosticSeverity.Error,
+                exception));
+        }
     }
 
     private void Render()
@@ -38,11 +62,7 @@ public sealed partial class SettingsPage : UserControl
         try
         {
             SettingsSnapshot snapshot = state.Snapshot;
-            StatusText.Text = snapshot.Status;
-            ErrorText.Text = snapshot.Error ?? string.Empty;
-            ErrorText.Visibility = string.IsNullOrWhiteSpace(snapshot.Error)
-                ? Visibility.Collapsed
-                : Visibility.Visible;
+            ReportLoadError(snapshot.Error);
             ThemePicker.SelectedIndex = (int)snapshot.Theme;
             DataRootText.Text = snapshot.DataRootPath;
             DatabasePathText.Text = snapshot.DatabasePath;
@@ -53,8 +73,11 @@ public sealed partial class SettingsPage : UserControl
             HistoryArchivePicker.SelectedItem = snapshot.Archives.FirstOrDefault(
                 archive => archive.Id == snapshot.SelectedArchiveId);
             UndoLimitBox.Value = snapshot.UndoLimit;
-            VersionText.Text =
-                $"{snapshot.VersionText} · Phase {snapshot.PhaseLabel} · Commit {snapshot.Commit}";
+            VersionText.Text = snapshot.VersionText;
+#if DEBUG
+            VersionText.Text +=
+                $" · Phase {snapshot.PhaseLabel} · Commit {snapshot.Commit}";
+#endif
             bool idle = !snapshot.IsBusy;
             ClearIconCacheButton.IsEnabled = idle;
             ApplyUndoLimitButton.IsEnabled = idle && snapshot.SelectedArchiveId is not null;
@@ -76,6 +99,10 @@ public sealed partial class SettingsPage : UserControl
         if (result.Succeeded)
         {
             applyTheme(theme);
+        }
+        else
+        {
+            ReportFailure("应用主题失败", result.Message);
         }
 
         Render();
@@ -100,7 +127,10 @@ public sealed partial class SettingsPage : UserControl
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
         SettingsActionResult result = await state.ClearIconCacheAsync();
         Render();
-        if (!result.Succeeded) await ShowMessageAsync("缓存未清除", result.Message);
+        ReportActionResult(
+            "清除图标缓存",
+            NotificationTaskKeys.SettingsClearIconCache,
+            result);
     }
 
     private async void OnHistoryArchiveSelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -115,13 +145,18 @@ public sealed partial class SettingsPage : UserControl
         double value = UndoLimitBox.Value;
         if (double.IsNaN(value))
         {
-            await ShowMessageAsync("撤销保留次数无效", "请输入 0～1000 的整数。");
+            UndoLimitValidation.Text = "请输入 0～1000 的整数。";
+            UndoLimitValidation.Visibility = Visibility.Visible;
             return;
         }
 
+        UndoLimitValidation.Visibility = Visibility.Collapsed;
         SettingsActionResult result = await state.SetUndoLimitAsync((int)value);
         Render();
-        if (!result.Succeeded) await ShowMessageAsync("撤销保留次数未修改", result.Message);
+        ReportActionResult(
+            "设置撤销保留次数",
+            NotificationTaskKeys.SettingsUndoLimit,
+            result);
     }
 
     private async void OnLicense(object sender, RoutedEventArgs e) =>
@@ -134,7 +169,59 @@ public sealed partial class SettingsPage : UserControl
     {
         SettingsActionResult result = await state.ExportDiagnosticsAsync();
         Render();
-        await ShowMessageAsync(result.Succeeded ? "诊断已导出" : "诊断导出失败", result.Message);
+        ReportActionResult(
+            "导出诊断报告",
+            NotificationTaskKeys.SettingsExportDiagnostics,
+            result);
+    }
+
+    private void ReportActionResult(
+        string operation,
+        string taskKey,
+        SettingsActionResult result)
+    {
+        if (!result.Succeeded)
+        {
+            ReportFailure(operation, result.Message, taskKey);
+            return;
+        }
+
+        notifications.Publish(new(
+            NotificationSeverity.Information,
+            NotificationCategory.System,
+            operation,
+            result.Message)
+        {
+            TaskKey = taskKey,
+        });
+    }
+
+    private void ReportFailure(string operation, string message, string? taskKey = null)
+    {
+        diagnostics.Report(new DiagnosticEvent(
+            NotificationCategory.System,
+            "settings",
+            operation,
+            message,
+            DiagnosticSeverity.Warning)
+        {
+            TaskKey = taskKey,
+        });
+    }
+
+    private void ReportLoadError(string? error)
+    {
+        if (string.IsNullOrWhiteSpace(error) || error == lastLoadError)
+        {
+            return;
+        }
+        lastLoadError = error;
+        diagnostics.Report(new DiagnosticEvent(
+            NotificationCategory.System,
+            "settings-load",
+            "设置读取失败",
+            error,
+            DiagnosticSeverity.Warning));
     }
 
     private async Task ShowTextAsync(string title, string text, string automationId)
@@ -151,18 +238,6 @@ public sealed partial class SettingsPage : UserControl
             }
         };
         AutomationProperties.SetAutomationId(dialog, automationId);
-        await dialog.ShowAsync();
-    }
-
-    private async Task ShowMessageAsync(string title, string message)
-    {
-        var dialog = new ContentDialog
-        {
-            XamlRoot = XamlRoot,
-            Title = title,
-            CloseButtonText = "确定",
-            Content = new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap }
-        };
         await dialog.ShowAsync();
     }
 }

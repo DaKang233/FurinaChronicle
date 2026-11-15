@@ -246,7 +246,8 @@ public sealed partial class MainWindow : Window
         GachaView.Initialize(composition.Services.GetRequiredService<GachaPageServices>());
 
         overviewPage = new OverviewPage(
-            composition.Services.GetRequiredService<OverviewState>())
+            composition.Services.GetRequiredService<OverviewState>(),
+            diagnostics)
         {
             Visibility = Visibility.Collapsed
         };
@@ -256,7 +257,8 @@ public sealed partial class MainWindow : Window
 
         archivePage = new ArchivePage(
             composition.Services.GetRequiredService<ArchiveManagementState>(),
-            notificationCenter)
+            notificationCenter,
+            diagnostics)
         {
             Visibility = Visibility.Collapsed
         };
@@ -264,7 +266,9 @@ public sealed partial class MainWindow : Window
         PageHost.Children.Add(archivePage);
 
         historyPage = new HistoryPage(
-            composition.Services.GetRequiredService<ArchiveHistoryState>())
+            composition.Services.GetRequiredService<ArchiveHistoryState>(),
+            notificationCenter,
+            diagnostics)
         {
             Visibility = Visibility.Collapsed
         };
@@ -272,7 +276,9 @@ public sealed partial class MainWindow : Window
 
         settingsPage = new SettingsPage(
             composition.Services.GetRequiredService<SettingsState>(),
-            ApplyTheme)
+            ApplyTheme,
+            notificationCenter,
+            diagnostics)
         {
             Visibility = Visibility.Collapsed
         };
@@ -284,7 +290,8 @@ public sealed partial class MainWindow : Window
             composition.Version,
             composition.Services.GetRequiredService<IArchiveDomainPortableFileService>(),
             composition.Services.GetRequiredService<IArchiveDomainPortableApplier>(),
-            notificationCenter)
+            notificationCenter,
+            diagnostics)
         {
             Visibility = Visibility.Collapsed
         };
@@ -293,7 +300,8 @@ public sealed partial class MainWindow : Window
         PageHost.Children.Add(archiveTransferPage);
 
         chroniclePage = new ChroniclePage(
-            composition.Services.GetRequiredService<ChronicleWorkspaceState>())
+            composition.Services.GetRequiredService<ChronicleWorkspaceState>(),
+            diagnostics)
         {
             Visibility = Visibility.Collapsed
         };
@@ -301,7 +309,8 @@ public sealed partial class MainWindow : Window
 
         characterWeaponPage = new CharacterWeaponPage(
             composition.Services.GetRequiredService<CharacterWeaponHistoryState>(),
-            composition.Services.GetRequiredService<WindowsHistoryCollection>())
+            composition.Services.GetRequiredService<WindowsHistoryCollection>(),
+            diagnostics)
         {
             Visibility = Visibility.Collapsed
         };
@@ -309,7 +318,8 @@ public sealed partial class MainWindow : Window
 
         challengePage = new ChallengePage(
             composition.Services.GetRequiredService<ChallengeHistoryState>(),
-            composition.Services.GetRequiredService<WindowsHistoryCollection>())
+            composition.Services.GetRequiredService<WindowsHistoryCollection>(),
+            diagnostics)
         {
             Visibility = Visibility.Collapsed
         };
@@ -321,7 +331,8 @@ public sealed partial class MainWindow : Window
             composition.Services.GetRequiredService<HoYoLabPassportLoginService>(),
             composition.Services.GetRequiredService<IMiHoYoAccountProfileClient>(),
             composition.Services.GetRequiredService<DpapiPassportCredentialStore>(),
-            notificationCenter)
+            notificationCenter,
+            diagnostics)
         {
             Visibility = Visibility.Collapsed
         };

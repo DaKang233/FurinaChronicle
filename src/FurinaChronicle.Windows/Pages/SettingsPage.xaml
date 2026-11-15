@@ -9,121 +9,216 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     AutomationProperties.AutomationId="Ui4SettingsPage">
     <ScrollViewer Padding="24">
-        <StackPanel Spacing="18">
+        <StackPanel MaxWidth="1000" HorizontalAlignment="Left" Spacing="16">
             <StackPanel Spacing="4">
                 <TextBlock Text="设置" FontSize="28" FontWeight="SemiBold" />
                 <TextBlock
-                    Text="管理 WinUI 外观、数据存储和撤销历史。"
+                    Text="管理外观、存储与诊断。"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     TextWrapping="Wrap" />
             </StackPanel>
 
-            <StackPanel Spacing="2">
-                <TextBlock x:Name="StatusText" TextWrapping="Wrap"
-                    AutomationProperties.AutomationId="Ui4SettingsStatus"
-                    AutomationProperties.LiveSetting="Polite" />
-                <TextBlock x:Name="ErrorText" TextWrapping="Wrap" Visibility="Collapsed"
-                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                    AutomationProperties.AutomationId="Ui4SettingsError" />
-            </StackPanel>
-
             <Border Padding="16" CornerRadius="8"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-                <StackPanel Spacing="10">
-                    <TextBlock Text="外观" FontSize="18" FontWeight="SemiBold" />
-                    <ComboBox
-                        x:Name="ThemePicker"
-                        Header="主题"
-                        Width="240"
-                        SelectionChanged="OnThemeSelectionChanged"
-                        AutomationProperties.AutomationId="Ui4SettingsTheme" />
-                    <TextBlock
-                        Text="主题设置保存在本机 WinUI 设置中。"
-                        FontSize="12"
-                        TextWrapping="Wrap"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <StackPanel Spacing="2">
+                    <TextBlock Text="外观" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,6" />
+                    <Grid ColumnSpacing="16" Padding="0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="主题" FontSize="14" />
+                            <TextBlock Text="跟随系统、浅色或深色。"
+                                FontSize="12" TextWrapping="Wrap"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                        <ComboBox
+                            x:Name="ThemePicker"
+                            Grid.Column="1"
+                            Width="160"
+                            VerticalAlignment="Center"
+                            SelectionChanged="OnThemeSelectionChanged"
+                            AutomationProperties.Name="主题"
+                            AutomationProperties.AutomationId="Ui4SettingsTheme" />
+                    </Grid>
                 </StackPanel>
             </Border>
 
             <Border Padding="16" CornerRadius="8"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-                <StackPanel Spacing="8">
-                    <TextBlock Text="数据与存储" FontSize="18" FontWeight="SemiBold" />
-                    <TextBlock Text="数据目录" FontSize="12"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                    <TextBlock x:Name="DataRootText" TextWrapping="Wrap"
-                        AutomationProperties.AutomationId="Ui4SettingsDataRoot" />
-                    <TextBlock Text="数据库" FontSize="12"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                    <TextBlock x:Name="DatabasePathText" TextWrapping="Wrap"
-                        AutomationProperties.AutomationId="Ui4SettingsDatabasePath" />
-                    <StackPanel Orientation="Horizontal" Spacing="16">
-                        <TextBlock x:Name="DatabaseSizeText"
-                            AutomationProperties.AutomationId="Ui4SettingsDatabaseSize" />
-                        <TextBlock x:Name="CacheSizeText"
-                            AutomationProperties.AutomationId="Ui4SettingsCacheSize" />
-                    </StackPanel>
-                    <TextBlock Text="图标缓存目录" FontSize="12"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                    <TextBlock x:Name="CachePathText" TextWrapping="Wrap"
-                        AutomationProperties.AutomationId="Ui4SettingsCachePath" />
-                    <Button x:Name="ClearIconCacheButton" Content="清除图标缓存"
-                        Click="OnClearIconCache"
-                        AutomationProperties.AutomationId="Ui4SettingsClearIconCache" />
-                    <TextBlock Text="只清除可重建的图标缓存，不删除抽卡事实、档案或元数据；本页不提供全量备份/恢复。"
-                        FontSize="12" TextWrapping="Wrap"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <StackPanel Spacing="2">
+                    <TextBlock Text="数据与存储" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,6" />
+                    <Grid ColumnSpacing="16" Padding="0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="图标缓存" FontSize="14" />
+                            <TextBlock Text="清除可重建的图标；不影响档案、账号与抽卡记录。"
+                                FontSize="12" TextWrapping="Wrap"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10"
+                            VerticalAlignment="Center">
+                            <TextBlock x:Name="CacheSizeText" VerticalAlignment="Center"
+                                FontSize="12"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                AutomationProperties.AutomationId="Ui4SettingsCacheSize" />
+                            <Button x:Name="ClearIconCacheButton" Content="清除图标缓存"
+                                Click="OnClearIconCache"
+                                AutomationProperties.AutomationId="Ui4SettingsClearIconCache" />
+                        </StackPanel>
+                    </Grid>
+                    <Expander Header="存储位置" HorizontalAlignment="Stretch"
+                        AutomationProperties.AutomationId="Ui4SettingsStorageDetails">
+                        <StackPanel Spacing="8" Padding="0,8,0,0">
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="数据目录" FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <TextBlock x:Name="DataRootText" TextWrapping="Wrap" FontSize="12"
+                                    AutomationProperties.AutomationId="Ui4SettingsDataRoot" />
+                            </StackPanel>
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="数据库" FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <TextBlock x:Name="DatabasePathText" TextWrapping="Wrap" FontSize="12"
+                                    AutomationProperties.AutomationId="Ui4SettingsDatabasePath" />
+                                <TextBlock x:Name="DatabaseSizeText" FontSize="12"
+                                    AutomationProperties.AutomationId="Ui4SettingsDatabaseSize" />
+                            </StackPanel>
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="图标缓存目录" FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <TextBlock x:Name="CachePathText" TextWrapping="Wrap" FontSize="12"
+                                    AutomationProperties.AutomationId="Ui4SettingsCachePath" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Expander>
                 </StackPanel>
             </Border>
 
             <Border Padding="16" CornerRadius="8"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-                <StackPanel Spacing="8">
-                    <TextBlock Text="历史" FontSize="18" FontWeight="SemiBold" />
-                    <ComboBox
-                        x:Name="HistoryArchivePicker"
-                        Header="档案"
-                        DisplayMemberPath="Name"
-                        Width="320"
-                        SelectionChanged="OnHistoryArchiveSelectionChanged"
-                        AutomationProperties.AutomationId="Ui4SettingsHistoryArchive" />
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <NumberBox
-                            x:Name="UndoLimitBox"
-                            Header="撤销保留次数（0～1000）"
-                            Minimum="0"
-                            Maximum="1000"
-                            SmallChange="1"
-                            SpinButtonPlacementMode="Compact"
-                            AutomationProperties.AutomationId="Ui4SettingsUndoLimit" />
-                        <Button x:Name="ApplyUndoLimitButton" Content="应用" Click="OnApplyUndoLimit"
-                            VerticalAlignment="Bottom"
-                            AutomationProperties.AutomationId="Ui4SettingsApplyUndoLimit" />
-                    </StackPanel>
-                    <TextBlock Text="与操作历史页使用同一个历史服务；限额 0 会关闭撤销资格。"
-                        FontSize="12" TextWrapping="Wrap"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <StackPanel Spacing="2">
+                    <TextBlock Text="历史" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,6" />
+                    <Grid ColumnSpacing="16" Padding="0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="撤销保留次数" FontSize="14" />
+                            <TextBlock Text="0～1000；0 会关闭撤销资格。"
+                                FontSize="12" TextWrapping="Wrap"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <NumberBox
+                                    x:Name="UndoLimitBox"
+                                    Minimum="0"
+                                    Maximum="1000"
+                                    SmallChange="1"
+                                    SpinButtonPlacementMode="Compact"
+                                    Width="140"
+                                    AutomationProperties.Name="撤销保留次数"
+                                    AutomationProperties.AutomationId="Ui4SettingsUndoLimit" />
+                                <Button x:Name="ApplyUndoLimitButton" Content="应用"
+                                    Click="OnApplyUndoLimit"
+                                    AutomationProperties.AutomationId="Ui4SettingsApplyUndoLimit" />
+                            </StackPanel>
+                            <TextBlock x:Name="UndoLimitValidation" Visibility="Collapsed"
+                                FontSize="12" TextWrapping="Wrap"
+                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                AutomationProperties.AutomationId="Ui4SettingsUndoLimitValidation" />
+                        </StackPanel>
+                    </Grid>
+                    <Grid ColumnSpacing="16" Padding="0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="历史档案" FontSize="14" />
+                            <TextBlock Text="选择一个档案查看或修改其撤销限额。"
+                                FontSize="12" TextWrapping="Wrap"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                        <ComboBox
+                            x:Name="HistoryArchivePicker"
+                            Grid.Column="1"
+                            Width="220"
+                            VerticalAlignment="Center"
+                            DisplayMemberPath="Name"
+                            SelectionChanged="OnHistoryArchiveSelectionChanged"
+                            AutomationProperties.Name="历史档案"
+                            AutomationProperties.AutomationId="Ui4SettingsHistoryArchive" />
+                    </Grid>
                 </StackPanel>
             </Border>
 
             <Border Padding="16" CornerRadius="8"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-                <StackPanel Spacing="8">
-                    <TextBlock Text="应用" FontSize="18" FontWeight="SemiBold" />
-                    <TextBlock x:Name="VersionText" TextWrapping="Wrap"
-                        AutomationProperties.AutomationId="Ui4SettingsVersion" />
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button x:Name="LicenseButton" Content="许可" Click="OnLicense"
-                            AutomationProperties.AutomationId="Ui4SettingsLicense" />
-                        <Button x:Name="ThirdPartyButton" Content="第三方声明" Click="OnThirdParty"
-                            AutomationProperties.AutomationId="Ui4SettingsThirdParty" />
-                        <Button x:Name="ExportDiagnosticsButton" Content="导出诊断文本"
+                <StackPanel Spacing="2">
+                    <TextBlock Text="诊断与关于" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,6" />
+                    <Grid ColumnSpacing="16" Padding="0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="诊断报告" FontSize="14" />
+                            <TextBlock Text="仅保存在本机，可用于排查；不会自动上传。"
+                                FontSize="12" TextWrapping="Wrap"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                        <Button
+                            x:Name="ExportDiagnosticsButton"
+                            Grid.Column="1"
+                            Content="导出诊断报告"
+                            VerticalAlignment="Center"
                             Click="OnExportDiagnostics"
                             AutomationProperties.AutomationId="Ui4SettingsExportDiagnostics" />
-                    </StackPanel>
-                    <TextBlock Text="诊断文本只含版本、阶段、提交、库/缓存大小与安全声明，不含抽卡内容、凭据或完整用户路径。"
-                        FontSize="12" TextWrapping="Wrap"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </Grid>
+                    <Grid ColumnSpacing="16" Padding="0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="许可与第三方声明" FontSize="14" />
+                            <TextBlock Text="查看随应用分发的许可与第三方组件信息。"
+                                FontSize="12" TextWrapping="Wrap"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"
+                            VerticalAlignment="Center">
+                            <Button x:Name="LicenseButton" Content="许可" Click="OnLicense"
+                                AutomationProperties.AutomationId="Ui4SettingsLicense" />
+                            <Button x:Name="ThirdPartyButton" Content="第三方声明" Click="OnThirdParty"
+                                AutomationProperties.AutomationId="Ui4SettingsThirdParty" />
+                        </StackPanel>
+                    </Grid>
+                    <Grid ColumnSpacing="16" Padding="0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="关于" FontSize="14" />
+                            <TextBlock Text="当前应用版本。"
+                                FontSize="12" TextWrapping="Wrap"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                        <TextBlock
+                            x:Name="VersionText"
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            TextWrapping="Wrap"
+                            AutomationProperties.AutomationId="Ui4SettingsVersion" />
+                    </Grid>
                 </StackPanel>
             </Border>
         </StackPanel>

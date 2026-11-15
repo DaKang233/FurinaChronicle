@@ -3,6 +3,7 @@
 
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Presentation.Management;
+using FurinaChronicle.Presentation.Diagnostics;
 using FurinaChronicle.Presentation.Notifications;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -12,6 +13,7 @@ namespace FurinaChronicle.Windows.Pages;
 
 public sealed partial class ArchivePage : UserControl
 {
+    private readonly IDiagnosticService diagnostics;
     private static readonly RegionOption[] Regions =
     [
         new(GameServerRegion.ChinaOfficial),
@@ -28,10 +30,12 @@ public sealed partial class ArchivePage : UserControl
 
     public ArchivePage(
         ArchiveManagementState state,
-        INotificationCenter notifications)
+        INotificationCenter notifications,
+        IDiagnosticService diagnostics)
     {
         this.state = state;
         this.notifications = notifications;
+        this.diagnostics = diagnostics;
         InitializeComponent();
     }
 
@@ -42,8 +46,21 @@ public sealed partial class ArchivePage : UserControl
 
     public async Task EnterAsync(CancellationToken cancellationToken = default)
     {
-        await state.EnterAsync(cancellationToken);
-        Render();
+        try
+        {
+            await state.EnterAsync(cancellationToken);
+            Render();
+        }
+        catch (Exception exception)
+        {
+            diagnostics.Report(new DiagnosticEvent(
+                NotificationCategory.Archive,
+                "archive-load",
+                "档案读取失败",
+                "档案与账号暂未载入；可重试。",
+                DiagnosticSeverity.Error,
+                exception));
+        }
     }
 
     private void Render()
@@ -52,11 +69,6 @@ public sealed partial class ArchivePage : UserControl
         try
         {
             ArchiveManagementSnapshot snapshot = state.Snapshot;
-            StatusText.Text = snapshot.Status;
-            ErrorText.Text = snapshot.Error ?? string.Empty;
-            ErrorText.Visibility = string.IsNullOrWhiteSpace(snapshot.Error)
-                ? Visibility.Collapsed
-                : Visibility.Visible;
             ArchiveList.ItemsSource = snapshot.Archives;
             ArchiveList.SelectedItem = snapshot.Archives.FirstOrDefault(
                 archive => archive.Id == snapshot.SelectedArchiveId);
@@ -123,9 +135,7 @@ public sealed partial class ArchivePage : UserControl
     {
         string? name = await PromptAsync("创建档案", "请输入档案名称（由服务校验精确同名与长度）。", string.Empty);
         if (name is null) return;
-        await state.CreateArchiveAsync(name);
-        Render();
-        Report("创建档案");
+        await ExecuteAsync("创建档案", NotificationTaskKeys.ArchiveCreate, () => state.CreateArchiveAsync(name));
     }
 
     private async void OnRenameArchive(object sender, RoutedEventArgs e)
@@ -134,9 +144,7 @@ public sealed partial class ArchivePage : UserControl
         if (selected is null) return;
         string? name = await PromptAsync("重命名档案", "请输入新的档案名称。", selected.Name);
         if (name is null) return;
-        await state.RenameArchiveAsync(name);
-        Render();
-        Report("重命名档案");
+        await ExecuteAsync("重命名档案", NotificationTaskKeys.ArchiveRename, () => state.RenameArchiveAsync(name));
     }
 
     private async void OnDeleteArchive(object sender, RoutedEventArgs e)
@@ -157,9 +165,7 @@ public sealed partial class ArchivePage : UserControl
         };
         AutomationProperties.SetAutomationId(dialog, "Ui4DeleteArchiveDialog");
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
-        await state.DeleteArchiveAsync();
-        Render();
-        Report("删除档案");
+        await ExecuteAsync("删除档案", NotificationTaskKeys.ArchiveDelete, () => state.DeleteArchiveAsync());
     }
 
     private async void OnAddAccount(object sender, RoutedEventArgs e)
@@ -173,9 +179,8 @@ public sealed partial class ArchivePage : UserControl
             allowIdentityEdit: true,
             primaryText: "添加");
         if (input is null) return;
-        await state.AddAccountAsync(input.Uid, input.Region, input.DisplayName);
-        Render();
-        Report("添加游戏账号");
+        await ExecuteAsync("添加游戏账号", NotificationTaskKeys.ArchiveAccountAdd,
+            () => state.AddAccountAsync(input.Uid, input.Region, input.DisplayName));
     }
 
     private async void OnEditAccount(object sender, RoutedEventArgs e)
@@ -196,12 +201,11 @@ public sealed partial class ArchivePage : UserControl
             allowIdentityEdit: !resolved,
             primaryText: "保存");
         if (input is null) return;
-        await state.UpdateAccountAsync(
-            resolved ? row.Account.Uid : input.Uid,
-            resolved ? row.Account.ServerRegion : input.Region,
-            input.DisplayName);
-        Render();
-        Report("编辑游戏账号");
+        await ExecuteAsync("编辑游戏账号", NotificationTaskKeys.ArchiveAccountEdit,
+            () => state.UpdateAccountAsync(
+                resolved ? row.Account.Uid : input.Uid,
+                resolved ? row.Account.ServerRegion : input.Region,
+                input.DisplayName));
     }
 
     private async void OnDeleteAccount(object sender, RoutedEventArgs e)
@@ -222,20 +226,56 @@ public sealed partial class ArchivePage : UserControl
         };
         AutomationProperties.SetAutomationId(dialog, "Ui4DeleteAccountDialog");
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
-        await state.DeleteAccountAsync();
-        Render();
-        Report("删除游戏账号");
+        await ExecuteAsync("删除游戏账号", NotificationTaskKeys.ArchiveAccountDelete,
+            () => state.DeleteAccountAsync());
     }
 
-    private void Report(string operation)
+    private async Task ExecuteAsync(string operation, string taskKey, Func<Task> action)
     {
+        try
+        {
+            await action();
+        }
+        catch (Exception exception)
+        {
+            Render();
+            diagnostics.Report(new DiagnosticEvent(
+                NotificationCategory.Archive,
+                "archive",
+                operation,
+                "操作未完成；可重试或检查当前档案。",
+                DiagnosticSeverity.Error,
+                exception)
+            {
+                TaskKey = taskKey,
+            });
+            return;
+        }
+
+        Render();
         ArchiveManagementSnapshot snapshot = state.Snapshot;
-        bool failed = !string.IsNullOrWhiteSpace(snapshot.Error);
+        if (!string.IsNullOrWhiteSpace(snapshot.Error))
+        {
+            diagnostics.Report(new DiagnosticEvent(
+                NotificationCategory.Archive,
+                "archive",
+                operation,
+                snapshot.Error!,
+                DiagnosticSeverity.Warning)
+            {
+                TaskKey = taskKey,
+            });
+            return;
+        }
+
         notifications.Publish(new(
-            failed ? NotificationSeverity.Error : NotificationSeverity.Information,
+            NotificationSeverity.Information,
             NotificationCategory.Archive,
             operation,
-            failed ? snapshot.Error! : snapshot.Status));
+            snapshot.Status)
+        {
+            TaskKey = taskKey,
+        });
     }
 
     private async Task<string?> PromptAsync(string title, string message, string initialValue)

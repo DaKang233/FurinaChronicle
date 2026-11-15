@@ -3,6 +3,8 @@
 
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Presentation.Management;
+using FurinaChronicle.Presentation.Notifications;
+using FurinaChronicle.Presentation.Diagnostics;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -11,19 +13,40 @@ namespace FurinaChronicle.Windows.Pages;
 
 public sealed partial class HistoryPage : UserControl
 {
+    private readonly INotificationCenter notifications;
+    private readonly IDiagnosticService diagnostics;
     private readonly ArchiveHistoryState state;
     private bool renderGuard;
+    private string? lastLoadError;
 
-    public HistoryPage(ArchiveHistoryState state)
+    public HistoryPage(
+        ArchiveHistoryState state,
+        INotificationCenter notifications,
+        IDiagnosticService diagnostics)
     {
         this.state = state;
+        this.notifications = notifications;
+        this.diagnostics = diagnostics;
         InitializeComponent();
     }
 
     public async Task EnterAsync(CancellationToken cancellationToken = default)
     {
-        await state.EnterAsync(cancellationToken);
-        Render();
+        try
+        {
+            await state.EnterAsync(cancellationToken);
+            Render();
+        }
+        catch (Exception exception)
+        {
+            diagnostics.Report(new DiagnosticEvent(
+                NotificationCategory.Archive,
+                "history-load",
+                "操作历史读取失败",
+                "操作历史暂未载入；可重试。",
+                DiagnosticSeverity.Error,
+                exception));
+        }
     }
 
     private void Render()
@@ -32,11 +55,7 @@ public sealed partial class HistoryPage : UserControl
         try
         {
             ArchiveHistorySnapshot snapshot = state.Snapshot;
-            StatusText.Text = snapshot.Status;
-            ErrorText.Text = snapshot.Error ?? string.Empty;
-            ErrorText.Visibility = string.IsNullOrWhiteSpace(snapshot.Error)
-                ? Visibility.Collapsed
-                : Visibility.Visible;
+            ReportLoadError(snapshot.Error);
             ArchivePicker.ItemsSource = snapshot.Archives;
             ArchivePicker.SelectedItem = snapshot.Archives.FirstOrDefault(
                 archive => archive.Id == snapshot.SelectedArchiveId);
@@ -77,7 +96,6 @@ public sealed partial class HistoryPage : UserControl
         ArchiveHistoryEntry? candidate = state.Snapshot.LatestUndoCandidate;
         if (candidate is null)
         {
-            await ShowMessageAsync("没有可撤销操作", "当前档案没有仍满足撤销资格的操作。");
             return;
         }
 
@@ -98,7 +116,7 @@ public sealed partial class HistoryPage : UserControl
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
         ArchiveHistoryActionResult result = await state.UndoLatestAsync();
         Render();
-        await ShowMessageAsync("撤销结果", result.Message);
+        ReportResult("撤销操作", NotificationTaskKeys.HistoryUndo, result);
     }
 
     private async void OnApplyUndoLimit(object sender, RoutedEventArgs e)
@@ -106,33 +124,57 @@ public sealed partial class HistoryPage : UserControl
         double value = UndoLimitBox.Value;
         if (double.IsNaN(value))
         {
-            await ShowMessageAsync("撤销保留次数无效", "请输入 0～1000 的整数。");
+            UndoLimitValidation.Text = "请输入 0～1000 的整数。";
+            UndoLimitValidation.Visibility = Visibility.Visible;
             return;
         }
 
+        UndoLimitValidation.Visibility = Visibility.Collapsed;
         ArchiveHistoryActionResult result = await state.SetUndoLimitAsync((int)value);
         Render();
+        ReportResult("设置撤销保留次数", NotificationTaskKeys.HistoryUndoLimit, result);
+    }
+
+    private async void OnReload(object sender, RoutedEventArgs e) => await EnterAsync();
+
+    private void ReportLoadError(string? error)
+    {
+        if (string.IsNullOrWhiteSpace(error) || error == lastLoadError)
+        {
+            return;
+        }
+        lastLoadError = error;
+        diagnostics.Report(new DiagnosticEvent(
+            NotificationCategory.Archive,
+            "history-load",
+            "操作历史读取失败",
+            error,
+            DiagnosticSeverity.Error));
+    }
+
+    private void ReportResult(string operation, string taskKey, ArchiveHistoryActionResult result)
+    {
         if (!result.Succeeded)
         {
-            await ShowMessageAsync("撤销保留次数未修改", result.Message);
+            diagnostics.Report(new DiagnosticEvent(
+                NotificationCategory.Archive,
+                "history",
+                operation,
+                result.Message,
+                DiagnosticSeverity.Warning)
+            {
+                TaskKey = taskKey,
+            });
+            return;
         }
-    }
 
-    private async void OnReload(object sender, RoutedEventArgs e)
-    {
-        await state.EnterAsync();
-        Render();
-    }
-
-    private async Task ShowMessageAsync(string title, string message)
-    {
-        var dialog = new ContentDialog
+        notifications.Publish(new(
+            NotificationSeverity.Information,
+            NotificationCategory.Archive,
+            operation,
+            result.Message)
         {
-            XamlRoot = XamlRoot,
-            Title = title,
-            Content = new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap },
-            CloseButtonText = "确定"
-        };
-        await dialog.ShowAsync();
+            TaskKey = taskKey,
+        });
     }
 }
