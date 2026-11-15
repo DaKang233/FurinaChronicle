@@ -9,7 +9,6 @@ using FurinaChronicle.Services.Abstractions;
 using FurinaChronicle.Services.History;
 using FurinaChronicle.Services.HistoryDomains.Collecting;
 using FurinaChronicle.Presentation.Notifications;
-using FurinaChronicle.Presentation.Notifications;
 using FurinaChronicle.Services.Passport;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;

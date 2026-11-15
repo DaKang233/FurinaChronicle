@@ -27,6 +27,9 @@ public enum NotificationCategory
 /// <summary>
 /// A request from a page or service. The center owns identity, timestamps,
 /// deduplication and retention; callers only describe what happened.
+///
+/// A user-initiated operation should keep one stable <see cref="TaskKey"/> for
+/// its progress and final result so both updates land on the same notification.
 /// </summary>
 public sealed record NotificationRequest(
     NotificationSeverity Severity,
@@ -39,6 +42,15 @@ public sealed record NotificationRequest(
     public Action? Action { get; init; }
 
     public string? Fingerprint { get; init; }
+
+    /// <summary>Stable key for a user-initiated task; updates replace the same row.</summary>
+    public string? TaskKey { get; init; }
+
+    /// <summary>True while the task is still running; completion resets the unread state.</summary>
+    public bool IsInProgress { get; init; }
+
+    /// <summary>Shared diagnostic id when this notification reports a warning or error.</summary>
+    public string? DiagnosticId { get; init; }
 }
 
 public sealed record AppNotification(
@@ -52,7 +64,10 @@ public sealed record AppNotification(
     int RepeatCount,
     string? ActionLabel,
     Action? Action,
-    string Fingerprint);
+    string Fingerprint,
+    string? TaskKey = null,
+    bool IsInProgress = false,
+    string? DiagnosticId = null);
 
 public sealed record NotificationCenterOptions
 {
@@ -72,6 +87,8 @@ public interface INotificationCenter
     AppNotification Publish(NotificationRequest request);
 
     AppNotification? Latest();
+
+    AppNotification? FindByTask(string taskKey);
 
     bool MarkRead(Guid id);
 

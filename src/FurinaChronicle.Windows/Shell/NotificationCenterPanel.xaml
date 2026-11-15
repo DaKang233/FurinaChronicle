@@ -8,10 +8,13 @@
     x:Class="FurinaChronicle.Windows.Shell.NotificationCenterPanel"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    KeyDown="OnKeyDown"
     AutomationProperties.AutomationId="Ui7NotificationCenterPanel">
     <Grid>
         <Border
             x:Name="PanelCard"
+            AutomationProperties.AutomationId="Ui7NotificationPanelCard"
+            HorizontalAlignment="Right"
             Width="380"
             MaxHeight="480"
             CornerRadius="10"
@@ -36,6 +39,8 @@
                             x:Name="UnreadText"
                             FontSize="12"
                             VerticalAlignment="Center"
+                            AutomationProperties.LiveSetting="Polite"
+                            AutomationProperties.AutomationId="Ui7UnreadText"
                             Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     </StackPanel>
                     <Button
@@ -45,13 +50,17 @@
                         Click="OnCollapseClicked"
                         Padding="6"
                         ToolTipService.ToolTip="收起通知中心"
-                        AutomationProperties.Name="收起通知中心" />
+                        AutomationProperties.Name="收起通知中心"
+                        AutomationProperties.AutomationId="Ui7CollapseNotifications" />
                 </Grid>
 
-                <Grid Grid.Row="1">
+                <ScrollViewer
+                    Grid.Row="1"
+                    VerticalScrollBarVisibility="Auto"
+                    HorizontalScrollBarVisibility="Disabled"
+                    MaxHeight="320">
                     <ListView
                         x:Name="NotificationList"
-                        MaxHeight="320"
                         SelectionMode="None"
                         AutomationProperties.AutomationId="Ui7NotificationList">
                         <ListView.ItemContainerStyle>
@@ -93,12 +102,24 @@
                                                 FontSize="11"
                                                 VerticalAlignment="Center"
                                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                            <TextBlock
+                                                Text="{Binding ProgressText}"
+                                                FontSize="11"
+                                                VerticalAlignment="Center"
+                                                Visibility="{Binding ProgressVisibility}"
+                                                Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
                                         </StackPanel>
                                         <TextBlock
                                             Text="{Binding Message}"
                                             TextWrapping="Wrap"
                                             FontSize="12"
                                             Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <TextBlock
+                                            Text="{Binding DiagnosticText}"
+                                            FontSize="11"
+                                            Visibility="{Binding DiagnosticVisibility}"
+                                            FontFamily="Consolas"
+                                            Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
                                         <TextBlock
                                             Text="{Binding CategoryText}"
                                             FontSize="11"
@@ -125,15 +146,7 @@
                             </DataTemplate>
                         </ListView.ItemTemplate>
                     </ListView>
-                    <TextBlock
-                        x:Name="EmptyText"
-                        Text="暂无通知。"
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        FontSize="12"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Visibility="Collapsed" />
-                </Grid>
+                </ScrollViewer>
 
                 <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8">
                     <Button
@@ -148,6 +161,14 @@
                         Click="OnClearClicked"
                         FontSize="12"
                         AutomationProperties.AutomationId="Ui7ClearNotifications" />
+                    <Button
+                        x:Name="ExportDiagnosticsButton"
+                        Content="导出诊断"
+                        Click="OnExportDiagnosticsClicked"
+                        FontSize="12"
+                        ToolTipService.ToolTip="保存本地诊断报告"
+                        AutomationProperties.Name="导出本地诊断报告"
+                        AutomationProperties.AutomationId="Ui7ExportDiagnostics" />
                 </StackPanel>
             </Grid>
         </Border>
@@ -163,6 +184,7 @@
             Click="OnOpenClicked"
             Background="{ThemeResource AccentFillColorDefaultBrush}"
             ToolTipService.ToolTip="通知中心"
+            AutomationProperties.Name="打开通知中心"
             AutomationProperties.AutomationId="Ui7NotificationBell">
             <Grid>
                 <FontIcon Glyph="&#xEA8F;" FontSize="20" Foreground="White" />
@@ -180,7 +202,8 @@
                         FontSize="10"
                         Foreground="White"
                         HorizontalAlignment="Center"
-                        VerticalAlignment="Center" />
+                        VerticalAlignment="Center"
+                        Margin="4,0" />
                 </Border>
             </Grid>
         </Button>

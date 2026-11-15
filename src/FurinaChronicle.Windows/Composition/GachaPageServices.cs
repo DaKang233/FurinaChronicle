@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: MIT
 
 using FurinaChronicle.Infrastructure.Diagnostics;
+using FurinaChronicle.Presentation.Diagnostics;
 using FurinaChronicle.Presentation.Gacha;
 using FurinaChronicle.Presentation.Management;
+using FurinaChronicle.Presentation.Notifications;
 
 namespace FurinaChronicle.Windows.Composition;
 
@@ -22,4 +24,6 @@ public sealed record GachaPageServices(
     GachaManualRefreshCoordinator ManualRefresh,
     GachaWindowsCacheRefreshCoordinator WindowsCacheRefresh,
     GachaTeyvatHelperImportCoordinator TeyvatImport,
-    GachaSTokenRefreshCoordinator STokenRefresh);
+    GachaSTokenRefreshCoordinator STokenRefresh,
+    INotificationCenter Notifications,
+    IDiagnosticService Diagnostics);

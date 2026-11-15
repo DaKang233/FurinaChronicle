@@ -14,6 +14,7 @@ using FurinaChronicle.Infrastructure.HistoryDomains.Collecting;
 using FurinaChronicle.Infrastructure.Metadata;
 using FurinaChronicle.Infrastructure.Passport;
 using FurinaChronicle.Infrastructure.Persistence.Sqlite;
+using FurinaChronicle.Presentation.Diagnostics;
 using FurinaChronicle.Presentation.Gacha;
 using FurinaChronicle.Presentation.History;
 using FurinaChronicle.Presentation.Management;
@@ -33,6 +34,7 @@ using FurinaChronicle.Services.HistoryDomains;
 using FurinaChronicle.Services.HistoryDomains.Portable;
 using FurinaChronicle.Services.HistoryDomains.Collecting;
 using FurinaChronicle.Services.Passport;
+using FurinaChronicle.Windows.Diagnostics;
 using FurinaChronicle.Windows.Shell;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Dispatching;
@@ -92,6 +94,18 @@ public sealed class WindowsComposition : IAsyncDisposable
         services.AddSingleton<IFilePickerService>(filePicker);
         services.AddSingleton<INotificationCenter>(sp => new NotificationCenter(
             sp.GetRequiredService<IUiDispatcher>()));
+        services.AddSingleton<IDiagnosticLog>(sp => new FileDiagnosticLog(
+            Path.Combine(
+                sp.GetRequiredService<WindowsPaths>().DataRoot,
+                "Logs")));
+        services.AddSingleton<IDiagnosticService>(sp => new DiagnosticService(
+            sp.GetRequiredService<IDiagnosticLog>(),
+            sp.GetRequiredService<INotificationCenter>()));
+        services.AddSingleton<IDiagnosticReportExporter>(sp =>
+            new WindowsDiagnosticReportExporter(
+                sp.GetRequiredService<IDiagnosticService>(),
+                sp.GetRequiredService<WindowsPaths>(),
+                sp.GetRequiredService<IFilePickerService>()));
         services.AddSingleton<IArchiveSelectionStore>(selectionStore);
 
         // Environment and repositories are resolved lazily; nothing below is constructed until a
@@ -235,7 +249,9 @@ public sealed class WindowsComposition : IAsyncDisposable
             dispatcher,
             filePicker,
             sp.GetRequiredService<TimeProvider>(),
-            sp.GetRequiredService<GachaSTokenRefreshCoordinator>()));
+            sp.GetRequiredService<GachaSTokenRefreshCoordinator>(),
+            sp.GetRequiredService<INotificationCenter>(),
+            sp.GetRequiredService<IDiagnosticService>()));
 
         return new WindowsComposition(
             services.BuildServiceProvider(new ServiceProviderOptions
@@ -285,7 +301,9 @@ public sealed class WindowsComposition : IAsyncDisposable
         IUiDispatcher dispatcher,
         IFilePickerService filePicker,
         TimeProvider timeProvider,
-        GachaSTokenRefreshCoordinator sTokenRefresh)
+        GachaSTokenRefreshCoordinator sTokenRefresh,
+        INotificationCenter notifications,
+        IDiagnosticService diagnostics)
     {
         var planning = new ServiceGachaImportPlanningSource(
             new GetPlayerArchives(environment.Archives),
@@ -329,6 +347,8 @@ public sealed class WindowsComposition : IAsyncDisposable
             new GachaTeyvatHelperImportCoordinator(
                 planning,
                 new ServiceGachaTeyvatHelperImportGateway(environment.TeyvatHelperImport)),
-            sTokenRefresh);
+            sTokenRefresh,
+            notifications,
+            diagnostics);
     }
 }

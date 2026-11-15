@@ -1,6 +1,7 @@
 // Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
+using FurinaChronicle.Presentation.Diagnostics;
 using FurinaChronicle.Presentation.History;
 using FurinaChronicle.Presentation.Management;
 using FurinaChronicle.Presentation.Notifications;
@@ -23,6 +24,7 @@ public sealed partial class MainWindow : Window
 {
     private readonly WindowsComposition composition;
     private readonly INotificationCenter notificationCenter;
+    private readonly IDiagnosticService diagnostics;
     private readonly StartupPage startupPage;
     private OverviewPage? overviewPage;
     private ArchivePage? archivePage;
@@ -55,6 +57,24 @@ public sealed partial class MainWindow : Window
         // Application.OnLaunched before the startup failure page exists.
         composition.Services.GetRequiredService<IFilePickerService>().SetOwner(this);
         notificationCenter = composition.Services.GetRequiredService<INotificationCenter>();
+        diagnostics = composition.Services.GetRequiredService<IDiagnosticService>();
+
+        // The notification center is created before the startup gate so a blocking startup
+        // failure can still report details there. With no notifications the whole overlay is
+        // hidden and never blocks the page.
+        notificationCenterPanel = new NotificationCenterPanel(
+            notificationCenter,
+            diagnostics,
+            composition.Services.GetRequiredService<IDiagnosticReportExporter>())
+        {
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Bottom,
+            Margin = new Thickness(0, 0, 16, 16),
+            Visibility = Visibility.Collapsed
+        };
+        Canvas.SetZIndex(notificationCenterPanel, 100);
+        RootGrid.Children.Add(notificationCenterPanel);
+        RootGrid.SizeChanged += OnRootGridSizeChanged;
 
 
         startupPage = new StartupPage(composition.Paths.IsIsolated);
@@ -81,6 +101,13 @@ public sealed partial class MainWindow : Window
     {
         if (startupStarted) return;
         startupStarted = true;
+#if DEBUG
+        if (Environment.GetEnvironmentVariable("FURINA_UI7_SIMULATE_FATAL") == "1")
+        {
+            throw new InvalidOperationException(
+                "Simulated fatal error for UI-7 acceptance.");
+        }
+#endif
         await RunStartupAsync();
     }
 
@@ -123,15 +150,41 @@ public sealed partial class MainWindow : Window
                 return;
             }
 
-            if (!state.Snapshot.IsReady) return;
+            if (!state.Snapshot.IsReady)
+            {
+                diagnostics.Report(new DiagnosticEvent(
+                    NotificationCategory.System,
+                    "startup",
+                    state.Snapshot.FailureKind == StartupFailureKind.ProductionAdoptionRequired
+                        ? "启动需要处理"
+                        : "启动失败",
+                    $"{state.Snapshot.Status}：{state.Snapshot.Detail}",
+                    state.Snapshot.FailureKind == StartupFailureKind.ProductionAdoptionRequired
+                        ? DiagnosticSeverity.Warning
+                        : DiagnosticSeverity.Error)
+                {
+                    TaskKey = NotificationTaskKeys.StartupFailure,
+                });
+                return;
+            }
 
             BuildShell();
             await ApplyPersistedThemeAsync();
             StartupHost.Visibility = Visibility.Collapsed;
             Navigation.Visibility = Visibility.Visible;
             shellReady = true;
-            StartupWarningBar.Message = state.Snapshot.Warning ?? string.Empty;
-            StartupWarningBar.IsOpen = !string.IsNullOrWhiteSpace(state.Snapshot.Warning);
+            if (!string.IsNullOrWhiteSpace(state.Snapshot.Warning))
+            {
+                diagnostics.Report(new DiagnosticEvent(
+                    NotificationCategory.System,
+                    "startup",
+                    "数据目录提示",
+                    state.Snapshot.Warning!,
+                    DiagnosticSeverity.Warning)
+                {
+                    TaskKey = NotificationTaskKeys.StartupWarning,
+                });
+            }
             switching = true;
             Navigation.SelectedItem = OverviewDestination;
             switching = false;
@@ -143,12 +196,28 @@ public sealed partial class MainWindow : Window
             // never to an unhandled XAML exception on the UI thread.
             try
             {
-                File.WriteAllText(
-                    Path.Combine(Path.GetTempPath(), "furina-ui4-buildshell-error.txt"),
-                    LogSanitizer.SanitizeException(exception, "BuildShell"));
+                diagnostics.Report(new DiagnosticEvent(
+                    NotificationCategory.System,
+                    "BuildShell",
+                    "页面初始化失败",
+                    "启动后页面初始化失败；可重试启动。",
+                    DiagnosticSeverity.Error,
+                    exception)
+                {
+                    TaskKey = NotificationTaskKeys.StartupFailure,
+                });
             }
             catch (Exception)
             {
+                try
+                {
+                    File.WriteAllText(
+                        Path.Combine(Path.GetTempPath(), "furina-ui7-buildshell-error.txt"),
+                        LogSanitizer.SanitizeException(exception, "BuildShell"));
+                }
+                catch (Exception)
+                {
+                }
             }
 
             StartupHost.Visibility = Visibility.Visible;
@@ -167,6 +236,9 @@ public sealed partial class MainWindow : Window
             startupRunning = false;
         }
     }
+
+    private void OnRootGridSizeChanged(object sender, SizeChangedEventArgs e) =>
+        notificationCenterPanel?.SetAvailableWidth(e.NewSize.Width);
 
     private void BuildShell()
     {
@@ -242,16 +314,6 @@ public sealed partial class MainWindow : Window
             Visibility = Visibility.Collapsed
         };
         PageHost.Children.Add(challengePage);
-
-        notificationCenterPanel = new NotificationCenterPanel(notificationCenter)
-        {
-            HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Bottom,
-            Margin = new Thickness(0, 0, 16, 16),
-            Visibility = Visibility.Collapsed
-        };
-        Canvas.SetZIndex(notificationCenterPanel, 100);
-        RootGrid.Children.Add(notificationCenterPanel);
 
         passportPage = new PassportPage(
             composition.Services.GetRequiredService<PassportCredentialState>(),

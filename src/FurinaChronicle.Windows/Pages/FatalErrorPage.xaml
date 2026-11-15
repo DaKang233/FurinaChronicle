@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Copyright (c) 2026 DaKang233.
+  SPDX-License-Identifier: MIT
+-->
+
+<UserControl
+    x:Class="FurinaChronicle.Windows.Pages.FatalErrorPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    AutomationProperties.AutomationId="Ui7FatalErrorPage">
+    <Grid Padding="32" RowSpacing="16" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock
+            Text="应用无法继续运行"
+            FontSize="26"
+            FontWeight="SemiBold"
+            AutomationProperties.AutomationId="Ui7FatalTitle" />
+
+        <TextBlock
+            Grid.Row="1"
+            Text="{x:Bind MessageText}"
+            TextWrapping="Wrap"
+            FontSize="14"
+            AutomationProperties.AutomationId="Ui7FatalMessage" />
+
+        <TextBlock
+            Grid.Row="2"
+            Text="{x:Bind DiagnosticIdText}"
+            FontFamily="Consolas"
+            FontSize="12"
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+            AutomationProperties.AutomationId="Ui7FatalDiagnosticId" />
+
+        <Expander
+            Grid.Row="3"
+            Header="开发者详情（已脱敏）"
+            HorizontalAlignment="Stretch"
+            VerticalAlignment="Top"
+            AutomationProperties.AutomationId="Ui7FatalDetailsExpander">
+            <ScrollViewer MaxHeight="260" VerticalScrollBarVisibility="Auto">
+                <TextBox
+                    Text="{x:Bind DetailsText}"
+                    IsReadOnly="True"
+                    AcceptsReturn="True"
+                    TextWrapping="Wrap"
+                    FontFamily="Consolas"
+                    FontSize="11"
+                    AutomationProperties.AutomationId="Ui7FatalDetails" />
+            </ScrollViewer>
+        </Expander>
+
+        <StackPanel Grid.Row="4" Orientation="Horizontal" Spacing="8">
+            <Button
+                Content="复制详情"
+                Click="OnCopyClicked"
+                AutomationProperties.AutomationId="Ui7FatalCopy" />
+            <Button
+                x:Name="ExportButton"
+                Content="导出诊断报告"
+                Click="OnExportClicked"
+                AutomationProperties.AutomationId="Ui7FatalExport" />
+            <Button
+                Content="退出"
+                Click="OnExitClicked"
+                AutomationProperties.AutomationId="Ui7FatalExit" />
+            <TextBlock
+                x:Name="StatusText"
+                VerticalAlignment="Center"
+                FontSize="12"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                AutomationProperties.AutomationId="Ui7FatalStatus" />
+        </StackPanel>
+    </Grid>
+</UserControl>

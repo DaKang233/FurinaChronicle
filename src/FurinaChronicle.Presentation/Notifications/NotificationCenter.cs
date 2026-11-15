@@ -15,6 +15,7 @@ public sealed class NotificationCenter : INotificationCenter
 {
     private readonly object gate = new();
     private readonly List<AppNotification> history = [];
+    private readonly Dictionary<string, Guid> tasks = new(StringComparer.Ordinal);
     private readonly ObservableCollection<AppNotification> items = [];
     private readonly ReadOnlyObservableCollection<AppNotification> readOnlyItems;
     private readonly IUiDispatcher dispatcher;
@@ -63,46 +64,79 @@ public sealed class NotificationCenter : INotificationCenter
                 "A notification needs a title or a message.", nameof(request));
         }
 
+        string? taskKey = string.IsNullOrWhiteSpace(request.TaskKey)
+            ? null
+            : request.TaskKey.Trim();
         AppNotification notification;
         lock (gate)
         {
             DateTimeOffset now = timeProvider.GetUtcNow();
-            string fingerprint = request.Fingerprint ??
-                $"{request.Category}:{request.Title}:{request.Message}";
-            AppNotification? latest = history.FirstOrDefault();
-            if (latest is not null &&
-                !latest.IsRead &&
-                latest.Fingerprint == fingerprint &&
-                now - latest.OccurredAt <= options.DedupeWindow)
+            if (taskKey is not null &&
+                tasks.TryGetValue(taskKey, out Guid taskId) &&
+                history.FindIndex(item => item.Id == taskId) is int index and >= 0)
             {
-                AppNotification merged = latest with
+                AppNotification existing = history[index];
+                AppNotification updated = existing with
                 {
+                    Severity = request.Severity,
+                    Category = request.Category,
+                    Title = request.Title.Trim(),
+                    Message = request.Message.Trim(),
                     OccurredAt = now,
-                    RepeatCount = latest.RepeatCount + 1,
+                    // Progress updates should not keep re-raising the unread badge; a
+                    // completed/failed result becomes unread once.
+                    IsRead = request.IsInProgress && existing.IsRead,
+                    ActionLabel = request.ActionLabel,
+                    Action = request.Action,
+                    IsInProgress = request.IsInProgress,
+                    DiagnosticId = request.DiagnosticId,
                 };
-                history[0] = merged;
-                notification = merged;
+                history[index] = updated;
+                notification = updated;
             }
             else
             {
-                notification = new AppNotification(
-                    Guid.NewGuid(),
-                    request.Severity,
-                    request.Category,
-                    request.Title.Trim(),
-                    request.Message.Trim(),
-                    now,
-                    IsRead: false,
-                    RepeatCount: 1,
-                    request.ActionLabel,
-                    request.Action,
-                    fingerprint);
-                history.Insert(0, notification);
-                if (history.Count > options.MaxItems)
+                string fingerprint = request.Fingerprint ??
+                    $"{request.Category}:{request.Title}:{request.Message}";
+                AppNotification? latest = history.FirstOrDefault();
+                if (latest is not null &&
+                    !latest.IsRead &&
+                    latest.Fingerprint == fingerprint &&
+                    latest.TaskKey is null &&
+                    now - latest.OccurredAt <= options.DedupeWindow)
                 {
-                    history.RemoveRange(
-                        options.MaxItems,
-                        history.Count - options.MaxItems);
+                    AppNotification merged = latest with
+                    {
+                        OccurredAt = now,
+                        RepeatCount = latest.RepeatCount + 1,
+                    };
+                    history[0] = merged;
+                    notification = merged;
+                }
+                else
+                {
+                    notification = new AppNotification(
+                        Guid.NewGuid(),
+                        request.Severity,
+                        request.Category,
+                        request.Title.Trim(),
+                        request.Message.Trim(),
+                        now,
+                        // Running progress does not raise the unread badge; the final result does.
+                        IsRead: request.IsInProgress,
+                        RepeatCount: 1,
+                        request.ActionLabel,
+                        request.Action,
+                        fingerprint,
+                        taskKey,
+                        request.IsInProgress,
+                        request.DiagnosticId);
+                    history.Insert(0, notification);
+                    if (taskKey is not null)
+                    {
+                        tasks[taskKey] = notification.Id;
+                    }
+                    TrimExcessLocked();
                 }
             }
         }
@@ -157,7 +191,14 @@ public sealed class NotificationCenter : INotificationCenter
         bool removed;
         lock (gate)
         {
-            removed = history.RemoveAll(item => item.Id == id) > 0;
+            int index = history.FindIndex(item => item.Id == id);
+            if (index < 0)
+            {
+                return false;
+            }
+            removed = true;
+            RemoveTaskMappingLocked(history[index]);
+            history.RemoveAt(index);
         }
         if (removed)
         {
@@ -171,6 +212,7 @@ public sealed class NotificationCenter : INotificationCenter
         lock (gate)
         {
             history.Clear();
+            tasks.Clear();
         }
         PublishSnapshot();
     }
@@ -187,8 +229,44 @@ public sealed class NotificationCenter : INotificationCenter
         }
     }
 
-    private static string FingerprintOf(AppNotification notification) =>
-        $"{notification.Category}:{notification.Title}:{notification.Message}";
+    public AppNotification? FindByTask(string taskKey)
+    {
+        if (string.IsNullOrWhiteSpace(taskKey))
+        {
+            return null;
+        }
+        lock (gate)
+        {
+            return tasks.TryGetValue(taskKey.Trim(), out Guid id)
+                ? history.FirstOrDefault(item => item.Id == id)
+                : null;
+        }
+    }
+
+    private void TrimExcessLocked()
+    {
+        if (history.Count <= options.MaxItems)
+        {
+            return;
+        }
+        for (int index = options.MaxItems; index < history.Count; index++)
+        {
+            RemoveTaskMappingLocked(history[index]);
+        }
+        history.RemoveRange(
+            options.MaxItems,
+            history.Count - options.MaxItems);
+    }
+
+    private void RemoveTaskMappingLocked(AppNotification notification)
+    {
+        if (notification.TaskKey is { Length: > 0 } key &&
+            tasks.TryGetValue(key, out Guid id) &&
+            id == notification.Id)
+        {
+            tasks.Remove(key);
+        }
+    }
 
     private void PublishSnapshot()
     {
