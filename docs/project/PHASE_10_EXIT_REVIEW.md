@@ -54,7 +54,7 @@
    7 条观察覆盖三种挑战模式，包含阶段阵容、增益、敌人、难度与奖章，两次语义比对一致。
    随后在 WinUI 的“备份与恢复”使用 Windows 文件选择器导入 Android 导出文件并重新导出，
    7 条观察语义一致，重复导入全部跳过。
-4. **UI 重构并行线**：WinUI3 原生页面由独立 worktree 的会话推进；本阶段已把展示模型下沉到 `FurinaChronicle.Presentation/History`，后续复用同一服务层。
+4. **UI 重构并行线**：WinUI3 原生页面由独立 worktree 的会话推进；本阶段已把展示模型下沉到 `src/FurinaChronicle.Presentation/History`，后续复用同一服务层。
 
 ## 退出结论
 

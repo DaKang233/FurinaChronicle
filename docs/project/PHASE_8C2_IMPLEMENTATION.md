@@ -76,13 +76,13 @@ RestorePlan 覆盖当前支持的所有 Archive 领域及必要父对象，不�
 
 ## 主要实现位置
 
-- `FurinaChronicle.Services/Archives/Portable/ArchiveRestoreModels.cs`：staging、目标快照、映射、事实动作、冲突、确认、设置、资源和 Preview 合同。
-- `FurinaChronicle.Services/Archives/Portable/PlanArchiveRestore*.cs`：统一 Merge 规划、确定性 ID／指纹、策略和 Preview。
-- `FurinaChronicle.Services/Archives/Portable/ArchiveRestoreSemanticDigest.cs`：跨 adapter 共用的可移植语义摘要。
-- `FurinaChronicle.Infrastructure/Archives/Portable/SqliteArchiveRestoreInputStager.cs`：输入复制、正式验证、私有 SQLite 索引和 session 清理。
-- `FurinaChronicle.Infrastructure/Archives/Portable/SqliteArchiveExportSnapshotFactory.cs`：目标一致快照、状态令牌、有界事实查询和 Tombstone 查询。
-- `FurinaChronicle.App/Composition/ArchiveServiceCollectionExtensions.cs`：8C.2 服务注册；未增加产品入口。
-- `FurinaChronicle.Tests/Infrastructure/Archives/Portable/` 与 `FurinaChronicle.Tests/Services/Archives/Portable/`：staging、真实 SQLite 目标快照和规划器自动化。
+- `src/FurinaChronicle.Services/Archives/Portable/ArchiveRestoreModels.cs`：staging、目标快照、映射、事实动作、冲突、确认、设置、资源和 Preview 合同。
+- `src/FurinaChronicle.Services/Archives/Portable/PlanArchiveRestore*.cs`：统一 Merge 规划、确定性 ID／指纹、策略和 Preview。
+- `src/FurinaChronicle.Services/Archives/Portable/ArchiveRestoreSemanticDigest.cs`：跨 adapter 共用的可移植语义摘要。
+- `src/FurinaChronicle.Infrastructure/Archives/Portable/SqliteArchiveRestoreInputStager.cs`：输入复制、正式验证、私有 SQLite 索引和 session 清理。
+- `src/FurinaChronicle.Infrastructure/Archives/Portable/SqliteArchiveExportSnapshotFactory.cs`：目标一致快照、状态令牌、有界事实查询和 Tombstone 查询。
+- `src/FurinaChronicle.App/Composition/ArchiveServiceCollectionExtensions.cs`：8C.2 服务注册；未增加产品入口。
+- `src/FurinaChronicle.Tests/Infrastructure/Archives/Portable/` 与 `src/FurinaChronicle.Tests/Services/Archives/Portable/`：staging、真实 SQLite 目标快照和规划器自动化。
 
 ## 本地提交
 

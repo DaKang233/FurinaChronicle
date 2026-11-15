@@ -44,7 +44,7 @@
 - `SnapMetadataClient`：GitHub raw `Genshin/CHS`，`Meta.json` 24 小时检查一次，以其 SHA-256 前 16 位作为缓存版本目录；网络失败回退到最后缓存版本；单文件上限 16 MiB。
 - 解析：`Avatar/<id>.json`（名称、图标名、稀有度）、`Weapon.json`、`RoleCombatSchedule.json`、`HardChallengeSchedule.json`（名称与周期）。
 - `CompositeDomainMetadataService`：Snap.Metadata 优先；角色／武器缺失时回退现有养成计算器元数据（`IGachaItemMetadataProvider`）；挑战期次只由 Snap.Metadata 提供。
-- UI 展示模型下沉到 `FurinaChronicle.Presentation/History`，供 MAUI 与后续 WinUI3 复用；角色页新增“历史观察”切换，在线实测名称解析成功（琴、丽莎、旅行者等）。
+- UI 展示模型下沉到 `src/FurinaChronicle.Presentation/History`，供 MAUI 与后续 WinUI3 复用；角色页新增“历史观察”切换，在线实测名称解析成功（琴、丽莎、旅行者等）。
 - 待确认：YSHelper 的具体元数据端点（本地参考仅见抽卡／排行，没有物品元数据接口）；图标名到官方 CDN 的 URL 规则（当前临时使用 Enka 镜像，需替换为官方规则）。
 ## 10.4 实现记录
 

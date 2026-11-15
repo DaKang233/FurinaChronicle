@@ -33,12 +33,12 @@
 
 ## 实现位置
 
-- `FurinaChronicle.Services/Archives/Portable/`：Archive DTO、限制、诊断、版本派发和导出／未来恢复端口。
-- `FurinaChronicle.Infrastructure/Archives/Portable/ArchivePackageWriter.cs`：容器和逻辑 Dataset 写入。
-- `FurinaChronicle.Infrastructure/Archives/Portable/ArchivePackageReader.cs`：离线、只读、有界／流式验证。
-- `FurinaChronicle.Infrastructure/Archives/Portable/SqliteArchiveExportSnapshotFactory.cs`：SQLite Online Backup 一致快照和分页读取。
-- `FurinaChronicle.Infrastructure/Archives/Portable/ArchiveLogicalExporter.cs`：快照、写入、正式 Reader 回读和清理生命周期。
-- `FurinaChronicle.Tests/Infrastructure/Archives/Portable/`：Codec、负例、并发快照、跨领域保真和取消清理测试。
+- `src/FurinaChronicle.Services/Archives/Portable/`：Archive DTO、限制、诊断、版本派发和导出／未来恢复端口。
+- `src/FurinaChronicle.Infrastructure/Archives/Portable/ArchivePackageWriter.cs`：容器和逻辑 Dataset 写入。
+- `src/FurinaChronicle.Infrastructure/Archives/Portable/ArchivePackageReader.cs`：离线、只读、有界／流式验证。
+- `src/FurinaChronicle.Infrastructure/Archives/Portable/SqliteArchiveExportSnapshotFactory.cs`：SQLite Online Backup 一致快照和分页读取。
+- `src/FurinaChronicle.Infrastructure/Archives/Portable/ArchiveLogicalExporter.cs`：快照、写入、正式 Reader 回读和清理生命周期。
+- `src/FurinaChronicle.Tests/Infrastructure/Archives/Portable/`：Codec、负例、并发快照、跨领域保真和取消清理测试。
 
 ## 容器与安全边界
 

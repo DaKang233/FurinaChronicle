@@ -13,10 +13,10 @@ WinUI 宿主只保留一套通知管线：页面和后台服务描述“发生�
 
 | 层 | 位置 | 责任 |
 |---|---|---|
-| 模型与管线 | `FurinaChronicle.Presentation/Notifications` | `NotificationRequest`、`AppNotification`、`NotificationCenter`、去重/保留/未读 |
+| 模型与管线 | `src/FurinaChronicle.Presentation/Notifications` | `NotificationRequest`、`AppNotification`、`NotificationCenter`、去重/保留/未读 |
 | 分发端口 | `FurinaChronicle.Presentation.Gacha.IUiDispatcher` | 只在 UI 线程更新可观察集合 |
-| 宿主组合 | `FurinaChronicle.Windows/Composition/WindowsComposition.cs` | 注册单例 `INotificationCenter` |
-| 通知中心浮层 | `FurinaChronicle.Windows/Shell/NotificationCenterPanel` | 右下角置顶；有通知才显示，无通知完全隐藏；列表、未读、全部已读、清空、逐条移除、收起/展开 |
+| 宿主组合 | `src/FurinaChronicle.Windows/Composition/WindowsComposition.cs` | 注册单例 `INotificationCenter` |
+| 通知中心浮层 | `src/FurinaChronicle.Windows/Shell/NotificationCenterPanel` | 右下角置顶；有通知才显示，无通知完全隐藏；列表、未读、全部已读、清空、逐条移除、收起/展开 |
 | 全局宿主 | `MainWindow` | 浮层挂在 `RootGrid` 右下角，`Canvas.ZIndex=100`，覆盖所有页面 |
 
 ## 已实现（round 1）

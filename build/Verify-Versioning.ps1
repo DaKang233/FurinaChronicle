@@ -6,7 +6,7 @@ param()
 
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path $PSScriptRoot -Parent
-$projectPath = Join-Path $repositoryRoot 'FurinaChronicle.App\FurinaChronicle.App.csproj'
+$projectPath = Join-Path $repositoryRoot 'src\FurinaChronicle.App\FurinaChronicle.App.csproj'
 $windowsFramework = 'net10.0-windows10.0.19041.0'
 $androidFramework = 'net10.0-android'
 $temporaryRoot = Join-Path ([IO.Path]::GetTempPath()) ("FurinaChronicle-Versioning-{0}" -f [Guid]::NewGuid().ToString('N'))
@@ -99,6 +99,8 @@ try {
     Assert-Equal $windows.Build $android.Build 'Windows and Android must share Build/versionCode.'
 
     $nextMilestone = Invoke-VersionProbe -Framework $windowsFramework -GitRoot $historyRepository -Properties @{
+        FurinaVersionMajor = 0
+        FurinaVersionMinor = 8
         FurinaVersionPatch = 5
         FurinaPhaseLabel = '8C.0'
     }

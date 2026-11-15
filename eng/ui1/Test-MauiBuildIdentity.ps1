@@ -9,7 +9,7 @@ $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $evidenceRoot = [IO.Path]::GetFullPath($EvidenceDirectory)
 [IO.Directory]::CreateDirectory($evidenceRoot) | Out-Null
 $framework = 'net10.0-windows10.0.19041.0'
-$project = Join-Path $repositoryRoot 'FurinaChronicle.App\FurinaChronicle.App.csproj'
+$project = Join-Path $repositoryRoot 'src\FurinaChronicle.App\FurinaChronicle.App.csproj'
 $outputRoot = Join-Path $evidenceRoot 'build'
 $results = [Collections.Generic.List[object]]::new()
 
@@ -33,7 +33,7 @@ foreach ($mode in @('production', 'phase8c', 'ui1', 'production')) {
         "-p:BaseOutputPath=$outputRoot\", "-p:Phase8CValidationMode=$phase8c", "-p:Ui1PreviewMode=$ui1", '-p:Phase8BValidationMode=false')
     & dotnet @arguments *> (Join-Path $evidenceRoot "$index-$mode.log")
     if ($LASTEXITCODE -ne 0) { throw "Build failed for $mode. Inspect the corresponding evidence log." }
-    $generated = Join-Path $repositoryRoot "FurinaChronicle.App\obj\Release\$framework\win-x64\FurinaChronicle.App.AssemblyInfo.cs"
+    $generated = Join-Path $repositoryRoot "src\FurinaChronicle.App\obj\Release\$framework\win-x64\FurinaChronicle.App.AssemblyInfo.cs"
     $text = [IO.File]::ReadAllText($generated)
     $packageMatch = [regex]::Match($text, 'AppInfo\.PackageName", "([^"]+)"')
     $titleMatch = [regex]::Match($text, 'AppInfo\.Name", "([^"]+)"')

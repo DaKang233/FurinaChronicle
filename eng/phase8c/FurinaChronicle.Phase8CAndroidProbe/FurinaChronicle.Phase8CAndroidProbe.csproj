@@ -19,7 +19,7 @@
   <Import Project="../../../Version.props" />
   <Import Project="../../../build/FurinaVersion.targets" />
   <ItemGroup>
-    <ProjectReference Include="../../../FurinaChronicle.Infrastructure/FurinaChronicle.Infrastructure.csproj" />
+    <ProjectReference Include="../../../src/FurinaChronicle.Infrastructure/FurinaChronicle.Infrastructure.csproj" />
     <Compile Include="../FurinaChronicle.Phase8CValidation/RestoreInterruptionProbe.cs" Link="RestoreInterruptionProbe.cs" />
     <Compile Include="../FurinaChronicle.Phase8CValidation/SyntheticArchiveSnapshot.cs" Link="SyntheticArchiveSnapshot.cs" />
   </ItemGroup>

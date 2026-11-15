@@ -38,11 +38,11 @@ jobs:
           global-json-file: global.json
 
       - name: Restore test projects
-        run: dotnet restore ./FurinaChronicle.Tests/FurinaChronicle.Tests.csproj
+        run: dotnet restore ./src/FurinaChronicle.Tests/FurinaChronicle.Tests.csproj
 
       - name: Run tests
         run: >-
-          dotnet test ./FurinaChronicle.Tests/FurinaChronicle.Tests.csproj
+          dotnet test ./src/FurinaChronicle.Tests/FurinaChronicle.Tests.csproj
           --configuration Release
           --no-restore
           --logger "trx;LogFileName=furinachronicle-tests.trx"
@@ -117,7 +117,7 @@ jobs:
       - name: Ensure Android SDK dependencies
         shell: pwsh
         run: |
-          dotnet build .\FurinaChronicle.App\FurinaChronicle.App.csproj `
+          dotnet build .\src\FurinaChronicle.App\FurinaChronicle.App.csproj `
             -t:InstallAndroidDependencies `
             --framework net10.0-android `
             -p:AndroidSdkDirectory="$env:ANDROID_SDK_ROOT" `
@@ -134,7 +134,7 @@ jobs:
         run: |
           $publishArguments = @(
             'publish'
-            '.\FurinaChronicle.App\FurinaChronicle.App.csproj'
+            '.\src\FurinaChronicle.App\FurinaChronicle.App.csproj'
             '--framework', 'net10.0-android'
             '--configuration', 'Release'
             '--no-restore'
@@ -183,7 +183,7 @@ jobs:
       - name: Collect Android APK
         shell: pwsh
         run: |
-          $publishPath = Join-Path $env:GITHUB_WORKSPACE 'FurinaChronicle.App\bin\Release\net10.0-android\publish'
+          $publishPath = Join-Path $env:GITHUB_WORKSPACE 'src\FurinaChronicle.App\bin\Release\net10.0-android\publish'
           $signedApk = Get-ChildItem $publishPath -File -Filter '*-Signed.apk' |
             Sort-Object LastWriteTimeUtc -Descending |
             Select-Object -First 1

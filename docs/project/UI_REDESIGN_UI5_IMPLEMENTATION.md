@@ -10,7 +10,7 @@ UI-5 目标（计划 §11、§18）：Chronicle、角色与武器、周期挑战
 
 ## UI-5-1：Chronicle 游戏历程
 
-### 展示层（`FurinaChronicle.Presentation/Chronicle/`，平台无关）
+### 展示层（`src/FurinaChronicle.Presentation/Chronicle/`，平台无关）
 
 - `ChronicleDisplayText`：7 个 TitleKey、10 个 EvidenceReasonKey、6 个 MilestoneKey
   全部中文映射；枚举标签（来源/派生/置信/完整度/依据状态与范围/领域/类型/时间线/

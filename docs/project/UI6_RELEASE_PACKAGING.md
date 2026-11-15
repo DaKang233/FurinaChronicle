@@ -55,7 +55,7 @@ WinUI 宿主直接使用与旧 MAUI Windows 宿主**相同的生产数据库文�
 
 ## 验收清单（发布前）
 
-- [ ] `dotnet test FurinaChronicle.Tests/FurinaChronicle.Tests.csproj -c Release -m:1` 全通过；
+- [ ] `dotnet test src/FurinaChronicle.Tests/FurinaChronicle.Tests.csproj -c Release -m:1` 全通过；
 - [ ] `eng/Publish-WinUI.ps1` 发布成功、0 警告 0 错误；
 - [ ] 解压到干净目录可启动，窗口标题含版本，隔离数据目录可正常创建；
 - [ ] 首次启动接管：无生产库初始化/现有库校验+备份+标记成功/校验失败不改库/幂等/回退/旧宿主占用；

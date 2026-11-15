@@ -66,8 +66,8 @@ Phase 8B 已关闭，本阶段不重开 8B.7。Windows 历史库升级前精确 
 
 ### 分层
 
-- `FurinaChronicle.Services/Archives/Portable/`：逻辑 DTO、端口、Reader 结果、诊断和未来 Restore 协调端口。
-- `FurinaChronicle.Infrastructure/Archives/Portable/`：ZIP、JSON、哈希、staging、一致快照 exporter。
+- `src/FurinaChronicle.Services/Archives/Portable/`：逻辑 DTO、端口、Reader 结果、诊断和未来 Restore 协调端口。
+- `src/FurinaChronicle.Infrastructure/Archives/Portable/`：ZIP、JSON、哈希、staging、一致快照 exporter。
 - 现有 Gacha／HistoryDomains：复用领域 Codec 和规则，不复制第二套事实解析或写入语义。
 - App／WinUI：8C.1 不接正式入口；WinUI 技术小样继续与生产库隔离。
 

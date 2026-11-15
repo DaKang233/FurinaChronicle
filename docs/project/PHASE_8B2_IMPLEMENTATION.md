@@ -67,7 +67,7 @@
 
 ## 2026-10-06 验证记录
 
-- `dotnet restore FurinaChronicle.Tests/FurinaChronicle.Tests.csproj`：通过；
+- `dotnet restore src/FurinaChronicle.Tests/FurinaChronicle.Tests.csproj`：通过；
 - Release 全量单元测试：377/377 通过；
 - Portable 专项：22/22 通过，包括 20,000 条生成器、1,250 条真实 SQLite 多页导出、并发插入一致性、取消和失败不覆盖；
 - Windows Release `net10.0-windows10.0.19041.0 / win-x64`：0 警告、0 错误；

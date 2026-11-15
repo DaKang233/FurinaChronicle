@@ -216,7 +216,7 @@
 ### 2.5 日志/诊断脱敏
 
 - 现状：UI-4 设置页“诊断导出”只含版本/文件名/大小/安全声明（WinUI `WindowsSettingsPorts.cs:128-151`；MAUI `MauiSettingsPorts.cs:112-139`）。
-- **现存风险**：MAUI 崩溃日志 `%LOCALAPPDATA%\FurinaChronicle\Logs\windows-unhandled.log` 记录异常全文（可能含路径/UID/记录信息），无脱敏、无保留上限（`Platforms/Windows/App.xaml.cs:26-47`）；WinUI 在启动 shell 失败时把异常全文写到 `%TEMP%\furina-ui4-buildshell-error.txt`（`FurinaChronicle.Windows/MainWindow.xaml.cs:100-110`），同样未脱敏、无清理策略。
+- **现存风险**：MAUI 崩溃日志 `%LOCALAPPDATA%\FurinaChronicle\Logs\windows-unhandled.log` 记录异常全文（可能含路径/UID/记录信息），无脱敏、无保留上限（`Platforms/Windows/App.xaml.cs:26-47`）；WinUI 在启动 shell 失败时把异常全文写到 `%TEMP%\furina-ui4-buildshell-error.txt`（`src/FurinaChronicle.Windows/MainWindow.xaml.cs:100-110`），同样未脱敏、无清理策略。
 - 要求（UI-6 实施时）：
   - 迁移/切换流程日志：不记录完整用户路径、UID、凭据、备份内容；哈希可记录但不上传；
   - 崩溃日志：默认本地、可关闭、有限保留、可一键清除；写入前脱敏（至少替换用户目录与凭据值），并在设置页显示位置；
@@ -408,13 +408,13 @@ Get-ChildItem $root -Recurse -File | Measure-Object Length -Sum
 Get-Item (Join-Path $root 'Data\furinachronicle.db3') | Select-Object Length, LastWriteTimeUtc
 
 # 生产标识（源清单）
-Get-Content 'FurinaChronicle.App/Platforms/Windows/Package.appxmanifest'
+Get-Content 'src/FurinaChronicle.App/Platforms/Windows/Package.appxmanifest'
 
 # 隔离宿主路径定义
-Get-Content 'FurinaChronicle.Windows/Composition/WindowsPaths.cs'
+Get-Content 'src/FurinaChronicle.Windows/Composition/WindowsPaths.cs'
 
 # 应用崩溃日志路径（代码）
-Get-Content 'FurinaChronicle.App/Platforms/Windows/App.xaml.cs'
+Get-Content 'src/FurinaChronicle.App/Platforms/Windows/App.xaml.cs'
 ```
 
 > 迁移实现阶段建议补充（需用户授权、只读）：SQLite `ReadOnly` 打开 + `PRAGMA application_id/user_version/quick_check`；在线备份后对副本做同样校验；**不要**在探测阶段创建目录或写库。
@@ -428,21 +428,21 @@ Get-Content 'FurinaChronicle.App/Platforms/Windows/App.xaml.cs'
 ### 7.3 关键文件/行号索引
 
 **路径与存储**
-- `FurinaChronicle.App/Composition/PersistenceServiceCollectionExtensions.cs:61-63`（DB 路径）、`:24-65`（路径变量）
-- `FurinaChronicle.App/Persistence/PlatformStoragePaths.cs:10-29`（AppData/Cache）
-- `FurinaChronicle.App/Composition/GachaServiceCollectionExtensions.cs:79、97、104、108、120-130`（元数据/图标/横幅/Portable）
-- `FurinaChronicle.App/Composition/ArchiveServiceCollectionExtensions.cs:23-30`（导出/恢复会话）
-- `FurinaChronicle.App/Composition/PresentationServiceCollectionExtensions.cs:70-72`（SnapMetadata 缓存）
-- `FurinaChronicle.App/Persistence/SecureStoragePassportAccountStore.cs:14-15、200-274`（凭据键/字段）
-- `FurinaChronicle.App/Persistence/PreferencesArchiveSelectionStore.cs:13-15`、`PreferencesPassportSelectionStore.cs:12`、`UI/Gacha/GachaAppearanceSettings.cs:9`、`Composition/MauiSettingsPorts.cs:18`（Preferences 键）
-- `FurinaChronicle.App/Platforms/Windows/Package.appxmanifest:11-17`（PublisherDisplayName/Identity）
-- `FurinaChronicle.App/Platforms/Windows/App.xaml.cs:26-47`（崩溃日志）
-- `FurinaChronicle.Infrastructure/Persistence/Sqlite/FurinaDatabase.cs:12、34、57、75-198`（Schema/app id/全互斥/初始化锁）
-- `FurinaChronicle.Infrastructure/Persistence/Sqlite/SqliteGachaAtomicChangeStore.ArchiveRestore.Recovery.cs:95-115`（恢复点目录）
-- `FurinaChronicle.Infrastructure/Archives/Portable/SqliteArchiveExportSnapshotFactory.cs:53`、`ArchiveRestore.Receipt.cs:375`（SQLite 在线备份）
-- `FurinaChronicle.Infrastructure/Diagnostics/Ui1PreviewEnvironment.cs:27-118、131-140、227-247`（隔离环境/租约/占位）
-- `FurinaChronicle.Windows/Composition/WindowsPaths.cs:6-49`、`WindowsComposition.cs:31-39、63-72、134-149、151-181`、`WindowsSettingsPorts.cs:13-18、128-151`、`DpapiPassportCredentialStore.cs:13-22、282-329`、`WindowsStartupProbe.cs:10-40`、`EnvironmentHolder.cs`、`STokenRefreshComposition.cs`
-- `FurinaChronicle.Windows/FurinaChronicle.Windows.csproj:9-28`、`MainWindow.xaml:26-48`、`MainWindow.xaml.cs`（标题/导航/固定尺寸）
+- `src/FurinaChronicle.App/Composition/PersistenceServiceCollectionExtensions.cs:61-63`（DB 路径）、`:24-65`（路径变量）
+- `src/FurinaChronicle.App/Persistence/PlatformStoragePaths.cs:10-29`（AppData/Cache）
+- `src/FurinaChronicle.App/Composition/GachaServiceCollectionExtensions.cs:79、97、104、108、120-130`（元数据/图标/横幅/Portable）
+- `src/FurinaChronicle.App/Composition/ArchiveServiceCollectionExtensions.cs:23-30`（导出/恢复会话）
+- `src/FurinaChronicle.App/Composition/PresentationServiceCollectionExtensions.cs:70-72`（SnapMetadata 缓存）
+- `src/FurinaChronicle.App/Persistence/SecureStoragePassportAccountStore.cs:14-15、200-274`（凭据键/字段）
+- `src/FurinaChronicle.App/Persistence/PreferencesArchiveSelectionStore.cs:13-15`、`PreferencesPassportSelectionStore.cs:12`、`UI/Gacha/GachaAppearanceSettings.cs:9`、`Composition/MauiSettingsPorts.cs:18`（Preferences 键）
+- `src/FurinaChronicle.App/Platforms/Windows/Package.appxmanifest:11-17`（PublisherDisplayName/Identity）
+- `src/FurinaChronicle.App/Platforms/Windows/App.xaml.cs:26-47`（崩溃日志）
+- `src/FurinaChronicle.Infrastructure/Persistence/Sqlite/FurinaDatabase.cs:12、34、57、75-198`（Schema/app id/全互斥/初始化锁）
+- `src/FurinaChronicle.Infrastructure/Persistence/Sqlite/SqliteGachaAtomicChangeStore.ArchiveRestore.Recovery.cs:95-115`（恢复点目录）
+- `src/FurinaChronicle.Infrastructure/Archives/Portable/SqliteArchiveExportSnapshotFactory.cs:53`、`ArchiveRestore.Receipt.cs:375`（SQLite 在线备份）
+- `src/FurinaChronicle.Infrastructure/Diagnostics/Ui1PreviewEnvironment.cs:27-118、131-140、227-247`（隔离环境/租约/占位）
+- `src/FurinaChronicle.Windows/Composition/WindowsPaths.cs:6-49`、`WindowsComposition.cs:31-39、63-72、134-149、151-181`、`WindowsSettingsPorts.cs:13-18、128-151`、`DpapiPassportCredentialStore.cs:13-22、282-329`、`WindowsStartupProbe.cs:10-40`、`EnvironmentHolder.cs`、`STokenRefreshComposition.cs`
+- `src/FurinaChronicle.Windows/FurinaChronicle.Windows.csproj:9-28`、`MainWindow.xaml:26-48`、`MainWindow.xaml.cs`（标题/导航/固定尺寸）
 
 **决策/规范**
 - `docs/decisions/0020-platform-specific-ui-hosts.md:31-42、53-59、63-70`

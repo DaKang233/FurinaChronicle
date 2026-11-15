@@ -34,7 +34,7 @@
 4. 在生产入口开放前完成删除抑制评审、错误脱敏与设备验收。Windows 和 Android 应用构建、真机与授权接口均为 Not run。
 
 ```powershell
-dotnet test FurinaChronicle.Tests/FurinaChronicle.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~SpiralAbyssCollectionTests
+dotnet test src/FurinaChronicle.Tests/FurinaChronicle.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~SpiralAbyssCollectionTests
 ```
 
 ## 实际验证
@@ -206,7 +206,7 @@ Windows 本期国服在线复测再次进入人工验证，提交结果为业务
 
 **待复验**：当前账号在参考客户端验证后处于可读状态，`5003` 分支未能现场触发，因此新路由只由合成测试覆盖；下一次出现账号级风控时，需要真实执行一次 `5003 → index 1034 → 人工验证 → 战绩写入` 才能把该修复标为在线通过。
 
-**构建环境排障（2026-11-11）**：VS 2026 的还原跑在 .NET Framework NuGet 栈上，经本机 `127.0.0.1:9000` 代理访问 HTTPS 源时报 `ServicePointManager 不支持具有 https 方案的代理`。一旦还原失败，`FurinaChronicle.App/obj/project.assets.json` 会被写成缺少 `net10.0-android`／`net10.0-windows10.0.19041.0` 目标的版本，后续构建报 `NETSDK1005`／`NETSDK1004`（`-f` 单目标构建也会留下同类资产，可用于复现）。恢复方式：执行 `dotnet restore FurinaChronicle.slnx`（或用 VS 的「还原 NuGet 包」）生成完整资产，关闭残留 MSBuild/dotnet 节点后重新构建；已验证 VS 2026 MSBuild 全解决方案 Debug（App 两个 TFM 与 Windows 项目）构建通过。这是本机代理与还原缓存的状态问题，不是仓库配置缺陷。
+**构建环境排障（2026-11-11）**：VS 2026 的还原跑在 .NET Framework NuGet 栈上，经本机 `127.0.0.1:9000` 代理访问 HTTPS 源时报 `ServicePointManager 不支持具有 https 方案的代理`。一旦还原失败，`src/FurinaChronicle.App/obj/project.assets.json` 会被写成缺少 `net10.0-android`／`net10.0-windows10.0.19041.0` 目标的版本，后续构建报 `NETSDK1005`／`NETSDK1004`（`-f` 单目标构建也会留下同类资产，可用于复现）。恢复方式：执行 `dotnet restore FurinaChronicle.slnx`（或用 VS 的「还原 NuGet 包」）生成完整资产，关闭残留 MSBuild/dotnet 节点后重新构建；已验证 VS 2026 MSBuild 全解决方案 Debug（App 两个 TFM 与 Windows 项目）构建通过。这是本机代理与还原缓存的状态问题，不是仓库配置缺陷。
 
 ### 2026-11-11 夜间复核：`5003` 的设备信任根因
 

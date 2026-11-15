@@ -133,7 +133,7 @@ P0 fixture 编号沿用实施计划的 S01～S04、M01～M05、C01～C06、I01�
 
 ## 自动化验证（2026-10-18）
 
-- `dotnet test FurinaChronicle.Tests/FurinaChronicle.Tests.csproj --configuration Release --no-restore`：493／493 通过。
+- `dotnet test src/FurinaChronicle.Tests/FurinaChronicle.Tests.csproj --configuration Release --no-restore`：493／493 通过。
 - `build/Verify-Versioning.ps1`：通过；人工版本源为 `0.8.6`／`8B.5`，构建过程未回写版本文件。
 - Windows `net10.0-windows10.0.19041.0` Release：通过，0 warning／0 error。
 - Android `net10.0-android` Release（`AndroidSdkDirectory=E:\AndroidSDK`）：通过，0 warning／0 error；包含 Release 裁剪和程序集预编译阶段。

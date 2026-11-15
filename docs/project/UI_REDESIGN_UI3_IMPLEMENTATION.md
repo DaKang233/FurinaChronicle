@@ -58,7 +58,7 @@ Release 回归 717/717。
   等待已开始的提交。结果区分“已保存的事实”（总数、新增、重复、无效、忽略、
   新建账号、覆盖修订）与“当前显示是否更新”，成功后按原范围重查并保留稳定 ID。
 - **分层**：目标校验、模式快照、预览与中文文案下沉到
-  `FurinaChronicle.Presentation/Gacha/`（不引用 MAUI／WinUI／文件系统类型）；
+  `src/FurinaChronicle.Presentation/Gacha/`（不引用 MAUI／WinUI／文件系统类型）；
   `Ui1PreviewEnvironment` 只新增同一隔离库上的导入服务组合，不发现生产库或凭据。
   Windows 视图只负责选择器、对话框与渲染。
 - 验收中修正了导入状态的可访问名称：状态文本本身成为 `AutomationProperties.Name`，

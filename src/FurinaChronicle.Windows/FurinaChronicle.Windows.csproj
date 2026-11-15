@@ -4,7 +4,7 @@
 -->
 
 <Project Sdk="Microsoft.NET.Sdk">
-  <Import Project="..\Version.props" />
+  <Import Project="..\..\Version.props" />
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -59,10 +59,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="..\LICENSE.txt" Link="LICENSE.txt"
+    <None Include="..\..\LICENSE.txt" Link="LICENSE.txt"
           CopyToOutputDirectory="PreserveNewest"
           CopyToPublishDirectory="PreserveNewest" />
-    <None Include="..\THIRD-PARTY-NOTICES.txt" Link="THIRD-PARTY-NOTICES.txt"
+    <None Include="..\..\THIRD-PARTY-NOTICES.txt" Link="THIRD-PARTY-NOTICES.txt"
           CopyToOutputDirectory="PreserveNewest"
           CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
@@ -74,7 +74,7 @@
     <ProjectReference Include="..\FurinaChronicle.Presentation\FurinaChronicle.Presentation.csproj" />
   </ItemGroup>
 
-  <Import Project="..\build\FurinaVersion.targets" />
+  <Import Project="..\..\build\FurinaVersion.targets" />
 
   <!-- The unpackaged publish must carry the current resource index, including embedded XBF. -->
   <Target Name="PublishPreviewResourceIndex" AfterTargets="ComputeFilesToPublish">

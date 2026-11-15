@@ -20,7 +20,7 @@
 | 证据 | 位置 |
 |---|---|
 | 采集契约、`10306`／`5003` 复核、在线验收与根因记录 | [Phase 9.0／9.1 实施记录](PHASE_9_COLLECTION_IMPLEMENTATION.md) |
-| 深境螺旋传输与映射 | `FurinaChronicle.Infrastructure/HistoryDomains/Collecting/HoYoGameRecordSpiralAbyssSource.cs`、`MiYouSheSpiralAbyssResponseReader.cs` |
+| 深境螺旋传输与映射 | `src/FurinaChronicle.Infrastructure/HistoryDomains/Collecting/HoYoGameRecordSpiralAbyssSource.cs`、`MiYouSheSpiralAbyssResponseReader.cs` |
 | 角色／武器传输与映射 | `HoYoGameRecordCharacterWeaponSource.cs`、`MiYouSheCharacterWeaponResponseReader.cs` |
 | 采集用例 | `CollectSpiralAbyss.cs`、`CollectCharacterWeapon.cs`、`ValidateSpiralAbyssCollection.cs`、`ValidateCharacterWeaponCollection.cs` |
 | 回归 | `HoYoGameRecordSpiralAbyssSourceTests`、`HoYoGameRecordCharacterWeaponSourceTests`、`CharacterWeaponCollectionTests`、`SpiralAbyssCollectionTests` |

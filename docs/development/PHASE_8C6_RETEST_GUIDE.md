@@ -44,8 +44,8 @@
 
 本轮已准备的固定产物（均对应 `8e36948 / 0.8.15.214`，尚未设备启动验收）：
 
-- Windows EXE：`FurinaChronicle.App\bin\Release\net10.0-windows10.0.19041.0\win-x64\FurinaChronicle.App.exe`。
-- Android APK：`FurinaChronicle.App\bin\Release\net10.0-android\android-arm64\com.companyname.furinachronicle.validation.phase8c6.retest-Signed.apk`。
+- Windows EXE：`src\FurinaChronicle.App\bin\Release\net10.0-windows10.0.19041.0\win-x64\FurinaChronicle.App.exe`。
+- Android APK：`src\FurinaChronicle.App\bin\Release\net10.0-android\android-arm64\com.companyname.furinachronicle.validation.phase8c6.retest-Signed.apk`。
 - Android 包大小 21,907,421 bytes；SHA-256：
   `145db5f14e2cc1b86b46ae6a1a11a8bee4299e37b485c4c2e6c3de6c478fc8e6`。
 - 上述路径均相对本节的仓库实际路径。主机文件可能在后续构建时更新，运行前必须重新

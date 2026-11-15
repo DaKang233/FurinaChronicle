@@ -17,21 +17,23 @@ FurinaChronicle 是一个以本地数据为核心的原神个人历史档案应�
 
 需要 .NET 10 SDK、Git；Windows 额外需要 Windows App SDK 运行环境（发布物已自包含）与 .NET MAUI workload（仅构建旧宿主或 Android 时）。
 
+应用、共享库和测试项目位于 `src/`。从仓库根目录打开 `FurinaChronicle.slnx`，工程工具位于 `eng/`。
+
 ```powershell
 # 自动化回归
-dotnet test FurinaChronicle.Tests/FurinaChronicle.Tests.csproj -c Release -m:1 --nologo
+dotnet test src/FurinaChronicle.Tests/FurinaChronicle.Tests.csproj -c Release -m:1 --nologo
 
 # Windows 默认宿主：独立 WinUI 3（unpackaged、自包含）
 pwsh -File .\eng\Publish-WinUI.ps1
 .\artifacts\windows-winui\win-x64\FurinaChronicle.Windows.exe
 
 # 旧 MAUI Windows 宿主（保留一个发布周期，用于回退）
-dotnet publish FurinaChronicle.App/FurinaChronicle.App.csproj `
+dotnet publish src/FurinaChronicle.App/FurinaChronicle.App.csproj `
   -f net10.0-windows10.0.19041.0 -c Release -p:RuntimeIdentifierOverride=win-x64 `
   -p:WindowsPackageType=None -p:WindowsAppSDKSelfContained=true -p:SelfContained=true
 
 # Android Emulator（x64 验证包）
-dotnet build FurinaChronicle.App/FurinaChronicle.App.csproj -f net10.0-android -c Release `
+dotnet build src/FurinaChronicle.App/FurinaChronicle.App.csproj -f net10.0-android -c Release `
   -r android-x64 -p:AndroidSdkDirectory=<Android SDK 路径> -p:Phase8CValidationMode=true `
   -p:EmbeddedAssembliesIntoApk=true
 ```

@@ -102,17 +102,17 @@ powershell.exe -NoProfile -STA -File .\eng\ui1\Test-WindowsPreview.ps1 `
 Windows 单目标项目：
 
 ```powershell
-dotnet publish .\FurinaChronicle.Windows\FurinaChronicle.Windows.csproj `
+dotnet publish .\src\FurinaChronicle.Windows\FurinaChronicle.Windows.csproj `
   -c Release -r win-x64 --self-contained true -m:1 -o .\artifacts\ui1\windows
 ```
 
 Android 按相同属性定向清理、构建，再复制固定 APK；本机显式指定 SDK，不把路径写进工程：
 
 ```powershell
-dotnet clean .\FurinaChronicle.App\FurinaChronicle.App.csproj `
+dotnet clean .\src\FurinaChronicle.App\FurinaChronicle.App.csproj `
   -f net10.0-android -c Release -r android-arm64 -m:1 `
   -p:Ui1PreviewMode=true -p:AndroidSdkDirectory=E:\AndroidSDK
-dotnet build .\FurinaChronicle.App\FurinaChronicle.App.csproj `
+dotnet build .\src\FurinaChronicle.App\FurinaChronicle.App.csproj `
   -f net10.0-android -c Release -r android-arm64 -m:1 `
   -p:Ui1PreviewMode=true -p:AndroidSdkDirectory=E:\AndroidSDK -p:EmbedAssembliesIntoApk=true
 ```

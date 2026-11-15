@@ -4,7 +4,7 @@
 -->
 
 <Project Sdk="Microsoft.NET.Sdk">
-	<Import Project="..\Version.props" />
+	<Import Project="..\..\Version.props" />
 
 	<PropertyGroup>
 		<TargetFrameworks>net10.0-android</TargetFrameworks>
@@ -84,8 +84,8 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <EmbeddedResource Include="..\LICENSE.txt" Link="LICENSE.txt" LogicalName="FurinaChronicle.LICENSE.txt" />
-	  <EmbeddedResource Include="..\THIRD-PARTY-NOTICES.txt" Link="THIRD-PARTY-NOTICES.txt" LogicalName="FurinaChronicle.THIRD-PARTY-NOTICES.txt" />
+	  <EmbeddedResource Include="..\..\LICENSE.txt" Link="LICENSE.txt" LogicalName="FurinaChronicle.LICENSE.txt" />
+	  <EmbeddedResource Include="..\..\THIRD-PARTY-NOTICES.txt" Link="THIRD-PARTY-NOTICES.txt" LogicalName="FurinaChronicle.THIRD-PARTY-NOTICES.txt" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -120,8 +120,8 @@
 	  <Compile Remove="UI\Pages\Phase8BValidationPage.xaml.cs;ViewModels\Phase8BValidationPageViewModel.cs" />
 	</ItemGroup>
 
-	<Import Project="..\build\FurinaVersion.targets" />
-	<Import Project="..\build\FurinaMauiIdentity.targets" />
+	<Import Project="..\..\build\FurinaVersion.targets" />
+	<Import Project="..\..\build\FurinaMauiIdentity.targets" />
 
 	<Target Name="ValidateAcceptanceBuildMode" BeforeTargets="PrepareForBuild">
 		<Error

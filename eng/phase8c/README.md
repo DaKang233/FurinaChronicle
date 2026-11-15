@@ -43,12 +43,12 @@ Replace must use an explicitly selected, disposable validation scope.
 Build the product UI against an isolated database:
 
 ```powershell
-dotnet build .\FurinaChronicle.App\FurinaChronicle.App.csproj `
+dotnet build .\src\FurinaChronicle.App\FurinaChronicle.App.csproj `
   --framework net10.0-windows10.0.19041.0 `
   --configuration Release `
   -p:Phase8CValidationMode=true
 
-dotnet build .\FurinaChronicle.App\FurinaChronicle.App.csproj `
+dotnet build .\src\FurinaChronicle.App\FurinaChronicle.App.csproj `
   --framework net10.0-android `
   --configuration Release `
   -p:AndroidSdkDirectory=E:\AndroidSDK `

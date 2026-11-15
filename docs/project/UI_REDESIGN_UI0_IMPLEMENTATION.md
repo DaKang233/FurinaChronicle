@@ -136,16 +136,16 @@ CI 保留旧 MAUI Windows 产物，并新增明确标记为 UI-0 preview 的独�
 
 ### 4.3 关键文件
 
-- `FurinaChronicle.Windows/`：独立 WinUI 3 项目、应用、窗口、清单与 UI-0 样例；
+- `src/FurinaChronicle.Windows/`：独立 WinUI 3 项目、应用、窗口、清单与 UI-0 样例；
 - `FurinaChronicle.slnx`：接入新项目；
-- `FurinaChronicle.App/UI/TechnicalPreview/`：最小跨平台入口 View 与 BottomSheet 端口；
-- `FurinaChronicle.App/Platforms/Android/AndroidMaterialExtendedActionButtonHandler.cs`：
+- `src/FurinaChronicle.App/UI/TechnicalPreview/`：最小跨平台入口 View 与 BottomSheet 端口；
+- `src/FurinaChronicle.App/Platforms/Android/AndroidMaterialExtendedActionButtonHandler.cs`：
   Material 扩展操作按钮 Handler；
-- `FurinaChronicle.App/Platforms/Android/AndroidMaterialBottomSheetPreview.cs`：
+- `src/FurinaChronicle.App/Platforms/Android/AndroidMaterialBottomSheetPreview.cs`：
   原生 BottomSheet、返回/手势、滚动、键盘与 insets 生命周期；
-- `FurinaChronicle.App/UI/Pages/HomePage.xaml(.cs)`：受控 Android UI-0 入口、主题与
+- `src/FurinaChronicle.App/UI/Pages/HomePage.xaml(.cs)`：受控 Android UI-0 入口、主题与
   响应式状态；
-- `FurinaChronicle.App/MauiProgram.cs` 与
+- `src/FurinaChronicle.App/MauiProgram.cs` 与
   `Composition/PlatformServiceCollectionExtensions.cs`：按平台注册 Handler/端口；
 - `docs/decisions/0020-platform-specific-ui-hosts.md` 与决策索引：Accepted ADR；
 - `.github/workflows/build-and-test.yml`、`docs/development/CONTINUOUS_INTEGRATION.md`

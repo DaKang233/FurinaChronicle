@@ -12,6 +12,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\FurinaChronicle.Infrastructure\FurinaChronicle.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\src\FurinaChronicle.Infrastructure\FurinaChronicle.Infrastructure.csproj" />
   </ItemGroup>
 </Project>

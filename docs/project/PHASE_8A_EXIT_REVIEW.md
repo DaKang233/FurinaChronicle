@@ -33,7 +33,7 @@ Phase 8B 可以正式开始。实施必须从 8B.0 契约冻结开始；在影�
 
 在 `feat/phase-8` 分支、提交 `3157eaa` 上于 2026-10-04 复核：
 
-- `dotnet test FurinaChronicle.Tests/FurinaChronicle.Tests.csproj --configuration Release --no-restore`：291/291 通过；
+- `dotnet test src/FurinaChronicle.Tests/FurinaChronicle.Tests.csproj --configuration Release --no-restore`：291/291 通过；
 - Windows `net10.0-windows10.0.19041.0` Release 构建：0 警告、0 错误；
 - Android `net10.0-android` Release 构建：0 警告、0 错误；
 - GitHub Actions 已提供测试、Windows Release 和 Android Release APK 构建任务。

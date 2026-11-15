@@ -19,7 +19,7 @@ GitHub Actions 从全新 checkout 执行通用 Android publish，通常不存在
 以下命令在仓库根目录执行。示例 Android SDK 路径是当前开发环境的 `E:\AndroidSDK`；其他开发机应替换为其实际 SDK 路径。
 
 ```powershell
-$project = '.\FurinaChronicle.App\FurinaChronicle.App.csproj'
+$project = '.\src\FurinaChronicle.App\FurinaChronicle.App.csproj'
 $androidSdk = 'E:\AndroidSDK'
 
 dotnet clean $project `
@@ -48,13 +48,13 @@ Phase 8B.7 隔离验收包在两条命令中均额外加入：
 构建成功后，ARM64 签名 APK 位于：
 
 ```text
-FurinaChronicle.App\bin\Release\net10.0-android\android-arm64\com.companyname.furinachronicle.app-Signed.apk
+src\FurinaChronicle.App\bin\Release\net10.0-android\android-arm64\com.companyname.furinachronicle.app-Signed.apk
 ```
 
 不要仅按文件名选择 `bin/Release/net10.0-android` 根目录或旧 `publish` 目录中的 APK。选择产物时同时核对完整路径、最后写入时间、大小和 SHA-256：
 
 ```powershell
-$apk = Resolve-Path '.\FurinaChronicle.App\bin\Release\net10.0-android\android-arm64\com.companyname.furinachronicle.app-Signed.apk'
+$apk = Resolve-Path '.\src\FurinaChronicle.App\bin\Release\net10.0-android\android-arm64\com.companyname.furinachronicle.app-Signed.apk'
 Get-Item $apk | Select-Object FullName, Length, LastWriteTimeUtc
 Get-FileHash $apk -Algorithm SHA256
 ```
@@ -124,7 +124,7 @@ int .Style.get_Maui_Material3_Theme_NoActionBar()
 
 ```powershell
 Select-String `
-  '.\FurinaChronicle.App\obj\Release\net10.0-android\android-arm64\R.txt' `
+  '.\src\FurinaChronicle.App\obj\Release\net10.0-android\android-arm64\R.txt' `
   'Maui_Material3_Theme_NoActionBar'
 ```
 

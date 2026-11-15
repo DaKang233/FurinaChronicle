@@ -49,7 +49,7 @@ if (Test-Path $outputPath) {
 }
 New-Item -ItemType Directory -Path $outputPath -Force | Out-Null
 
-& dotnet publish (Join-Path $repositoryRoot "FurinaChronicle.Windows/FurinaChronicle.Windows.csproj") `
+& dotnet publish (Join-Path $repositoryRoot "src/FurinaChronicle.Windows/FurinaChronicle.Windows.csproj") `
     -c $Configuration `
     -r $Runtime `
     --self-contained true `
