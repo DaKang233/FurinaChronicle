@@ -4,6 +4,7 @@
 using System.IO;
 using FurinaChronicle.Windows.Composition;
 using FurinaChronicle.Presentation.Gacha;
+using FurinaChronicle.Presentation.Notifications;
 using FurinaChronicle.Services.Archives;
 using FurinaChronicle.Services.Gacha;
 using Microsoft.UI.Xaml;
@@ -40,23 +41,20 @@ public sealed partial class Ui1GachaView
         if (windowsCacheRefresh is null || importMode is null ||
             state?.Snapshot is not { IsBusy: false, ArchiveId: Guid archiveId } snapshot)
         {
-            ShowDataOperationStatus("请先选择档案并等待当前读取结束。", isError: true);
+            ShowInlineValidation("请先选择档案并等待当前读取结束。");
             return;
         }
 
         if (snapshot.AccountId is not Guid accountId)
         {
-            ShowDataOperationStatus("请先选择要刷新的账号。", isError: true);
+            ShowInlineValidation("请先选择要刷新的账号。");
             return;
         }
 
         string? gameFolder = await PickGameInstallationFolderAsync();
-        if (gameFolder is null)
-        {
-            ShowDataOperationStatus("已取消选择游戏安装目录，未刷新。");
-            return;
-        }
+        if (gameFolder is null) return;
 
+        ClearInlineValidation();
         // Full-import mode and the target account are fixed before the cache is read.
         GachaImportMode mode = importMode.Snapshot();
         GachaWindowsCacheRefreshPlanResult planned = await windowsCacheRefresh.PlanAsync(
@@ -66,9 +64,11 @@ public sealed partial class Ui1GachaView
             mode);
         if (!planned.Succeeded || planned.Plan is null)
         {
-            ShowDataOperationStatus(
-                planned.FailureMessage ?? "无法准备网页缓存刷新，未写入任何数据。",
-                isError: true);
+            ReportFailure(
+                NotificationTaskKeys.GachaRefreshWindowsCache,
+                "gacha.refresh.webcache",
+                "网页缓存刷新失败",
+                planned.FailureMessage ?? "无法准备网页缓存刷新，未写入任何数据。");
             return;
         }
 
@@ -92,34 +92,42 @@ public sealed partial class Ui1GachaView
             }
         };
         AutomationProperties.SetAutomationId(confirmDialog, "GachaWindowsCacheConfirmDialog");
-        if (await confirmDialog.ShowAsync() != ContentDialogResult.Primary)
-        {
-            ShowDataOperationStatus("已取消网页缓存刷新，未写入任何数据。");
-            return;
-        }
+        if (await confirmDialog.ShowAsync() != ContentDialogResult.Primary) return;
 
+        PublishProgress(
+            NotificationTaskKeys.GachaRefreshWindowsCache,
+            "网页缓存刷新",
+            "正在读取本机游戏网页缓存并请求抽卡接口…");
         GachaWindowsCacheRefreshOutcome outcome;
-        (ContentDialog progress, Task show) = ShowDataProgressDialog(
-            "正在通过网页缓存刷新",
-            "正在读取本机游戏网页缓存并请求抽卡接口；此阶段不能取消。");
         try
         {
             outcome = await windowsCacheRefresh.ExecuteAsync(plan);
         }
-        finally
+        catch (Exception exception)
         {
-            await CloseDataProgressDialogAsync(progress, show);
+            ReportFailure(
+                NotificationTaskKeys.GachaRefreshWindowsCache,
+                "gacha.refresh.webcache",
+                "网页缓存刷新失败",
+                "刷新未完成，未写入任何数据。",
+                exception);
+            return;
         }
 
         if (!outcome.Succeeded)
         {
-            ShowDataOperationStatus(outcome.Message, isError: true);
+            ReportFailure(
+                NotificationTaskKeys.GachaRefreshWindowsCache,
+                "gacha.refresh.webcache",
+                "网页缓存刷新失败",
+                outcome.Message);
             return;
         }
 
-        string? refresh = await RefreshAfterImportAsync();
-        ShowDataOperationStatus(
-            outcome.Message + (refresh is null ? "" : $"\n{refresh}"));
+        await PublishCommittedResultAsync(
+            NotificationTaskKeys.GachaRefreshWindowsCache,
+            "网页缓存刷新完成",
+            $"刷新完成：{DescribeRefresh(outcome.Result)}");
     }
 
     private async Task ImportFromTeyvatHelperAsync()
@@ -127,10 +135,11 @@ public sealed partial class Ui1GachaView
         if (teyvatImport is null || importCoordinator is null || importMode is null ||
             state?.Snapshot is not { IsBusy: false, ArchiveId: Guid archiveId } snapshot)
         {
-            ShowDataOperationStatus("请先选择档案并等待当前读取结束。", isError: true);
+            ShowInlineValidation("请先选择档案并等待当前读取结束。");
             return;
         }
 
+        ClearInlineValidation();
         GachaImportMode mode = importMode.Snapshot();
         var uid = new TextBox
         {
@@ -181,11 +190,7 @@ public sealed partial class Ui1GachaView
         // Fix the local import target before the third-party request so a later page change
         // cannot redirect the downloaded payload.
         GachaImportTargetRequest? target = await ChooseImportTargetAsync(snapshot, archiveId);
-        if (target is null)
-        {
-            ShowDataOperationStatus("已取消导入，未向第三方发送任何内容。");
-            return;
-        }
+        if (target is null) return;
 
         GachaTeyvatHelperImportPlanResult planned = await teyvatImport.PlanAsync(
             uidText,
@@ -194,37 +199,44 @@ public sealed partial class Ui1GachaView
             mode);
         if (!planned.Succeeded || planned.Plan is null)
         {
-            ShowDataOperationStatus(
-                planned.FailureMessage ?? "UID 或抽卡链接无效，未发起第三方请求。",
-                isError: true);
+            ReportFailure(
+                NotificationTaskKeys.GachaImportTeyvat,
+                "gacha.import.teyvat",
+                "提瓦特小助手导入失败",
+                planned.FailureMessage ?? "UID 或抽卡链接无效，未发起第三方请求。");
             return;
         }
 
         GachaTeyvatHelperImportPlan plan = planned.Plan;
-        if (!await ConfirmTeyvatPrivacyAsync(plan))
-        {
-            ShowDataOperationStatus("已取消，未向第三方发送任何内容。");
-            return;
-        }
+        if (!await ConfirmTeyvatPrivacyAsync(plan)) return;
 
+        PublishProgress(
+            NotificationTaskKeys.GachaImportTeyvat,
+            "从提瓦特小助手导入",
+            "正在把 UID 与抽卡链接发送给第三方 lelaer.com 并获取数据…");
         GachaTeyvatHelperImportOutcome download;
-        (ContentDialog progress, Task show) = ShowDataProgressDialog(
-            "正在从提瓦特小助手获取数据",
-            "正在把 UID 与抽卡链接发送给第三方 lelaer.com；此阶段不能取消。");
         try
         {
             download = await teyvatImport.DownloadAsync(plan, gachaUrl);
         }
-        finally
+        catch (Exception exception)
         {
-            await CloseDataProgressDialogAsync(progress, show);
+            ReportFailure(
+                NotificationTaskKeys.GachaImportTeyvat,
+                "gacha.import.teyvat",
+                "提瓦特小助手导入失败",
+                "从提瓦特小助手获取数据未完成，未写入任何数据。",
+                exception);
+            return;
         }
 
         if (!download.Succeeded || download.Content is null)
         {
-            ShowDataOperationStatus(
-                download.FailureMessage ?? "从提瓦特小助手导入未完成，未写入任何数据。",
-                isError: true);
+            ReportFailure(
+                NotificationTaskKeys.GachaImportTeyvat,
+                "gacha.import.teyvat",
+                "提瓦特小助手导入失败",
+                download.FailureMessage ?? "从提瓦特小助手导入未完成，未写入任何数据。");
             return;
         }
 
@@ -239,7 +251,8 @@ public sealed partial class Ui1GachaView
             archiveId,
             mode,
             CancellationToken.None,
-            ShowDataOperationStatus,
+            NotificationTaskKeys.GachaImportTeyvat,
+            "从提瓦特小助手导入",
             target);
     }
 

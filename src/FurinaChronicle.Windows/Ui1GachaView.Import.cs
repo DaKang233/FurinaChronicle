@@ -3,6 +3,7 @@
 
 using FurinaChronicle.Windows.Composition;
 using FurinaChronicle.Presentation.Gacha;
+using FurinaChronicle.Presentation.Notifications;
 using FurinaChronicle.Services.Archives;
 using FurinaChronicle.Services.Gacha;
 using Microsoft.UI.Xaml;
@@ -71,17 +72,6 @@ public sealed partial class Ui1GachaView
         UpdateDataOperationAvailability();
     }
 
-    private void ShowImportStatus(string text, bool isError = false)
-    {
-        ImportStatus.Text = text;
-        ImportStatus.Visibility = Visibility.Visible;
-        // The accessible name carries the actual state text. A generic label would hide the
-        // result from Narrator and from UIA-based acceptance while the LiveSetting is active.
-        AutomationProperties.SetName(
-            ImportStatus,
-            (isError ? "导入未完成：" : "导入状态：") + text);
-    }
-
     private void OnToggleImportMode(object sender, RoutedEventArgs e)
     {
         if (importBusy || importFlowTask is not null || importMode is null ||
@@ -114,10 +104,11 @@ public sealed partial class Ui1GachaView
                 ArchiveId: Guid archiveId
             } snapshot)
         {
-            ShowImportStatus("请先选择档案并等待当前读取结束，再导入抽卡文件。", isError: true);
+            ShowInlineValidation("请先选择档案并等待当前读取结束，再导入抽卡文件。");
             return;
         }
 
+        ClearInlineValidation();
         // Mode and target IDs are fixed before the file picker; the confirmation page only
         // re-displays this snapshot. A changed target always discards the previous preview.
         GachaImportMode mode = importMode.Snapshot();
@@ -134,15 +125,22 @@ public sealed partial class Ui1GachaView
                 archiveId,
                 mode,
                 cancellation.Token,
-                ShowImportStatus);
+                NotificationTaskKeys.GachaImportUigf,
+                "导入抽卡文件");
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         {
             // Leaving the page may cancel the read/preview phase; nothing was written.
+            ClearProgress(NotificationTaskKeys.GachaImportUigf);
         }
-        catch (Exception)
+        catch (Exception exception)
         {
-            ShowImportStatus("导入未完成；未确认任何记录被修改，请重新载入后再试。", isError: true);
+            ReportFailure(
+                NotificationTaskKeys.GachaImportUigf,
+                "gacha.import.uigf",
+                "导入失败",
+                "导入未完成；未确认任何记录被修改，请重新载入后再试。",
+                exception);
         }
         finally
         {
@@ -159,7 +157,8 @@ public sealed partial class Ui1GachaView
         Guid archiveId,
         GachaImportMode mode,
         CancellationToken cancellationToken,
-        Action<string, bool> showStatus,
+        string taskKey,
+        string operationTitle,
         GachaImportTargetRequest? preselectedTarget = null)
     {
         if (importCoordinator is null) return;
@@ -167,15 +166,21 @@ public sealed partial class Ui1GachaView
         UpdateCommandAvailability();
         try
         {
-            showStatus("正在读取并校验导入文件…", false);
+            PublishProgress(taskKey, operationTitle, "正在读取并校验导入文件…");
             GachaImportSourceReadResult read = await importCoordinator.ReadSourceAsync(
                 source, cancellationToken);
-            if (!entered) return;
+            if (!entered)
+            {
+                ClearProgress(taskKey);
+                return;
+            }
             if (!read.Succeeded || read.Summary is null)
             {
-                showStatus(
-                    read.FailureMessage ?? "无法读取所选文件，未写入任何数据。",
-                    true);
+                ReportFailure(
+                    taskKey,
+                    taskKey,
+                    "导入失败",
+                    read.FailureMessage ?? "无法读取所选文件，未写入任何数据。");
                 return;
             }
 
@@ -183,31 +188,39 @@ public sealed partial class Ui1GachaView
             GachaImportTargetRequest? target = preselectedTarget;
             while (true)
             {
-                if (!entered) return;
+                if (!entered)
+                {
+                    ClearProgress(taskKey);
+                    return;
+                }
                 target ??= await ChooseImportTargetAsync(snapshot, archiveId);
                 if (target is null)
                 {
-                    showStatus("已取消导入，未写入任何数据。", false);
+                    ClearProgress(taskKey);
                     return;
                 }
 
-                showStatus("正在生成导入预览…", false);
+                PublishProgress(taskKey, operationTitle, "正在生成导入预览…");
                 GachaImportPlanResult planned = await importCoordinator.PlanAsync(
                     read.Summary, target, mode, cancellationToken);
                 if (!planned.Succeeded || planned.Plan is null)
                 {
-                    showStatus(
-                        planned.FailureMessage ?? "无法生成导入预览，未写入任何数据。",
-                        true);
+                    ReportFailure(
+                        taskKey,
+                        taskKey,
+                        "导入预览失败",
+                        planned.FailureMessage ?? "无法生成导入预览，未写入任何数据。");
                     return;
                 }
 
                 plan = planned.Plan;
                 if (!plan.CanExecute)
                 {
-                    showStatus(
-                        plan.BlockMessage ?? "导入目标与文件不匹配，未写入任何数据。",
-                        true);
+                    ReportFailure(
+                        taskKey,
+                        taskKey,
+                        "导入被阻止",
+                        plan.BlockMessage ?? "导入目标与文件不匹配，未写入任何数据。");
                     return;
                 }
 
@@ -215,7 +228,7 @@ public sealed partial class Ui1GachaView
                 if (decision == ContentDialogResult.Primary) break;
                 if (decision != ContentDialogResult.Secondary)
                 {
-                    showStatus("已取消导入，未写入任何数据。", false);
+                    ClearProgress(taskKey);
                     return;
                 }
 
@@ -224,39 +237,41 @@ public sealed partial class Ui1GachaView
                 target = null;
             }
 
-            showStatus("正在保存导入结果…", false);
-            (ContentDialog progress, Task showTask) = ShowImportProgressDialog();
-            GachaImportExecution execution;
-            try
-            {
-                // The atomic commit is not cancelled by page navigation. Closing the window
-                // waits for this task instead of interrupting an in-flight transaction.
-                execution = await importCoordinator.ExecuteAsync(plan, CancellationToken.None);
-            }
-            finally
-            {
-                progress.Hide();
-                try { await showTask; } catch (Exception) { }
-            }
-
+            PublishProgress(taskKey, operationTitle, "正在保存导入结果…");
+            // The atomic commit is not cancelled by page navigation. Closing the window waits
+            // for this task instead of interrupting an in-flight transaction.
+            GachaImportExecution execution = await importCoordinator.ExecuteAsync(
+                plan, CancellationToken.None);
             if (!execution.IsSuccess)
             {
-                showStatus(execution.Message, true);
+                ReportFailure(
+                    taskKey,
+                    taskKey,
+                    "导入失败",
+                    execution.Message);
                 return;
             }
 
-            string? refreshNote = await RefreshAfterImportAsync();
-            showStatus(
-                refreshNote is null ? execution.Message : execution.Message + "\n" + refreshNote,
-                false);
+            string message = execution.Result is { } result
+                ? $"已导入 {result.ImportedCount} 条记录。新增 {result.ImportedCount} 条、" +
+                    $"更新 {result.UpdatedCount} 条、" +
+                    $"跳过 {result.DuplicateCount + result.IgnoredCount} 条、" +
+                    $"冲突/无效 {result.InvalidCount} 条。"
+                : execution.Message;
+            await PublishCommittedResultAsync(taskKey, "导入完成", message);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            // Read/preview cancellation writes nothing.
+            ClearProgress(taskKey);
         }
-        catch (Exception)
+        catch (Exception exception)
         {
-            showStatus("导入未完成；未确认任何记录被修改，请重新载入后再试。", true);
+            ReportFailure(
+                taskKey,
+                taskKey,
+                "导入失败",
+                "导入未完成；未确认任何记录被修改，请重新载入后再试。",
+                exception);
         }
         finally
         {
@@ -376,52 +391,5 @@ public sealed partial class Ui1GachaView
         };
         AutomationProperties.SetAutomationId(dialog, "GachaImportPreviewDialog");
         return await dialog.ShowAsync();
-    }
-
-    private (ContentDialog Dialog, Task ShowTask) ShowImportProgressDialog()
-    {
-        var dialog = new ContentDialog
-        {
-            XamlRoot = XamlRoot,
-            Title = "正在导入",
-            Content = new StackPanel
-            {
-                Spacing = 12,
-                Children =
-                {
-                    new ProgressRing
-                    {
-                        IsActive = true,
-                        Width = 40,
-                        Height = 40,
-                        HorizontalAlignment = HorizontalAlignment.Center
-                    },
-                    new TextBlock
-                    {
-                        Text = "正在以原子变更集保存导入结果；此阶段不能取消。",
-                        TextWrapping = TextWrapping.Wrap
-                    }
-                }
-            }
-        };
-        AutomationProperties.SetAutomationId(dialog, "GachaImportProgressDialog");
-        return (dialog, dialog.ShowAsync().AsTask());
-    }
-
-    private async Task<string?> RefreshAfterImportAsync()
-    {
-        if (state is null || !entered) return null;
-        try
-        {
-            // Re-query the same scope; stable archive/account IDs are preserved by the state.
-            await state.EnterAsync();
-            return state.Snapshot.Status.Contains("失败", StringComparison.Ordinal)
-                ? "数据已保存，但当前显示未更新；请重新载入。"
-                : "当前显示已按原范围重新查询（稳定 ID 保留）。";
-        }
-        catch (Exception)
-        {
-            return "数据已保存，但当前显示未更新；请重新载入。";
-        }
     }
 }

@@ -4,9 +4,11 @@
 using System.Globalization;
 using FurinaChronicle.Core.Gacha;
 using FurinaChronicle.Core.History;
+using FurinaChronicle.Core.Records;
 using FurinaChronicle.Windows.Composition;
 using FurinaChronicle.Presentation.Gacha;
 using FurinaChronicle.Presentation.Management;
+using FurinaChronicle.Presentation.Notifications;
 using FurinaChronicle.Services.Archives;
 using FurinaChronicle.Services.Gacha;
 using FurinaChronicle.Services.Gacha.History;
@@ -65,21 +67,14 @@ public sealed partial class Ui1GachaView
         RecordOperationPanel.Visibility = hasRecord ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    private void ShowDataOperationStatus(string text, bool isError = false)
-    {
-        DataOperationStatus.Text = text;
-        DataOperationStatus.Visibility = Visibility.Visible;
-        // Keep the actual state text as the accessible name so the LiveSetting announcement
-        // and UIA-based acceptance can read the result instead of a generic label.
-        AutomationProperties.SetName(
-            DataOperationStatus,
-            (isError ? "数据操作未完成：" : "数据操作状态：") + text);
-    }
-
-    private async Task RunDataOperationAsync(Func<Task> operation)
+    private async Task RunDataOperationAsync(
+        string taskKey,
+        string operationTitle,
+        Func<Task> operation)
     {
         if (dataOperationTask is not null || importFlowTask is not null ||
             exportTask is not null || exportCancellation is not null) return;
+        ClearInlineValidation();
         Task task = operation();
         dataOperationTask = task;
         UpdateCommandAvailability();
@@ -89,12 +84,16 @@ public sealed partial class Ui1GachaView
         }
         catch (OperationCanceledException)
         {
+            ClearProgress(taskKey);
         }
-        catch (Exception)
+        catch (Exception exception)
         {
-            ShowDataOperationStatus(
+            ReportFailure(
+                taskKey,
+                taskKey,
+                operationTitle + "失败",
                 "操作未完成；未确认任何记录被修改，请重新载入后重试。",
-                isError: true);
+                exception);
         }
         finally
         {
@@ -109,25 +108,52 @@ public sealed partial class Ui1GachaView
         switch (item.Tag?.ToString())
         {
             case "portable-import":
-                await RunDataOperationAsync(ImportPortableAsync);
+                await RunDataOperationAsync(
+                    NotificationTaskKeys.GachaImportPortable,
+                    "Portable 导入",
+                    ImportPortableAsync);
                 break;
             case "portable-export":
-                await RunDataOperationAsync(ExportPortableAsync);
+                await RunDataOperationAsync(
+                    NotificationTaskKeys.GachaExportPortable,
+                    "Portable 导出",
+                    ExportPortableAsync);
                 break;
             case "manual-refresh":
-                await RunDataOperationAsync(ManualRefreshAsync);
+                await RunDataOperationAsync(
+                    NotificationTaskKeys.GachaRefreshManual,
+                    "手动链接刷新",
+                    ManualRefreshAsync);
                 break;
             case "stoken-refresh":
-                await RunDataOperationAsync(RefreshFromLoginAccountAsync);
+                await RunDataOperationAsync(
+                    NotificationTaskKeys.GachaRefreshSToken,
+                    "登录账号刷新",
+                    RefreshFromLoginAccountAsync);
                 break;
             case "windows-cache-refresh":
-                await RunDataOperationAsync(RefreshFromWindowsCacheAsync);
+                await RunDataOperationAsync(
+                    NotificationTaskKeys.GachaRefreshWindowsCache,
+                    "网页缓存刷新",
+                    RefreshFromWindowsCacheAsync);
                 break;
             case "teyvat-import":
-                await RunDataOperationAsync(ImportFromTeyvatHelperAsync);
+                await RunDataOperationAsync(
+                    NotificationTaskKeys.GachaImportTeyvat,
+                    "提瓦特小助手导入",
+                    ImportFromTeyvatHelperAsync);
                 break;
             case "clear-icon-cache":
-                await RunDataOperationAsync(ClearIconCacheAsync);
+                await RunDataOperationAsync(
+                    NotificationTaskKeys.GachaIconCache,
+                    "图标缓存清理",
+                    ClearIconCacheAsync);
+                break;
+            case "undo-record":
+                await RunDataOperationAsync(
+                    NotificationTaskKeys.GachaRecordUndo,
+                    "撤销抽卡变更",
+                    UndoLatestRecordAsync);
                 break;
         }
     }
@@ -137,10 +163,11 @@ public sealed partial class Ui1GachaView
         if (portableImporter is null || filePicker is null || importMode is null ||
             state?.Snapshot is not { IsBusy: false, ArchiveId: Guid archiveId } snapshot)
         {
-            ShowDataOperationStatus("请先选择档案并等待当前读取结束。", isError: true);
+            ShowInlineValidation("请先选择档案并等待当前读取结束。");
             return;
         }
 
+        ClearInlineValidation();
         StorageFile? file = await PickDataFileAsync(".zip");
         if (file is null) return;
 
@@ -148,33 +175,24 @@ public sealed partial class Ui1GachaView
         // discards the previous preview and re-plans from the same index.
         GachaImportMode mode = importMode.Snapshot();
         GachaPortableImportTarget? target = await ChoosePortableTargetAsync(snapshot, archiveId);
-        if (target is null)
-        {
-            ShowDataOperationStatus("已取消 Portable 导入，未写入任何数据。");
-            return;
-        }
+        if (target is null) return;
 
-        GachaPortableImportPrepareResult prepared;
-        (ContentDialog prepareDialog, Task prepareShow) = ShowDataProgressDialog(
-            "正在读取并索引 Portable 包",
-            "正在把所选 ZIP 暂存到私有临时目录并建立磁盘索引；大型档案可能需要一些时间。");
-        try
-        {
-            prepared = await portableImporter.PrepareAsync(
-                CreateImportSource(file),
-                target,
-                mode);
-        }
-        finally
-        {
-            await CloseDataProgressDialogAsync(prepareDialog, prepareShow);
-        }
+        PublishProgress(
+            NotificationTaskKeys.GachaImportPortable,
+            "Portable 导入",
+            "正在读取并索引 Portable 包…");
+        GachaPortableImportPrepareResult prepared = await portableImporter.PrepareAsync(
+            CreateImportSource(file),
+            target,
+            mode);
 
         if (!prepared.Succeeded || prepared.Session is null)
         {
-            ShowDataOperationStatus(
-                prepared.FailureMessage ?? "Portable 文件无法读取，未写入任何数据。",
-                isError: true);
+            ReportFailure(
+                NotificationTaskKeys.GachaImportPortable,
+                "gacha.import.portable",
+                "Portable 导入失败",
+                prepared.FailureMessage ?? "Portable 文件无法读取，未写入任何数据。");
             return;
         }
 
@@ -189,7 +207,7 @@ public sealed partial class Ui1GachaView
                     archiveId);
                 if (mapping is null)
                 {
-                    ShowDataOperationStatus("已取消 Portable 导入，未写入任何数据。");
+                    ClearProgress(NotificationTaskKeys.GachaImportPortable);
                     return;
                 }
 
@@ -198,9 +216,11 @@ public sealed partial class Ui1GachaView
                     mapping);
                 if (!replanned.Succeeded)
                 {
-                    ShowDataOperationStatus(
-                        replanned.FailureMessage ?? "Portable 预览重建失败，未写入任何数据。",
-                        isError: true);
+                    ReportFailure(
+                        NotificationTaskKeys.GachaImportPortable,
+                        "gacha.import.portable",
+                        "Portable 预览失败",
+                        replanned.FailureMessage ?? "Portable 预览重建失败，未写入任何数据。");
                     return;
                 }
 
@@ -209,7 +229,11 @@ public sealed partial class Ui1GachaView
 
             if (!session.Plan.CanApply)
             {
-                ShowDataOperationStatus(session.BlockingMessage, isError: true);
+                ReportFailure(
+                    NotificationTaskKeys.GachaImportPortable,
+                    "gacha.import.portable",
+                    "Portable 导入被阻止",
+                    session.BlockingMessage);
                 return;
             }
 
@@ -217,14 +241,14 @@ public sealed partial class Ui1GachaView
             if (decision == ContentDialogResult.Primary) break;
             if (decision != ContentDialogResult.Secondary)
             {
-                ShowDataOperationStatus("已取消 Portable 导入，未写入任何数据。");
+                ClearProgress(NotificationTaskKeys.GachaImportPortable);
                 return;
             }
 
             GachaPortableImportTarget? changed = await ChoosePortableTargetAsync(snapshot, archiveId);
             if (changed is null)
             {
-                ShowDataOperationStatus("已取消 Portable 导入，未写入任何数据。");
+                ClearProgress(NotificationTaskKeys.GachaImportPortable);
                 return;
             }
 
@@ -233,9 +257,11 @@ public sealed partial class Ui1GachaView
                 changed);
             if (!changedPlan.Succeeded)
             {
-                ShowDataOperationStatus(
-                    changedPlan.FailureMessage ?? "Portable 预览重建失败，未写入任何数据。",
-                    isError: true);
+                ReportFailure(
+                    NotificationTaskKeys.GachaImportPortable,
+                    "gacha.import.portable",
+                    "Portable 预览失败",
+                    changedPlan.FailureMessage ?? "Portable 预览重建失败，未写入任何数据。");
                 return;
             }
         }
@@ -249,22 +275,16 @@ public sealed partial class Ui1GachaView
         GachaPortableApplyOutcome? outcome = null;
         for (int attempt = 0; attempt < 3; attempt++)
         {
-            (ContentDialog applyDialog, Task applyShow) = ShowDataProgressDialog(
-                "正在应用 Portable 数据",
-                "正在以单一原子事务提交；此阶段不能取消。");
-            try
-            {
-                outcome = reintroductions is null && cleanupConfirmationId is null
-                    ? await portableImporter.ApplyAsync(session)
-                    : await portableImporter.ApplyAsync(
-                        session,
-                        reintroductions ?? [],
-                        cleanupConfirmationId);
-            }
-            finally
-            {
-                await CloseDataProgressDialogAsync(applyDialog, applyShow);
-            }
+            PublishProgress(
+                NotificationTaskKeys.GachaImportPortable,
+                "Portable 导入",
+                "正在以单一原子事务保存 Portable 导入…");
+            outcome = reintroductions is null && cleanupConfirmationId is null
+                ? await portableImporter.ApplyAsync(session)
+                : await portableImporter.ApplyAsync(
+                    session,
+                    reintroductions ?? [],
+                    cleanupConfirmationId);
 
             if (outcome.Kind == GachaPortableApplyOutcomeKind.RequiresReintroduction &&
                 reintroductions is null)
@@ -273,7 +293,7 @@ public sealed partial class Ui1GachaView
                     outcome.ReintroductionWarnings ?? [];
                 if (!await ConfirmReintroductionAsync(warnings))
                 {
-                    ShowDataOperationStatus("已取消重新引入，未写入任何数据。");
+                    ClearProgress(NotificationTaskKeys.GachaImportPortable);
                     return;
                 }
 
@@ -291,7 +311,7 @@ public sealed partial class Ui1GachaView
             {
                 if (!await ConfirmCleanupAsync(outcome.CleanupPlan, "清理并继续"))
                 {
-                    ShowDataOperationStatus("已取消清理撤销材料，未写入任何数据。");
+                    ClearProgress(NotificationTaskKeys.GachaImportPortable);
                     return;
                 }
 
@@ -304,17 +324,22 @@ public sealed partial class Ui1GachaView
 
         if (outcome is null || !outcome.IsSuccess)
         {
-            ShowDataOperationStatus(
-                outcome?.Message ?? "Portable 导入未完成，未写入任何数据。",
-                isError: true);
+            ReportFailure(
+                NotificationTaskKeys.GachaImportPortable,
+                "gacha.import.portable",
+                "Portable 导入失败",
+                outcome?.Message ?? "Portable 导入未完成，未写入任何数据。");
             return;
         }
 
-        string? refresh = await RefreshAfterImportAsync();
-        ShowDataOperationStatus(
-            $"已保存 Portable 导入（{modeLabel}）：{outcome.Message}" +
-            $"\n目标：{targetName}" +
-            (refresh is null ? "" : $"\n{refresh}"));
+        string counts = outcome.Result is { } applied
+            ? $"新增 {applied.InsertedRecordCount} 条、更新 {applied.UpdatedRecordCount} 条、" +
+                $"跳过 {applied.SkippedRecordCount} 条。"
+            : string.Empty;
+        await PublishCommittedResultAsync(
+            NotificationTaskKeys.GachaImportPortable,
+            "Portable 导入完成",
+            $"已导入 Portable 数据（{modeLabel}）；目标：{targetName}。{counts}");
     }
 
     private async Task ExportPortableAsync()
@@ -327,10 +352,11 @@ public sealed partial class Ui1GachaView
                 Accounts.Count: > 0
             } snapshot)
         {
-            ShowDataOperationStatus("请先选择档案并等待当前读取结束。", isError: true);
+            ShowInlineValidation("请先选择档案并等待当前读取结束。");
             return;
         }
 
+        ClearInlineValidation();
         Guid[] current = snapshot.ArchiveAccountIds?.ToArray() ??
             (snapshot.AccountId is Guid accountId ? [accountId] : []);
         Guid[] all = snapshot.Accounts.Select(account => account.Id).ToArray();
@@ -380,9 +406,11 @@ public sealed partial class Ui1GachaView
             scopes[scope.SelectedIndex].Ids);
         if (!planned.Succeeded || planned.Plan is null)
         {
-            ShowDataOperationStatus(
-                planned.FailureMessage ?? "无法生成 Portable 导出范围。",
-                isError: true);
+            ReportFailure(
+                NotificationTaskKeys.GachaExportPortable,
+                "gacha.export.portable",
+                "Portable 导出失败",
+                planned.FailureMessage ?? "无法生成 Portable 导出范围。");
             return;
         }
 
@@ -413,21 +441,14 @@ public sealed partial class Ui1GachaView
             $"gacha-portable-{Guid.NewGuid():N}.zip");
         try
         {
-            GachaPortableWriteResult result;
-            (ContentDialog exportDialog, Task exportShow) = ShowDataProgressDialog(
-                "正在生成 Portable 文件",
-                "正在私有临时目录生成并校验 Portable 抽卡数据集。");
-            try
-            {
-                result = await environment.PortableExport.ExportAsync(
-                    temporaryPath,
-                    archiveId,
-                    plan.AccountIds);
-            }
-            finally
-            {
-                await CloseDataProgressDialogAsync(exportDialog, exportShow);
-            }
+            PublishProgress(
+                NotificationTaskKeys.GachaExportPortable,
+                "Portable 导出",
+                "正在私有临时目录生成并校验 Portable 抽卡数据集…");
+            GachaPortableWriteResult result = await environment.PortableExport.ExportAsync(
+                temporaryPath,
+                archiveId,
+                plan.AccountIds);
 
             StorageFile? destination = await filePicker.PickSaveFileAsync(
                 $"FurinaChronicle-Gacha-Portable-{DateTime.Today:yyyyMMdd}",
@@ -435,7 +456,7 @@ public sealed partial class Ui1GachaView
                 ".zip");
             if (destination is null)
             {
-                ShowDataOperationStatus("已取消保存，未写出 Portable 导出文件。");
+                ClearProgress(NotificationTaskKeys.GachaExportPortable);
                 return;
             }
 
@@ -450,10 +471,25 @@ public sealed partial class Ui1GachaView
                 await SaveExportAsync(destination.Path, artifact, CancellationToken.None);
             }
 
-            ShowDataOperationStatus(
-                $"已保存 {destination.Name}：{result.AccountCount} 个账号、" +
+            string location = DescribeSavedLocation(destination.Path, destination.Name);
+            Action? openFolder = CreateOpenFolderAction(destination.Path);
+            PublishSuccess(
+                NotificationTaskKeys.GachaExportPortable,
+                "Portable 导出完成",
+                $"已保存到 {location}：{result.AccountCount} 个账号、" +
                 $"{result.RecordCount} 条记录。这是 Furina 抽卡数据集（Portable v1），" +
-                "不是完整应用备份。");
+                "不是完整应用备份。",
+                openFolder is null ? null : "打开文件夹",
+                openFolder);
+        }
+        catch (Exception exception)
+        {
+            ReportFailure(
+                NotificationTaskKeys.GachaExportPortable,
+                "gacha.export.portable",
+                "Portable 导出失败",
+                "Portable 导出未完成，未写出文件。",
+                exception);
         }
         finally
         {
@@ -469,16 +505,17 @@ public sealed partial class Ui1GachaView
         if (manualRefresher is null || importMode is null ||
             state?.Snapshot is not { IsBusy: false, ArchiveId: Guid archiveId } snapshot)
         {
-            ShowDataOperationStatus("请先选择档案并等待当前读取结束。", isError: true);
+            ShowInlineValidation("请先选择档案并等待当前读取结束。");
             return;
         }
 
         if (snapshot.AccountId is not Guid accountId)
         {
-            ShowDataOperationStatus("请先选择要刷新的账号。", isError: true);
+            ShowInlineValidation("请先选择要刷新的账号。");
             return;
         }
 
+        ClearInlineValidation();
         var urlBox = new PasswordBox
         {
             Header = "抽卡链接（含 authkey，仅本次请求使用）",
@@ -500,7 +537,7 @@ public sealed partial class Ui1GachaView
                     new TextBlock
                     {
                         Text = "链接仅在本次请求中使用；不显示、不保存、不写入日志。" +
-                            "成功刷新需要有效 authkey。本宿主不提供 SToken 与网页缓存刷新。",
+                            "成功刷新需要有效 authkey。",
                         TextWrapping = TextWrapping.Wrap
                     },
                     urlBox
@@ -518,34 +555,48 @@ public sealed partial class Ui1GachaView
             importMode.Snapshot());
         if (!planned.Succeeded || planned.Plan is null)
         {
-            ShowDataOperationStatus(
-                planned.FailureMessage ?? "抽卡链接无效，未写入任何数据。",
-                isError: true);
+            ReportFailure(
+                NotificationTaskKeys.GachaRefreshManual,
+                "gacha.refresh.manual",
+                "手动链接刷新失败",
+                planned.FailureMessage ?? "抽卡链接无效，未写入任何数据。");
             return;
         }
 
+        PublishProgress(
+            NotificationTaskKeys.GachaRefreshManual,
+            "手动链接刷新",
+            "正在请求抽卡接口并以原子变更集提交…");
         GachaManualRefreshOutcome outcome;
-        (ContentDialog refreshDialog, Task refreshShow) = ShowDataProgressDialog(
-            "正在通过手动链接刷新",
-            "正在请求抽卡接口并以原子变更集提交；此阶段不能取消。");
         try
         {
             outcome = await manualRefresher.ExecuteAsync(planned.Plan, manualUrl);
         }
-        finally
+        catch (Exception exception)
         {
-            await CloseDataProgressDialogAsync(refreshDialog, refreshShow);
+            ReportFailure(
+                NotificationTaskKeys.GachaRefreshManual,
+                "gacha.refresh.manual",
+                "手动链接刷新失败",
+                "刷新未完成，未写入任何数据。",
+                exception);
+            return;
         }
 
         if (!outcome.Succeeded)
         {
-            ShowDataOperationStatus(outcome.Message, isError: true);
+            ReportFailure(
+                NotificationTaskKeys.GachaRefreshManual,
+                "gacha.refresh.manual",
+                "手动链接刷新失败",
+                outcome.Message);
             return;
         }
 
-        string? refresh = await RefreshAfterImportAsync();
-        ShowDataOperationStatus(
-            outcome.Message + (refresh is null ? "" : $"\n{refresh}"));
+        await PublishCommittedResultAsync(
+            NotificationTaskKeys.GachaRefreshManual,
+            "手动链接刷新完成",
+            $"刷新完成：{DescribeRefresh(outcome.Result)}");
     }
 
     private async Task RefreshFromLoginAccountAsync()
@@ -553,18 +604,21 @@ public sealed partial class Ui1GachaView
         if (stokenRefresh is null || importMode is null ||
             state?.Snapshot is not { IsBusy: false, AccountId: Guid accountId } snapshot)
         {
-            ShowDataOperationStatus("请先选择要刷新的账号并等待当前读取结束。", isError: true);
+            ShowInlineValidation("请先选择要刷新的账号并等待当前读取结束。");
             return;
         }
 
+        ClearInlineValidation();
         // Full mode is frozen here; the coordinator snapshots target account and mode before any
         // credential/network work.
         GachaSTokenRefreshPlanResult planned = await stokenRefresh.PlanAsync(accountId);
         if (!planned.Succeeded || planned.Plan is null)
         {
-            ShowDataOperationStatus(
-                planned.FailureMessage ?? "无法通过登录账号刷新，未写入任何数据。",
-                isError: true);
+            ReportFailure(
+                NotificationTaskKeys.GachaRefreshSToken,
+                "gacha.refresh.stoken",
+                "登录账号刷新失败",
+                planned.FailureMessage ?? "无法通过登录账号刷新，未写入任何数据。");
             return;
         }
 
@@ -588,34 +642,42 @@ public sealed partial class Ui1GachaView
             }
         };
         AutomationProperties.SetAutomationId(confirmDialog, "GachaSTokenRefreshDialog");
-        if (await confirmDialog.ShowAsync() != ContentDialogResult.Primary)
-        {
-            ShowDataOperationStatus("已取消通过登录账号刷新，未写入任何数据。");
-            return;
-        }
+        if (await confirmDialog.ShowAsync() != ContentDialogResult.Primary) return;
 
+        PublishProgress(
+            NotificationTaskKeys.GachaRefreshSToken,
+            "登录账号刷新",
+            "正在使用本机凭据请求抽卡接口并以原子变更集提交…");
         GachaSTokenRefreshOutcome outcome;
-        (ContentDialog progress, Task show) = ShowDataProgressDialog(
-            "正在通过登录账号刷新",
-            "正在使用本机隔离宿主凭据请求抽卡接口并以原子变更集提交；此阶段不能取消。");
         try
         {
             outcome = await stokenRefresh.ExecuteAsync(plan);
         }
-        finally
+        catch (Exception exception)
         {
-            await CloseDataProgressDialogAsync(progress, show);
+            ReportFailure(
+                NotificationTaskKeys.GachaRefreshSToken,
+                "gacha.refresh.stoken",
+                "登录账号刷新失败",
+                "刷新未完成，未写入任何数据。",
+                exception);
+            return;
         }
 
         if (!outcome.Succeeded)
         {
-            ShowDataOperationStatus(outcome.Message, isError: true);
+            ReportFailure(
+                NotificationTaskKeys.GachaRefreshSToken,
+                "gacha.refresh.stoken",
+                "登录账号刷新失败",
+                outcome.Message);
             return;
         }
 
-        string? refresh = await RefreshAfterImportAsync();
-        ShowDataOperationStatus(
-            outcome.Message + (refresh is null ? "" : $"\n{refresh}"));
+        await PublishCommittedResultAsync(
+            NotificationTaskKeys.GachaRefreshSToken,
+            "登录账号刷新完成",
+            $"刷新完成：{DescribeRefresh(outcome.Result)}");
     }
 
     private async Task ClearIconCacheAsync()
@@ -635,21 +697,106 @@ public sealed partial class Ui1GachaView
             }
         };
         AutomationProperties.SetAutomationId(dialog, "GachaClearIconCacheDialog");
-        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+
+        PublishProgress(
+            NotificationTaskKeys.GachaIconCache,
+            "清除图标缓存",
+            "正在清除本机图标缓存…");
+        try
         {
-            ShowDataOperationStatus("已取消清除图标缓存。");
+            await environment.GachaIconCache.ClearAsync();
+            PublishSuccess(
+                NotificationTaskKeys.GachaIconCache,
+                "图标缓存已清除",
+                "本机图标缓存已清除；抽卡事实、档案、账号和元数据未改变。");
+        }
+        catch (Exception exception)
+        {
+            ReportFailure(
+                NotificationTaskKeys.GachaIconCache,
+                "gacha.cache.icons",
+                "清除图标缓存失败",
+                "图标缓存未清除，可重试；业务数据未改变。",
+                exception);
+        }
+    }
+
+    private async Task UndoLatestRecordAsync()
+    {
+        if (environment is null ||
+            state?.Snapshot is not { IsBusy: false, ArchiveId: Guid archiveId })
+        {
+            ShowInlineValidation("请先选择档案并等待当前读取结束。");
             return;
         }
 
-        await environment.GachaIconCache.ClearAsync();
-        ShowDataOperationStatus("已清除图标缓存；本地抽卡事实、档案和元数据未改变。");
+        ClearInlineValidation();
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "撤销最近一次抽卡变更",
+            PrimaryButtonText = "撤销最近一次变更",
+            CloseButtonText = "取消",
+            DefaultButton = ContentDialogButton.Close,
+            Content = new TextBlock
+            {
+                Text = "只撤销当前档案最近一次仍可撤销的抽卡写入；不可逆删除、已被后续操作替代或撤销材料已淘汰的变更不能撤销。撤销前会再次校验事实版本。",
+                TextWrapping = TextWrapping.Wrap
+            }
+        };
+        AutomationProperties.SetAutomationId(dialog, "GachaRecordUndoDialog");
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+
+        PublishProgress(
+            NotificationTaskKeys.GachaRecordUndo,
+            "撤销抽卡变更",
+            "正在校验并撤销最近一次变更…");
+        GachaAtomicChangeResult result;
+        try
+        {
+            result = await environment.GachaHistory.UndoLatestAsync(
+                OperationId.New(),
+                archiveId);
+        }
+        catch (Exception exception)
+        {
+            ReportFailure(
+                NotificationTaskKeys.GachaRecordUndo,
+                "gacha.record.undo",
+                "撤销失败",
+                "撤销未完成，未写入任何数据。",
+                exception);
+            return;
+        }
+
+        if (result.Status is not (ChangeExecutionStatus.Applied or
+            ChangeExecutionStatus.NoOp or ChangeExecutionStatus.AlreadyCommitted))
+        {
+            ReportFailure(
+                NotificationTaskKeys.GachaRecordUndo,
+                "gacha.record.undo",
+                "撤销失败",
+                result.ConflictReason ??
+                    "没有可撤销的变更，或撤销材料已失效；未写入任何数据。");
+            return;
+        }
+
+        selectedRow = null;
+        await PublishCommittedResultAsync(
+            NotificationTaskKeys.GachaRecordUndo,
+            "撤销完成",
+            $"已撤销最近一次抽卡变更（影响 {result.AffectedRecordCount} 条记录）。");
     }
 
     private async void OnCorrectRecordCommand(object sender, RoutedEventArgs e)
     {
         if (selectedRow is GachaReadOnlyRow row)
         {
-            await RunDataOperationAsync(() => CorrectRecordAsync(row));
+            await RunDataOperationAsync(
+                NotificationTaskKeys.GachaRecordCorrect,
+                "纠正记录",
+                () => CorrectRecordAsync(row));
         }
     }
 
@@ -657,7 +804,10 @@ public sealed partial class Ui1GachaView
     {
         if (selectedRow is GachaReadOnlyRow row)
         {
-            await RunDataOperationAsync(() => DeleteRecordAsync(row));
+            await RunDataOperationAsync(
+                NotificationTaskKeys.GachaRecordDelete,
+                "删除记录",
+                () => DeleteRecordAsync(row));
         }
     }
 
@@ -665,7 +815,10 @@ public sealed partial class Ui1GachaView
     {
         if (selectedRow is GachaReadOnlyRow row)
         {
-            await RunDataOperationAsync(() => IrreversibleDeleteRecordAsync(row));
+            await RunDataOperationAsync(
+                NotificationTaskKeys.GachaRecordPurge,
+                "永久删除记录",
+                () => IrreversibleDeleteRecordAsync(row));
         }
     }
 
@@ -674,14 +827,22 @@ public sealed partial class Ui1GachaView
         if (recordOperations is null || environment is null ||
             row.Reference is not GachaFactReference reference)
         {
-            ShowDataOperationStatus("所选记录缺少稳定引用，请重新载入。", isError: true);
+            ReportFailure(
+                NotificationTaskKeys.GachaRecordCorrect,
+                "gacha.record.correct",
+                "纠正失败",
+                "所选记录缺少稳定引用，请重新载入。");
             return;
         }
 
         GachaFactState? current = await environment.Changes.GetCurrentAsync(reference);
         if (current is null)
         {
-            ShowDataOperationStatus("所选记录已不存在，未写入任何数据。请重新载入。", isError: true);
+            ReportFailure(
+                NotificationTaskKeys.GachaRecordCorrect,
+                "gacha.record.correct",
+                "纠正失败",
+                "所选记录已不存在，未写入任何数据。请重新载入。");
             return;
         }
 
@@ -733,7 +894,7 @@ public sealed partial class Ui1GachaView
             DateTimeStyles.None,
             out DateTimeOffset occurredAt))
         {
-            ShowDataOperationStatus("记录时间格式无效，未写入任何数据。", isError: true);
+            ShowInlineValidation("记录时间格式无效，未写入任何数据。");
             return;
         }
 
@@ -750,26 +911,34 @@ public sealed partial class Ui1GachaView
             new GachaCorrectionInput(name.Text, itemId.Text, rankValue, occurredAt));
         if (!planned.Succeeded || planned.Plan is null)
         {
-            ShowDataOperationStatus(
-                planned.FailureMessage ?? "无法生成纠正预览，未写入任何数据。",
-                isError: true);
+            ReportFailure(
+                NotificationTaskKeys.GachaRecordCorrect,
+                "gacha.record.correct",
+                "纠正失败",
+                planned.FailureMessage ?? "无法生成纠正预览，未写入任何数据。");
             return;
         }
 
         if (!await ConfirmRecordOperationAsync(planned.Plan, "保存纠正", requireExplicit: false))
         {
-            ShowDataOperationStatus("已取消纠正，未写入任何数据。");
             return;
         }
 
-        await ExecuteRecordOperationAsync(planned.Plan);
+        await ExecuteRecordOperationAsync(
+            planned.Plan,
+            NotificationTaskKeys.GachaRecordCorrect,
+            "纠正记录");
     }
 
     private async Task DeleteRecordAsync(GachaReadOnlyRow row)
     {
         if (recordOperations is null || row.Reference is not GachaFactReference reference)
         {
-            ShowDataOperationStatus("所选记录缺少稳定引用，请重新载入。", isError: true);
+            ReportFailure(
+                NotificationTaskKeys.GachaRecordDelete,
+                "gacha.record.delete",
+                "删除失败",
+                "所选记录缺少稳定引用，请重新载入。");
             return;
         }
 
@@ -778,9 +947,11 @@ public sealed partial class Ui1GachaView
             GachaRecordOperationKind.Delete);
         if (!planned.Succeeded || planned.Plan is null)
         {
-            ShowDataOperationStatus(
-                planned.FailureMessage ?? "无法生成删除预览，未写入任何数据。",
-                isError: true);
+            ReportFailure(
+                NotificationTaskKeys.GachaRecordDelete,
+                "gacha.record.delete",
+                "删除失败",
+                planned.FailureMessage ?? "无法生成删除预览，未写入任何数据。");
             return;
         }
 
@@ -789,18 +960,24 @@ public sealed partial class Ui1GachaView
             "删除记录（可撤销）",
             requireExplicit: false))
         {
-            ShowDataOperationStatus("已取消删除，未写入任何数据。");
             return;
         }
 
-        await ExecuteRecordOperationAsync(planned.Plan);
+        await ExecuteRecordOperationAsync(
+            planned.Plan,
+            NotificationTaskKeys.GachaRecordDelete,
+            "删除记录");
     }
 
     private async Task IrreversibleDeleteRecordAsync(GachaReadOnlyRow row)
     {
         if (recordOperations is null || row.Reference is not GachaFactReference reference)
         {
-            ShowDataOperationStatus("所选记录缺少稳定引用，请重新载入。", isError: true);
+            ReportFailure(
+                NotificationTaskKeys.GachaRecordPurge,
+                "gacha.record.purge",
+                "永久删除失败",
+                "所选记录缺少稳定引用，请重新载入。");
             return;
         }
 
@@ -809,9 +986,11 @@ public sealed partial class Ui1GachaView
             GachaRecordOperationKind.IrreversibleDelete);
         if (!planned.Succeeded || planned.Plan is null)
         {
-            ShowDataOperationStatus(
-                planned.FailureMessage ?? "无法生成永久删除预览，未写入任何数据。",
-                isError: true);
+            ReportFailure(
+                NotificationTaskKeys.GachaRecordPurge,
+                "gacha.record.purge",
+                "永久删除失败",
+                planned.FailureMessage ?? "无法生成永久删除预览，未写入任何数据。");
             return;
         }
 
@@ -820,34 +999,43 @@ public sealed partial class Ui1GachaView
             "永久删除",
             requireExplicit: true))
         {
-            ShowDataOperationStatus("已取消永久删除，未写入任何数据。");
             return;
         }
 
-        await ExecuteRecordOperationAsync(planned.Plan);
+        await ExecuteRecordOperationAsync(
+            planned.Plan,
+            NotificationTaskKeys.GachaRecordPurge,
+            "永久删除记录");
     }
 
-    private async Task ExecuteRecordOperationAsync(GachaRecordOperationPlan plan)
+    private async Task ExecuteRecordOperationAsync(
+        GachaRecordOperationPlan plan,
+        string taskKey,
+        string operationTitle)
     {
         if (recordOperations is null) return;
+        PublishProgress(taskKey, operationTitle, "正在以单一原子变更集保存…");
         GachaRecordOperationOutcome outcome;
-        (ContentDialog progress, Task show) = ShowDataProgressDialog(
-            "正在保存记录操作",
-            "正在以单一原子变更集提交；此阶段不能取消。");
         try
         {
             outcome = await recordOperations.ExecuteAsync(plan);
         }
-        finally
+        catch (Exception exception)
         {
-            await CloseDataProgressDialogAsync(progress, show);
+            ReportFailure(
+                taskKey,
+                taskKey,
+                operationTitle + "失败",
+                "操作未完成，未写入任何数据。",
+                exception);
+            return;
         }
 
         if (outcome.RequiresUserConfirmation && outcome.CleanupPlan is not null)
         {
             if (!await ConfirmCleanupAsync(outcome.CleanupPlan, "清理并继续"))
             {
-                ShowDataOperationStatus("已取消清理撤销材料，未写入任何数据。");
+                ClearProgress(taskKey);
                 return;
             }
 
@@ -858,14 +1046,16 @@ public sealed partial class Ui1GachaView
 
         if (!outcome.IsSuccess)
         {
-            ShowDataOperationStatus(outcome.Message, isError: true);
+            ReportFailure(
+                taskKey,
+                taskKey,
+                operationTitle + "失败",
+                outcome.Message);
             return;
         }
 
         selectedRow = null;
-        string? refresh = await RefreshAfterImportAsync();
-        ShowDataOperationStatus(
-            outcome.Message + (refresh is null ? "" : $"\n{refresh}"));
+        await PublishCommittedResultAsync(taskKey, operationTitle + "完成", outcome.Message);
     }
 
     private async Task<bool> ConfirmRecordOperationAsync(
@@ -1117,54 +1307,37 @@ public sealed partial class Ui1GachaView
         return await filePicker.PickOpenFileAsync(extension);
     }
 
-    private (ContentDialog Dialog, Task ShowTask) ShowDataProgressDialog(
-        string title,
-        string detail)
-    {
-        var dialog = new ContentDialog
-        {
-            XamlRoot = XamlRoot,
-            Title = title,
-            Content = new StackPanel
-            {
-                Spacing = 12,
-                Children =
-                {
-                    new ProgressRing
-                    {
-                        IsActive = true,
-                        Width = 40,
-                        Height = 40,
-                        HorizontalAlignment = HorizontalAlignment.Center
-                    },
-                    new TextBlock { Text = detail, TextWrapping = TextWrapping.Wrap }
-                }
-            }
-        };
-        AutomationProperties.SetAutomationId(dialog, "GachaDataProgressDialog");
-        return (dialog, dialog.ShowAsync().AsTask());
-    }
-
-    private static async Task CloseDataProgressDialogAsync(ContentDialog dialog, Task showTask)
-    {
-        dialog.Hide();
-        try { await showTask; } catch (Exception) { }
-    }
-
     private StackPanel CreateRecordOperationButtons(
         GachaReadOnlyRow row,
         ContentDialog detailDialog)
     {
         var panel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        panel.Children.Add(OperationButton("纠正", "GachaRecordCorrect", () => CorrectRecordAsync(row)));
-        panel.Children.Add(OperationButton("删除", "GachaRecordDelete", () => DeleteRecordAsync(row)));
+        panel.Children.Add(OperationButton(
+            "纠正",
+            "GachaRecordCorrect",
+            NotificationTaskKeys.GachaRecordCorrect,
+            "纠正记录",
+            () => CorrectRecordAsync(row)));
+        panel.Children.Add(OperationButton(
+            "删除",
+            "GachaRecordDelete",
+            NotificationTaskKeys.GachaRecordDelete,
+            "删除记录",
+            () => DeleteRecordAsync(row)));
         panel.Children.Add(OperationButton(
             "永久删除",
             "GachaRecordIrreversibleDelete",
+            NotificationTaskKeys.GachaRecordPurge,
+            "永久删除记录",
             () => IrreversibleDeleteRecordAsync(row)));
         return panel;
 
-        Button OperationButton(string text, string automationId, Func<Task> operation)
+        Button OperationButton(
+            string text,
+            string automationId,
+            string taskKey,
+            string operationTitle,
+            Func<Task> operation)
         {
             var button = new Button { Content = text };
             AutomationProperties.SetAutomationId(button, automationId);
@@ -1172,7 +1345,7 @@ public sealed partial class Ui1GachaView
             {
                 detailDialog.Hide();
                 await Task.Yield();
-                await RunDataOperationAsync(operation);
+                await RunDataOperationAsync(taskKey, operationTitle, operation);
             };
             return button;
         }

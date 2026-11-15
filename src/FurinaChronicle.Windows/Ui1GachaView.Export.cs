@@ -6,6 +6,7 @@ using FurinaChronicle.Infrastructure.Gacha.Exporting;
 using FurinaChronicle.Infrastructure.Gacha.Metadata;
 using FurinaChronicle.Infrastructure.Gacha.Uigf.V4_2;
 using FurinaChronicle.Presentation.Gacha;
+using FurinaChronicle.Presentation.Notifications;
 using FurinaChronicle.Services.Gacha.Exporting;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -55,6 +56,7 @@ public sealed partial class Ui1GachaView
     private async Task ExportAsync(WindowsHostEnvironment preview, GachaReadOnlySnapshot snapshot,
         Guid archiveId, CancellationToken token)
     {
+        string taskKey = NotificationTaskKeys.GachaExportArchive;
         try
         {
             Guid[] current = snapshot.ArchiveAccountIds?.ToArray() ?? (snapshot.AccountId is Guid id ? [id] : []);
@@ -90,16 +92,15 @@ public sealed partial class Ui1GachaView
                 }
             };
             scope.SelectionChanged += (_, _) => dialog.IsPrimaryButtonEnabled = scope.SelectedIndex >= 0;
-            if (await dialog.ShowAsync() != ContentDialogResult.Primary)
-            {
-                ShowExportStatus("已取消导出。");
-                return;
-            }
+            if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
 
             token.ThrowIfCancellationRequested();
             var chosen = ExportFormats[format.SelectedIndex];
+            taskKey = chosen.Table is null
+                ? NotificationTaskKeys.GachaExportArchive
+                : NotificationTaskKeys.GachaExportTable;
             Guid[] accountIds = scopes[scope.SelectedIndex].Ids;
-            ShowExportStatus("正在生成导出文件…");
+            PublishProgress(taskKey, "导出抽卡数据", "正在生成导出文件…");
             string path = Path.Combine(preview.TemporaryDirectory, $"gacha-{Guid.NewGuid():N}.tmp");
             await using var artifact = new FileStream(path, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None,
                 65536, FileOptions.Asynchronous | FileOptions.DeleteOnClose);
@@ -112,33 +113,46 @@ public sealed partial class Ui1GachaView
                     UigfV42ExportOptions.Compatible, token), token);
 
             token.ThrowIfCancellationRequested();
-            ShowExportStatus("请选择保存位置…");
+            PublishProgress(taskKey, "导出抽卡数据", "请选择保存位置…");
             StorageFile? destination = await filePicker!.PickSaveFileAsync(
                 $"FurinaChronicle-Gacha-{DateTime.Today:yyyyMMdd}",
                 chosen.Name,
                 chosen.Extension);
             if (destination is null)
             {
-                ShowExportStatus("已取消保存，未写出导出文件。");
+                ClearProgress(taskKey);
                 return;
             }
 
-            ShowExportStatus("正在保存导出文件…");
+            PublishProgress(taskKey, "导出抽卡数据", "正在保存导出文件…");
             artifact.Position = 0;
             await SaveExportAsync(destination.Path, artifact, token);
-            ShowExportStatus($"已保存 {destination.Name} · {result.AccountCount} 个账号 · {result.RecordCount} 条记录。");
+            Action? openFolder = CreateOpenFolderAction(destination.Path);
+            PublishSuccess(
+                taskKey,
+                "导出完成",
+                $"已保存到 {DescribeSavedLocation(destination.Path, destination.Name)}：" +
+                $"{result.AccountCount} 个账号、{result.RecordCount} 条记录。",
+                openFolder is null ? null : "打开文件夹",
+                openFolder);
         }
-        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
-        catch (Exception)
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
-            if (!token.IsCancellationRequested) ShowExportStatus("导出未完成。请检查导出范围和所选目录，再重试。");
+            ClearProgress(NotificationTaskKeys.GachaExportArchive);
+            ClearProgress(NotificationTaskKeys.GachaExportTable);
         }
-    }
-
-    private void ShowExportStatus(string text)
-    {
-        ExportStatus.Text = text;
-        ExportStatus.Visibility = Visibility.Visible;
+        catch (Exception exception)
+        {
+            if (!token.IsCancellationRequested)
+            {
+                ReportFailure(
+                    taskKey,
+                    "gacha.export",
+                    "导出失败",
+                    "导出未完成。请检查导出范围和所选目录，再重试。",
+                    exception);
+            }
+        }
     }
 
     private static async Task SaveExportAsync(string destination, Stream artifact, CancellationToken token)

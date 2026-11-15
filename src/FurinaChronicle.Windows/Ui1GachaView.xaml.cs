@@ -43,6 +43,8 @@ public sealed partial class Ui1GachaView : UserControl
         teyvatImport = services.TeyvatImport;
         stokenRefresh = services.STokenRefresh;
         importMode ??= new GachaImportModeState();
+        notifications = services.Notifications;
+        diagnostics = services.Diagnostics;
         RenderImportState();
     }
 
@@ -54,7 +56,11 @@ public sealed partial class Ui1GachaView : UserControl
             {
                 if (environment is null || source is null || dispatcher is null)
                 {
-                    StatusText.Text = "共享隔离环境尚未初始化；请重新启动应用。";
+                    ReportFailure(
+                        "gacha.page",
+                        "gacha-page-enter",
+                        "抽卡页不可用",
+                        "共享隔离环境尚未初始化；请重新启动应用。");
                     return;
                 }
 
@@ -62,15 +68,20 @@ public sealed partial class Ui1GachaView : UserControl
                 state.PropertyChanged += (_, _) => Render();
                 EnsureImportComposition(environment);
                 EnsureDataOperationComposition(environment);
-                PathText.Text = environment.DatabasePath;
             }
             await state.EnterAsync();
             entered = true;
+            ClearInlineValidation();
         }
-        catch (Exception)
+        catch (Exception exception)
         {
             entered = false;
-            StatusText.Text = "无法打开测试数据，请检查目录访问权限并重试。";
+            ReportFailure(
+                "gacha.page",
+                "gacha-page-enter",
+                "无法打开抽卡数据",
+                "无法打开抽卡数据，请检查目录访问权限并重试。",
+                exception);
         }
     }
 
@@ -130,7 +141,7 @@ public sealed partial class Ui1GachaView : UserControl
             if (calendar) RenderCalendar(s);
             UpdateLayoutMode();
             SummaryText.Text = s.Summary;
-            StatusText.Text = calendar ? $"{s.VisibleMonth:yyyy-MM} {s.Calendar.TimeZoneLabel} · {s.Status}" : s.Status;
+            ReportReadFailureOnce(s.Status);
             CancelButton.IsEnabled = s.IsBusy;
             PreviousButton.Content = calendar ? "上个月" : "上一页";
             NextButton.Content = calendar ? "下个月" : "下一页";
