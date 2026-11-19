@@ -102,11 +102,11 @@ public sealed class WindowsHistoryCollection(
                     selected,
                     token,
                     verificationPrompt: new WindowsPassportVerification(root).VerifyGeetestAsync);
-                return Report(result.Commit, result.Status.ToString(), subject, taskKey);
+                return Report(result.Commit, result.Status.ToString(), subject, taskKey, result.ProviderCode, result.HttpStatus);
             }
             ChallengeModeCollectionResult other =
                 await challenge.ExecuteAsync(archiveId, accountId, selected, mode.Value, token);
-            return Report(other.Commit, other.Status.ToString(), subject, taskKey);
+            return Report(other.Commit, other.Status.ToString(), subject, taskKey, other.ProviderCode, other.HttpStatus);
         }
         catch (OperationCanceledException)
         {
@@ -132,9 +132,16 @@ public sealed class WindowsHistoryCollection(
         ArchiveOperationResult? commit,
         string status,
         string subject,
-        string taskKey)
+        string taskKey,
+        int? providerCode = null,
+        int? httpStatus = null)
     {
         string message = Describe(commit, status);
+        if (commit is null)
+        {
+            if (providerCode is int code) message += $"（业务码 {code}）";
+            if (httpStatus is int http) message += $"（HTTP {http}）";
+        }
         NotificationSeverity severity = commit?.Status switch
         {
             ChangeExecutionStatus.Applied => NotificationSeverity.Success,
@@ -164,6 +171,7 @@ public sealed class WindowsHistoryCollection(
             "RoleNotBound" or "ResponseRoleMismatch" => "所选通行证与当前档案角色不匹配。",
             "AccessDenied" => "官方服务限制了此角色的数据访问。",
             "VerificationRequired" => "官方服务要求额外安全验证，请完成验证后重试。",
+            "InvalidResponse" => "官方响应无法解析；本次未保存，请更新应用或查看诊断。",
             "RateLimited" => "请求过于频繁，请稍后重试。",
             "Empty" or "NotUnlocked" => "当前没有可采集的记录。",
             _ => "采集未完成，请检查登录和网络后重试。"

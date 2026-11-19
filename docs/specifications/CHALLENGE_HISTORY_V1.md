@@ -79,7 +79,7 @@ Portable 保存全部不可变观察。重复引用同内容为 NoOp，同引用
 
 角色表现为 `{ "participant": { "id": "...", "name": null, "icon_url": null, "level": null, "rarity": 5 }, "value": "3000000000" }`。字符串值不截断为 Int32；采集边界规范化数值表示，官方明确的空串值表示零，缺字段保持 null。隐藏标记为 false 时 UI 和 Markdown 不展示角色表现，机器格式保留收到的字段与标记。
 
-阵容／候补角色的可选 `origin` 为 1 自有、2 试用、3 助演；缺失为空，不能据此默认判断自有，未知代码拒绝。它只描述该次挑战中的角色来源，不创建角色仓库记录。阶段可选 `theater_round` 为 `{ "is_tarot": true, "tarot_serial_number": 1 }`；普通幕与塔罗标记缺失均保留原含义，不推断未知精度或时间。发生时间仍来自 finish_time。舞台仅在展示时按数字幕次排序，持久化稳定 StageId 不变。
+阵容／候补角色的可选 `origin` 为 1 自有、2 试用、3 助演；缺失为空，不能据此默认判断自有，未知代码拒绝。它只描述该次挑战中的角色来源，不创建角色仓库记录。阶段可选 `theater_round` 为 `{ "is_tarot": true, "tarot_serial_number": 1 }`；普通幕与塔罗标记缺失均保留原含义，不推断未知精度或时间。发生时间仍来自 finish_time。舞台仅在展示时按数字幕次排序，持久化稳定 StageId 不变。 新的官方采集适配为塔罗幕使用稳定组合键 `tarot:<round_id>:<tarot_serial_no>`（序号缺失为 `unknown`），避免与普通幕共用源幕号时冲突；普通幕仍为数字幕号，非塔罗的 -1 序号表示不适用。已有观察／导入的 StageId 不回写，详见 [ADR 0026](../decisions/0026-spiral-abyss-battle-details.md#剧诗官方幕次兼容修正2026-11-20)。
 
 这些字段至少要求分类挑战 2.1 或 Archive 必需挑战子数据集 1.2（及其受支持后继版本）；旧 1.x／2.0 分类包以及 1.0／1.1 Archive 子数据集携带它们均受控拒绝。旧载荷与旧 1.x 数据不回填。Summary-only 官方结果可以作为 Partial 观察保存，不据汇总计数生成挑战完成节点。
 

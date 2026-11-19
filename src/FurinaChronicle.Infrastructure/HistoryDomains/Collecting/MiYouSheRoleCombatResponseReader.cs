@@ -1,4 +1,4 @@
-// Copyright (c) 2026 DaKang233.
+﻿// Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
 using System.Globalization;
@@ -39,6 +39,7 @@ public sealed class MiYouSheRoleCombatResponseReader(TimeProvider timeProvider)
                 HttpStatus: (int)response.StatusCode);
         }
 
+        int? providerCode = null;
         try
         {
             await response.Content.LoadIntoBufferAsync(
@@ -48,22 +49,24 @@ public sealed class MiYouSheRoleCombatResponseReader(TimeProvider timeProvider)
                 cancellationToken);
             Envelope? envelope = await JsonSerializer.DeserializeAsync<Envelope>(
                 body, JsonOptions, cancellationToken);
+            providerCode = envelope?.Retcode;
             return Map(envelope, fetchedAt) with
             {
                 HttpStatus = (int)response.StatusCode,
+                ProviderCode = providerCode,
             };
         }
         catch (JsonException)
         {
-            return new(SpiralAbyssCollectionStatus.InvalidResponse);
+            return new(SpiralAbyssCollectionStatus.InvalidResponse, HttpStatus: (int)response.StatusCode, ProviderCode: providerCode);
         }
         catch (ArgumentException)
         {
-            return new(SpiralAbyssCollectionStatus.InvalidResponse);
+            return new(SpiralAbyssCollectionStatus.InvalidResponse, HttpStatus: (int)response.StatusCode, ProviderCode: providerCode);
         }
         catch (HttpRequestException)
         {
-            return new(SpiralAbyssCollectionStatus.InvalidResponse);
+            return new(SpiralAbyssCollectionStatus.InvalidResponse, HttpStatus: (int)response.StatusCode, ProviderCode: providerCode);
         }
     }
 
@@ -184,7 +187,11 @@ public sealed class MiYouSheRoleCombatResponseReader(TimeProvider timeProvider)
             }
 
             stages.Add(new ChallengeStageResult(
-                round.RoundId.Value.ToString(CultureInfo.InvariantCulture),
+                // Tarot challenges can share the source round number with ordinary rounds.
+                // Qualify every Tarot key consistently; never rename existing stored stages.
+                round.IsTarot == true
+                    ? $"tarot:{round.RoundId.Value.ToString(CultureInfo.InvariantCulture)}:{round.TarotSerialNo?.ToString(CultureInfo.InvariantCulture) ?? "unknown"}"
+                    : round.RoundId.Value.ToString(CultureInfo.InvariantCulture),
                 round.IsGetMedal is null ? null : round.IsGetMedal.Value ? 1 : 0,
                 round.FinishTime is > 0
                     ? OccurrenceTime.At(
@@ -196,7 +203,10 @@ public sealed class MiYouSheRoleCombatResponseReader(TimeProvider timeProvider)
                 enemies,
                 round.IsTarot.HasValue || round.TarotSerialNo.HasValue || buffDetails.Count > 0 ||
                     !string.IsNullOrWhiteSpace(round.SplendourBuff?.Summary?.Description)
-                    ? new TheaterRoundDetails(round.IsTarot, round.TarotSerialNo, buffDetails,
+                    // The official API uses -1 for ordinary (non-Tarot) rounds. It means
+                    // not applicable, not an invalid negative Tarot challenge ordinal.
+                    ? new TheaterRoundDetails(round.IsTarot,
+                        round.IsTarot != true && round.TarotSerialNo == -1 ? null : round.TarotSerialNo, buffDetails,
                         round.SplendourBuff?.Summary?.Description?.Replace("\\n", "\n", StringComparison.Ordinal)) : null));
         }
 

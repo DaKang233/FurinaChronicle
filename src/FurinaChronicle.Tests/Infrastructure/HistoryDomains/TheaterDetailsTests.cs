@@ -1,7 +1,8 @@
-// Copyright (c) 2026 DaKang233.
+﻿// Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
 using System.Net;
+using System.Text.Json.Nodes;
 using FurinaChronicle.Core.Challenges;
 using FurinaChronicle.Core.Records;
 using FurinaChronicle.Infrastructure.HistoryDomains.Collecting;
@@ -49,6 +50,30 @@ public sealed class TheaterDetailsTests
             (await Read(TheaterDetailFixture.Response.Replace(before, after, StringComparison.Ordinal))).Status);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(null)]
+    public async Task NonTarotMinusOneSerialIsNotApplicableAndDoesNotDiscardTheObservation(bool? isTarot)
+    {
+        string ordinary = isTarot is null ? "\"tarot_serial_no\":-1" : "\"is_tarot\":false,\"tarot_serial_no\":-1";
+        string response = TheaterDetailFixture.Response.Replace("\"is_tarot\":false", ordinary, StringComparison.Ordinal);
+        var result = await Read(response);
+        Assert.Equal(SpiralAbyssCollectionStatus.Received, result.Status);
+        Assert.Equal(200, result.HttpStatus); Assert.Equal(0, result.ProviderCode);
+        Assert.Equal(4, result.Snapshot!.Stages.Count);
+        Assert.All(result.Snapshot.Stages.Where(stage => stage.TheaterRound?.IsTarot != true), stage => Assert.Null(stage.TheaterRound!.TarotSerialNumber));
+        Assert.Equal(1, result.Snapshot.Stages.Single(stage => stage.TheaterRound?.IsTarot == true).TheaterRound!.TarotSerialNumber);
+    }
+
+    [Fact]
+    public async Task RealNegativeOrdinalStillReportsInvalidResponseWithSafeResponseCodes()
+    {
+        var result = await Read(TheaterDetailFixture.Response.Replace("\"tarot_serial_no\":1", "\"tarot_serial_no\":-2", StringComparison.Ordinal));
+        Assert.Equal(SpiralAbyssCollectionStatus.InvalidResponse, result.Status);
+        Assert.Equal(200, result.HttpStatus); Assert.Equal(0, result.ProviderCode);
+        Assert.Null(result.Snapshot);
+    }
+
     [Fact]
     public async Task MissingValuesAndOriginRemainUnknownAndNumericRepresentationNormalizes()
     {
@@ -62,6 +87,41 @@ public sealed class TheaterDetailsTests
         Assert.Null(snapshot.TheaterStatistics!.CoinCount);
         Assert.Null(snapshot.TheaterStatistics.MaxTakeDamage!.Value);
         Assert.Equal("3000000000", snapshot.TheaterStatistics.MaxDamage!.Value);
+    }
+
+    [Fact]
+    public async Task SharedRoundNumbersKeepOrdinaryAndDistinctTarotChallengesWithStableKeys()
+    {
+        var root = JsonNode.Parse(TheaterDetailFixture.Response)!;
+        var rounds = root["data"]!["data"]![0]!["detail"]!["rounds_data"]!.AsArray();
+        rounds[3]!["round_id"] = 10;
+        var secondTarot = rounds[3]!.DeepClone();
+        secondTarot["tarot_serial_no"] = 2;
+        rounds.Insert(0, secondTarot);
+        var result = await Read(root.ToJsonString());
+        Assert.Equal(SpiralAbyssCollectionStatus.Received, result.Status);
+        Assert.Equal(new[] { "1", "10", "2", "tarot:10:1", "tarot:10:2" },
+            result.Snapshot!.Stages.Select(stage => stage.StageId).Order(StringComparer.Ordinal));
+        var tarot = result.Snapshot.Stages.Single(stage => stage.StageId == "tarot:10:1");
+        Assert.True(tarot.TheaterRound!.IsTarot);
+        Assert.Equal(1, tarot.TheaterRound.TarotSerialNumber);
+        Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(1794100011), tarot.CompletedAt.Start);
+        rounds.RemoveAt(1); // Removing the ordinary round must not change either Tarot identity.
+        var withoutOrdinary = await Read(root.ToJsonString());
+        Assert.Equal(new[] { "tarot:10:1", "tarot:10:2" }, withoutOrdinary.Snapshot!.Stages
+            .Where(stage => stage.TheaterRound?.IsTarot == true).Select(stage => stage.StageId).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task ExactDuplicateTarotKeyIsRejectedRatherThanDroppingAStage()
+    {
+        var root = JsonNode.Parse(TheaterDetailFixture.Response)!;
+        var rounds = root["data"]!["data"]![0]!["detail"]!["rounds_data"]!.AsArray();
+        rounds.Add(rounds[3]!.DeepClone());
+        var result = await Read(root.ToJsonString());
+        Assert.Equal(SpiralAbyssCollectionStatus.InvalidResponse, result.Status);
+        Assert.Null(result.Snapshot);
+        Assert.Equal(0, result.ProviderCode);
     }
 
     private static async Task<ChallengeModeSourceResult> Read(string json)
