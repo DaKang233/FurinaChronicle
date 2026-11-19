@@ -10,30 +10,21 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
     xmlns:viewModels="clr-namespace:FurinaChronicle.App.ViewModels"
     x:DataType="viewModels:GachaAnalysisViewModel">
-
-    <Grid RowDefinitions="Auto,*" RowSpacing="8">
-        <VerticalStackLayout>
-            <Label FontAttributes="Bold" FontSize="20" Text="抽卡日历" />
-            <Label FontSize="11" Text="颜色越深表示当天投入的抽数越多。" />
-        </VerticalStackLayout>
-        <CollectionView Grid.Row="1" ItemsSource="{Binding CalendarItems}">
-            <CollectionView.ItemsLayout>
-                <GridItemsLayout Orientation="Vertical" Span="7" HorizontalItemSpacing="5" VerticalItemSpacing="5" />
-            </CollectionView.ItemsLayout>
-            <CollectionView.EmptyView>
-                <Label Padding="16" Text="当前范围暂无日历数据。" />
-            </CollectionView.EmptyView>
-            <CollectionView.ItemTemplate>
-                <DataTemplate x:DataType="viewModels:GachaCalendarDisplayItem">
-                    <Border BackgroundColor="{Binding Color}" Padding="7" MinimumHeightRequest="72">
-                        <VerticalStackLayout Spacing="2">
-                            <Label FontAttributes="Bold" FontSize="11" Text="{Binding Date}" TextColor="Black" />
-                            <Label FontSize="11" Text="{Binding Total}" TextColor="Black" />
-                            <Label FontSize="9" LineBreakMode="WordWrap" Text="{Binding HighRanks}" TextColor="Black" />
-                        </VerticalStackLayout>
-                    </Border>
-                </DataTemplate>
-            </CollectionView.ItemTemplate>
-        </CollectionView>
-    </Grid>
+    <VerticalStackLayout Spacing="10" Padding="0,8">
+        <Label FontAttributes="Bold" FontSize="20" Text="抽卡日历" />
+        <HorizontalStackLayout Spacing="8">
+            <Button x:Name="PreviousYear" Text="上一年" Clicked="OnPreviousYear" IsEnabled="{Binding IsNotBusy}" />
+            <Picker x:Name="YearPicker" Title="年份" WidthRequest="110"
+                    SelectedIndexChanged="OnYearChanged" IsEnabled="{Binding IsNotBusy}" />
+            <Button x:Name="NextYear" Text="下一年" Clicked="OnNextYear" IsEnabled="{Binding IsNotBusy}" />
+        </HorizontalStackLayout>
+        <Label x:Name="YearSummary" FontSize="12" />
+        <ScrollView Orientation="Horizontal" HorizontalScrollBarVisibility="Always">
+            <Grid x:Name="HeatmapGrid" ColumnSpacing="3" RowSpacing="3" Padding="0,4"
+                  HorizontalOptions="Start" AutomationId="GachaCalendarHeatmap" />
+        </ScrollView>
+        <HorizontalStackLayout x:Name="Legend" Spacing="4" />
+        <Label FontSize="11" Text="每列一周、周一至周日从上到下排列。点击方格查看当天统计。按 UTC+08:00 分日，仅统计本地记录。" />
+        <Label x:Name="SelectedDay" FontSize="13" />
+    </VerticalStackLayout>
 </ContentView>

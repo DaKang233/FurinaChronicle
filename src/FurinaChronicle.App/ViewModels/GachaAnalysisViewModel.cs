@@ -52,7 +52,8 @@ public partial class GachaAnalysisViewModel(
     public ObservableCollection<GachaRecordAnalysisDisplayItem> DetailRecords { get; } = [];
     public ObservableCollection<GachaHistoryDisplayItem> HistoryItems { get; } = [];
     public ObservableCollection<GachaHistoryVersionOption> HistoryVersions { get; } = [];
-    public ObservableCollection<GachaCalendarDisplayItem> CalendarItems { get; } = [];
+    [ObservableProperty]
+    public partial IReadOnlyList<GachaCalendarDay> CalendarDays { get; set; } = [];
 
     [ObservableProperty]
     public partial IReadOnlyList<GachaItemStatisticsDisplayItem> ItemStatistics { get; set; } = [];
@@ -560,7 +561,8 @@ public partial class GachaAnalysisViewModel(
                 accounts.ToDictionary(
                     account => account.Id,
                     account => account.ServerRegion),
-                CancellationToken.None);
+                CancellationToken.None,
+                calendarOffset: CurrentSection == GachaAnalysisSection.Calendar ? TimeSpan.FromHours(8) : null);
             await PopulateCurrentSectionAsync(report);
         }
         catch (Exception exception)
@@ -1105,15 +1107,7 @@ public partial class GachaAnalysisViewModel(
     private void PopulateCalendar(
         IReadOnlyList<GachaCalendarDay> calendar)
     {
-        CalendarItems.Clear();
-        foreach (GachaCalendarDay day in calendar)
-        {
-            CalendarItems.Add(new GachaCalendarDisplayItem(
-                day.Date.ToString("MM-dd"),
-                $"{day.TotalPulls} 抽",
-                $"五星 {day.FiveStarCount} · 四星 {day.FourStarCount}",
-                GetIntensityColor(day.IntensityLevel)));
-        }
+        CalendarDays = calendar.ToArray();
     }
 
     private async Task PopulateItemsAsync(
@@ -1340,7 +1334,7 @@ public partial class GachaAnalysisViewModel(
         historyPeriodsByEventId =
             new Dictionary<string, GachaHistoryPeriod>(StringComparer.Ordinal);
         Interlocked.Increment(ref historySelectionRevision);
-        CalendarItems.Clear();
+        CalendarDays = [];
         ItemStatistics = [];
         ItemGridRows = [];
         DetailPage = 1;
@@ -1365,16 +1359,4 @@ public partial class GachaAnalysisViewModel(
             TimeZoneInfo.Local.GetUtcOffset(local));
     }
 
-    private static Color GetIntensityColor(int level)
-    {
-        return level switch
-        {
-            5 => Color.FromArgb("#216E39"),
-            4 => Color.FromArgb("#30A14E"),
-            3 => Color.FromArgb("#40C463"),
-            2 => Color.FromArgb("#9BE9A8"),
-            1 => Color.FromArgb("#C6E48B"),
-            _ => Color.FromArgb("#EBEDF0")
-        };
-    }
 }

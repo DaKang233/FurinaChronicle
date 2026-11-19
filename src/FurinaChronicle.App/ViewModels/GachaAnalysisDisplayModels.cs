@@ -367,12 +367,6 @@ public sealed record GachaHistoryDisplayItem(
         HasFiveStarItems || HasFourStarItems || HasThreeStarItems;
 }
 
-public sealed record GachaCalendarDisplayItem(
-    string Date,
-    string Total,
-    string HighRanks,
-    Color Color);
-
 public sealed partial class GachaItemStatisticsDisplayItem(
     GachaItemStatistics source,
     string? cachedIconPath)
