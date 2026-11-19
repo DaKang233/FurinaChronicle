@@ -30,6 +30,10 @@ public sealed record GachaReadOnlyRow(
     public string? Subtitle { get; init; }
     public string? CountText { get; init; }
     public bool HasCount => CountText is not null;
+    public int? IntervalPulls { get; init; }
+    public int IntervalMaximum { get; init; } = 90;
+    public double IntervalValue => IntervalPulls ?? 0;
+    public double IntervalRatio => IntervalPulls is int pulls ? Math.Clamp((double)pulls / IntervalMaximum, 0, 1) : 0;
     public GachaItemCard? Item { get; init; }
     public GachaOverviewCard? Overview { get; init; }
     public GachaHistoryCard? History { get; init; }

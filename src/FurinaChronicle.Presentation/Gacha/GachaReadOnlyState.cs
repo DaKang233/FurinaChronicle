@@ -72,7 +72,8 @@ public sealed class GachaReadOnlyState(
     public Task OpenCalendarDayAsync(DateOnly day) =>
         LoadAsync(Snapshot.ArchiveId, Snapshot.AccountId, 1, Snapshot.ArchiveAccountIds,
             new GachaReadOnlyFilter(Day: day, DayOffset: Snapshot.Calendar.Offset), GachaReadOnlyView.Records);
-    public Task ChangePageAsync(int page) => ReloadPageAsync(Math.Max(1, page));
+    public Task ChangePageAsync(int page) => Snapshot.View == GachaReadOnlyView.History
+        ? Task.CompletedTask : ReloadPageAsync(Math.Max(1, page));
 
     private Task ReloadPageAsync(int page) => LoadAsync(
         Snapshot.ArchiveId, Snapshot.AccountId, page, Snapshot.ArchiveAccountIds, Snapshot.Filter);

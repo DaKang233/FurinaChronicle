@@ -56,6 +56,24 @@ public sealed class GachaItemPresentationTests
         }
     }
 
+    [Theory]
+    [InlineData(3, false)]
+    [InlineData(4, false)]
+    [InlineData(5, false)]
+    [InlineData(5, true)]
+    public void ExplicitSelectionShowsBoundedAcquisitionsForEveryItem(int rank, bool archive)
+    {
+        var times = Enumerable.Range(0, 151).Select(i => Time.AddSeconds(i)).ToArray();
+        var card = Card(rank, archive, times);
+        card.OpenDetails();
+        Assert.True(card.IsTimesVisible);
+        Assert.Equal(50, card.TimesText.Split('\n').Length);
+        Assert.StartsWith(times[^1].ToString("yyyy-MM-dd HH:mm:ss zzz"), card.TimesText);
+        card.LoadMoreTimes();
+        Assert.Equal(100, card.TimesText.Split('\n').Length);
+        Assert.Equal("151", card.Icon.CountText);
+    }
+
     [Fact]
     public void FourStarCollapseResetsItsBoundedHistoryAndNotifiesBindings()
     {

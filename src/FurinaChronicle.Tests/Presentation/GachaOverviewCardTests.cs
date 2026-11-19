@@ -25,11 +25,15 @@ public sealed class GachaOverviewCardTests
 
         Assert.Equal(new[] { "限定 B", "常驻角色", "限定 A" }, card.VisibleItems.Select(item => item.Name));
         Assert.Equal("75 抽", card.VisibleItems[0].Subtitle);
-        card.ToggleTruePulls();
+        card.ToggleTruePullsCommand.Execute(null);
         Assert.Equal(new[] { "限定 B", "限定 A" }, card.VisibleItems.Select(item => item.Name));
         Assert.Equal("150 抽", card.VisibleItems[0].Subtitle);
+        Assert.Equal(150, card.VisibleItems[0].IntervalPulls);
+        Assert.Equal(180, card.VisibleItems[0].IntervalMaximum);
+        Assert.Equal(150D / 180, card.VisibleItems[0].IntervalRatio, 8);
+        Assert.Null(card.VisibleItems[1].IntervalPulls);
         Assert.Equal("间隔未知", card.VisibleItems[1].Subtitle);
-        card.ToggleLayout();
+        card.ToggleLayoutCommand.Execute(null);
         Assert.True(card.IsListMode);
         Assert.Equal("150 抽", card.VisibleItems[0].Subtitle);
         card.ToggleTruePulls();
@@ -69,6 +73,30 @@ public sealed class GachaOverviewCardTests
         Assert.False(card.CanShowTruePulls);
         card.ToggleTruePulls();
         Assert.Equal("60 抽", Assert.Single(card.VisibleItems).Subtitle);
+    }
+
+    [Theory]
+    [InlineData(GachaPoolGroup.CharacterEvent, 90)]
+    [InlineData(GachaPoolGroup.WeaponEvent, 80)]
+    public void IntervalBarsKeepSourceCountsAndTheirPoolScale(GachaPoolGroup group, int scale)
+    {
+        var item = new FiveStarGacha(AccountId, "1", "合成", "10000089", null, Time, 70);
+        var card = new GachaOverviewCard(Pool([item], []) with { PoolGroup = group }, false, _ => null);
+        var row = Assert.Single(card.VisibleItems);
+        Assert.Equal(70, row.IntervalPulls);
+        Assert.Equal(scale, row.IntervalMaximum);
+        Assert.Equal(70D / scale, row.IntervalRatio, 8);
+    }
+
+    [Fact]
+    public void ViewportHeightOnlyAcceptsFinitePositiveHostMeasurements()
+    {
+        var card = new GachaOverviewCard(Pool([], []), false, _ => null);
+        Assert.True(double.IsNaN(card.ViewportHeight));
+        card.SetViewportHeight(600);
+        card.SetViewportHeight(double.NaN);
+        card.SetViewportHeight(0);
+        Assert.Equal(600, card.ViewportHeight);
     }
 
     private static GachaPoolStatistics Pool(

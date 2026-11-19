@@ -124,7 +124,7 @@ public sealed class ServiceGachaReadOnlySource(
                 {
                     Item = card,
                     DetailText = "抽取次数仅来自抽卡记录。" + (archiveScope || item.RankType is not (4 or 5) ? "" :
-                        "\n账号模式可在「列表与时间」中查看获取时间；四星需手动展开。"),
+                        "\n点击物品，在右侧查看获取信息。"),
                 };
             })
         };

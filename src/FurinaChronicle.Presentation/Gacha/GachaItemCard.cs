@@ -16,10 +16,10 @@ public sealed class GachaItemCard : INotifyPropertyChanged
 
     public GachaItemCard(GachaItemStatistics item, bool archiveMode, Func<string?, string?> cachedIconPath)
     {
+        LoadMoreTimesCommand = new GachaActionCommand(LoadMoreTimes);
         IsArchiveMode = archiveMode;
         Rank = item.RankType;
-        acquisitionTimes = archiveMode || item.RankType is not (4 or 5)
-            ? [] : item.AcquisitionTimes.OrderByDescending(time => time).ToArray();
+        acquisitionTimes = item.AcquisitionTimes.OrderByDescending(time => time).ToArray();
         timesExpanded = !archiveMode && Rank == 5;
         Icon = new("", item.ItemName, item.RankType is int rank ? $"{rank} 星" : "星级未知",
             "", "", "", new(item.ItemId, cachedIconPath(item.ItemId), item.IconUrl))
@@ -43,12 +43,21 @@ public sealed class GachaItemCard : INotifyPropertyChanged
     public string TimeCountText => IsTimesVisible
         ? $"仅来自抽卡记录 · 已显示 {Math.Min(visibleTimes, acquisitionTimes.Count)} / {acquisitionTimes.Count} 次获取" : "";
 
+    public System.Windows.Input.ICommand LoadMoreTimesCommand { get; }
+
     public event PropertyChangedEventHandler? PropertyChanged;
 
     public void ToggleTimes()
     {
         if (!CanExpandTimes) return;
         timesExpanded = !timesExpanded;
+        visibleTimes = TimeBatchSize;
+        Refresh();
+    }
+
+    public void OpenDetails()
+    {
+        timesExpanded = true;
         visibleTimes = TimeBatchSize;
         Refresh();
     }

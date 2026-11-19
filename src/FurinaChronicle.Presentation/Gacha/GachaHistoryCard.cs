@@ -18,9 +18,11 @@ public sealed class GachaHistoryCard : INotifyPropertyChanged
         GachaHistoryPeriod? history,
         Func<string?, string?> cachedIconPath)
     {
+        LoadMoreCommand = new GachaActionCommand(LoadMore);
         Id = period.Id;
         Version = $"v{period.Version}";
         Title = string.Join(" / ", period.Banners.Select(banner => banner.Name));
+        ShortPeriod = $"{period.StartsAt:yyyy.MM.dd} ～ {period.EndsAt:yyyy.MM.dd}";
         Period = $"{period.StartsAt:yyyy-MM-dd HH:mm zzz} ～ {period.EndsAt:yyyy-MM-dd HH:mm zzz}";
         Total = $"{history?.TotalPulls ?? 0} 抽";
         Metadata = $"元数据：{period.Source} · {period.SourceRevision}" +
@@ -52,6 +54,7 @@ public sealed class GachaHistoryCard : INotifyPropertyChanged
     public string Version { get; }
     public string Title { get; }
     public string Period { get; }
+    public string ShortPeriod { get; }
     public string Total { get; }
     public string Metadata { get; }
     public string ItemsText { get; }
@@ -60,6 +63,8 @@ public sealed class GachaHistoryCard : INotifyPropertyChanged
     public IReadOnlyList<GachaReadOnlyRow> VisibleItems => items.Take(visibleCount).ToArray();
     public bool CanLoadMore => visibleCount < items.Count;
     public string LoadMoreText => $"加载更多物品（{Math.Min(visibleCount, items.Count)} / {items.Count}）";
+
+    public System.Windows.Input.ICommand LoadMoreCommand { get; }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 

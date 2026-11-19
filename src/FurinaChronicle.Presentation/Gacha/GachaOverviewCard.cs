@@ -24,6 +24,9 @@ public sealed class GachaOverviewCard : INotifyPropertyChanged
         bool archiveMode,
         Func<string?, string?> cachedIconPath)
     {
+        ToggleTruePullsCommand = new GachaActionCommand(ToggleTruePulls);
+        ToggleLayoutCommand = new GachaActionCommand(ToggleLayout);
+        LoadMoreCommand = new GachaActionCommand(LoadMore);
         Title = statistics.PoolName;
         IsArchiveMode = archiveMode;
         CanShowTruePulls = !archiveMode && statistics.PoolGroup == GachaPoolGroup.CharacterEvent;
@@ -39,15 +42,16 @@ public sealed class GachaOverviewCard : INotifyPropertyChanged
             $"{Date(statistics.StartTime)} ～ {Date(statistics.EndTime)}";
         batchSize = archiveMode ? ArchiveBatchSize : AccountBatchSize;
         visibleCount = batchSize;
+        int ordinaryScale = statistics.PoolGroup == GachaPoolGroup.WeaponEvent ? 80 : 90;
         normalHistory = archiveMode
             ? statistics.ItemCounts.Where(item => item.RankType == 5).Select(item =>
                 Row(item.ItemName, item.ItemId, item.IconUrl, "", item.Count.ToString(), cachedIconPath)).ToArray()
             : statistics.FiveStarHistory.Select(item =>
                 Row(item.ItemName, item.ItemId, item.IconUrl, Pulls(item.Pulls), null, cachedIconPath)
-                    with { DetailText = item.Time.ToString("yyyy-MM-dd HH:mm:ss zzz") }).ToArray();
+                    with { DetailText = item.Time.ToString("yyyy-MM-dd HH:mm:ss zzz"), IntervalPulls = item.Pulls, IntervalMaximum = ordinaryScale }).ToArray();
         limitedHistory = !CanShowTruePulls ? [] : statistics.LimitedFiveStarHistory.Select(item =>
             Row(item.ItemName, item.ItemId, item.IconUrl, Pulls(item.PullsSincePreviousLimitedFiveStar), null, cachedIconPath)
-                with { DetailText = item.Time.ToString("yyyy-MM-dd HH:mm:ss zzz") }).ToArray();
+                with { DetailText = item.Time.ToString("yyyy-MM-dd HH:mm:ss zzz"), IntervalPulls = item.PullsSincePreviousLimitedFiveStar, IntervalMaximum = 180 }).ToArray();
     }
 
     public string Title { get; }
@@ -65,6 +69,18 @@ public sealed class GachaOverviewCard : INotifyPropertyChanged
     public string HistoryLabel => IsArchiveMode ? "五星物品数量" : truePulls ? "限定五星历史" : "五星历史";
 
     private IReadOnlyList<GachaReadOnlyRow> History => truePulls ? limitedHistory : normalHistory;
+
+    public System.Windows.Input.ICommand ToggleTruePullsCommand { get; }
+    public System.Windows.Input.ICommand ToggleLayoutCommand { get; }
+    public System.Windows.Input.ICommand LoadMoreCommand { get; }
+    private double viewportHeight = double.NaN;
+    public double ViewportHeight => viewportHeight;
+    public void SetViewportHeight(double height)
+    {
+        if (!double.IsFinite(height) || height <= 0 || height == viewportHeight) return;
+        viewportHeight = height;
+        PropertyChanged?.Invoke(this, new(nameof(ViewportHeight)));
+    }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 

@@ -65,6 +65,24 @@ public sealed class GachaHistoryPresentationTests
         Assert.Equal("0 抽", secondCard.Total);
         Assert.Equal("0", Assert.Single(secondCard.FeaturedItems).CountText);
         Assert.Empty(secondCard.VisibleItems);
+        var unpaged = await source.GetAnalysisAsync(
+            new GachaRecordQuery([account.Id]), GachaReadOnlyView.History,
+            [new GachaScopeOption(account.Id, "fixture") { Region = GameServerRegion.ChinaOfficial }],
+            99, 1, new(null, true), false, CancellationToken.None);
+        Assert.Equal(2, unpaged.Rows.Count);
+        Assert.Equal(1, unpaged.PageNumber);
+        Assert.Equal(1, unpaged.TotalPages);
+        var state = new GachaReadOnlyState(source, new Dispatcher(), GachaReadOnlyView.History);
+        await state.EnterAsync();
+        var snapshot = state.Snapshot;
+        await state.ChangePageAsync(2);
+        Assert.Same(snapshot, state.Snapshot);
+        Assert.Equal(2, state.Snapshot.Rows.Count);
+    }
+
+    private sealed class Dispatcher : IUiDispatcher
+    {
+        public Task InvokeAsync(Action action) { action(); return Task.CompletedTask; }
     }
 
     [Fact]
