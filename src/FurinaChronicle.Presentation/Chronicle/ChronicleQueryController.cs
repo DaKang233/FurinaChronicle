@@ -15,170 +15,124 @@ public enum ChronicleLoadOutcome
     Superseded = 4,
 }
 
-/// <summary>
-/// Drives <see cref="ChroniclePageState"/> against the formal
-/// <see cref="IChronicleQueryService"/>. Starting a new query cancels the
-/// previous request and invalidates its result, so a slow response cannot
-/// overwrite a newer scope, timeline or filter selection.
-/// </summary>
-public sealed class ChronicleQueryController
+/// <summary>Drives formal Chronicle queries; superseded responses cannot mutate newer query state.</summary>
+public sealed class ChronicleQueryController(IChronicleQueryService queryService)
 {
-    private readonly IChronicleQueryService queryService;
+    private readonly IChronicleQueryService queryService = queryService ??
+        throw new ArgumentNullException(nameof(queryService));
+    private readonly object gate = new();
     private CancellationTokenSource? activeRequest;
     private int requestGeneration;
-
-    public ChronicleQueryController(IChronicleQueryService queryService)
-    {
-        this.queryService = queryService ??
-            throw new ArgumentNullException(nameof(queryService));
-    }
 
     public ChroniclePageState State { get; } = new();
 
     public async Task<ChronicleLoadOutcome> LoadFirstPageAsync(
-        ChronicleQuery query,
-        CancellationToken cancellationToken = default)
+        ChronicleQuery query, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(query);
-        CancelActiveRequest();
-        int generation = ++requestGeneration;
-        CancellationTokenSource source =
-            CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        activeRequest = source;
-        State.BeginInitialLoad(query);
-
-        try
+        query.Validate();
+        var source = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        CancellationTokenSource? previous;
+        int generation;
+        lock (gate)
         {
-            ChroniclePage page = await queryService
-                .QueryAsync(query, source.Token)
-                .ConfigureAwait(false);
-            if (generation != requestGeneration)
-            {
-                return ChronicleLoadOutcome.Superseded;
-            }
-
-            State.ApplyPage(page);
-            return Outcome(page);
+            previous = activeRequest;
+            generation = ++requestGeneration;
+            activeRequest = source;
+            State.BeginInitialLoad(query);
         }
-        catch (OperationCanceledException) when (source.IsCancellationRequested)
-        {
-            if (generation == requestGeneration)
-            {
-                State.ApplyCancelled();
-            }
-            return ChronicleLoadOutcome.Superseded;
-        }
-        catch (Exception exception)
-        {
-            if (generation == requestGeneration)
-            {
-                State.ApplyTransportError(exception.Message);
-            }
-            return ChronicleLoadOutcome.Failed;
-        }
-        finally
-        {
-            Release(source);
-        }
+        // Invalidate the old generation before cancellation can run its continuations.
+        // Keep cancellation callbacks outside the state lock.
+        TryCancel(previous);
+        return await ExecuteAsync(query, source, generation).ConfigureAwait(false);
     }
 
-    public async Task<ChronicleLoadOutcome> LoadMoreAsync(
-        CancellationToken cancellationToken = default)
+    public async Task<ChronicleLoadOutcome> LoadMoreAsync(CancellationToken cancellationToken = default)
     {
-        if (!State.BeginLoadMore())
+        ChronicleQuery query;
+        CancellationTokenSource source;
+        int generation;
+        lock (gate)
         {
-            return ChronicleLoadOutcome.Superseded;
+            if (!State.BeginLoadMore()) return ChronicleLoadOutcome.Superseded;
+            query = State.Query! with { Cursor = State.NextCursor };
+            generation = ++requestGeneration;
+            source = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            activeRequest = source;
         }
+        return await ExecuteAsync(query, source, generation).ConfigureAwait(false);
+    }
 
-        ChronicleQuery query = State.Query! with { Cursor = State.NextCursor };
-        int generation = ++requestGeneration;
-        CancellationTokenSource source =
-            CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        activeRequest = source;
-
+    private async Task<ChronicleLoadOutcome> ExecuteAsync(
+        ChronicleQuery query, CancellationTokenSource source, int generation)
+    {
         try
         {
-            ChroniclePage page = await queryService
-                .QueryAsync(query, source.Token)
-                .ConfigureAwait(false);
-            if (generation != requestGeneration)
+            ChroniclePage page = await queryService.QueryAsync(query, source.Token).ConfigureAwait(false);
+            lock (gate)
             {
-                return ChronicleLoadOutcome.Superseded;
+                if (generation != requestGeneration) return ChronicleLoadOutcome.Superseded;
+                State.ApplyPage(page);
+                return Outcome(page);
             }
-
-            State.ApplyPage(page);
-            return Outcome(page);
         }
         catch (OperationCanceledException) when (source.IsCancellationRequested)
         {
-            if (generation == requestGeneration)
+            lock (gate)
             {
-                State.ApplyCancelled();
+                if (generation == requestGeneration) State.ApplyCancelled();
             }
             return ChronicleLoadOutcome.Superseded;
         }
         catch (Exception exception)
         {
-            if (generation == requestGeneration)
+            lock (gate)
             {
-                State.ApplyTransportError(exception.Message);
+                if (generation == requestGeneration) State.ApplyTransportError(exception.Message);
             }
             return ChronicleLoadOutcome.Failed;
         }
         finally
         {
-            Release(source);
+            lock (gate)
+            {
+                if (ReferenceEquals(activeRequest, source)) activeRequest = null;
+            }
+            source.Dispose();
         }
     }
 
     /// <summary>Cancel any in-flight request without discarding loaded entries.</summary>
     public void CancelActive()
     {
-        CancellationTokenSource? current = activeRequest;
-        if (current is null)
-        {
-            return;
-        }
-        try
-        {
-            current.Cancel();
-        }
-        catch (ObjectDisposedException)
-        {
-        }
+        CancellationTokenSource? source;
+        lock (gate) source = activeRequest;
+        TryCancel(source);
     }
 
     public void Reset()
     {
-        CancelActive();
-        requestGeneration++;
-        State.Reset();
+        CancellationTokenSource? source;
+        lock (gate)
+        {
+            source = activeRequest;
+            activeRequest = null;
+            requestGeneration++;
+            State.Reset();
+        }
+        TryCancel(source);
     }
 
     private ChronicleLoadOutcome Outcome(ChroniclePage page)
     {
         if (page.Error != ChronicleQueryError.None)
-        {
-            return State.RequiresReload
-                ? ChronicleLoadOutcome.Stale
-                : ChronicleLoadOutcome.Failed;
-        }
-        return State.LoadState == ChronicleLoadState.Empty
-            ? ChronicleLoadOutcome.Empty
-            : ChronicleLoadOutcome.Loaded;
+            return State.RequiresReload ? ChronicleLoadOutcome.Stale : ChronicleLoadOutcome.Failed;
+        return State.LoadState == ChronicleLoadState.Empty ? ChronicleLoadOutcome.Empty : ChronicleLoadOutcome.Loaded;
     }
 
-    private void CancelActiveRequest()
+    private static void TryCancel(CancellationTokenSource? source)
     {
-        CancelActive();
-    }
-
-    private void Release(CancellationTokenSource source)
-    {
-        if (ReferenceEquals(activeRequest, source))
-        {
-            activeRequest = null;
-        }
-        source.Dispose();
+        try { source?.Cancel(); }
+        catch (ObjectDisposedException) { }
     }
 }

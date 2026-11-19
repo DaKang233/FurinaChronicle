@@ -192,6 +192,36 @@ public sealed class ChronicleQueryControllerTests
         Assert.Empty(controller.State.Entries);
     }
 
+    [Fact]
+    public async Task ConcurrentCancelAndScopeSwitchKeepsTheLatestResult()
+    {
+        await Task.WhenAll(Enumerable.Range(0, 128).Select(_ => Task.Run(async () =>
+        {
+            var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var service = new FakeChronicleQueryService(async (query, token) =>
+            {
+                if (query.PageSize == 1)
+                {
+                    started.TrySetResult();
+                    await Task.Delay(Timeout.Infinite, token);
+                }
+                return ChronicleTestEntries.Page(
+                    [ChronicleTestEntries.Create(seed: "latest")], generationId: "generation-latest");
+            });
+            var controller = new ChronicleQueryController(service);
+            using var cancellation = new CancellationTokenSource();
+            var first = controller.LoadFirstPageAsync(Query(1), cancellation.Token);
+            await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            var cancel = Task.Run(cancellation.Cancel);
+            var second = controller.LoadFirstPageAsync(Query(2));
+            await cancel;
+            Assert.Equal(ChronicleLoadOutcome.Superseded, await first);
+            Assert.Equal(ChronicleLoadOutcome.Loaded, await second);
+            Assert.Equal("latest", Assert.Single(controller.State.Entries).SourceEntityId);
+            Assert.Equal("generation-latest", controller.State.GenerationId);
+        })));
+    }
+
     private static ChronicleQuery Query(int pageSize = 2) => new(
         new ChronicleScope(ChronicleScopeKind.Account, AccountId),
         new ChronicleProfileRequest(ChronicleTimeline.Main),
