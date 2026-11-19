@@ -38,6 +38,8 @@ public sealed class RefreshGachaRecords(
             throw new ArgumentException("Game account ID is required.", nameof(request));
         }
 
+        if (request.Mode is not (GachaImportMode.Incremental or GachaImportMode.Full))
+            throw new ArgumentOutOfRangeException(nameof(request));
         DateTimeOffset startedAt = DateTimeOffset.UtcNow;
         Uri sourceUrl = await ResolveSourceUrlAsync(request, cancellationToken);
         AcquisitionBatchId batchId = AcquisitionBatchId.New();
@@ -131,6 +133,7 @@ public sealed class RefreshGachaRecords(
             }
         }
 
+        progress?.Report(new GachaRefreshProgress("200", 0, collected.Count, GachaRefreshProgressStage.Saving, []));
         CommitGachaRecordsResult saveResult =
             await commitGachaRecords.ExecuteAsync(
                 new CommitGachaRecordsRequest(

@@ -22,7 +22,8 @@ public interface IGachaWindowsCacheRefreshGateway
         GameAccount targetAccount,
         GachaImportMode mode,
         string gameInstallationPath,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        IProgress<GachaRefreshProgress>? progress = null);
 }
 
 public sealed record GachaWindowsCacheRefreshPlan(
@@ -134,7 +135,8 @@ public sealed class GachaWindowsCacheRefreshCoordinator(
 
     public async Task<GachaWindowsCacheRefreshOutcome> ExecuteAsync(
         GachaWindowsCacheRefreshPlan plan,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IProgress<GachaRefreshProgress>? progress = null)
     {
         ArgumentNullException.ThrowIfNull(plan);
         if (string.IsNullOrWhiteSpace(plan.GameInstallationPath))
@@ -181,7 +183,7 @@ public sealed class GachaWindowsCacheRefreshCoordinator(
                 account,
                 plan.Mode,
                 plan.GameInstallationPath,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken, progress).ConfigureAwait(false);
             string message =
                 $"网页缓存刷新完成：获取 {result.FetchedCount} 条，新增 {result.InsertedCount} 条，" +
                 $"覆盖校正 {result.UpdatedCount} 条，保留重复 {result.DuplicateCount} 条，" +

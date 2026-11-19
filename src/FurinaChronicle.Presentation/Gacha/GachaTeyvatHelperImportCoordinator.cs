@@ -4,11 +4,12 @@
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Services.Gacha;
 using FurinaChronicle.Services.Gacha.Importing;
+using FurinaChronicle.Presentation.Management;
 
 namespace FurinaChronicle.Presentation.Gacha;
 
-// Third-party Teyvat Helper fetch seam. Only the manual path is used by the isolated host: the
-// automatic path needs a passport login/role-selection context that this host does not own.
+// Third-party fetch seam. Manual input needs no login; automatic import uses the separate
+// page-local role gateway and never exposes a generated authkey to the presentation plan.
 public interface IGachaTeyvatHelperImportGateway
 {
     Task<TeyvatHelperImportAvailability> GetAvailabilityAsync(
@@ -27,7 +28,10 @@ public sealed record GachaTeyvatHelperImportPlan(
     GachaImportMode Mode,
     bool AutomaticImportAvailable,
     string PrivacyNotice,
-    string ConfirmationText);
+    string ConfirmationText)
+{
+    public Guid? PassportAccountId { get; init; }
+}
 
 public sealed record GachaTeyvatHelperImportPlanResult(
     GachaTeyvatHelperImportPlan? Plan,
@@ -45,9 +49,10 @@ public sealed record GachaTeyvatHelperImportOutcome(
 // Validates UID/link locally, freezes the import target and full-mode snapshot, renders the
 // third-party privacy notice, then downloads the UIGF payload after explicit confirmation. The
 // caller feeds the payload into the same unified UIGF import pipeline as a chosen JSON file.
-public sealed class GachaTeyvatHelperImportCoordinator(
+public sealed partial class GachaTeyvatHelperImportCoordinator(
     IGachaImportPlanningSource planningSource,
-    IGachaTeyvatHelperImportGateway gateway)
+    IGachaTeyvatHelperImportGateway gateway,
+    IIsolatedCredentialStore? credentials = null)
 {
     public const string ThirdPartyHost = "lelaer.com";
 
@@ -118,8 +123,8 @@ public sealed class GachaTeyvatHelperImportCoordinator(
         }
 
         string automaticText = automaticAvailable
-            ? "自动导入：通行证上下文可用，但本入口只提供手动方式。"
-            : "自动导入：不可用（需要用户页通行证登录与角色选择；孤立宿主未提供该上下文），请使用手动方式。";
+            ? "登录上下文可用；本次仍使用手动填写的信息。"
+            : "本次使用手动方式：无需通行证登录或角色选择。";
         string modeLabel = mode == GachaImportMode.Full
             ? "全量导入：覆盖同记录"
             : "仅补充";
@@ -159,6 +164,8 @@ public sealed class GachaTeyvatHelperImportCoordinator(
     {
         ArgumentNullException.ThrowIfNull(plan);
         cancellationToken.ThrowIfCancellationRequested();
+        if (plan.PassportAccountId.HasValue)
+            return new(false, "自动计划须使用自动导入入口；未发起请求。", null, null);
         if (GachaManualRefreshCoordinator.ValidateUrl(gachaUrl) is string urlError)
         {
             return new(false, urlError.Replace("未写入任何数据", "未发起第三方请求"), null, null);

@@ -11,7 +11,7 @@ using FurinaChronicle.Services.Gacha.Metadata;
 
 namespace FurinaChronicle.Tests.Infrastructure.Gacha.Metadata;
 
-public sealed class SqliteGachaItemMetadataProviderTests
+public sealed partial class SqliteGachaItemMetadataProviderTests
 {
     private static readonly DateTimeOffset InitialTime =
         new(2026, 8, 24, 12, 0, 0, TimeSpan.Zero);

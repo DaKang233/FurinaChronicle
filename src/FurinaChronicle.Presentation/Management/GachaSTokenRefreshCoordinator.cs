@@ -15,13 +15,20 @@ public sealed record GachaSTokenRefreshPlan(
     GachaImportMode Mode,
     IsolatedCredentialSummary Credential)
 {
+    public PreparedGachaRefreshTarget? TargetPreparation { get; init; }
     public string ConfirmationText =>
         $"将通过本机 WinUI 登录凭据刷新：\n" +
+        (TargetPreparation?.ArchiveName is { } archiveName ? $"目标档案：{archiveName}\n" : "") +
         $"目标账号：UID {TargetAccount.Uid}（{TargetAccount.ServerRegion}）\n" +
         $"模式：{(Mode == GachaImportMode.Full ? "全量刷新（流程开始时快照）" : "增量刷新")}\n" +
         $"凭据：{Credential.Label ?? "未命名"} · MID {Credential.MaskedMid} · " +
         $"绑定 UID {TargetAccount.Uid}\n" +
-        "提交阶段不可取消；不会显示或记录凭据和完整链接。";
+        "提交阶段不可取消；不会显示或记录凭据和完整链接。" +
+        (TargetPreparation?.AccountToCreate is not null
+            ? "\n将随记录原子创建账号" + (TargetPreparation.ArchiveToCreate is { } archive
+                ? $"和档案“{archive.Name}”" : "") +
+                "；没有可保存的新记录则不创建。包含新父对象的操作不能整体撤销。"
+            : "");
 }
 
 public sealed record GachaSTokenRefreshPlanResult(
@@ -33,6 +40,8 @@ public sealed record GachaSTokenRefreshOutcome(
     bool Succeeded,
     string Message,
     GachaRefreshResult? Result);
+
+public sealed record GachaSTokenRoleChoice(Guid PassportAccountId, string Uid, string Label);
 
 public interface IGachaSTokenRefreshExecutor
 {
@@ -52,17 +61,24 @@ public sealed class ServiceGachaSTokenRefreshExecutor(RefreshGachaRecords refres
         refresher.ExecuteAsync(request, progress, cancellationToken);
 }
 
-// Freezes the target account and Full mode before any credential/network work. SToken never
+// Freezes the target account and selected mode before any credential/network work. SToken never
 // appears here; the refresh service reads it directly from the credential store boundary.
 public sealed class GachaSTokenRefreshCoordinator(
     IIsolatedCredentialStore credentials,
     IGameAccountRepository accounts,
-    IGachaSTokenRefreshExecutor refresher)
+    IGachaSTokenRefreshExecutor refresher,
+    PrepareGachaRefreshTarget? targets = null)
 {
+    public Task<GachaSTokenRefreshPlanResult> PlanAsync(Guid gameAccountId, CancellationToken cancellationToken = default) =>
+        PlanAsync(gameAccountId, GachaImportMode.Full, cancellationToken);
+
     public async Task<GachaSTokenRefreshPlanResult> PlanAsync(
         Guid gameAccountId,
+        GachaImportMode mode,
         CancellationToken cancellationToken = default)
     {
+        if (mode is not (GachaImportMode.Incremental or GachaImportMode.Full))
+            throw new ArgumentOutOfRangeException(nameof(mode));
         if (gameAccountId == Guid.Empty)
         {
             return new(false, null, "请先选择要刷新的账号。");
@@ -110,9 +126,36 @@ public sealed class GachaSTokenRefreshCoordinator(
             new GachaSTokenRefreshPlan(
                 usable.Id,
                 account,
-                GachaImportMode.Full,
+                mode,
                 usable),
             null);
+    }
+
+    public async Task<IReadOnlyList<GachaSTokenRoleChoice>> GetRoleChoicesAsync(
+        CancellationToken cancellationToken = default) =>
+        GachaPassportRoleChoices.From(await credentials.ListAsync(cancellationToken));
+
+    public async Task<GachaSTokenRefreshPlanResult> PlanRoleAsync(
+        Guid passportAccountId, string uid, Guid? archiveId, GachaImportMode mode,
+        CancellationToken cancellationToken = default)
+    {
+        if (mode is not (GachaImportMode.Incremental or GachaImportMode.Full))
+            throw new ArgumentOutOfRangeException(nameof(mode));
+        if (targets is null) return new(false, null, "此宿主未配置自动创建账号功能。");
+        IsolatedCredentialSummary? credential = (await credentials.ListAsync(cancellationToken))
+            .FirstOrDefault(item => item.Id == passportAccountId && item.IsUsable &&
+                item.CanRefreshGacha && item.MatchesRole(uid));
+        if (credential is null) return new(false, null, "登录账号或角色已变化，请重新选择。");
+        if (!GenshinGameRoleIdentity.TryCreate(uid, GameServerRegion.Unknown, out _))
+            return new(false, null, "无法可靠识别角色区服；请先在档案与账号页建立账号。");
+        if (GameServerRegionResolver.Resolve(uid) is not (GameServerRegion.ChinaOfficial or GameServerRegion.ChinaBilibili))
+            return new(false, null, "当前自动生成抽卡链接仅支持国服角色；国际服请使用手动链接。");
+        PreparedGachaRefreshTarget target = await targets.ExecuteAsync(
+            new(uid, GameServerRegionResolver.Resolve(uid)), archiveId, cancellationToken: cancellationToken);
+        return new(true, new(passportAccountId, target.Account, mode, credential)
+        {
+            TargetPreparation = target,
+        }, null);
     }
 
     public async Task<GachaSTokenRefreshOutcome> ExecuteAsync(
@@ -120,6 +163,8 @@ public sealed class GachaSTokenRefreshCoordinator(
         IProgress<GachaRefreshProgress>? progress = null)
     {
         ArgumentNullException.ThrowIfNull(plan);
+        if (plan.Mode is not (GachaImportMode.Incremental or GachaImportMode.Full))
+            throw new ArgumentOutOfRangeException(nameof(plan));
         // Revalidate the binding immediately before the network/commit path.
         IReadOnlyList<IsolatedCredentialSummary> stored =
             await credentials.ListAsync(CancellationToken.None);
@@ -138,22 +183,36 @@ public sealed class GachaSTokenRefreshCoordinator(
 
         try
         {
-            // Full mode and target account are frozen in the plan. The commit phase must not be
+            // Mode and target account are frozen in the plan. The commit phase must not be
             // cancelled by page navigation/window close; the shell waits for this task.
             GachaRefreshResult result = await refresher.ExecuteAsync(
                 new GachaRefreshRequest(
                     plan.TargetAccount,
                     GachaRefreshSource.SToken,
-                    GachaImportMode.Full,
-                    plan.PassportAccountId),
+                    plan.Mode,
+                    plan.PassportAccountId,
+                    ArchiveToCreate: plan.TargetPreparation?.ArchiveToCreate,
+                    AccountToCreate: plan.TargetPreparation?.AccountToCreate),
                 progress,
                 CancellationToken.None);
-            await credentials.MarkUsableAsync(plan.PassportAccountId, CancellationToken.None);
+            // The atomic refresh has committed. A credential-status write is ancillary and must
+            // never turn this result into a failed refresh or suggest retrying a committed change.
+            bool credentialStatusSaved = true;
+            try
+            {
+                await credentials.MarkUsableAsync(plan.PassportAccountId, CancellationToken.None);
+            }
+            catch (Exception)
+            {
+                credentialStatusSaved = false;
+            }
             string message =
                 $"通过登录账号刷新完成：获取 {result.FetchedCount} 条，" +
                 $"新增 {result.InsertedCount} 条，覆盖校正 {result.UpdatedCount} 条，" +
                 $"保留重复 {result.DuplicateCount} 条，永久删除抑制 {result.SuppressedCount} 条，" +
                 $"请求 {result.PageCount} 页。";
+            if (!credentialStatusSaved)
+                message += " 抽卡记录已保存，但本机凭据状态未更新；请重新载入登录账号页核对。";
             return new(true, message, result);
         }
         catch (TaskCanceledException)

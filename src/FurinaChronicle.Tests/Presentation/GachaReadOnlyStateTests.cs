@@ -31,6 +31,24 @@ public sealed class GachaReadOnlyStateTests
     }
 
     [Fact]
+    public async Task PageSizeChangeRestartsAtFirstPageAndSurvivesReload()
+    {
+        var source = new Source();
+        var state = new GachaReadOnlyState(source, new ImmediateDispatcher());
+        await state.EnterAsync();
+        await state.ChangePageAsync(2);
+        await state.ChangePageSizeAsync(100);
+        Assert.Equal(1, state.Snapshot.PageNumber);
+        Assert.Equal(100, state.Snapshot.PageSize);
+        Assert.Equal(100, source.LastPageSize);
+        state.Leave();
+        await state.EnterAsync();
+        Assert.Equal(100, state.Snapshot.PageSize);
+        Assert.Equal(100, source.LastPageSize);
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => state.ChangePageSizeAsync(10000));
+    }
+
+    [Fact]
     public async Task RemovedArchiveFallsBackWithoutKeepingItsRows()
     {
         var source = new Source();

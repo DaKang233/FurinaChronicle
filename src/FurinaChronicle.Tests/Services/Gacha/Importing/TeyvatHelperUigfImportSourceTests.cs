@@ -9,7 +9,7 @@ using FurinaChronicle.Services.Passport;
 
 namespace FurinaChronicle.Tests.Services.Gacha.Importing;
 
-public sealed class TeyvatHelperUigfImportSourceTests
+public sealed partial class TeyvatHelperUigfImportSourceTests
 {
     [Fact]
     public async Task DownloadForSelectedRoleAsync_GeneratesFreshUrlForEveryImport()

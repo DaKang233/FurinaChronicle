@@ -99,8 +99,8 @@ public sealed class TableExportOptionsPage : ContentPage
                     new Label
                     {
                         FontSize = 12,
-                        Text = "列：UID、ExternalID、时间、时区偏移、物品名称、" +
-                            "物品类型、卡池、序号、保底内计数。"
+                        Text = "表格包含抽卡字段、档案与账号身份、来源、" +
+                            "采集时间及导出说明；使用固定列结构。"
                     },
                     actions
                 }

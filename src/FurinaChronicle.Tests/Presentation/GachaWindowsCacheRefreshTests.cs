@@ -299,7 +299,8 @@ public sealed class GachaWindowsCacheRefreshTests
             GameAccount targetAccount,
             GachaImportMode mode,
             string gameInstallationPath,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            IProgress<GachaRefreshProgress>? progress = null)
         {
             RefreshCalls++;
             LastTarget = targetAccount;

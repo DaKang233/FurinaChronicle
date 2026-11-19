@@ -31,13 +31,14 @@ public sealed class ServiceGachaWindowsCacheRefreshGateway(
         GameAccount targetAccount,
         GachaImportMode mode,
         string gameInstallationPath,
-        CancellationToken cancellationToken = default) =>
+        CancellationToken cancellationToken = default,
+        IProgress<GachaRefreshProgress>? progress = null) =>
         refresher.ExecuteAsync(
             new GachaRefreshRequest(
                 targetAccount,
                 GachaRefreshSource.WindowsWebCache,
                 mode,
                 GameInstallationPath: gameInstallationPath),
-            progress: null,
+            progress,
             cancellationToken);
 }

@@ -19,7 +19,8 @@ public interface IGachaManualRefreshGateway
         GameAccount targetAccount,
         GachaImportMode mode,
         string manualUrl,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        IProgress<GachaRefreshProgress>? progress = null);
 }
 
 public sealed record GachaManualRefreshPlan(
@@ -120,7 +121,8 @@ public sealed class GachaManualRefreshCoordinator(
     public async Task<GachaManualRefreshOutcome> ExecuteAsync(
         GachaManualRefreshPlan plan,
         string manualUrl,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IProgress<GachaRefreshProgress>? progress = null)
     {
         ArgumentNullException.ThrowIfNull(plan);
         if (ValidateUrl(manualUrl) is string urlError)
@@ -165,7 +167,7 @@ public sealed class GachaManualRefreshCoordinator(
                 account,
                 plan.Mode,
                 manualUrl,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken, progress).ConfigureAwait(false);
             string message =
                 $"刷新完成：获取 {result.FetchedCount} 条，新增 {result.InsertedCount} 条，" +
                 $"覆盖校正 {result.UpdatedCount} 条，保留重复 {result.DuplicateCount} 条，" +

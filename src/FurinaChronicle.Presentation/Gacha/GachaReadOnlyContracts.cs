@@ -17,18 +17,31 @@ public sealed record GachaScopeOption(Guid Id, string Label)
 {
     public GameServerRegion? Region { get; init; }
 }
-public sealed record GachaImageReference(string? ResourceKey, string? CachedPath);
+public sealed record GachaImageReference(string? ResourceKey, string? CachedPath, string? SourceUrl = null);
+
+public sealed record GachaHistoryBannerVisual(
+    string Name, string Id, string? ImageUrl, string? BackupImageUrl);
 public sealed record GachaReadOnlyRow(
     string ExternalRecordId, string Name, string Rank, string Time,
     string Pool, string Source, GachaImageReference Image)
 {
+    public IReadOnlyList<GachaHistoryBannerVisual> Banners { get; init; } = [];
     public string? AccountLabel { get; init; }
     public string? Subtitle { get; init; }
+    public string? CountText { get; init; }
+    public bool HasCount => CountText is not null;
+    public GachaItemCard? Item { get; init; }
+    public GachaOverviewCard? Overview { get; init; }
+    public GachaHistoryCard? History { get; init; }
     public string? DetailText { get; init; }
     public DateOnly? CalendarDay { get; init; }
     public int CalendarPulls { get; init; }
+    public int CalendarFiveStarCount { get; init; }
+    public int CalendarFourStarCount { get; init; }
+    public int CalendarIntensity { get; init; }
     public GachaFactReference? Reference { get; init; }
     public string? ItemType { get; init; }
+    public int? Rarity { get; init; }
     public string Detail => (Subtitle ?? $"{Rank} · {Pool} · {Time} · {Source}") +
         (AccountLabel is null ? "" : $"\n{AccountLabel}");
 }
@@ -51,7 +64,7 @@ public interface IGachaScopedReadOnlySource : IGachaReadOnlySource
         IReadOnlyDictionary<Guid, string> accountLabels, CancellationToken cancellationToken);
     Task<GachaReadOnlyPage> GetAnalysisAsync(GachaRecordQuery query, GachaReadOnlyView view,
         IReadOnlyList<GachaScopeOption> accounts, int pageNumber, int pageSize, GachaCalendarFilter calendar,
-        CancellationToken cancellationToken);
+        bool archiveScope, CancellationToken cancellationToken);
 }
 
 public enum GachaReadOnlyView { Records, Overview, History, Calendar, Items }
@@ -68,8 +81,29 @@ public sealed record GachaReadOnlyFilter(
     GachaPoolGroup? Pool = null,
     GachaRecordSortOrder SortOrder = GachaRecordSortOrder.NewestFirst,
     DateOnly? Day = null,
-    TimeSpan DayOffset = default)
+    TimeSpan DayOffset = default,
+    DateOnly? StartDay = null,
+    DateOnly? EndDay = null,
+    TimeSpan? RangeOffset = null)
 {
+    public DateTimeOffset? StartTime => Boundary(Day ?? StartDay, false);
+    public DateTimeOffset? EndTime => Boundary(Day ?? EndDay, true);
+
+    public void Validate()
+    {
+        if (Day is null && StartDay > EndDay)
+            throw new ArgumentException("结束日期不能早于开始日期。");
+    }
+
+    private DateTimeOffset? Boundary(DateOnly? date, bool end)
+    {
+        if (date is not DateOnly day) return null;
+        DateTime local = day.ToDateTime(end ? TimeOnly.MaxValue : TimeOnly.MinValue);
+        TimeSpan offset = Day.HasValue ? DayOffset :
+            RangeOffset ?? TimeZoneInfo.Local.GetUtcOffset(local);
+        return new DateTimeOffset(local, offset);
+    }
+
     public static IReadOnlyList<string> Ranks { get; } = ["全部星级", "三星", "四星", "五星"];
     public static IReadOnlyList<string> Pools { get; } = ["全部卡池", .. Enum.GetValues<GachaPoolGroup>()
         .Select(GachaPoolGroupResolver.GetDisplayName)];
@@ -83,30 +117,46 @@ public sealed record GachaReadOnlyFilter(
         sort == 1 ? GachaRecordSortOrder.OldestFirst : GachaRecordSortOrder.NewestFirst);
 }
 
-public sealed record GachaCalendarFilter(DateOnly? Month, bool UseChinaTime)
+public sealed record GachaCalendarFilter(DateOnly? Month, bool UseChinaTime, bool YearView = false)
 {
     public TimeSpan Offset => UseChinaTime ? TimeSpan.FromHours(8) : TimeSpan.Zero;
     public string TimeZoneLabel => UseChinaTime ? "UTC+08:00" : "UTC";
     public DateTimeOffset? Start => Month is DateOnly month
-        ? new DateTimeOffset(month.Year, month.Month, 1, 0, 0, 0, Offset) : null;
-    public DateTimeOffset? End => Start?.AddMonths(1).AddTicks(-1);
+        ? new DateTimeOffset(month.Year, YearView ? 1 : month.Month, 1, 0, 0, 0, Offset) : null;
+    public DateTimeOffset? End => YearView ? Start?.AddYears(1).AddTicks(-1) : Start?.AddMonths(1).AddTicks(-1);
 }
 
 public sealed record GachaCalendarCell(DateOnly Date, int Column, int Week, int Pulls)
 {
+    public int FiveStarCount { get; init; }
+    public int FourStarCount { get; init; }
+    public int IntensityLevel { get; init; }
+    public string HighRanks => $"五星 {FiveStarCount} · 四星 {FourStarCount}";
     public string Label => $"{Date:yyyy-MM-dd} · {Pulls} 抽";
     public static IReadOnlyList<string> Weekdays { get; } = ["一", "二", "三", "四", "五", "六", "日"];
 
-    public static IEnumerable<GachaCalendarCell> Build(DateOnly month, IReadOnlyList<GachaReadOnlyRow> rows)
+    public static IEnumerable<GachaCalendarCell> Build(DateOnly month, IReadOnlyList<GachaReadOnlyRow> rows) =>
+        BuildRange(new(month.Year, month.Month, 1), DateTime.DaysInMonth(month.Year, month.Month), rows);
+
+    public static IEnumerable<GachaCalendarCell> BuildYear(int year, IReadOnlyList<GachaReadOnlyRow> rows) =>
+        BuildRange(new(year, 1, 1), DateTime.IsLeapYear(year) ? 366 : 365, rows);
+
+    private static IEnumerable<GachaCalendarCell> BuildRange(
+        DateOnly first, int length, IReadOnlyList<GachaReadOnlyRow> rows)
     {
         var counts = rows.Where(row => row.CalendarDay.HasValue)
-            .ToDictionary(row => row.CalendarDay!.Value, row => row.CalendarPulls);
-        DateOnly first = new(month.Year, month.Month, 1);
+            .ToDictionary(row => row.CalendarDay!.Value);
         int shift = ((int)first.DayOfWeek + 6) % 7;
-        for (int i = 0; i < DateTime.DaysInMonth(first.Year, first.Month); i++)
+        for (int i = 0; i < length; i++)
         {
             DateOnly day = first.AddDays(i);
-            yield return new(day, (shift + i) % 7, (shift + i) / 7, counts.GetValueOrDefault(day));
+            counts.TryGetValue(day, out GachaReadOnlyRow? entry);
+            yield return new(day, (shift + i) % 7, (shift + i) / 7, entry?.CalendarPulls ?? 0)
+            {
+                FiveStarCount = entry?.CalendarFiveStarCount ?? 0,
+                FourStarCount = entry?.CalendarFourStarCount ?? 0,
+                IntensityLevel = entry?.CalendarIntensity ?? 0,
+            };
         }
     }
 }
@@ -125,10 +175,13 @@ public sealed record GachaReadOnlySnapshot
     public IReadOnlyList<GachaReadOnlyRow> Rows { get; init; } = [];
     public int TotalCount { get; init; }
     public int PageNumber { get; init; } = 1;
+    public int PageSize { get; init; } = GachaReadOnlyState.PageSize;
     public int TotalPages { get; init; } = 1;
     public bool IsBusy { get; init; }
     public string Status { get; init; } = "尚未载入";
-    public string Summary => $"{(View == GachaReadOnlyView.Records ? "本地记录" : "分析条目")} {TotalCount} 条 · 第 {PageNumber}/{TotalPages} 页";
+    public string Summary => View == GachaReadOnlyView.Calendar
+        ? $"有抽卡记录 {TotalCount} 天"
+        : $"{(View == GachaReadOnlyView.Records ? "本地记录" : "分析条目")} {TotalCount} 条 · 第 {PageNumber}/{TotalPages} 页";
     public bool CanPrevious => !IsBusy && PageNumber > 1;
     public bool CanNext => !IsBusy && PageNumber < TotalPages;
 }

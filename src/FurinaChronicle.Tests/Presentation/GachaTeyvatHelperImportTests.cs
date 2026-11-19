@@ -101,14 +101,13 @@ public sealed class GachaTeyvatHelperImportTests
         GachaTeyvatHelperImportPlan unavailable = (await harness.Coordinator.PlanAsync(
             Uid, Url, ArchiveId, GachaImportMode.Incremental)).Plan!;
         Assert.False(unavailable.AutomaticImportAvailable);
-        Assert.Contains("自动导入：不可用", unavailable.ConfirmationText);
-        Assert.Contains("请使用手动方式", unavailable.ConfirmationText);
+        Assert.Contains("无需通行证登录或角色选择", unavailable.ConfirmationText);
 
         harness.Gateway.Availability = new TeyvatHelperImportAvailability(Uid, true);
         GachaTeyvatHelperImportPlan available = (await harness.Coordinator.PlanAsync(
             Uid, Url, ArchiveId, GachaImportMode.Incremental)).Plan!;
         Assert.True(available.AutomaticImportAvailable);
-        Assert.Contains("只提供手动方式", available.ConfirmationText);
+        Assert.Contains("本次仍使用手动填写的信息", available.ConfirmationText);
     }
 
     [Fact]

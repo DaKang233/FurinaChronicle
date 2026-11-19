@@ -82,7 +82,8 @@ public sealed record GachaRemotePage(
 public enum GachaRefreshProgressStage
 {
     RequestingPage = 0,
-    PageReceived = 1
+    PageReceived = 1,
+    Saving = 2
 }
 
 public sealed record GachaRefreshProgress(

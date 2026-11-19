@@ -1,4 +1,4 @@
-﻿<!--
+<!--
   Copyright (c) 2026 DaKang233.
   SPDX-License-Identifier: MIT
 -->
@@ -29,6 +29,8 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Compile Include="..\FurinaChronicle.Windows\Composition\JsonFileArchiveSelectionStore.cs"
+             Link="Windows\JsonFileArchiveSelectionStore.cs" />
     <Compile Include="..\..\eng\phase8c\FurinaChronicle.Phase8CValidation\RuntimeMetrics.cs"
              Link="Validation\RuntimeMetrics.cs" />
     <Compile Include="..\..\eng\phase8c\FurinaChronicle.Phase8CValidation\SyntheticArchiveSnapshot.cs"

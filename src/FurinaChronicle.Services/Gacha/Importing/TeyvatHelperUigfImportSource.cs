@@ -10,7 +10,7 @@ namespace FurinaChronicle.Services.Gacha.Importing;
 
 public sealed class TeyvatHelperUigfImportSource(
     IPassportAccountStore accountStore,
-    IPassportSelectionStore selectionStore,
+    IPassportSelectionStore? selectionStore,
     ISTokenGachaUrlProvider sTokenGachaUrlProvider,
     ITeyvatHelperUigfClient client)
 {
@@ -49,6 +49,27 @@ public sealed class TeyvatHelperUigfImportSource(
             ?? throw new InvalidOperationException(
                 "请先在用户页登录通行证账号并选择原神角色。");
 
+        return await DownloadForRoleCoreAsync(selected, cancellationToken);
+    }
+
+    // Page-local explicit role selection, independent of another host/page's persisted selection.
+    // No URI is returned to the UI and no generated authkey is cached.
+    public async Task<TeyvatHelperUigfDownload> DownloadForRoleAsync(
+        Guid passportAccountId, string uid, CancellationToken cancellationToken = default)
+    {
+        if (passportAccountId == Guid.Empty) throw new ArgumentException("A passport account is required.");
+        string normalizedUid = uid?.Trim() ?? string.Empty;
+        if (!GameUidValidation.IsValidUid(normalizedUid))
+            throw new ArgumentException("The selected role UID is invalid.");
+        PassportAccount account = await accountStore.GetByIdAsync(passportAccountId, cancellationToken)
+            ?? throw new InvalidOperationException("所选通行证账号已不存在，请重新选择。");
+        return await DownloadForRoleCoreAsync(new(account, normalizedUid), cancellationToken);
+    }
+
+    private async Task<TeyvatHelperUigfDownload> DownloadForRoleCoreAsync(
+        SelectedPassportRole selected, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
         if (selected.Account.Realm != PassportRealm.MainlandChina)
         {
             throw new NotSupportedException(
@@ -121,7 +142,7 @@ public sealed class TeyvatHelperUigfImportSource(
         bool required,
         CancellationToken cancellationToken)
     {
-        PassportSelection? selection = await selectionStore.LoadAsync(
+        PassportSelection? selection = selectionStore is null ? null : await selectionStore.LoadAsync(
             cancellationToken);
         if (selection is null ||
             string.IsNullOrWhiteSpace(selection.GameUid))

@@ -233,6 +233,7 @@ public sealed class PassportCredentialAndSTokenTests
         public List<IsolatedCredentialSummary> Entries { get; } = [];
         public string? LoadWarning { get; set; }
         public Exception? ListError { get; set; }
+        public Exception? MarkUsableError { get; set; }
         public int SaveCallCount { get; private set; }
         public int DeleteCallCount { get; private set; }
         public int ClearCallCount { get; private set; }
@@ -319,7 +320,7 @@ public sealed class PassportCredentialAndSTokenTests
         public Task MarkUsableAsync(
             Guid accountId,
             CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
+            MarkUsableError is null ? Task.CompletedTask : Task.FromException(MarkUsableError);
     }
 
     private sealed class FakeAccountRepository(GameAccount account) : IGameAccountRepository
@@ -363,11 +364,93 @@ public sealed class PassportCredentialAndSTokenTests
             CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
+    [Theory]
+    [InlineData(GachaImportMode.Incremental)]
+    [InlineData(GachaImportMode.Full)]
+    public async Task ExplicitModeIsFrozenAndProgressReachesExecutor(GachaImportMode mode)
+    {
+        var store = new FakeCredentialStore();
+        store.Add();
+        var account = Account();
+        var executor = new FakeExecutor();
+        var coordinator = new GachaSTokenRefreshCoordinator(store, new FakeAccountRepository(account), executor);
+        var plan = (await coordinator.PlanAsync(account.Id, mode)).Plan!;
+        var progress = new CaptureProgress();
+        Assert.Equal(mode, plan.Mode);
+        Assert.True((await coordinator.ExecuteAsync(plan, progress)).Succeeded);
+        Assert.Equal(mode, executor.LastRequest!.Mode);
+        Assert.Same(progress, executor.LastProgress);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CredentialStatusFailureAfterCommitPreservesSuccessfulResult(bool cancellation)
+    {
+        var store = new FakeCredentialStore
+        {
+            MarkUsableError = cancellation
+                ? new OperationCanceledException("synthetic status failure")
+                : new IOException("synthetic status failure"),
+        };
+        store.Add();
+        var account = Account();
+        var executor = new FakeExecutor();
+        var coordinator = new GachaSTokenRefreshCoordinator(store, new FakeAccountRepository(account), executor);
+        var plan = (await coordinator.PlanAsync(account.Id, GachaImportMode.Incremental)).Plan!;
+        var outcome = await coordinator.ExecuteAsync(plan);
+        Assert.True(outcome.Succeeded);
+        Assert.NotNull(outcome.Result);
+        Assert.Equal(1, outcome.Result.InsertedCount);
+        Assert.Equal(1, executor.CallCount);
+        Assert.Contains("抽卡记录已保存", outcome.Message);
+        Assert.DoesNotContain("synthetic status failure", outcome.Message);
+        Assert.Equal(0, store.MarkUnusableCallCount);
+    }
+
+    [Fact]
+    public async Task RoleSelectionPreparesParentsWithoutWritingAndPassesThemToExistingExecutor()
+    {
+        await using var c = FurinaChronicle.Tests.Infrastructure.Persistence.Sqlite.SqliteRepositoryTestContext.Create();
+        var store = new FakeCredentialStore();
+        store.Add();
+        store.Add(BoundUid: "bad-uid");
+        store.Entries[0] = store.Entries[0] with { RoleUids = [BoundUid, BoundUid, "500000001", "800000001"] };
+        var executor = new FakeExecutor();
+        var coordinator = new GachaSTokenRefreshCoordinator(store, c.Accounts, executor,
+            new PrepareGachaRefreshTarget(c.Archives, c.Accounts, TimeProvider.System));
+        var roles = await coordinator.GetRoleChoicesAsync();
+        Assert.Equal(2, roles.Count);
+        var choice = Assert.Single(roles, role => role.Uid == BoundUid);
+        var plan = (await coordinator.PlanRoleAsync(choice.PassportAccountId, choice.Uid, null,
+            GachaImportMode.Incremental)).Plan!;
+        Assert.Empty(await c.Archives.GetAllAsync());
+        Assert.Contains("不能整体撤销", plan.ConfirmationText);
+        Assert.NotNull(plan.TargetPreparation!.ArchiveToCreate);
+        Assert.NotNull(plan.TargetPreparation.AccountToCreate);
+        var outcome = await coordinator.ExecuteAsync(plan);
+        Assert.True(outcome.Succeeded);
+        Assert.Same(plan.TargetPreparation.ArchiveToCreate, executor.LastRequest!.ArchiveToCreate);
+        Assert.Same(plan.TargetPreparation.AccountToCreate, executor.LastRequest.AccountToCreate);
+        Assert.Equal(GachaImportMode.Incremental, executor.LastRequest.Mode);
+        // This executor is a port spy, not persistence evidence.
+        Assert.Empty(await c.Archives.GetAllAsync());
+        await store.DeleteAsync(choice.PassportAccountId);
+        Assert.False((await coordinator.ExecuteAsync(plan)).Succeeded);
+        Assert.Equal(1, executor.CallCount);
+    }
+
+    private sealed class CaptureProgress : IProgress<GachaRefreshProgress>
+    {
+        public void Report(GachaRefreshProgress value) { }
+    }
+
     private sealed class FakeExecutor : IGachaSTokenRefreshExecutor
     {
         public Exception? Error { get; set; }
         public int CallCount { get; private set; }
         public GachaRefreshRequest? LastRequest { get; private set; }
+        public IProgress<GachaRefreshProgress>? LastProgress { get; private set; }
 
         public Task<GachaRefreshResult> ExecuteAsync(
             GachaRefreshRequest request,
@@ -376,6 +459,7 @@ public sealed class PassportCredentialAndSTokenTests
         {
             CallCount++;
             LastRequest = request;
+            LastProgress = progress;
             if (Error is not null) return Task.FromException<GachaRefreshResult>(Error);
             return Task.FromResult(new GachaRefreshResult(1, 1, 0, 0, 1, 0));
         }

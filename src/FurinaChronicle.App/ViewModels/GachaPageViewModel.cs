@@ -757,6 +757,12 @@ public partial class GachaPageViewModel(
 
 	private void ApplyRefreshProgress(GachaRefreshProgress progress)
 	{
+		if (progress.Stage == GachaRefreshProgressStage.Saving)
+		{
+			RefreshCurrentPool = "正在保存";
+			RefreshProgressDetail = $"已获取 {progress.FetchedCount} 条，正在保存抽卡记录…";
+			return;
+		}
 		RefreshCurrentPool = $"正在获取{FormatGachaPool(progress.GachaType)}";
 		RefreshProgressDetail = progress.Stage ==
 			GachaRefreshProgressStage.RequestingPage

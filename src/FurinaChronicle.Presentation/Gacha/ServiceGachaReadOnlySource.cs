@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 using FurinaChronicle.Core.Gacha;
+using FurinaChronicle.Core.Gacha.Metadata;
+using FurinaChronicle.Services.Gacha.Abstractions;
 using FurinaChronicle.Core.History;
 using FurinaChronicle.Core.Records;
 using FurinaChronicle.Services.Archives;
@@ -18,7 +20,8 @@ public sealed class ServiceGachaReadOnlySource(
     Func<CancellationToken, Task> initialize,
     Func<string?, string?> cachedIconPath,
     BuildGachaAnalytics? analytics = null,
-    Func<GachaFactReference, CancellationToken, Task<IReadOnlyList<GachaRevisionItem>>>? readRevisions = null) : IGachaScopedReadOnlySource
+    Func<GachaFactReference, CancellationToken, Task<IReadOnlyList<GachaRevisionItem>>>? readRevisions = null,
+    IGachaEventCatalog? eventCatalog = null) : IGachaScopedReadOnlySource
 {
     public async Task<IReadOnlyList<GachaScopeOption>> GetArchivesAsync(CancellationToken cancellationToken)
     {
@@ -53,7 +56,7 @@ public sealed class ServiceGachaReadOnlySource(
 
     public async Task<GachaReadOnlyPage> GetAnalysisAsync(GachaRecordQuery query, GachaReadOnlyView view,
         IReadOnlyList<GachaScopeOption> accounts, int pageNumber, int pageSize, GachaCalendarFilter calendar,
-        CancellationToken cancellationToken)
+        bool archiveScope, CancellationToken cancellationToken)
     {
         GachaAnalyticsComponents component = view switch
         {
@@ -71,19 +74,30 @@ public sealed class ServiceGachaReadOnlySource(
         {
             DateOnly date = calendar.Month ?? report.Calendar.LastOrDefault()?.Date ??
                 DateOnly.FromDateTime(DateTimeOffset.UtcNow.ToOffset(calendar.Offset).Date);
-            var visibleMonth = new DateOnly(date.Year, date.Month, 1);
-            GachaReadOnlyRow[] days = report.Calendar
-                .Where(day => day.Date.Year == date.Year && day.Date.Month == date.Month)
+            var visibleMonth = new DateOnly(date.Year, calendar.YearView ? 1 : date.Month, 1);
+            GachaCalendarDay[] visibleDays = report.Calendar
+                .Where(day => day.Date.Year == date.Year && (calendar.YearView || day.Date.Month == date.Month)).ToArray();
+            int maximum = visibleDays.Select(day => day.TotalPulls).DefaultIfEmpty(0).Max();
+            GachaReadOnlyRow[] days = visibleDays
                 .Select(day => AnalysisRow($"{day.Date:yyyy-MM-dd}",
                     $"{day.TotalPulls} 抽 · 五星 {day.FiveStarCount} · 四星 {day.FourStarCount}", "查看该日抽卡记录。")
-                    with { CalendarDay = day.Date, CalendarPulls = day.TotalPulls }).ToArray();
+                    with
+                    {
+                        CalendarDay = day.Date, CalendarPulls = day.TotalPulls,
+                        CalendarFiveStarCount = day.FiveStarCount, CalendarFourStarCount = day.FourStarCount,
+                        CalendarIntensity = maximum == 0 ? 0 : Math.Clamp((int)Math.Ceiling(day.TotalPulls * 5D / maximum), 1, 5),
+                    }).ToArray();
             return new(days, days.Length, 1, 1) { VisibleMonth = visibleMonth };
         }
+        if (view == GachaReadOnlyView.History)
+        {
+            return await GetHistoryPageAsync(report, query, accounts, cancellationToken).ConfigureAwait(false);
+        }
+
         var labels = accounts.ToDictionary(account => account.Id, account => account.Label);
         int count = view switch
         {
             GachaReadOnlyView.Overview => report.Pools.Count,
-            GachaReadOnlyView.History => report.History.Count,
             _ => report.Items.Count
         };
         int totalPages = Math.Max(1, (count + pageSize - 1) / pageSize);
@@ -101,30 +115,58 @@ public sealed class ServiceGachaReadOnlySource(
                         ? $"最近一次五星后有 {pool.PullsSinceLastFiveStar} 条本地抽取。\n" : "") +
                     "平均值采用现有统计服务认可的同账号间隔。\n最近五星：\n" +
                     string.Join("\n", pool.FiveStarHistory.Take(10).Select(item =>
-                        $"{item.ItemName} · {FormatTime(item.Time)} · {labels.GetValueOrDefault(item.GameAccountId)}")))),
-            GachaReadOnlyView.History => report.History.Skip(offset).Take(pageSize).Select(period =>
-                AnalysisRow(period.EventPeriod?.Banners.FirstOrDefault()?.Name ?? period.PoolName,
-                    $"{FormatTime(period.StartTime)} ～ {FormatTime(period.EndTime)} · {period.TotalPulls} 抽",
-                    (period.MatchQuality switch
-                    {
-                        GachaEventMatchQuality.Verified => "已匹配卡池",
-                        GachaEventMatchQuality.RegionUnverified => "区服未核实",
-                        _ => "未匹配卡池活动"
-                    }) + $"\n版本：{period.EventPeriod?.Version ?? "未知"} · 元数据：{period.EventPeriod?.SourceRevision ?? "未知"}\n" +
-                    string.Join("\n", period.Items.Select(item => $"{item.ItemName} × {item.Count}")))),
+                        $"{item.ItemName} · {FormatTime(item.Time)} · {labels.GetValueOrDefault(item.GameAccountId)}")))
+                with { Overview = new GachaOverviewCard(pool, archiveScope, cachedIconPath) }),
             _ => report.Items.Skip(offset).Take(pageSize).Select(item =>
-                AnalysisRow(item.ItemName, $"本地抽取 {item.Count} 次 · {item.ItemType ?? "类型未知"}",
-                    "抽取次数仅来自抽卡记录。\n记录时间：\n" + string.Join("\n", item.AcquisitionTimes.Take(50).Select(time => FormatTime(time))) +
-                    (item.AcquisitionTimes.Count > 50 ? "\n仅显示最近 50 条记录时间。" : ""), item.ItemId, item.RankType))
+            {
+                var card = new GachaItemCard(item, archiveScope, cachedIconPath);
+                return card.Icon with
+                {
+                    Item = card,
+                    DetailText = "抽取次数仅来自抽卡记录。" + (archiveScope || item.RankType is not (4 or 5) ? "" :
+                        "\n账号模式可在「列表与时间」中查看获取时间；四星需手动展开。"),
+                };
+            })
         };
         return new(rows.ToArray(), count, normalizedPage, totalPages);
     }
 
-    private GachaReadOnlyRow AnalysisRow(string name, string summary, string detail, string? itemId = null, int? rank = null) =>
-        new("", name, rank is int stars ? $"{stars} 星" : "", "", "", "", new(itemId, cachedIconPath(itemId)))
+    private async Task<GachaReadOnlyPage> GetHistoryPageAsync(
+        GachaAnalyticsReport report, GachaRecordQuery query, IReadOnlyList<GachaScopeOption> accounts,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<GachaEventPeriod> catalog = eventCatalog is null
+            ? report.History.Select(item => item.EventPeriod).OfType<GachaEventPeriod>().ToArray()
+            : await eventCatalog.GetAllAsync(GachaGame.GenshinImpact, cancellationToken).ConfigureAwait(false);
+        var history = report.History.Where(item => item.EventPeriod is not null)
+            .ToDictionary(item => item.EventPeriod!.Id, StringComparer.Ordinal);
+        var scope = accounts.Where(account => query.GameAccountIds.Contains(account.Id))
+            .Select(account => account.Region ?? FurinaChronicle.Core.Archives.GameServerRegion.Unknown).ToArray();
+        DateTimeOffset now = DateTimeOffset.Now;
+        GachaReadOnlyRow[] rows = catalog
+            .Where(period => period.PoolGroup is GachaPoolGroup.CharacterEvent or GachaPoolGroup.WeaponEvent or GachaPoolGroup.Chronicled)
+            .Where(period => period.StartsAt <= now && scope.Any(period.Supports))
+            .DistinctBy(period => period.Id, StringComparer.Ordinal)
+            .OrderByDescending(period => period.Contains(now))
+            .ThenByDescending(period => period.StartsAt)
+            .ThenBy(period => period.PoolGroup)
+            .ThenBy(period => period.Id, StringComparer.Ordinal)
+            .Select(period =>
+            {
+                history.TryGetValue(period.Id, out GachaHistoryPeriod? obtained);
+                var card = new GachaHistoryCard(period, obtained, cachedIconPath);
+                return AnalysisRow(card.Title, $"{card.Version} · {card.Total}", card.ItemsText)
+                    with { History = card, Banners = card.Banners };
+            }).ToArray();
+        return new GachaReadOnlyPage(rows, rows.Length, 1, 1);
+    }
+
+    private GachaReadOnlyRow AnalysisRow(string name, string summary, string detail, string? itemId = null, int? rank = null, string? iconUrl = null) =>
+        new("", name, rank is int stars ? $"{stars} 星" : "", "", "", "", new(itemId, cachedIconPath(itemId), iconUrl))
         {
             Subtitle = summary,
-            DetailText = detail
+            DetailText = detail,
+            Rarity = rank,
         };
 
     private static string FormatTime(DateTimeOffset? time) => time?.ToString("yyyy-MM-dd HH:mm:ss zzz") ?? "未知";
@@ -160,6 +202,7 @@ public sealed class ServiceGachaReadOnlySource(
         {
             Reference = new(record.GameAccountId, record.ExternalRecordId),
             ItemType = record.ItemType,
+            Rarity = record.RankType,
             DetailText = $"记录 ID：{record.ExternalRecordId}\n物品 ID：{record.ItemId ?? "未知"}\n物品类型：{record.ItemType ?? "未知"}"
         };
 

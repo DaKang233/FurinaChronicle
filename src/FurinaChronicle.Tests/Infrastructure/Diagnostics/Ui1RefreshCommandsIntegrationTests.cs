@@ -77,7 +77,12 @@ public sealed class Ui1RefreshCommandsIntegrationTests
                 archive.Id,
                 account.Id,
                 GachaImportMode.Incremental)).Plan!;
-            GachaWindowsCacheRefreshOutcome first = await coordinator.ExecuteAsync(plan);
+            var frames = new FrameCapture();
+            GachaWindowsCacheRefreshOutcome first = await coordinator.ExecuteAsync(plan, progress: frames);
+            Assert.Contains(frames.Frames, frame => frame.Stage == GachaRefreshProgressStage.RequestingPage);
+            Assert.Contains(frames.Frames, frame => frame.Stage == GachaRefreshProgressStage.PageReceived &&
+                frame.GachaType == "301" && frame.Records.Count == 2);
+            Assert.Equal(GachaRefreshProgressStage.Saving, frames.Frames[^1].Stage);
 
             Assert.True(first.Succeeded, first.Message);
             Assert.Equal(2, first.Result!.InsertedCount);
@@ -241,6 +246,12 @@ public sealed class Ui1RefreshCommandsIntegrationTests
         Assert.Single(
             await environment.Accounts.GetByArchiveIdAsync(archiveId, default),
             account => account.Uid == uid);
+
+    private sealed class FrameCapture : IProgress<GachaRefreshProgress>
+    {
+        public List<GachaRefreshProgress> Frames { get; } = [];
+        public void Report(GachaRefreshProgress frame) => Frames.Add(frame);
+    }
 
     private sealed class FakeGachaLogClient : IGachaLogClient
     {

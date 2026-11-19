@@ -260,7 +260,8 @@ public sealed class GachaManualRefreshTests
             GameAccount targetAccount,
             GachaImportMode mode,
             string manualUrl,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            IProgress<GachaRefreshProgress>? progress = null)
         {
             RefreshCalls++;
             LastTarget = targetAccount;

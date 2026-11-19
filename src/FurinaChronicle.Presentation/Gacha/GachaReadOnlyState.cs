@@ -7,17 +7,28 @@ using FurinaChronicle.Services.Gacha;
 
 namespace FurinaChronicle.Presentation.Gacha;
 
-// One instance per page. Selection is deliberately in memory and never shared across pages.
+// One instance per page; optional device preferences belong only to this page.
 // All entry points and snapshot changes run on the host's UI dispatcher; I/O may complete anywhere.
-public sealed class GachaReadOnlyState(IGachaReadOnlySource source, IUiDispatcher dispatcher)
+public sealed class GachaReadOnlyState(
+    IGachaReadOnlySource source, IUiDispatcher dispatcher,
+    GachaReadOnlyView initialView = GachaReadOnlyView.Records,
+    GachaCalendarFilter? initialCalendar = null,
+    GachaSelectionPreferences? selectionPreferences = null)
     : INotifyPropertyChanged
 {
     public const int PageSize = 25;
+    public static IReadOnlyList<int> PageSizeOptions { get; } = [25, 50, 100, 200];
+    private int selectedPageSize = PageSize;
     private readonly Dictionary<Guid, Guid> rememberedAccounts = [];
     private CancellationTokenSource? pending;
     private long generation;
     private bool active;
-    public GachaReadOnlySnapshot Snapshot { get; private set; } = new();
+    public GachaReadOnlySnapshot Snapshot { get; private set; } = new()
+    {
+        View = initialView, Calendar = initialCalendar ?? new(null, true),
+    };
+    public string? SelectionWarning => selectionPreferences?.Warning;
+    public Task FlushSelectionAsync() => selectionPreferences?.FlushAsync() ?? Task.CompletedTask;
     public event PropertyChangedEventHandler? PropertyChanged;
 
     public Task EnterAsync()
@@ -32,8 +43,18 @@ public sealed class GachaReadOnlyState(IGachaReadOnlySource source, IUiDispatche
         SelectScopeAsync(Snapshot.ArchiveId, Snapshot.AccountId, ids);
     public Task SelectScopeAsync(Guid? archiveId, Guid? accountId, IReadOnlyList<Guid>? archiveAccountIds) =>
         LoadAsync(archiveId, accountId, 1, archiveAccountIds?.Distinct().ToArray(), Snapshot.Filter);
-    public Task ApplyFilterAsync(GachaReadOnlyFilter filter) =>
-        LoadAsync(Snapshot.ArchiveId, Snapshot.AccountId, 1, Snapshot.ArchiveAccountIds, filter);
+    public Task ApplyFilterAsync(GachaReadOnlyFilter filter)
+    {
+        filter.Validate();
+        return LoadAsync(Snapshot.ArchiveId, Snapshot.AccountId, 1, Snapshot.ArchiveAccountIds, filter);
+    }
+
+    public Task ChangePageSizeAsync(int value)
+    {
+        if (!PageSizeOptions.Contains(value)) throw new ArgumentOutOfRangeException(nameof(value));
+        selectedPageSize = value;
+        return ReloadPageAsync(1);
+    }
     public Task SelectViewAsync(GachaReadOnlyView view) =>
         LoadAsync(Snapshot.ArchiveId, Snapshot.AccountId, 1, Snapshot.ArchiveAccountIds, Snapshot.Filter, view);
     public Task ApplyCalendarAsync(GachaCalendarFilter calendar) =>
@@ -42,7 +63,11 @@ public sealed class GachaReadOnlyState(IGachaReadOnlySource source, IUiDispatche
     public Task ShiftCalendarAsync(int months)
     {
         if (Snapshot.VisibleMonth is not DateOnly month) return Task.CompletedTask;
-        return ApplyCalendarAsync(Snapshot.Calendar with { Month = month.AddMonths(months) });
+        if (Snapshot.Calendar.YearView && ((long)month.Year + months is < 1 or > 9998)) return Task.CompletedTask;
+        return ApplyCalendarAsync(Snapshot.Calendar with
+        {
+            Month = Snapshot.Calendar.YearView ? month.AddYears(months) : month.AddMonths(months),
+        });
     }
     public Task OpenCalendarDayAsync(DateOnly day) =>
         LoadAsync(Snapshot.ArchiveId, Snapshot.AccountId, 1, Snapshot.ArchiveAccountIds,
@@ -82,6 +107,7 @@ public sealed class GachaReadOnlyState(IGachaReadOnlySource source, IUiDispatche
         pending = request;
         CancellationToken token = request.Token;
         long version = ++generation;
+        int requestedPageSize = selectedPageSize;
         GachaReadOnlyView view = requestedView ?? Snapshot.View;
         GachaCalendarFilter calendar = requestedCalendar ?? Snapshot.Calendar;
         Dictionary<Guid, Guid> remembered = new(rememberedAccounts);
@@ -90,12 +116,15 @@ public sealed class GachaReadOnlyState(IGachaReadOnlySource source, IUiDispatche
         {
             ArchiveId = requestedArchive, AccountId = requestedAccount,
             ArchiveAccountIds = requestedAccounts, Filter = filter, View = view, Calendar = calendar,
+            PageSize = requestedPageSize,
             Accounts = requestedArchive == Snapshot.ArchiveId ? Snapshot.Accounts : [],
             Rows = [], VisibleMonth = null, TotalCount = 0, PageNumber = 1, TotalPages = 1,
             IsBusy = true, Status = "正在读取本地记录…"
         });
         try
         {
+            requestedArchive ??= selectionPreferences is null ? null :
+                await selectionPreferences.LoadArchiveAsync(token).ConfigureAwait(false);
             IReadOnlyList<GachaScopeOption> archives = await source.GetArchivesAsync(token).ConfigureAwait(false);
             Guid? archiveId = archives.FirstOrDefault(a => a.Id == requestedArchive)?.Id ?? archives.FirstOrDefault()?.Id;
             IReadOnlyList<GachaScopeOption> accounts = archiveId is Guid id
@@ -103,6 +132,8 @@ public sealed class GachaReadOnlyState(IGachaReadOnlySource source, IUiDispatche
             Guid? desiredAccount = requestedAccount;
             if (desiredAccount is null && archiveId is Guid rememberedArchive && remembered.TryGetValue(rememberedArchive, out Guid saved))
                 desiredAccount = saved;
+            if (desiredAccount is null && archiveId is Guid storedArchive && selectionPreferences is not null)
+                desiredAccount = await selectionPreferences.LoadAccountAsync(storedArchive, token).ConfigureAwait(false);
             Guid? accountId = accounts.FirstOrDefault(a => a.Id == desiredAccount)?.Id ?? accounts.FirstOrDefault()?.Id;
             Guid[]? archiveAccountIds = requestedAccounts is null ? null : accounts
                 .Where(account => requestedAccounts.Contains(account.Id)).Select(account => account.Id).ToArray();
@@ -117,14 +148,19 @@ public sealed class GachaReadOnlyState(IGachaReadOnlySource source, IUiDispatche
             })).ConfigureAwait(false);
             token.ThrowIfCancellationRequested();
             GachaReadOnlyPage? result = await GetPageAsync(scopeIds, accounts, archiveAccountIds is not null,
-                filter, view, calendar, page, token).ConfigureAwait(false);
+                filter, view, calendar, page, requestedPageSize, token).ConfigureAwait(false);
+            string? previousSelectionWarning = SelectionWarning;
+            Task saveSelection = Task.CompletedTask;
             await ApplyAsync(version, token, () =>
             {
+                if (selectionPreferences is not null && archiveId is Guid archive)
+                    saveSelection = selectionPreferences.RememberAsync(archive, accountId);
                 if (archiveId is Guid a && accountId is Guid b) rememberedAccounts[a] = b;
                 Set(new GachaReadOnlySnapshot
                 {
                     Archives = archives, Accounts = accounts, ArchiveId = archiveId, AccountId = accountId,
                     ArchiveAccountIds = archiveAccountIds, Filter = filter, View = view, Calendar = calendar,
+                    PageSize = requestedPageSize,
                     Rows = result?.Rows ?? [], TotalCount = result?.TotalCount ?? 0,
                     VisibleMonth = result?.VisibleMonth ?? (view == GachaReadOnlyView.Calendar ? calendar.Month : null),
                     PageNumber = result?.PageNumber ?? 1, TotalPages = result?.TotalPages ?? 1,
@@ -136,6 +172,10 @@ public sealed class GachaReadOnlyState(IGachaReadOnlySource source, IUiDispatche
                             ? "尚未记录此账号的抽卡数据" : "当前范围与筛选条件下暂无数据") : "本地读取完成；图片缺失时显示占位，不需要联网")
                 });
             }).ConfigureAwait(false);
+            await saveSelection.ConfigureAwait(false);
+            if (SelectionWarning != previousSelectionWarning)
+                await ApplyAsync(version, token, () =>
+                    PropertyChanged?.Invoke(this, new(nameof(SelectionWarning)))).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
         catch (Exception)
@@ -150,31 +190,30 @@ public sealed class GachaReadOnlyState(IGachaReadOnlySource source, IUiDispatche
 
     private async Task<GachaReadOnlyPage?> GetPageAsync(Guid[] scopeIds, IReadOnlyList<GachaScopeOption> accounts,
         bool archiveScope, GachaReadOnlyFilter filter, GachaReadOnlyView view, GachaCalendarFilter calendar,
-        int page, CancellationToken token)
+        int page, int pageSize, CancellationToken token)
     {
         if (scopeIds.Length == 0) return null;
         if (source is not IGachaScopedReadOnlySource scoped)
-            return await source.GetPageAsync(scopeIds[0], page, PageSize, token).ConfigureAwait(false);
+            return await source.GetPageAsync(scopeIds[0], page, pageSize, token).ConfigureAwait(false);
 
         if (view != GachaReadOnlyView.Records)
         {
             var analysisQuery = view == GachaReadOnlyView.Calendar
                 ? new GachaRecordQuery(scopeIds, StartTime: calendar.Start, EndTime: calendar.End)
                 : new GachaRecordQuery(scopeIds);
-            return await scoped.GetAnalysisAsync(analysisQuery, view, accounts, page, PageSize, calendar,
-                token).ConfigureAwait(false);
+            return await scoped.GetAnalysisAsync(analysisQuery, view, accounts, page, pageSize, calendar,
+                archiveScope, token).ConfigureAwait(false);
         }
 
-        DateTimeOffset? start = filter.Day is DateOnly day ? new DateTimeOffset(day.ToDateTime(TimeOnly.MinValue), filter.DayOffset) : null;
         var query = new GachaRecordQuery(scopeIds,
             RankTypes: filter.Rank is int rank ? new HashSet<int> { rank } : null,
             PoolGroups: filter.Pool is { } pool ? new HashSet<GachaPoolGroup> { pool } : null,
-            StartTime: start, EndTime: start?.AddDays(1).AddTicks(-1),
+            StartTime: filter.StartTime, EndTime: filter.EndTime,
             SortOrder: filter.SortOrder);
         IReadOnlyDictionary<Guid, string> labels = archiveScope
             ? accounts.ToDictionary(account => account.Id, account => account.Label)
             : new Dictionary<Guid, string>();
-        return await scoped.GetPageAsync(query, page, PageSize, labels, token).ConfigureAwait(false);
+        return await scoped.GetPageAsync(query, page, pageSize, labels, token).ConfigureAwait(false);
     }
 
     private Task ApplyAsync(long version, CancellationToken token, Action action) =>

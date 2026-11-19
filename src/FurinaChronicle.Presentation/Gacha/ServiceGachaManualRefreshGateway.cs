@@ -24,13 +24,14 @@ public sealed class ServiceGachaManualRefreshGateway(RefreshGachaRecords refresh
         GameAccount targetAccount,
         GachaImportMode mode,
         string manualUrl,
-        CancellationToken cancellationToken = default) =>
+        CancellationToken cancellationToken = default,
+        IProgress<GachaRefreshProgress>? progress = null) =>
         refresher.ExecuteAsync(
             new GachaRefreshRequest(
                 targetAccount,
                 GachaRefreshSource.ManualUrl,
                 mode,
                 ManualUrl: manualUrl),
-            progress: null,
+            progress,
             cancellationToken);
 }

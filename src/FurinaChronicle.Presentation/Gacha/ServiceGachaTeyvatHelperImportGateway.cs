@@ -9,11 +9,15 @@ namespace FurinaChronicle.Presentation.Gacha;
 // component that sends the UID/link to lelaer.com; nothing here persists the URL.
 public sealed class ServiceGachaTeyvatHelperImportGateway(
     TeyvatHelperUigfImportSource importSource)
-    : IGachaTeyvatHelperImportGateway
+    : IGachaTeyvatHelperImportGateway, IGachaTeyvatHelperAutomaticImportGateway
 {
     public Task<TeyvatHelperImportAvailability> GetAvailabilityAsync(
         CancellationToken cancellationToken = default) =>
         importSource.GetAvailabilityAsync(cancellationToken);
+
+    public Task<TeyvatHelperUigfDownload> DownloadForRoleAsync(
+        Guid passportAccountId, string uid, CancellationToken cancellationToken = default) =>
+        importSource.DownloadForRoleAsync(passportAccountId, uid, cancellationToken);
 
     public Task<TeyvatHelperUigfDownload> DownloadManuallyAsync(
         string uid,

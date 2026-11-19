@@ -42,7 +42,7 @@ public sealed class SqliteGachaItemMetadataProvider(
                 itemId.Trim(),
                 cancellationToken);
 
-        return CreateMetadata(game, item, names);
+        return CreateMetadata(game, item, names, options.PreferredLanguage);
     }
 
     public async ValueTask<GachaItemMetadata?> FindByNameAsync(
@@ -65,7 +65,7 @@ public sealed class SqliteGachaItemMetadataProvider(
                 itemName.Trim(),
                 cancellationToken);
 
-        return CreateMetadata(game, item, names);
+        return CreateMetadata(game, item, names, options.PreferredLanguage);
     }
 
     public async Task<GachaMetadataRefreshResult> RefreshIfNeededAsync(
@@ -192,11 +192,11 @@ public sealed class SqliteGachaItemMetadataProvider(
             elapsed < options.RefreshInterval;
     }
 
-    private string? SelectDisplayName(
-        IReadOnlyDictionary<string, string> localizedNames)
+    private static string? SelectDisplayName(
+        IReadOnlyDictionary<string, string> localizedNames, string preferredLanguage)
     {
         string[] preferredLanguages =
-            [options.PreferredLanguage, "chs", "en"];
+            [preferredLanguage, "chs", "en"];
 
         foreach (string language in preferredLanguages.Distinct(
             StringComparer.OrdinalIgnoreCase))
@@ -215,10 +215,10 @@ public sealed class SqliteGachaItemMetadataProvider(
             .FirstOrDefault();
     }
 
-    private GachaItemMetadata? CreateMetadata(
+    internal static GachaItemMetadata? CreateMetadata(
         GachaGame game,
         GachaMetadataItemRow? item,
-        IReadOnlyList<GachaMetadataNameRow> names)
+        IReadOnlyList<GachaMetadataNameRow> names, string preferredLanguage)
     {
         if (item is null)
         {
@@ -231,7 +231,7 @@ public sealed class SqliteGachaItemMetadataProvider(
                 group => group.Key,
                 group => group.First().Name,
                 StringComparer.OrdinalIgnoreCase);
-        string? displayName = SelectDisplayName(localizedNames);
+        string? displayName = SelectDisplayName(localizedNames, preferredLanguage);
         return displayName is null
             ? null
             : new GachaItemMetadata(
