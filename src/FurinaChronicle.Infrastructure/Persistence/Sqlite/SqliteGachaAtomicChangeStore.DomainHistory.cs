@@ -4,6 +4,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using FurinaChronicle.Core.Challenges;
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.History;
@@ -28,6 +29,7 @@ public sealed partial class SqliteGachaAtomicChangeStore
     private static readonly JsonSerializerOptions DomainJsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        Converters = { new DomainChallengeParticipantConverter() },
     };
 
     public Task<ArchiveOperationResult> CommitItemObservationsAsync(
@@ -114,7 +116,7 @@ public sealed partial class SqliteGachaAtomicChangeStore
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        if (request.Package.FormatMajor != 1 ||
+        if (!request.Package.SupportsVersion() ||
             request.Plan.ConflictCount != 0 ||
             request.Package.DatasetKind != request.Plan.DatasetKind ||
             !string.Equals(
@@ -215,7 +217,9 @@ public sealed partial class SqliteGachaAtomicChangeStore
                     observation.Provenance,
                     observation.Stages,
                     observation.Difficulty,
-                    observation.MedalCount);
+                    observation.MedalCount,
+                    observation.SpiralAbyssStatistics,
+                    observation.TheaterStatistics, observation.StygianStatistics, observation.MultiplayerStages);
                 proposals.Add(DomainProposal.Immutable(
                     ChallengeObservationEntityKind,
                     mapped.ObservationId.ToString(),
@@ -2024,7 +2028,15 @@ public sealed partial class SqliteGachaAtomicChangeStore
         JsonSerializer.Serialize(left.Floors, DomainJsonOptions) ==
         JsonSerializer.Serialize(right.Floors, DomainJsonOptions) &&
         JsonSerializer.Serialize(left.Stages, DomainJsonOptions) ==
-        JsonSerializer.Serialize(right.Stages, DomainJsonOptions);
+        JsonSerializer.Serialize(right.Stages, DomainJsonOptions) &&
+        JsonSerializer.Serialize(left.SpiralAbyssStatistics, DomainJsonOptions) ==
+        JsonSerializer.Serialize(right.SpiralAbyssStatistics, DomainJsonOptions) &&
+        JsonSerializer.Serialize(left.TheaterStatistics, DomainJsonOptions) ==
+        JsonSerializer.Serialize(right.TheaterStatistics, DomainJsonOptions) &&
+        JsonSerializer.Serialize(left.StygianStatistics, DomainJsonOptions) ==
+        JsonSerializer.Serialize(right.StygianStatistics, DomainJsonOptions) &&
+        JsonSerializer.Serialize(left.MultiplayerStages, DomainJsonOptions) ==
+        JsonSerializer.Serialize(right.MultiplayerStages, DomainJsonOptions);
 
     private sealed record DomainCommitEnvelope(
         OperationId OperationId,
@@ -2367,7 +2379,15 @@ public sealed partial class SqliteGachaAtomicChangeStore
         ProvenancePayload Provenance,
         ChallengeStagePayload[]? Stages = null,
         int? Difficulty = null,
-        int? MedalCount = null)
+        int? MedalCount = null,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        SpiralAbyssStatistics? SpiralAbyssStatistics = null,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        TheaterStatistics? TheaterStatistics = null,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        StygianStatistics? StygianStatistics = null,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        ChallengeStagePayload[]? MultiplayerStages = null)
     {
         public static ChallengeObservationPayload FromDomain(
             ChallengeObservation observation) =>
@@ -2387,7 +2407,10 @@ public sealed partial class SqliteGachaAtomicChangeStore
                     .Select(ChallengeStagePayload.FromDomain)
                     .ToArray(),
                 observation.Difficulty,
-                observation.MedalCount);
+                observation.MedalCount,
+                observation.SpiralAbyssStatistics,
+                observation.TheaterStatistics, observation.StygianStatistics,
+                observation.MultiplayerStages.Count == 0 ? null : observation.MultiplayerStages.Select(ChallengeStagePayload.FromDomain).ToArray());
 
         public ChallengeObservation ToDomain() =>
             new(
@@ -2402,7 +2425,10 @@ public sealed partial class SqliteGachaAtomicChangeStore
                 Provenance.ToDomain(),
                 (Stages ?? []).Select(stage => stage.ToDomain()),
                 Difficulty,
-                MedalCount);
+                MedalCount,
+                SpiralAbyssStatistics,
+                TheaterStatistics, StygianStatistics,
+                (MultiplayerStages ?? []).Select(stage => stage.ToDomain()));
     }
 
     private sealed record ChallengeStagePayload(
@@ -2411,7 +2437,11 @@ public sealed partial class SqliteGachaAtomicChangeStore
         OccurrencePayload CompletedAt,
         ChallengeParticipantPayload[]? Participants = null,
         string[]? Buffs = null,
-        ChallengeEnemyPayload[]? Enemies = null)
+        ChallengeEnemyPayload[]? Enemies = null,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        TheaterRoundDetails? TheaterRound = null,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        StygianStageDetails? StygianDetails = null)
     {
         public static ChallengeStagePayload FromDomain(
             ChallengeStageResult stage) =>
@@ -2425,7 +2455,8 @@ public sealed partial class SqliteGachaAtomicChangeStore
                 stage.Buffs.ToArray(),
                 stage.Enemies
                     .Select(ChallengeEnemyPayload.FromDomain)
-                    .ToArray());
+                    .ToArray(),
+                stage.TheaterRound, stage.StygianDetails);
 
         public ChallengeStageResult ToDomain() =>
             new(
@@ -2434,7 +2465,8 @@ public sealed partial class SqliteGachaAtomicChangeStore
                 CompletedAt.ToDomain(),
                 (Participants ?? []).Select(participant => participant.ToDomain()),
                 Buffs ?? [],
-                (Enemies ?? []).Select(enemy => enemy.ToDomain()));
+                (Enemies ?? []).Select(enemy => enemy.ToDomain()),
+                TheaterRound, StygianDetails);
     }
 
     private sealed record ChallengeParticipantPayload(
@@ -2442,7 +2474,11 @@ public sealed partial class SqliteGachaAtomicChangeStore
         string? Name,
         string? IconUrl,
         int? Level,
-        int? Rarity)
+        int? Rarity,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        ChallengeParticipantOrigin? Origin = null,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        int? Constellation = null)
     {
         public static ChallengeParticipantPayload FromDomain(
             ChallengeParticipant participant) =>
@@ -2451,10 +2487,11 @@ public sealed partial class SqliteGachaAtomicChangeStore
                 participant.Name,
                 participant.IconUrl,
                 participant.Level,
-                participant.Rarity);
+                participant.Rarity,
+                participant.Origin, participant.Constellation);
 
         public ChallengeParticipant ToDomain() =>
-            new(Id, Name, IconUrl, Level, Rarity);
+            new(Id, Name, IconUrl, Level, Rarity, Origin, Constellation);
     }
 
     private sealed record ChallengeEnemyPayload(
@@ -2492,17 +2529,37 @@ public sealed partial class SqliteGachaAtomicChangeStore
     private sealed record SpiralAbyssChamberPayload(
         int Chamber,
         int Stars,
-        OccurrencePayload CompletedAt)
+        OccurrencePayload CompletedAt,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        SpiralAbyssBattlePayload[]? Battles = null)
     {
         public static SpiralAbyssChamberPayload FromDomain(
             SpiralAbyssChamberResult chamber) =>
             new(
                 chamber.Chamber,
                 chamber.Stars,
-                OccurrencePayload.FromDomain(chamber.CompletedAt));
+                OccurrencePayload.FromDomain(chamber.CompletedAt),
+                chamber.Battles.Count == 0 ? null :
+                    chamber.Battles.Select(SpiralAbyssBattlePayload.FromDomain).ToArray());
 
         public SpiralAbyssChamberResult ToDomain() =>
-            new(Chamber, Stars, CompletedAt.ToDomain());
+            new(Chamber, Stars, CompletedAt.ToDomain(), Battles?.Select(battle => battle.ToDomain()));
+    }
+
+    private sealed record SpiralAbyssBattlePayload(
+        int Half,
+        OccurrencePayload CompletedAt,
+        ChallengeParticipantPayload[] Participants,
+        ChallengeEnemyPayload[] Enemies)
+    {
+        public static SpiralAbyssBattlePayload FromDomain(SpiralAbyssBattleResult battle) =>
+            new(battle.Half, OccurrencePayload.FromDomain(battle.CompletedAt),
+                battle.Participants.Select(ChallengeParticipantPayload.FromDomain).ToArray(),
+                battle.Enemies.Select(ChallengeEnemyPayload.FromDomain).ToArray());
+
+        public SpiralAbyssBattleResult ToDomain() =>
+            new(Half, CompletedAt.ToDomain(), Participants.Select(item => item.ToDomain()),
+                Enemies.Select(item => item.ToDomain()));
     }
     private sealed record OccurrencePayload(
         int Kind,

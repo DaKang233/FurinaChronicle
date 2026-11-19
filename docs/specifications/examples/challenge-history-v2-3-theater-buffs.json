@@ -1,0 +1,111 @@
+{
+  "format": "furina-domain-history",
+  "package": {
+    "dataset_kind": 2,
+    "format_major": 2,
+    "format_minor": 3,
+    "package_fingerprint": "d11ea28afd078128abb89f341bd03428d739f0771ca6ae0d56b515641734329b",
+    "source_archive_id": "18680383-1c4b-4241-8e43-acb25bdecc09",
+    "source_archive_name": "\u5408\u6210\u5267\u8BD7\u5361\u724C\u5C55\u793A\u6863\u6848",
+    "exported_at": "2026-11-19T12:36:56+08:00",
+    "accounts": [
+      {
+        "source_account_id": "1bf5f134-e6a1-46b8-bf9a-bc8579979dd3",
+        "role_identity": {
+          "id": "3d2436bc-41eb-5cb4-85fa-364e4a08603b",
+          "natural_identity": {
+            "game_biz": "hk4e_cn",
+            "server": "cn_gf01",
+            "uid": "100000001"
+          }
+        },
+        "item_observations": [],
+        "manual_acquisitions": [],
+        "manual_revisions": [],
+        "challenge_observations": [
+          {
+            "observation_id": "38fd184e-7bf2-4cb9-98a4-10008389c41b",
+            "game_account_id": "1bf5f134-e6a1-46b8-bf9a-bc8579979dd3",
+            "mode": 2,
+            "season_id": "900010",
+            "period_start": null,
+            "period_end": null,
+            "completeness": 1,
+            "spiral_abyss_floors": [],
+            "provenance": {
+              "origin": 6,
+              "timestamps": {
+                "observed_at": "2026-11-19T12:35:56+08:00",
+                "fetched_at": null,
+                "imported_at": null
+              },
+              "source": {
+                "provider": "synthetic-theater-buff-fixture",
+                "source_record_id": null,
+                "source_snapshot_id": null
+              },
+              "acquisition_batch_id": null
+            },
+            "stages": [
+              {
+                "stage_id": "1",
+                "score": 1,
+                "completed_at": {
+                  "kind": 1,
+                  "start": "2026-11-19T12:34:56+08:00",
+                  "precision": 1
+                },
+                "participants": [],
+                "buffs": [
+                  "\u5408\u6210\u5C55\u793A\uFF1A\u5361\u724C\u6587\u5B57\u4E0E\u56FE\u7247\u6765\u81EA\u516C\u5F00\u8D44\u4EA7\uFF0C\u4E0D\u662F\u73A9\u5BB6\u6311\u6218\u8BB0\u5F55\u3002"
+                ],
+                "enemies": [],
+                "theater_round": {
+                  "is_tarot": false,
+                  "tarot_serial_number": null,
+                  "buff_details": [
+                    {
+                      "kind": "choice_card",
+                      "name": "\u4F19\u4F34\u00B7\u9082\u9005\u591A\u591A",
+                      "source_id": 100,
+                      "description": "\u540E\u7EED\u62BD\u53D6\u4E8B\u4EF6\u65F6\uFF0C\u5F85\u9009\u4E8B\u4EF6\u4E2D\u5FC5\u5B9A\u5305\u542B\u003Ccolor=#f39001\u003E\u4F19\u4F34\u00B7\u968F\u673A\u003C/color\u003E",
+                      "icon_url": "https://act-webstatic.mihoyo.com/hk4e/e20200928calculate/item_role_combat_u3ce5g/a05a35fb8ff556d9702ce15ca604eab7.png",
+                      "level": null,
+                      "is_enhanced": false,
+                      "effects": []
+                    },
+                    {
+                      "kind": "buff",
+                      "name": "\u706B\u6676\u00B7\u539F\u6001",
+                      "source_id": null,
+                      "description": "\u83B7\u5F97\u706B\u5143\u7D20\u7ED3\u6676\u53CD\u5E94\u4EA7\u751F\u7684\u6676\u7247\u540E\uFF0C\u5C06\u4EA7\u751F\u6301\u7EED\u003Ccolor=#f39001\u003E5\u003C/color\u003E\u79D2\u7684\u003Ccolor=#f39001\u003E\u706B\u6676\u5E87\u4F51\u003C/color\u003E\u6548\u679C\uFF1A\u4F7F\u961F\u4F0D\u4E2D\u6240\u6709\u89D2\u8272\u83B7\u5F97\u003Ccolor=#f39001\u003E50%\u003C/color\u003E\u706B\u5143\u7D20\u4E0E\u5CA9\u5143\u7D20\u4F24\u5BB3\u52A0\u6210\u3002\u6B64\u5916\uFF0C\u6BCF\u003Ccolor=#f39001\u003E4\u003C/color\u003E\u79D2\uFF0C\u5C06\u83B7\u53D6\u9644\u8FD1\u7684\u7ED3\u6676\u53CD\u5E94\u4EA7\u751F\u7684\u6676\u7247",
+                      "icon_url": "https://act-webstatic.mihoyo.com/hk4e/e20200928calculate/item_role_combat_u3ce5g/7039c23a42c3d0814dc98360ffdb6c2b.png",
+                      "level": null,
+                      "is_enhanced": null,
+                      "effects": []
+                    },
+                    {
+                      "kind": "splendour",
+                      "name": "\u706B\u6676\u795D\u798F",
+                      "source_id": null,
+                      "description": null,
+                      "icon_url": "https://act-webstatic.mihoyo.com/hk4e/e20200928calculate/item_role_combat_u3ce5g/49168c5d8a4543591883efd8d7fe8d81.png",
+                      "level": 1,
+                      "is_enhanced": null,
+                      "effects": [
+                        "\u83B7\u5F97\u706B\u5143\u7D20\u7ED3\u6676\u53CD\u5E94\u4EA7\u751F\u7684\u6676\u7247\u540E\uFF0C\u5C06\u4EA7\u751F\u6301\u7EED\u003Ccolor=#f39001\u003E5\u003C/color\u003E\u79D2\u7684\u003Ccolor=#f39001\u003E\u706B\u6676\u5E87\u4F51\u003C/color\u003E\u6548\u679C\uFF1A\u4F7F\u961F\u4F0D\u4E2D\u6240\u6709\u89D2\u8272\u83B7\u5F97\u003Ccolor=#f39001\u003E50%\u003C/color\u003E\u706B\u5143\u7D20\u4E0E\u5CA9\u5143\u7D20\u4F24\u5BB3\u52A0\u6210\u3002\u6B64\u5916\uFF0C\u6BCF\u003Ccolor=#f39001\u003E4\u003C/color\u003E\u79D2\uFF0C\u5C06\u83B7\u53D6\u9644\u8FD1\u7684\u7ED3\u6676\u53CD\u5E94\u4EA7\u751F\u7684\u6676\u7247"
+                      ]
+                    }
+                  ],
+                  "buff_summary": "\u5408\u6210\u5C55\u793A\uFF0C\u975E\u5B9E\u9645\u73A9\u5BB6\u6311\u6218\u6210\u7EE9\u3002"
+                }
+              }
+            ],
+            "difficulty": 4,
+            "medal_count": 1
+          }
+        ]
+      }
+    ]
+  }
+}

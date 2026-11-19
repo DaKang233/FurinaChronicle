@@ -11,7 +11,7 @@ using FurinaChronicle.Services.Gacha.Abstractions;
 
 namespace FurinaChronicle.Tests.Infrastructure.Metadata;
 
-public sealed class SnapMetadataClientTests : IDisposable
+public sealed partial class SnapMetadataClientTests : IDisposable
 {
     private static readonly Uri BaseAddress =
         new("https://fixture.invalid/Genshin/CHS/");
@@ -32,8 +32,12 @@ public sealed class SnapMetadataClientTests : IDisposable
                     """{"Id":10000093,"Name":"闲云","Icon":"UI_AvatarIcon_Xianyun","Quality":5}"""),
                 "/Genshin/CHS/Weapon.json" => Json(
                     """[{"Id":11501,"Name":"天空之刃","Icon":"UI_EquipIcon_Sword_Sky","RankLevel":5}]"""),
+                "/Genshin/CHS/TowerSchedule.json" => Json(
+                    """[{"Id":112,"FloorIds":[1110],"Open":"2025-10-16T04:00:00+08:00","Close":"2025-11-16T03:59:59+08:00","BuffName":"测试祝福","Descriptions":["触发<color=#F39000>增益</color>。"]}]"""),
+                "/Genshin/CHS/TowerFloor.json" => Json(
+                    """[{"Id":1110,"Index":12,"Descriptions":["楼层增益 A"]},{"Id":2220,"Index":12,"Descriptions":["另一时间的楼层增益 B"]}]"""),
                 "/Genshin/CHS/RoleCombatSchedule.json" => Json(
-                    """[{"Id":31,"Begin":"2026-10-01T10:00:00+08:00","End":"2026-11-01T04:00:00+08:00"}]"""),
+                    """[{"Id":31,"Begin":"2026-10-01T10:00:00+08:00","End":"2026-11-01T04:00:00+08:00","Elements":[1,7],"InitialAvatars":[10000093],"SpecialAvatars":[10000089]}]"""),
                 "/Genshin/CHS/HardChallengeSchedule.json" => Json(
                     """[{"Id":5269013,"Begin":"2026-10-21T10:00:00+08:00","End":"2026-12-02T04:00:00+08:00","Name":"迅悍之役"}]"""),
                 _ => new HttpResponseMessage(HttpStatusCode.NotFound),
@@ -58,6 +62,9 @@ public sealed class SnapMetadataClientTests : IDisposable
             ChallengeMode.ImaginariumTheater, "31");
         Assert.NotNull(theater);
         Assert.Null(theater.Name);
+        Assert.Equal(new[] { 1, 7 }, theater.Theater!.AllowedElements);
+        Assert.Equal("10000093", Assert.Single(theater.Theater.InitialAvatarIds));
+        Assert.Equal("10000089", Assert.Single(theater.Theater.SpecialAvatarIds));
         Assert.Equal(
             DateTimeOffset.Parse("2026-10-01T10:00:00+08:00"),
             theater.Start);
@@ -66,6 +73,13 @@ public sealed class SnapMetadataClientTests : IDisposable
             ChallengeMode.StygianOnslaught, "5269013");
         Assert.NotNull(stygian);
         Assert.Equal("迅悍之役", stygian.Name);
+
+        var abyss = await snap.ResolveScheduleAsync(ChallengeMode.SpiralAbyss, "112");
+        Assert.NotNull(abyss);
+        Assert.Equal("测试祝福", abyss.Blessing?.Name);
+        Assert.Equal("触发增益。", Assert.Single(abyss.Blessing!.Descriptions));
+        Assert.Equal("楼层增益 A", Assert.Single(abyss.FloorEffects![12]));
+        Assert.Null(await snap.ResolveScheduleAsync(ChallengeMode.SpiralAbyss, "113"));
 
         int requestCount = requests.Count;
         Assert.Equal("闲云", (await snap.ResolveAvatarAsync("10000093"))!.Name);

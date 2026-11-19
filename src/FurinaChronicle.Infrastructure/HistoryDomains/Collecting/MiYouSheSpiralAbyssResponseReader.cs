@@ -150,12 +150,12 @@ public sealed class MiYouSheSpiralAbyssResponseReader(TimeProvider timeProvider)
                     return new(SpiralAbyssCollectionStatus.InvalidResponse);
                 }
 
-                // A zero-star slot alone cannot distinguish a clear from a
-                // placeholder. Domain chamber results are positive clear evidence.
-                if (stars > 0)
+                OccurrenceTime completedAt = ReadChamberCompletion(level.Battles);
+                // A zero-star slot needs evidence from both completed halves.
+                if (stars > 0 || completedAt.Kind != OccurrenceTimeKind.Unknown)
                 {
                     chambers.Add(new SpiralAbyssChamberResult(
-                        chamberIndex, stars, OccurrenceTime.Unknown));
+                        chamberIndex, stars, completedAt, ReadBattleDetails(level)));
                 }
             }
             mappedFloors.Add(new SpiralAbyssFloorResult(
@@ -175,14 +175,96 @@ public sealed class MiYouSheSpiralAbyssResponseReader(TimeProvider timeProvider)
                 periodStart,
                 periodEnd,
                 mappedFloors,
-                fetchedAt));
+                fetchedAt,
+                ReadStatistics(data)));
     }
+
+    private static SpiralAbyssStatistics? ReadStatistics(AbyssData data)
+    {
+        if (data.TotalBattleTimes is null && data.TotalWinTimes is null &&
+            data.MaxFloor is null && data.TotalStar is null &&
+            data.RevealRank is null && data.DefeatRank is null && data.DamageRank is null &&
+            data.TakeDamageRank is null && data.NormalSkillRank is null && data.EnergySkillRank is null)
+            return null;
+        return new SpiralAbyssStatistics(
+            data.TotalBattleTimes, data.TotalWinTimes, data.MaxFloor, data.TotalStar,
+            ReadRank(data.RevealRank), ReadRank(data.DefeatRank), ReadRank(data.DamageRank),
+            ReadRank(data.TakeDamageRank), ReadRank(data.NormalSkillRank), ReadRank(data.EnergySkillRank));
+    }
+
+    private static IReadOnlyList<SpiralAbyssRankEntry> ReadRank(Rank?[]? values) =>
+        (values ?? []).Select(value => value is { AvatarId: > 0, Value: >= 0 }
+            ? new SpiralAbyssRankEntry(value.AvatarId.Value.ToString(CultureInfo.InvariantCulture),
+                value.Value.Value, value.AvatarIcon, NonNegative(value.Rarity))
+            : throw new ArgumentException("An Abyss ranking entry is invalid.")).ToArray();
+
+    private static OccurrenceTime ReadChamberCompletion(Battle?[]? battles)
+    {
+        if (battles is not { Length: 2 })
+        {
+            return OccurrenceTime.Unknown;
+        }
+
+        Battle? first = Array.Find(battles, battle => battle?.Index == 1);
+        Battle? second = Array.Find(battles, battle => battle?.Index == 2);
+        if (first?.Timestamp is not > 0 || second?.Timestamp is not > 0 ||
+            second.Timestamp < first.Timestamp ||
+            second.Timestamp > DateTimeOffset.MaxValue.ToUnixTimeSeconds())
+        {
+            return OccurrenceTime.Unknown;
+        }
+
+        return OccurrenceTime.At(
+            DateTimeOffset.FromUnixTimeSeconds(second.Timestamp.Value), TimePrecision.Second);
+    }
+
+    private static IEnumerable<SpiralAbyssBattleResult> ReadBattleDetails(Level level)
+    {
+        for (int half = 1; half <= 2; half++)
+        {
+            Battle?[] reported = (level.Battles ?? []).Where(battle => battle?.Index == half).ToArray();
+            Battle? battle = reported.Length == 1 ? reported[0] : null;
+            Monster?[] monsters = (half == 1 ? level.TopHalfFloorMonster : level.BottomHalfFloorMonster) ?? [];
+            ChallengeParticipant[] participants = (battle?.Avatars ?? [])
+                .Where(avatar => avatar is { Id: > 0 })
+                .Select(avatar => new ChallengeParticipant(
+                    avatar!.Id.ToString(CultureInfo.InvariantCulture), avatar.Name, avatar.Icon,
+                    NonNegative(avatar.Level), NonNegative(avatar.Rarity)))
+                .ToArray();
+            ChallengeEnemy[] enemies = monsters
+                .Where(monster => monster is not null &&
+                    (!string.IsNullOrWhiteSpace(monster.Name) || !string.IsNullOrWhiteSpace(monster.Icon)))
+                .Select(monster => new ChallengeEnemy(
+                    monster!.Name, NonNegative(monster.Level), monster.Icon))
+                .ToArray();
+            OccurrenceTime completedAt = battle?.Timestamp is long timestamp &&
+                timestamp > 0 && timestamp <= DateTimeOffset.MaxValue.ToUnixTimeSeconds()
+                ? OccurrenceTime.At(DateTimeOffset.FromUnixTimeSeconds(timestamp), TimePrecision.Second)
+                : OccurrenceTime.Unknown;
+            if (completedAt.Kind != OccurrenceTimeKind.Unknown || participants.Length > 0 || enemies.Length > 0)
+            {
+                yield return new SpiralAbyssBattleResult(half, completedAt, participants, enemies);
+            }
+        }
+    }
+
+    private static int? NonNegative(int? value) => value >= 0 ? value : null;
 
     private static DateTimeOffset? ReadUnixTime(long? seconds) =>
         seconds is > 0 ? DateTimeOffset.FromUnixTimeSeconds(seconds.Value) : null;
 
     private sealed record Envelope(int? Retcode, AbyssData? Data);
-    private sealed record AbyssData(int? ScheduleId, long? StartTime, long? EndTime, Floor?[]? Floors, JsonElement Uid, bool? IsUnlock);
+    private sealed record AbyssData(
+        int? ScheduleId, long? StartTime, long? EndTime, Floor?[]? Floors, JsonElement Uid, bool? IsUnlock,
+        int? TotalBattleTimes, int? TotalWinTimes, string? MaxFloor, int? TotalStar,
+        Rank?[]? RevealRank, Rank?[]? DefeatRank, Rank?[]? DamageRank, Rank?[]? TakeDamageRank,
+        Rank?[]? NormalSkillRank, Rank?[]? EnergySkillRank);
+    private sealed record Rank(long? AvatarId, long? Value, string? AvatarIcon, int? Rarity);
     private sealed record Floor(int? Index, Level?[]? Levels);
-    private sealed record Level(int? Index, int? Star);
+    private sealed record Level(
+        int? Index, int? Star, Battle?[]? Battles,
+        Monster?[]? TopHalfFloorMonster, Monster?[]? BottomHalfFloorMonster);
+    private sealed record Battle(int? Index, long? Timestamp, Avatar?[]? Avatars);
+    private sealed record Avatar(int Id, string? Name, string? Icon, int? Level, int? Rarity);
+    private sealed record Monster(string? Name, string? Icon, int? Level);
 }

@@ -438,14 +438,22 @@ public sealed class ArchivePackageWriter(ArchivePortableLimits? limits = null)
                 account.AccountReference,
                 observations));
         }
+        string version = accounts.SelectMany(account => account.ChallengeObservations)
+            .Any(observation => observation.HasTheaterBuffDetails) ? "1.4" :
+            accounts.SelectMany(account => account.ChallengeObservations)
+            .Any(observation => observation.HasStygianDetails || observation.HasConstellations) ? "1.3" :
+            accounts.SelectMany(account => account.ChallengeObservations)
+            .Any(observation => observation.HasTheaterDetails || observation.HasParticipantOrigins) ? "1.2" :
+            accounts.SelectMany(account => account.ChallengeObservations)
+                .Any(observation => observation.RequiresDetailedPortableFormat) ? "1.1" : "1.0";
         string path = GetDomainPath(archive.ArchiveReference, "challenge-history");
         EntryDescriptor entry = await WriteJsonEntryAsync(
             zip,
             path,
             new ArchiveChallengeDataset(
-                "furina-domain-history", "1.0", archive.ArchiveReference, accounts),
+                "furina-domain-history", version, archive.ArchiveReference, accounts),
             cancellationToken);
-        return new DomainWriteResult(entry, facts, 0);
+        return new DomainWriteResult(entry, facts, 0, version);
     }
 
     private static ArchiveDatasetDescriptor ToDomainDescriptor(
@@ -455,8 +463,8 @@ public sealed class ArchivePackageWriter(ArchivePortableLimits? limits = null)
             $"{kind}-{archiveReference:D}".ToLowerInvariant(),
             kind,
             "furina-domain-history",
-            "1.0",
-            false,
+            result.FormatVersion,
+            result.FormatVersion != "1.0",
             [result.Entry!.Path],
             new Dictionary<string, long>
             {
@@ -675,5 +683,6 @@ public sealed class ArchivePackageWriter(ArchivePortableLimits? limits = null)
     private sealed record DomainWriteResult(
         EntryDescriptor? Entry,
         long Facts,
-        long Revisions);
+        long Revisions,
+        string FormatVersion = "1.0");
 }

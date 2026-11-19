@@ -15,7 +15,7 @@ using FurinaChronicle.Services.HistoryDomains.Portable;
 
 namespace FurinaChronicle.Tests.Infrastructure.HistoryDomains;
 
-public sealed class ArchiveDomainPortableFileServiceTests
+public sealed partial class ArchiveDomainPortableFileServiceTests
 {
     [Fact]
     public async Task CharacterWeaponDataset_RoundTripsIntoNewDatabase()
@@ -126,14 +126,18 @@ public sealed class ArchiveDomainPortableFileServiceTests
                 ApplyRequest(package, repeat))).Status);
     }
 
-    [Fact]
-    public async Task ChallengeDataset_RoundTripsWithoutInventingCompletionTime()
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task ChallengeDataset_RoundTripsWithoutInventingCompletionTime(bool includeBattle, bool includeStatistics)
     {
         await using PortableContext source = await PortableContext.CreateAsync();
         PlayerArchive archive = await source.AddArchiveAndAccountAsync();
         GameAccount account = Assert.Single(
             await source.Accounts.GetByArchiveIdAsync(archive.Id));
-        ChallengeObservation challenge = Challenge(account.Id);
+        ChallengeObservation challenge = Challenge(account.Id, includeBattle, includeStatistics);
         Assert.Equal(
             ChangeExecutionStatus.Applied,
             (await source.Store.CommitChallengeObservationsAsync(
@@ -163,6 +167,39 @@ public sealed class ArchiveDomainPortableFileServiceTests
             Assert.Single(Assert.Single(saved.SpiralAbyssFloors).Chambers)
                 .CompletedAt.Kind);
         Assert.Equal(challenge.Provenance, saved.Provenance);
+        Assert.Equal(includeBattle || includeStatistics ? 2 : 1, package.FormatMajor);
+        Assert.Equal(includeBattle || includeStatistics ? 0 : 1, package.FormatMinor);
+        if (includeStatistics)
+        {
+            SpiralAbyssStatistics statistics = Assert.IsType<SpiralAbyssStatistics>(saved.SpiralAbyssStatistics);
+            Assert.False((package with { FormatMajor = 1, FormatMinor = 99 }).SupportsVersion());
+            Assert.Equal(17, statistics.TotalBattleTimes);
+            Assert.Equal(3_000_000_000, Assert.Single(statistics.DamageRank).Value);
+            Assert.Single(statistics.RevealRank);
+            Assert.Single(statistics.DefeatRank);
+            Assert.Single(statistics.TakeDamageRank);
+            Assert.Single(statistics.NormalSkillRank);
+            Assert.Single(statistics.EnergySkillRank);
+            using var markdown = new StringWriter();
+            await source.Files.ExportMarkdownAsync(archive.Id,
+                ArchiveDomainDatasetKind.ChallengeHistory, markdown);
+            Assert.Contains("战斗次数：17", markdown.ToString());
+            Assert.Contains("最强一击：角色 10000089 = 3000000000", markdown.ToString());
+        }
+        else Assert.Null(saved.SpiralAbyssStatistics);
+        var battles = Assert.Single(Assert.Single(saved.SpiralAbyssFloors).Chambers).Battles;
+        if (includeBattle)
+        {
+            SpiralAbyssBattleResult battle = Assert.Single(battles);
+            Assert.Equal(1, battle.Half);
+            Assert.Equal(OccurrenceTime.At(TestTime(), TimePrecision.Second), battle.CompletedAt);
+            Assert.Equal("10000089", Assert.Single(battle.Participants).Id);
+            Assert.Equal("Fixture enemy", Assert.Single(battle.Enemies).Name);
+        }
+        else
+        {
+            Assert.Empty(battles);
+        }
 
         using var reexported = new MemoryStream();
         await target.Files.ExportAsync(
@@ -247,8 +284,8 @@ public sealed class ArchiveDomainPortableFileServiceTests
             Assert.Single(package.Accounts);
         Assert.Equal(2, exportedAccount.ChallengeObservations.Count);
         ChallengeObservation exportedTheater =
-            Assert.Single(exportedAccount.ChallengeObservations.Where(
-                item => item.Mode == ChallengeMode.ImaginariumTheater));
+            Assert.Single(exportedAccount.ChallengeObservations,
+                item => item.Mode == ChallengeMode.ImaginariumTheater);
         ChallengeStageResult theaterStage = Assert.Single(
             exportedTheater.Stages);
         Assert.Equal("闲云", Assert.Single(theaterStage.Participants).Name);
@@ -264,8 +301,8 @@ public sealed class ArchiveDomainPortableFileServiceTests
         GameAccount imported = Assert.Single(
             await target.Accounts.GetByArchiveIdAsync(plan.TargetArchiveId));
         ChallengeObservation importedStygian = Assert.Single(
-            (await target.Store.GetChallengeObservationsAsync(imported.Id))
-            .Where(item => item.Mode == ChallengeMode.StygianOnslaught));
+            await target.Store.GetChallengeObservationsAsync(imported.Id),
+            item => item.Mode == ChallengeMode.StygianOnslaught);
         Assert.Equal(60, Assert.Single(importedStygian.Stages).Score);
         Assert.Equal("怪物A", Assert.Single(
             importedStygian.Stages[0].Enemies).Name);
@@ -280,6 +317,52 @@ public sealed class ArchiveDomainPortableFileServiceTests
         Assert.Contains("闲云", text);
         Assert.Contains("元素战技强化", text);
         Assert.Contains("深渊法师", text);
+    }
+
+    [Fact]
+    public async Task TheaterDetailsRoundTripPortableAndReadableExport()
+    {
+        await using PortableContext source = await PortableContext.CreateAsync();
+        var archive = await source.AddArchiveAndAccountAsync();
+        var account = Assert.Single(await source.Accounts.GetByArchiveIdAsync(archive.Id));
+        var expected = new ChallengeObservation(ChallengeObservationId.New(), account.Id,
+            ChallengeMode.ImaginariumTheater, "37", null, null, DataCompleteness.Partial, [],
+            new RecordProvenance(DataOrigin.OfficialApi, new RecordTimestamps(ObservedAt: TestTime())),
+            [new ChallengeStageResult("11", 1, OccurrenceTime.At(TestTime(), TimePrecision.Second),
+                [new ChallengeParticipant("10000089", "合成试用角色", null, 80, 5, ChallengeParticipantOrigin.Trial)],
+                ["合成增益"], [], new TheaterRoundDetails(true, 1))],
+            4, 3, theaterStatistics: FurinaChronicle.Tests.TestDoubles.TheaterDetailFixture.Statistics());
+        await source.Store.CommitChallengeObservationsAsync(ChallengeRequest([expected]));
+        using var file = new MemoryStream();
+        await source.Files.ExportAsync(archive.Id, ArchiveDomainDatasetKind.ChallengeHistory, file, TestTime());
+        file.Position = 0;
+        var package = await source.Files.ReadAsync(file);
+        Assert.Equal(2, package.FormatMajor);
+        Assert.Equal(1, package.FormatMinor);
+        Assert.False((package with { FormatMajor = 2, FormatMinor = 0 }).SupportsVersion());
+        Assert.False((package with { FormatMajor = 1, FormatMinor = 99 }).SupportsVersion());
+        await using PortableContext target = await PortableContext.CreateAsync();
+        var plan = await target.Files.PlanAsync(package);
+        Assert.Equal(ChangeExecutionStatus.Applied,
+            (await target.Store.ApplyArchiveDomainPortableAsync(ApplyRequest(package, plan))).Status);
+        var imported = Assert.Single(await target.Accounts.GetByArchiveIdAsync(plan.TargetArchiveId));
+        var actual = Assert.Single(await target.Store.GetChallengeObservationsAsync(imported.Id));
+        Assert.Equal(expected.TheaterStatistics!.TotalUseTime, actual.TheaterStatistics!.TotalUseTime);
+        Assert.Equal("3000000000", actual.TheaterStatistics.MaxDamage!.Value);
+        Assert.Equal(ChallengeParticipantOrigin.Trial, actual.Stages[0].Participants[0].Origin);
+        Assert.True(actual.Stages[0].TheaterRound!.IsTarot);
+        using var second = new MemoryStream();
+        await target.Files.ExportAsync(plan.TargetArchiveId, ArchiveDomainDatasetKind.ChallengeHistory, second, TestTime());
+        second.Position = 0;
+        Assert.True(ArchiveDomainPortableSemanticComparer.Compare(package, await target.Files.ReadAsync(second)).Equivalent);
+        Assert.Equal(0, (await target.Files.PlanAsync(package, plan.TargetArchiveId)).AddCount);
+        using var markdown = new StringWriter();
+        await target.Files.ExportMarkdownAsync(plan.TargetArchiveId, ArchiveDomainDatasetKind.ChallengeHistory, markdown);
+        Assert.Contains("演出总时长：90761 秒", markdown.ToString());
+        Assert.Contains("3000000000", markdown.ToString());
+        Assert.Contains("试用", markdown.ToString());
+        Assert.Contains("助演", markdown.ToString());
+        Assert.Contains("塔罗标记：True", markdown.ToString());
     }
 
     [Fact]
@@ -430,7 +513,7 @@ public sealed class ArchiveDomainPortableFileServiceTests
             "砺行修远",
             new RecordProvenance(DataOrigin.UserEntered));
 
-    private static ChallengeObservation Challenge(Guid accountId) =>
+    private static ChallengeObservation Challenge(Guid accountId, bool includeBattle, bool includeStatistics = false) =>
         new(
             ChallengeObservationId.New(),
             accountId,
@@ -445,13 +528,25 @@ public sealed class ArchiveDomainPortableFileServiceTests
                 [new SpiralAbyssChamberResult(
                     1,
                     3,
-                    OccurrenceTime.Unknown)])],
+                    OccurrenceTime.Unknown,
+                    includeBattle
+                        ? [new SpiralAbyssBattleResult(1, OccurrenceTime.At(TestTime(), TimePrecision.Second),
+                            [new ChallengeParticipant("10000089", null, null, 90, 5)],
+                            [new ChallengeEnemy("Fixture enemy", 99, null)])]
+                        : [])])],
             new RecordProvenance(
                 DataOrigin.OfficialApi,
                 new RecordTimestamps(ObservedAt: TestTime()),
                 new DataSourceReference(
                     "miyoushe",
-                    sourceRecordId: "abyss-2026-10-upper")));
+                    sourceRecordId: "abyss-2026-10-upper")),
+            spiralAbyssStatistics: includeStatistics ? new SpiralAbyssStatistics(17, 12, "12-3", 34,
+                    [new SpiralAbyssRankEntry("10000089", 12, null, 5)],
+                    [new SpiralAbyssRankEntry("10000089", 27, null, 5)],
+                    [new SpiralAbyssRankEntry("10000089", 3_000_000_000, null, 5)],
+                    [new SpiralAbyssRankEntry("10000089", 999, null, 5)],
+                    [new SpiralAbyssRankEntry("10000089", 24, null, 5)],
+                    [new SpiralAbyssRankEntry("10000089", 8, null, 5)]) : null);
 
     private static ChallengeObservation Challenge(
         Guid accountId,

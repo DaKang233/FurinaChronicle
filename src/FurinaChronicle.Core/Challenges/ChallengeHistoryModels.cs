@@ -37,7 +37,8 @@ public sealed record SpiralAbyssChamberResult
     public SpiralAbyssChamberResult(
         int chamber,
         int stars,
-        OccurrenceTime completedAt)
+        OccurrenceTime completedAt,
+        IEnumerable<SpiralAbyssBattleResult>? battles = null)
     {
         if (chamber <= 0)
         {
@@ -49,9 +50,16 @@ public sealed record SpiralAbyssChamberResult
         }
         ArgumentNullException.ThrowIfNull(completedAt);
 
+        SpiralAbyssBattleResult[] orderedBattles = (battles ?? []).OrderBy(battle => battle.Half).ToArray();
+        if (orderedBattles.Select(battle => battle.Half).Distinct().Count() != orderedBattles.Length)
+        {
+            throw new ArgumentException("A chamber cannot contain duplicate battle halves.", nameof(battles));
+        }
+
         Chamber = chamber;
         Stars = stars;
         CompletedAt = completedAt;
+        Battles = orderedBattles;
     }
 
     public int Chamber { get; }
@@ -59,6 +67,32 @@ public sealed record SpiralAbyssChamberResult
     public int Stars { get; }
 
     public OccurrenceTime CompletedAt { get; }
+    public IReadOnlyList<SpiralAbyssBattleResult> Battles { get; }
+}
+
+public sealed record SpiralAbyssBattleResult
+{
+    public SpiralAbyssBattleResult(
+        int half,
+        OccurrenceTime completedAt,
+        IEnumerable<ChallengeParticipant>? participants = null,
+        IEnumerable<ChallengeEnemy>? enemies = null)
+    {
+        if (half is not (1 or 2))
+        {
+            throw new ArgumentOutOfRangeException(nameof(half));
+        }
+        ArgumentNullException.ThrowIfNull(completedAt);
+        Half = half;
+        CompletedAt = completedAt;
+        Participants = (participants ?? []).ToArray();
+        Enemies = (enemies ?? []).ToArray();
+    }
+
+    public int Half { get; }
+    public OccurrenceTime CompletedAt { get; }
+    public IReadOnlyList<ChallengeParticipant> Participants { get; }
+    public IReadOnlyList<ChallengeEnemy> Enemies { get; }
 }
 
 public sealed record SpiralAbyssFloorResult
@@ -108,9 +142,14 @@ public sealed record ChallengeParticipant
         string? name,
         string? iconUrl,
         int? level,
-        int? rarity)
+        int? rarity,
+        ChallengeParticipantOrigin? origin = null,
+        int? constellation = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        if (origin.HasValue && !Enum.IsDefined(origin.Value))
+            throw new ArgumentOutOfRangeException(nameof(origin));
+        if (constellation is < 0 or > 6) throw new ArgumentOutOfRangeException(nameof(constellation));
         if (level is < 0 || rarity is < 0)
         {
             throw new ArgumentOutOfRangeException(
@@ -122,6 +161,8 @@ public sealed record ChallengeParticipant
         IconUrl = string.IsNullOrWhiteSpace(iconUrl) ? null : iconUrl.Trim();
         Level = level;
         Rarity = rarity;
+        Origin = origin;
+        Constellation = constellation;
     }
 
     public string Id { get; }
@@ -133,6 +174,8 @@ public sealed record ChallengeParticipant
     public int? Level { get; }
 
     public int? Rarity { get; }
+    public ChallengeParticipantOrigin? Origin { get; }
+    public int? Constellation { get; }
 }
 
 public sealed record ChallengeEnemy
@@ -165,7 +208,9 @@ public sealed record ChallengeStageResult
         OccurrenceTime completedAt,
         IEnumerable<ChallengeParticipant>? participants = null,
         IEnumerable<string>? buffs = null,
-        IEnumerable<ChallengeEnemy>? enemies = null)
+        IEnumerable<ChallengeEnemy>? enemies = null,
+        TheaterRoundDetails? theaterRound = null,
+        StygianStageDetails? stygianDetails = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(stageId);
         if (score is < 0)
@@ -186,7 +231,12 @@ public sealed record ChallengeStageResult
             .Distinct(StringComparer.Ordinal)
             .ToArray();
         Enemies = (enemies ?? []).ToArray();
+        TheaterRound = theaterRound;
+        StygianDetails = stygianDetails;
     }
+
+    public TheaterRoundDetails? TheaterRound { get; }
+    public StygianStageDetails? StygianDetails { get; }
 
     /// <summary>Official round id or a stable challenge name.</summary>
     public string StageId { get; }
@@ -217,7 +267,11 @@ public sealed record ChallengeObservation
         RecordProvenance provenance,
         IEnumerable<ChallengeStageResult>? stages = null,
         int? difficulty = null,
-        int? medalCount = null)
+        int? medalCount = null,
+        SpiralAbyssStatistics? spiralAbyssStatistics = null,
+        TheaterStatistics? theaterStatistics = null,
+        StygianStatistics? stygianStatistics = null,
+        IEnumerable<ChallengeStageResult>? multiplayerStages = null)
     {
         if (gameAccountId == Guid.Empty)
         {
@@ -282,6 +336,38 @@ public sealed record ChallengeObservation
                 nameof(stages));
         }
 
+        if (spiralAbyssStatistics is not null && mode != ChallengeMode.SpiralAbyss)
+            throw new ArgumentException("Abyss statistics cannot be attached to another mode.", nameof(spiralAbyssStatistics));
+
+        if (mode != ChallengeMode.ImaginariumTheater &&
+            (theaterStatistics is not null || normalizedStages.Any(stage => stage.TheaterRound is not null)))
+            throw new ArgumentException("Theater details cannot be attached to another mode.", nameof(theaterStatistics));
+        ChallengeStageResult[] multiplayer = (multiplayerStages ?? []).OrderBy(stage => stage.StageId, StringComparer.Ordinal).ToArray();
+        if (multiplayer.Select(stage => stage.StageId).Distinct(StringComparer.Ordinal).Count() != multiplayer.Length)
+            throw new ArgumentException("Multiplayer stages cannot contain duplicate identifiers.", nameof(multiplayerStages));
+        if (mode != ChallengeMode.StygianOnslaught &&
+            (stygianStatistics is not null || multiplayer.Length > 0 || normalizedStages.Any(stage => stage.StygianDetails is not null)))
+            throw new ArgumentException("Stygian details cannot be attached to another mode.", nameof(stygianStatistics));
+        if (multiplayer.Any(stage => stage.TheaterRound is not null))
+            throw new ArgumentException("Theater rounds cannot be attached to multiplayer Stygian runs.", nameof(multiplayerStages));
+        if (stygianStatistics?.SinglePlayer is { HasData: false } && normalizedStages.Length > 0 ||
+            stygianStatistics?.Multiplayer is { HasData: false } && multiplayer.Length > 0)
+            throw new ArgumentException("An empty run cannot contain stages.", nameof(stygianStatistics));
+        if (stygianStatistics?.SinglePlayer is { } single)
+        {
+            if (!single.HasData && difficulty.HasValue)
+                throw new ArgumentException("An empty single-player run cannot have a difficulty.", nameof(difficulty));
+            if (single.Difficulty is int officialDifficulty)
+            {
+                if (difficulty.HasValue && difficulty != officialDifficulty)
+                    throw new ArgumentException("Single-player difficulty conflicts with its summary.", nameof(difficulty));
+                difficulty = officialDifficulty;
+            }
+        }
+        StygianStatistics = stygianStatistics;
+        MultiplayerStages = Array.AsReadOnly(multiplayer);
+        TheaterStatistics = theaterStatistics;
+        SpiralAbyssStatistics = spiralAbyssStatistics;
         ObservationId = observationId;
         GameAccountId = gameAccountId;
         Mode = mode;
@@ -311,6 +397,8 @@ public sealed record ChallengeObservation
     public DataCompleteness Completeness { get; }
 
     public IReadOnlyList<SpiralAbyssFloorResult> SpiralAbyssFloors { get; }
+    public bool HasSpiralAbyssBattleDetails =>
+        SpiralAbyssFloors.Any(floor => floor.Chambers.Any(chamber => chamber.Battles.Count > 0));
 
     /// <summary>Mode-specific rounds or challenges for non-Abyss modes.</summary>
     public IReadOnlyList<ChallengeStageResult> Stages { get; }
@@ -318,6 +406,35 @@ public sealed record ChallengeObservation
     public int? Difficulty { get; }
 
     public int? MedalCount { get; }
+
+    public SpiralAbyssStatistics? SpiralAbyssStatistics { get; }
+    public TheaterStatistics? TheaterStatistics { get; }
+    public StygianStatistics? StygianStatistics { get; }
+    public IReadOnlyList<ChallengeStageResult> MultiplayerStages { get; }
+    public bool HasStygianDetails => StygianStatistics is not null || MultiplayerStages.Count > 0 ||
+        Stages.Any(stage => stage.StygianDetails is not null);
+    public bool HasConstellations => ParticipantsForVersioning().Any(participant => participant.Constellation.HasValue);
+
+    private IEnumerable<ChallengeParticipant> ParticipantsForVersioning()
+    {
+        foreach (var stage in Stages.Concat(MultiplayerStages))
+            foreach (var participant in stage.Participants) yield return participant;
+        foreach (var battle in SpiralAbyssFloors.SelectMany(floor => floor.Chambers).SelectMany(chamber => chamber.Battles))
+            foreach (var participant in battle.Participants) yield return participant;
+        if (TheaterStatistics is not { } theater) yield break;
+        foreach (var participant in theater.BackupAvatars) yield return participant;
+        foreach (var metric in new[] { theater.MaxDefeat, theater.MaxDamage, theater.MaxTakeDamage })
+            if (metric is not null) yield return metric.Participant;
+        foreach (var metric in theater.ShortestAvatars) yield return metric.Participant;
+    }
+    public bool HasTheaterBuffDetails => Stages.Any(stage =>
+        stage.TheaterRound is { } round && (round.BuffDetails is { Count: > 0 } || round.BuffSummary is not null));
+    public bool HasTheaterDetails => TheaterStatistics is not null || Stages.Any(stage => stage.TheaterRound is not null);
+    public bool HasParticipantOrigins => Stages.Any(stage => stage.Participants.Any(participant => participant.Origin.HasValue)) ||
+        SpiralAbyssFloors.Any(floor => floor.Chambers.Any(chamber => chamber.Battles.Any(battle =>
+            battle.Participants.Any(participant => participant.Origin.HasValue))));
+    public bool RequiresDetailedPortableFormat => HasSpiralAbyssBattleDetails || SpiralAbyssStatistics is not null ||
+        HasTheaterDetails || HasParticipantOrigins || HasStygianDetails || HasConstellations;
 
     public RecordProvenance Provenance { get; }
 }

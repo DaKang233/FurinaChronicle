@@ -19,8 +19,7 @@ public sealed record DomainItemMetadata(
     string Source);
 
 /// <summary>
-/// Schedule-level metadata for a challenge mode. Only modes with an official
-/// schedule table can provide a name; the Abyss relies on its own season id.
+/// Optional display metadata matched to an official challenge season id.
 /// </summary>
 public sealed record ChallengeScheduleMetadata(
     ChallengeMode Mode,
@@ -28,4 +27,15 @@ public sealed record ChallengeScheduleMetadata(
     string? Name,
     DateTimeOffset? Start,
     DateTimeOffset? End,
-    string Source);
+    string Source,
+    ChallengeBlessingMetadata? Blessing = null,
+    IReadOnlyDictionary<int, IReadOnlyList<string>>? FloorEffects = null,
+    TheaterScheduleMetadata? Theater = null,
+    AbyssScheduleMetadata? Abyss = null);
+
+public sealed record TheaterScheduleMetadata(
+    IReadOnlyList<int> AllowedElements,
+    IReadOnlyList<string> InitialAvatarIds,
+    IReadOnlyList<string> SpecialAvatarIds);
+
+public sealed record ChallengeBlessingMetadata(string? Name, IReadOnlyList<string> Descriptions);

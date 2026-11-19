@@ -1,43 +1,478 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://www.dakang233.com/schemas/furina-challenge-history/1/dataset.schema.json",
-  "title": "Furina challenge history Portable v1.1",
+  "title": "Furina challenge history Portable 1.x / 2.0 / 2.1 / 2.2 / 2.3 (internal)",
   "type": "object",
-  "required": ["format", "package"],
+  "required": [
+    "format",
+    "package"
+  ],
   "properties": {
-    "format": { "const": "furina-domain-history" },
+    "format": {
+      "const": "furina-domain-history"
+    },
     "package": {
       "type": "object",
-      "required": ["dataset_kind", "format_major", "format_minor", "package_fingerprint", "source_archive_id", "source_archive_name", "exported_at", "accounts"],
+      "required": [
+        "dataset_kind",
+        "format_major",
+        "format_minor",
+        "package_fingerprint",
+        "source_archive_id",
+        "source_archive_name",
+        "exported_at",
+        "accounts"
+      ],
       "properties": {
-        "dataset_kind": { "const": 2 },
-        "format_major": { "const": 1 },
-        "format_minor": { "type": "integer", "minimum": 0 },
-        "package_fingerprint": { "$ref": "#/$defs/sha256" },
-        "source_archive_id": { "$ref": "#/$defs/guid" },
-        "source_archive_name": { "type": "string", "minLength": 1 },
-        "exported_at": { "type": "string", "format": "date-time" },
-        "accounts": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/account" } }
+        "dataset_kind": {
+          "const": 2
+        },
+        "format_major": {
+          "enum": [
+            1,
+            2
+          ]
+        },
+        "format_minor": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "package_fingerprint": {
+          "$ref": "#/$defs/sha256"
+        },
+        "source_archive_id": {
+          "$ref": "#/$defs/guid"
+        },
+        "source_archive_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "exported_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "accounts": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": {
+            "$ref": "#/$defs/account"
+          }
+        }
       },
-      "additionalProperties": true
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "format_major": {
+                "const": 2
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "format_minor": {
+                "enum": [
+                  0,
+                  1,
+                  2,
+                  3
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "format_major": {
+                "const": 1
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "accounts": {
+                "items": {
+                  "properties": {
+                    "challenge_observations": {
+                      "items": {
+                        "properties": {
+                          "spiral_abyss_statistics": {
+                            "type": "null"
+                          },
+                          "spiral_abyss_floors": {
+                            "items": {
+                              "properties": {
+                                "chambers": {
+                                  "items": {
+                                    "properties": {
+                                      "battles": {
+                                        "maxItems": 0
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "theater_statistics": {
+                            "type": "null"
+                          },
+                          "stages": {
+                            "items": {
+                              "properties": {
+                                "theater_round": {
+                                  "type": "null"
+                                },
+                                "participants": {
+                                  "items": {
+                                    "properties": {
+                                      "origin": {
+                                        "type": "null"
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "format_major": {
+                "const": 2
+              },
+              "format_minor": {
+                "const": 0
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "accounts": {
+                "items": {
+                  "properties": {
+                    "challenge_observations": {
+                      "items": {
+                        "properties": {
+                          "theater_statistics": {
+                            "type": "null"
+                          },
+                          "stages": {
+                            "items": {
+                              "properties": {
+                                "theater_round": {
+                                  "type": "null"
+                                },
+                                "participants": {
+                                  "items": {
+                                    "properties": {
+                                      "origin": {
+                                        "type": "null"
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "spiral_abyss_floors": {
+                            "items": {
+                              "properties": {
+                                "chambers": {
+                                  "items": {
+                                    "properties": {
+                                      "battles": {
+                                        "items": {
+                                          "properties": {
+                                            "participants": {
+                                              "items": {
+                                                "properties": {
+                                                  "origin": {
+                                                    "type": "null"
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "anyOf": [
+              {
+                "properties": {
+                  "format_major": {
+                    "const": 1
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "format_major": {
+                    "const": 2
+                  },
+                  "format_minor": {
+                    "enum": [
+                      0,
+                      1
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "then": {
+            "properties": {
+              "accounts": {
+                "items": {
+                  "properties": {
+                    "challenge_observations": {
+                      "items": {
+                        "properties": {
+                          "stygian_statistics": {
+                            "type": "null"
+                          },
+                          "multiplayer_stages": {
+                            "maxItems": 0
+                          },
+                          "stages": {
+                            "items": {
+                              "properties": {
+                                "stygian_details": {
+                                  "type": "null"
+                                },
+                                "participants": {
+                                  "items": {
+                                    "properties": {
+                                      "constellation": {
+                                        "type": "null"
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "spiral_abyss_floors": {
+                            "items": {
+                              "properties": {
+                                "chambers": {
+                                  "items": {
+                                    "properties": {
+                                      "battles": {
+                                        "items": {
+                                          "properties": {
+                                            "participants": {
+                                              "items": {
+                                                "properties": {
+                                                  "constellation": {
+                                                    "type": "null"
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "theater_statistics": {
+                            "properties": {
+                              "backup_avatars": {
+                                "items": {
+                                  "properties": {
+                                    "constellation": {
+                                      "type": "null"
+                                    }
+                                  }
+                                }
+                              },
+                              "max_defeat": {
+                                "properties": {
+                                  "participant": {
+                                    "properties": {
+                                      "constellation": {
+                                        "type": "null"
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                              "max_damage": {
+                                "properties": {
+                                  "participant": {
+                                    "properties": {
+                                      "constellation": {
+                                        "type": "null"
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                              "max_take_damage": {
+                                "properties": {
+                                  "participant": {
+                                    "properties": {
+                                      "constellation": {
+                                        "type": "null"
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                              "shortest_avatars": {
+                                "items": {
+                                  "properties": {
+                                    "participant": {
+                                      "properties": {
+                                        "constellation": {
+                                          "type": "null"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "format_major": {
+                "const": 2
+              },
+              "format_minor": {
+                "enum": [
+                  0,
+                  1,
+                  2
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "accounts": {
+                "items": {
+                  "properties": {
+                    "challenge_observations": {
+                      "items": {
+                        "properties": {
+                          "stages": {
+                            "items": {
+                              "properties": {
+                                "theater_round": {
+                                  "properties": {
+                                    "buff_details": {
+                                      "type": "null"
+                                    },
+                                    "buff_summary": {
+                                      "type": "null"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
     }
   },
   "additionalProperties": true,
   "$defs": {
-    "guid": { "type": "string", "format": "uuid" },
-    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "guid": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
     "identity": {
       "type": "object",
-      "required": ["id", "natural_identity"],
+      "required": [
+        "id",
+        "natural_identity"
+      ],
       "properties": {
-        "id": { "$ref": "#/$defs/guid" },
+        "id": {
+          "$ref": "#/$defs/guid"
+        },
         "natural_identity": {
           "type": "object",
-          "required": ["game_biz", "server", "uid"],
+          "required": [
+            "game_biz",
+            "server",
+            "uid"
+          ],
           "properties": {
-            "game_biz": { "enum": ["hk4e_cn", "hk4e_global"] },
-            "server": { "enum": ["cn_gf01", "cn_qd01", "os_usa", "os_euro", "os_asia", "os_cht"] },
-            "uid": { "type": "string", "pattern": "^[0-9]+$" }
+            "game_biz": {
+              "enum": [
+                "hk4e_cn",
+                "hk4e_global"
+              ]
+            },
+            "server": {
+              "enum": [
+                "cn_gf01",
+                "cn_qd01",
+                "os_usa",
+                "os_euro",
+                "os_asia",
+                "os_cht"
+              ]
+            },
+            "uid": {
+              "type": "string",
+              "pattern": "^[0-9]+$"
+            }
           },
           "additionalProperties": true
         }
@@ -46,111 +481,1070 @@
     },
     "occurrence": {
       "type": "object",
-      "required": ["kind"],
+      "required": [
+        "kind"
+      ],
       "properties": {
-        "kind": { "enum": [0, 1, 2, 3] },
-        "start": { "type": ["string", "null"], "format": "date-time" },
-        "end": { "type": ["string", "null"], "format": "date-time" },
-        "precision": { "type": ["integer", "null"], "minimum": 1, "maximum": 5 }
+        "kind": {
+          "enum": [
+            0,
+            1,
+            2,
+            3
+          ]
+        },
+        "start": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "end": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "precision": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "maximum": 5
+        }
       },
       "additionalProperties": true
     },
     "source": {
       "type": "object",
-      "required": ["origin", "timestamps"],
+      "required": [
+        "origin",
+        "timestamps"
+      ],
       "properties": {
-        "origin": { "enum": [0, 1, 2, 3, 4, 5, 6, 7] },
-        "timestamps": { "type": "object" },
-        "source": { "type": ["object", "null"] },
-        "acquisition_batch_id": { "oneOf": [{ "$ref": "#/$defs/guid" }, { "type": "null" }] }
+        "origin": {
+          "enum": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7
+          ]
+        },
+        "timestamps": {
+          "type": "object"
+        },
+        "source": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "acquisition_batch_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/guid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
       },
       "additionalProperties": true
     },
     "participant": {
       "type": "object",
-      "required": ["id"],
+      "required": [
+        "id"
+      ],
       "properties": {
-        "id": { "type": "string", "minLength": 1 },
-        "name": { "type": ["string", "null"] },
-        "icon_url": { "type": ["string", "null"] },
-        "level": { "type": ["integer", "null"], "minimum": 0 },
-        "rarity": { "type": ["integer", "null"], "minimum": 0 }
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "icon_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "level": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "rarity": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "origin": {
+          "enum": [
+            null,
+            1,
+            2,
+            3
+          ]
+        },
+        "constellation": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 6
+        }
       },
       "additionalProperties": true
     },
     "enemy": {
       "type": "object",
       "properties": {
-        "name": { "type": ["string", "null"] },
-        "level": { "type": ["integer", "null"], "minimum": 0 },
-        "icon_url": { "type": ["string", "null"] }
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "level": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "icon_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       },
       "additionalProperties": true
     },
     "stage": {
       "type": "object",
-      "required": ["stage_id", "completed_at"],
+      "required": [
+        "stage_id",
+        "completed_at"
+      ],
       "properties": {
-        "stage_id": { "type": "string", "minLength": 1 },
-        "score": { "type": ["integer", "null"] },
-        "completed_at": { "$ref": "#/$defs/occurrence" },
-        "participants": { "type": "array", "items": { "$ref": "#/$defs/participant" } },
-        "buffs": { "type": "array", "items": { "type": "string" } },
-        "enemies": { "type": "array", "items": { "$ref": "#/$defs/enemy" } }
+        "stage_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "score": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "completed_at": {
+          "$ref": "#/$defs/occurrence"
+        },
+        "participants": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/participant"
+          }
+        },
+        "buffs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "enemies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/enemy"
+          }
+        },
+        "theater_round": {
+          "$ref": "#/$defs/theater_round"
+        },
+        "stygian_details": {
+          "$ref": "#/$defs/stygian_stage"
+        }
+      },
+      "additionalProperties": true
+    },
+    "battle": {
+      "type": "object",
+      "required": [
+        "half",
+        "completed_at",
+        "participants",
+        "enemies"
+      ],
+      "properties": {
+        "half": {
+          "enum": [
+            1,
+            2
+          ]
+        },
+        "completed_at": {
+          "$ref": "#/$defs/occurrence"
+        },
+        "participants": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/participant"
+          }
+        },
+        "enemies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/enemy"
+          }
+        }
       },
       "additionalProperties": true
     },
     "chamber": {
       "type": "object",
-      "required": ["chamber", "stars", "completed_at"],
+      "required": [
+        "chamber",
+        "stars",
+        "completed_at"
+      ],
       "properties": {
-        "chamber": { "type": "integer", "minimum": 1 },
-        "stars": { "type": "integer", "minimum": 0, "maximum": 3 },
-        "completed_at": { "$ref": "#/$defs/occurrence" }
+        "chamber": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "stars": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "completed_at": {
+          "$ref": "#/$defs/occurrence"
+        },
+        "battles": {
+          "type": "array",
+          "maxItems": 2,
+          "items": {
+            "$ref": "#/$defs/battle"
+          }
+        }
       },
       "additionalProperties": true
     },
     "floor": {
       "type": "object",
-      "required": ["floor", "completeness", "chambers"],
+      "required": [
+        "floor",
+        "completeness",
+        "chambers"
+      ],
       "properties": {
-        "floor": { "type": "integer", "minimum": 1 },
-        "completeness": { "enum": [0, 1, 2] },
-        "chambers": { "type": "array", "items": { "$ref": "#/$defs/chamber" } }
+        "floor": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "completeness": {
+          "enum": [
+            0,
+            1,
+            2
+          ]
+        },
+        "chambers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/chamber"
+          }
+        }
       },
       "additionalProperties": true
     },
     "observation": {
       "type": "object",
-      "required": ["observation_id", "game_account_id", "mode", "season_id", "completeness", "spiral_abyss_floors", "provenance"],
+      "required": [
+        "observation_id",
+        "game_account_id",
+        "mode",
+        "season_id",
+        "completeness",
+        "spiral_abyss_floors",
+        "provenance"
+      ],
       "properties": {
-        "observation_id": { "$ref": "#/$defs/guid" },
-        "game_account_id": { "$ref": "#/$defs/guid" },
-        "mode": { "enum": [1, 2, 3] },
-        "season_id": { "type": "string", "minLength": 1 },
-        "period_start": { "type": ["string", "null"], "format": "date-time" },
-        "period_end": { "type": ["string", "null"], "format": "date-time" },
-        "completeness": { "enum": [0, 1, 2] },
-        "spiral_abyss_floors": { "type": "array", "items": { "$ref": "#/$defs/floor" } },
-        "stages": { "type": "array", "items": { "$ref": "#/$defs/stage" } },
-        "difficulty": { "type": ["integer", "null"], "minimum": 0 },
-        "medal_count": { "type": ["integer", "null"], "minimum": 0 },
-        "provenance": { "$ref": "#/$defs/source" }
+        "observation_id": {
+          "$ref": "#/$defs/guid"
+        },
+        "game_account_id": {
+          "$ref": "#/$defs/guid"
+        },
+        "mode": {
+          "enum": [
+            1,
+            2,
+            3
+          ]
+        },
+        "season_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "period_start": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "period_end": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "completeness": {
+          "enum": [
+            0,
+            1,
+            2
+          ]
+        },
+        "spiral_abyss_floors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/floor"
+          }
+        },
+        "stages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/stage"
+          }
+        },
+        "difficulty": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "medal_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "provenance": {
+          "$ref": "#/$defs/source"
+        },
+        "spiral_abyss_statistics": {
+          "$ref": "#/$defs/abyss_statistics"
+        },
+        "theater_statistics": {
+          "$ref": "#/$defs/theater_statistics"
+        },
+        "stygian_statistics": {
+          "$ref": "#/$defs/stygian_statistics"
+        },
+        "multiplayer_stages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/stage"
+          }
+        }
       },
-      "additionalProperties": true
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": 1
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "spiral_abyss_statistics": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": 2
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "theater_statistics": {
+                "type": "null"
+              },
+              "stages": {
+                "items": {
+                  "properties": {
+                    "theater_round": {
+                      "type": "null"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": 3
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "stygian_statistics": {
+                "type": "null"
+              },
+              "multiplayer_stages": {
+                "maxItems": 0
+              },
+              "stages": {
+                "items": {
+                  "properties": {
+                    "stygian_details": {
+                      "type": "null"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "multiplayer_stages": {
+              "items": {
+                "properties": {
+                  "theater_round": {
+                    "type": "null"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
     },
     "account": {
       "type": "object",
-      "required": ["source_account_id", "role_identity", "item_observations", "manual_acquisitions", "manual_revisions", "challenge_observations"],
+      "required": [
+        "source_account_id",
+        "role_identity",
+        "item_observations",
+        "manual_acquisitions",
+        "manual_revisions",
+        "challenge_observations"
+      ],
       "properties": {
-        "source_account_id": { "$ref": "#/$defs/guid" },
-        "role_identity": { "$ref": "#/$defs/identity" },
-        "item_observations": { "type": "array", "maxItems": 0 },
-        "manual_acquisitions": { "type": "array", "maxItems": 0 },
-        "manual_revisions": { "type": "array", "maxItems": 0 },
-        "challenge_observations": { "type": "array", "items": { "$ref": "#/$defs/observation" } }
+        "source_account_id": {
+          "$ref": "#/$defs/guid"
+        },
+        "role_identity": {
+          "$ref": "#/$defs/identity"
+        },
+        "item_observations": {
+          "type": "array",
+          "maxItems": 0
+        },
+        "manual_acquisitions": {
+          "type": "array",
+          "maxItems": 0
+        },
+        "manual_revisions": {
+          "type": "array",
+          "maxItems": 0
+        },
+        "challenge_observations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/observation"
+          }
+        }
       },
       "additionalProperties": true
+    },
+    "abyss_rank": {
+      "type": "object",
+      "properties": {
+        "rarity": {
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "value": {
+          "type": "integer",
+          "maximum": 9223372036854776000,
+          "minimum": 0
+        },
+        "avatar_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "icon_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "avatar_id",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "abyss_statistics": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "total_battle_times": {
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "energy_skill_rank": {
+          "items": {
+            "$ref": "#/$defs/abyss_rank"
+          },
+          "type": "array"
+        },
+        "defeat_rank": {
+          "items": {
+            "$ref": "#/$defs/abyss_rank"
+          },
+          "type": "array"
+        },
+        "take_damage_rank": {
+          "items": {
+            "$ref": "#/$defs/abyss_rank"
+          },
+          "type": "array"
+        },
+        "max_floor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "total_stars": {
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "total_win_times": {
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "reveal_rank": {
+          "items": {
+            "$ref": "#/$defs/abyss_rank"
+          },
+          "type": "array"
+        },
+        "damage_rank": {
+          "items": {
+            "$ref": "#/$defs/abyss_rank"
+          },
+          "type": "array"
+        },
+        "normal_skill_rank": {
+          "items": {
+            "$ref": "#/$defs/abyss_rank"
+          },
+          "type": "array"
+        }
+      },
+      "additionalProperties": false
+    },
+    "theater_round": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "is_tarot": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "tarot_serial_number": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "buff_details": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/theater_buff"
+          }
+        },
+        "buff_summary": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "theater_avatar_statistic": {
+      "type": "object",
+      "required": [
+        "participant"
+      ],
+      "properties": {
+        "participant": {
+          "$ref": "#/$defs/participant"
+        },
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        }
+      },
+      "additionalProperties": false
+    },
+    "theater_statistics": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "max_round_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "heraldry": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "coin_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "avatar_bonus_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "rent_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "tarot_finished_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "total_use_time": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "show_battle_stats": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "medal_rounds": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "uniqueItems": true
+        },
+        "backup_avatars": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/participant"
+          }
+        },
+        "max_defeat": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/theater_avatar_statistic"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "max_damage": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/theater_avatar_statistic"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "max_take_damage": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/theater_avatar_statistic"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "total_coins_consumed": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        },
+        "shortest_avatars": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/theater_avatar_statistic"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "stygian_run": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "has_data": {
+          "type": "boolean"
+        },
+        "difficulty": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "seconds": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "icon_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "has_data"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "has_data": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "difficulty": {
+                "type": "null"
+              },
+              "seconds": {
+                "type": "null"
+              },
+              "icon_url": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "stygian_performance": {
+      "type": "object",
+      "properties": {
+        "participant": {
+          "$ref": "#/$defs/participant"
+        },
+        "value": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 9223372036854776000
+        },
+        "type": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        }
+      },
+      "required": [
+        "participant"
+      ],
+      "additionalProperties": false
+    },
+    "stygian_tag": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        {
+          "required": [
+            "description"
+          ],
+          "properties": {
+            "description": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      ]
+    },
+    "stygian_stage": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "monster_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "monster_descriptions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "monster_tags": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/stygian_tag"
+          }
+        },
+        "best_avatars": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/stygian_performance"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "stygian_bling": {
+      "type": "object",
+      "properties": {
+        "participant": {
+          "$ref": "#/$defs/participant"
+        },
+        "is_plus": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "element": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "participant"
+      ],
+      "additionalProperties": false
+    },
+    "stygian_statistics": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "single_player": {
+          "$ref": "#/$defs/stygian_run"
+        },
+        "multiplayer": {
+          "$ref": "#/$defs/stygian_run"
+        },
+        "bling_avatars": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/stygian_bling"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "theater_buff": {
+      "type": "object",
+      "required": [
+        "kind",
+        "name"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "choice_card",
+            "buff",
+            "splendour"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "icon_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "level": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "is_enhanced": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "effects": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
     }
   }
 }

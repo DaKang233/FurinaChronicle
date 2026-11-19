@@ -171,6 +171,10 @@ public static class ArchiveDomainPortableSemanticComparer
                 challenge.Stages,
                 challenge.Difficulty,
                 challenge.MedalCount,
+                challenge.SpiralAbyssStatistics,
+                challenge.TheaterStatistics,
+                challenge.StygianStatistics,
+                challenge.MultiplayerStages,
                 challenge.Provenance))
             .OrderBy(challenge => challenge.ObservationId.ToString(), StringComparer.Ordinal)
             .ToArray());
@@ -245,5 +249,9 @@ public static class ArchiveDomainPortableSemanticComparer
         IReadOnlyList<ChallengeStageResult> Stages,
         int? Difficulty,
         int? MedalCount,
+        SpiralAbyssStatistics? SpiralAbyssStatistics,
+        TheaterStatistics? TheaterStatistics,
+        StygianStatistics? StygianStatistics,
+        IReadOnlyList<ChallengeStageResult> MultiplayerStages,
         RecordProvenance Provenance);
 }

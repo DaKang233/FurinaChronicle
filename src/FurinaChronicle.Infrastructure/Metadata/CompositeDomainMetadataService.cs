@@ -63,13 +63,6 @@ public sealed class CompositeDomainMetadataService(
     public ValueTask<ChallengeScheduleMetadata?> ResolveScheduleAsync(
         ChallengeMode mode,
         string seasonId,
-        CancellationToken cancellationToken = default)
-    {
-        if (mode == ChallengeMode.SpiralAbyss)
-        {
-            return ValueTask.FromResult<ChallengeScheduleMetadata?>(null);
-        }
-        return new ValueTask<ChallengeScheduleMetadata?>(
-            snap.ResolveScheduleAsync(mode, seasonId, cancellationToken));
-    }
+        CancellationToken cancellationToken = default) =>
+        new(snap.ResolveScheduleAsync(mode, seasonId, cancellationToken));
 }

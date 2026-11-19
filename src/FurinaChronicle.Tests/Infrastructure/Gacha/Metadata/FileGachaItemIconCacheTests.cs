@@ -44,10 +44,12 @@ public sealed class FileGachaItemIconCacheTests
             Assert.NotNull(first);
             Assert.Equal(first, second);
             Assert.True(File.Exists(first));
+            Assert.Equal(first, cache.GetCachedPath(GachaGame.GenshinImpact, "10000089"));
             Assert.Equal(1, requests);
 
             await cache.ClearAsync();
             Assert.False(File.Exists(first));
+            Assert.Null(cache.GetCachedPath(GachaGame.GenshinImpact, "10000089"));
         }
         finally
         {
@@ -80,6 +82,8 @@ public sealed class FileGachaItemIconCacheTests
                 "10000089",
                 "https://example.test/icon.png");
             clock.Advance(TimeSpan.FromDays(31));
+            Assert.Null(cache.GetCachedPath(GachaGame.GenshinImpact, "10000089", freshOnly: true));
+            Assert.Equal(first, cache.GetCachedPath(GachaGame.GenshinImpact, "10000089"));
             string? afterFailure = await cache.GetOrRefreshAsync(
                 GachaGame.GenshinImpact,
                 "10000089",

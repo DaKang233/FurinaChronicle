@@ -91,6 +91,13 @@ public static class ArchiveRestoreSemanticDigest
         value.PeriodEnd,
         value.Completeness,
         value.SpiralAbyssFloors,
+        value.Stages,
+        value.Difficulty,
+        value.MedalCount,
+        value.SpiralAbyssStatistics,
+        value.TheaterStatistics,
+        value.StygianStatistics,
+        value.MultiplayerStages,
         value.Provenance,
     });
 

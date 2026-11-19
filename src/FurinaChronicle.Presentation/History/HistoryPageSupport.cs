@@ -180,6 +180,8 @@ public sealed record ChallengeObservationView
 
     public required string OccurredText { get; init; }
 
+    public required string ListTimeText { get; init; }
+
     public required string ObservedText { get; init; }
 
     public required string FetchedText { get; init; }
@@ -198,7 +200,9 @@ public sealed record ChallengeObservationView
 
     public required string AccountLabel { get; init; }
 
-    public string DetailText => string.Join(
+    public IReadOnlyList<ChallengeDetailSection> DetailSections { get; init; } = [];
+
+    public string SummaryText => string.Join(
         Environment.NewLine,
         new[]
         {
@@ -213,9 +217,41 @@ public sealed record ChallengeObservationView
             StarsText,
             SecondsText,
             Evidence,
-            Detail,
         }.Where(value => !string.IsNullOrWhiteSpace(value)));
+
+    public string DetailText => string.IsNullOrWhiteSpace(Detail)
+        ? SummaryText
+        : SummaryText + Environment.NewLine + Detail;
 }
+
+public sealed record ChallengeDetailSection(
+    string Title, IReadOnlyList<string> Lines, IReadOnlyList<ChallengeCombatDetail> Battles)
+{
+    public bool HasLines => Lines.Count > 0;
+    public bool HasBattles => Battles.Count > 0;
+    public IReadOnlyList<ChallengeBuffDetail> Buffs { get; init; } = [];
+    public bool HasBuffs => Buffs.Count > 0;
+    public ChallengePortrait? HeaderArtwork { get; init; }
+    public bool HasHeaderArtwork => HeaderArtwork?.Icon is not null ||
+        StygianDifficultyArtwork.IsBundledKey(HeaderArtwork?.ResourceKey);
+}
+
+public sealed record ChallengeCombatDetail(
+    string Title, IReadOnlyList<string> Lines, IReadOnlyList<ChallengePortraitGroup> Groups)
+{
+    public bool HasTitle => !string.IsNullOrWhiteSpace(Title);
+    public bool HasLines => Lines.Count > 0;
+}
+
+public sealed record ChallengePortraitGroup(string Title, IReadOnlyList<ChallengePortrait> Portraits)
+{
+    public bool HasTitle => !string.IsNullOrWhiteSpace(Title);
+}
+
+public sealed record ChallengeBuffDetail(string Title, string Detail, ChallengePortrait Artwork);
+
+public sealed record ChallengePortrait(string Label, Uri? Icon, int? Rarity = null,
+    bool IsCharacter = false, string? ResourceKey = null);
 
 public static class HistoryObservationViewBuilder
 {
@@ -282,7 +318,7 @@ public static class HistoryObservationViewBuilder
                 observation.Provenance.Timestamps.ObservedAt,
                 observation.Provenance.Timestamps.FetchedAt),
             TimeZoneInfo.Local);
-        int stars = observation.SpiralAbyssFloors.Sum(floor => floor.Stars);
+        int stars = observation.SpiralAbyssStatistics?.TotalStars ?? observation.SpiralAbyssFloors.Sum(floor => floor.Stars);
         int? bestSeconds = null;
         if (observation.Mode == ChallengeMode.StygianOnslaught)
         {
@@ -303,15 +339,23 @@ public static class HistoryObservationViewBuilder
             Detail = card.Detail,
             ModeLabel = HistoryLabels.Mode(observation.Mode),
             SeasonId = observation.SeasonId,
+            DetailSections = await ChallengeObservationCard.BuildDetailSectionsAsync(
+                observation, metadata, schedule, cancellationToken),
             OccurredText = occurred is null ||
                 observation.Mode == ChallengeMode.StygianOnslaught
                     ? "游戏内发生时间：未知（只以观察/采集时间排序）"
                     : time.PrimaryText,
+            ListTimeText = occurred is null || observation.Mode == ChallengeMode.StygianOnslaught
+                ? time.PrimaryText + " · 发生时间未知" : time.PrimaryText,
             ObservedText = HistoryLabels.ObservedText(observation.Provenance),
             FetchedText = HistoryLabels.FetchedText(observation.Provenance),
             CompletenessText = $"完整度：{HistoryLabels.Completeness(observation.Completeness, "该模式/期次观察范围")}",
             SourceText = $"来源：{HistoryLabels.Origin(observation.Provenance.Origin)}",
-            DifficultyText = observation.Difficulty is int difficulty
+            DifficultyText = observation.StygianStatistics is { } stygian
+                ? ChallengeObservationCard.StygianDifficultySummary(stygian)
+                : observation.Mode == ChallengeMode.ImaginariumTheater
+                ? $"难度：{ChallengeObservationCard.TheaterDifficultyName(observation.Difficulty)}"
+                : observation.Difficulty is int difficulty
                 ? $"难度：{difficulty}"
                 : "难度：未知",
             MedalText = observation.MedalCount is int medals
@@ -321,8 +365,10 @@ public static class HistoryObservationViewBuilder
                 ? $"星数：{stars}"
                 : "星数：不适用",
             SecondsText = observation.Mode == ChallengeMode.StygianOnslaught
-                ? bestSeconds is int seconds
-                    ? $"秒数成绩：最快 {seconds} 秒"
+                ? observation.StygianStatistics is { } stygianStats
+                    ? ChallengeObservationCard.StygianSecondsSummary(stygianStats)
+                    : bestSeconds is int seconds
+                    ? $"秒数成绩：最快 {seconds} 秒（本地单关）"
                     : "秒数成绩：未知"
                 : "秒数成绩：不适用",
             AccountLabel = accountLabel,

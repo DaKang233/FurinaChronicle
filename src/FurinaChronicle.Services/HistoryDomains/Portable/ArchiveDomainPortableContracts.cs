@@ -40,7 +40,33 @@ public sealed record ArchiveDomainPortablePackage(
     Guid SourceArchiveId,
     string SourceArchiveName,
     DateTimeOffset ExportedAt,
-    IReadOnlyList<ArchiveDomainPortableAccount> Accounts);
+    IReadOnlyList<ArchiveDomainPortableAccount> Accounts)
+{
+    public bool SupportsVersion() => FormatMajor switch
+    {
+        1 => FormatMinor >= 0 && !ContainsDetailedChallenges(Accounts),
+        2 => DatasetKind == ArchiveDomainDatasetKind.ChallengeHistory &&
+            (FormatMinor == 3 || FormatMinor is 0 or 1 or 2 && !ContainsTheaterBuffDetails(Accounts) &&
+                (FormatMinor == 2 || !ContainsStygianDetails(Accounts) &&
+                    (FormatMinor == 1 || !ContainsTheaterDetails(Accounts)))),
+        _ => false,
+    };
+
+    public static bool ContainsTheaterBuffDetails(IEnumerable<ArchiveDomainPortableAccount> accounts) =>
+        accounts.SelectMany(account => account.ChallengeObservations).Any(observation => observation.HasTheaterBuffDetails);
+
+    public static bool ContainsStygianDetails(IEnumerable<ArchiveDomainPortableAccount> accounts) =>
+        accounts.SelectMany(account => account.ChallengeObservations)
+            .Any(observation => observation.HasStygianDetails || observation.HasConstellations);
+
+    public static bool ContainsTheaterDetails(IEnumerable<ArchiveDomainPortableAccount> accounts) =>
+        accounts.SelectMany(account => account.ChallengeObservations)
+            .Any(observation => observation.HasTheaterDetails || observation.HasParticipantOrigins);
+
+    public static bool ContainsDetailedChallenges(IEnumerable<ArchiveDomainPortableAccount> accounts) =>
+        accounts.SelectMany(account => account.ChallengeObservations)
+            .Any(observation => observation.RequiresDetailedPortableFormat);
+}
 
 public sealed record ArchiveDomainPortableAccountPlan(
     Guid SourceAccountId,

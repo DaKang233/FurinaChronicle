@@ -41,7 +41,14 @@ public sealed class HoYoGameRecordChallengeModeSourceTests
                           "rarity": 5
                         }
                       ],
-                      "choice_cards": [ { "name": "元素战技强化" } ],
+                      "choice_cards": [ { "name": "元素战技强化", "desc": "战技效果说明" } ],
+                      "splendour_buff": {
+                        "summary": { "desc": "合成祝福摘要" },
+                        "buffs": [
+                          { "name": "合成祝福", "level": 2,
+                            "level_effect": [{ "desc": "效果一" }, { "desc": "效果二" }] }
+                        ]
+                      },
                       "buffs": [ { "name": "元素爆发强化" } ],
                       "enemies": [
                         {
@@ -156,12 +163,19 @@ public sealed class HoYoGameRecordChallengeModeSourceTests
         Assert.Equal("闲云", participant.Name);
         Assert.Equal(90, participant.Level);
         Assert.Equal(5, participant.Rarity);
-        Assert.Equal(["元素战技强化", "元素爆发强化"], detailed.Buffs);
+        Assert.Equal([
+            "元素战技强化：战技效果说明",
+            "元素爆发强化",
+            "祝福总览：合成祝福摘要",
+            "合成祝福 Lv.2：效果一\n效果二",
+        ], detailed.Buffs);
         Assert.Equal("深渊法师", Assert.Single(detailed.Enemies).Name);
     }
 
-    [Fact]
-    public async Task StygianUsesHardChallengeAndMapsMonsterSeconds()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task StygianUsesHardChallengeAndMapsMonsterSeconds(bool includeNullEntry)
     {
         using var client = new HttpClient(new RecordingHandler(request =>
         {
@@ -171,7 +185,9 @@ public sealed class HoYoGameRecordChallengeModeSourceTests
             Assert.Equal(
                 "?role_id=100000001&server=cn_gf01&need_detail=true",
                 request.RequestUri.Query);
-            return Json(StygianBody);
+            return Json(includeNullEntry
+                ? StygianBody.Replace("\"data\": [", "\"data\": [null,", StringComparison.Ordinal)
+                : StygianBody);
         }));
         using var source = new HoYoGameRecordChallengeModeSource(
             TimeProvider.System, client);

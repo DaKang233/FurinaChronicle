@@ -136,13 +136,15 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
         long domainFacts = 0;
         long domainRevisions = 0;
         foreach (ArchiveDatasetDescriptor dataset in manifest.Datasets.Where(item =>
-            item.Format == "furina-domain-history" && item.FormatVersion == "1.0"))
+            item.Format == "furina-domain-history" &&
+            ArchiveVersionDispatcher.IsKnownDataset(item.Format, item.FormatVersion)))
         {
             foreach (string path in dataset.Paths)
             {
                 DomainCounts counts = await ValidateDomainAsync(
                     Require(entries, path),
                     dataset.Kind,
+                    dataset.FormatVersion,
                     catalog,
                     contentSink,
                     cancellationToken);
@@ -741,6 +743,7 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
     private async Task<DomainCounts> ValidateDomainAsync(
         ZipArchiveEntry entry,
         string kind,
+        string version,
         ArchiveCatalog catalog,
         IArchivePackageContentSink? contentSink,
         CancellationToken cancellationToken)
@@ -753,7 +756,7 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
                 await ReadJsonAsync<ArchiveCharacterWeaponDataset>(
                     entry, limits.MaximumEntryBytes, cancellationToken);
             ValidateDomainHeader(value.Format, value.FormatVersion,
-                value.ArchiveReference, entry.FullName, catalog);
+                value.ArchiveReference, entry.FullName, catalog, expectedVersion: "1.0");
             if (value.Accounts.Select(item => item.AccountReference).Distinct().Count() !=
                     value.Accounts.Count ||
                 value.Accounts.Any(item =>
@@ -783,7 +786,25 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
             ArchiveChallengeDataset value = await ReadJsonAsync<ArchiveChallengeDataset>(
                 entry, limits.MaximumEntryBytes, cancellationToken);
             ValidateDomainHeader(value.Format, value.FormatVersion,
-                value.ArchiveReference, entry.FullName, catalog);
+                value.ArchiveReference, entry.FullName, catalog, expectedVersion: version);
+            if (version == "1.0" && value.Accounts.SelectMany(account => account.ChallengeObservations)
+                .Any(observation => observation.RequiresDetailedPortableFormat))
+            {
+                throw Error(ArchivePackageErrorCode.UnsupportedVersion,
+                    "A challenge dataset with extended details requires version 1.1.", entry.FullName);
+            }
+            if (version is "1.0" or "1.1" or "1.2" or "1.3" &&
+                value.Accounts.SelectMany(account => account.ChallengeObservations).Any(observation => observation.HasTheaterBuffDetails))
+                throw Error(ArchivePackageErrorCode.UnsupportedVersion,
+                    "Structured Theater buffs require challenge dataset version 1.4.", entry.FullName);
+            if (version is "1.1" or "1.2" && value.Accounts.SelectMany(account => account.ChallengeObservations)
+                .Any(observation => observation.HasStygianDetails || observation.HasConstellations))
+                throw Error(ArchivePackageErrorCode.UnsupportedVersion,
+                    "Stygian details require challenge dataset version 1.3.", entry.FullName);
+            if (version == "1.1" && value.Accounts.SelectMany(account => account.ChallengeObservations)
+                .Any(observation => observation.HasTheaterDetails || observation.HasParticipantOrigins))
+                throw Error(ArchivePackageErrorCode.UnsupportedVersion,
+                    "Theater details require challenge dataset version 1.2.", entry.FullName);
             if (value.Accounts.Select(item => item.AccountReference).Distinct().Count() !=
                     value.Accounts.Count ||
                 value.Accounts.Any(item =>
@@ -808,9 +829,10 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
         string version,
         Guid archiveReference,
         string path,
-        ArchiveCatalog catalog)
+        ArchiveCatalog catalog,
+        string expectedVersion)
     {
-        if (format != "furina-domain-history" || version != "1.0" ||
+        if (format != "furina-domain-history" || version != expectedVersion ||
             !catalog.Archives.Any(item => item.ArchiveReference == archiveReference) ||
             !path.Contains(archiveReference.ToString("D"), StringComparison.Ordinal))
         {

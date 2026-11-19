@@ -8,7 +8,8 @@ public sealed record SnapMetadataOptions
     public SnapMetadataOptions(
         string cacheDirectory,
         Uri? baseAddress = null,
-        TimeSpan? manifestCheckInterval = null)
+        TimeSpan? manifestCheckInterval = null,
+        Uri? monsterIconBaseAddress = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(cacheDirectory);
         if (manifestCheckInterval is { } interval && interval <= TimeSpan.Zero)
@@ -18,6 +19,13 @@ public sealed record SnapMetadataOptions
                 "The manifest interval must be positive.");
         }
 
+        MonsterIconBaseAddress = monsterIconBaseAddress ?? new Uri(
+            "https://static.snaphutaorp.org/static/raw/MonsterIcon/");
+        if (!MonsterIconBaseAddress.IsAbsoluteUri || MonsterIconBaseAddress.Scheme != Uri.UriSchemeHttps ||
+            !MonsterIconBaseAddress.IsDefaultPort || MonsterIconBaseAddress.UserInfo.Length > 0 ||
+            MonsterIconBaseAddress.Query.Length > 0 || MonsterIconBaseAddress.Fragment.Length > 0 ||
+            !MonsterIconBaseAddress.AbsolutePath.EndsWith('/'))
+            throw new ArgumentException("The monster icon base must be an HTTPS directory URI.", nameof(monsterIconBaseAddress));
         CacheDirectory = cacheDirectory;
         BaseAddress = baseAddress ?? new Uri(
             "https://raw.githubusercontent.com/" +
@@ -31,4 +39,6 @@ public sealed record SnapMetadataOptions
     public Uri BaseAddress { get; }
 
     public TimeSpan ManifestCheckInterval { get; }
+
+    public Uri MonsterIconBaseAddress { get; }
 }

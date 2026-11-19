@@ -26,7 +26,10 @@ public sealed record ChallengeModeSnapshot(
     IReadOnlyList<ChallengeStageResult> Stages,
     int? Difficulty,
     int? MedalCount,
-    DateTimeOffset FetchedAt);
+    DateTimeOffset FetchedAt,
+    TheaterStatistics? TheaterStatistics = null,
+    StygianStatistics? StygianStatistics = null,
+    IReadOnlyList<ChallengeStageResult>? MultiplayerStages = null);
 
 public sealed record ChallengeModeSourceResult(
     SpiralAbyssCollectionStatus Status,
@@ -118,7 +121,8 @@ public sealed class CollectChallengeMode(
         {
             return new(SpiralAbyssCollectionStatus.InvalidResponse);
         }
-        if (snapshot.Stages.Count == 0)
+        if (snapshot.Stages.Count == 0 && snapshot.TheaterStatistics is null && snapshot.StygianStatistics is null &&
+            snapshot.MultiplayerStages is not { Count: > 0 })
         {
             return new(SpiralAbyssCollectionStatus.Empty);
         }
@@ -142,7 +146,9 @@ public sealed class CollectChallengeMode(
                 AcquisitionBatchId.New()),
             snapshot.Stages,
             snapshot.Difficulty,
-            snapshot.MedalCount);
+            snapshot.MedalCount,
+            theaterStatistics: snapshot.TheaterStatistics,
+            stygianStatistics: snapshot.StygianStatistics, multiplayerStages: snapshot.MultiplayerStages);
 
         ArchiveOperationResult committed =
             await history.CommitChallengeObservationsAsync(

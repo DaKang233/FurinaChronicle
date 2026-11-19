@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using FurinaChronicle.Core.Challenges;
 using FurinaChronicle.Core.Inventory;
 using FurinaChronicle.Core.Metadata;
@@ -18,7 +19,7 @@ namespace FurinaChronicle.Infrastructure.Metadata;
 /// a refreshed repository never mixes old and new entries. Network failures
 /// fall back to the last cached version.
 /// </summary>
-public sealed class SnapMetadataClient : IDisposable
+public sealed partial class SnapMetadataClient : IDisposable
 {
     private const int MaxFileBytes = 16 * 1024 * 1024;
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -35,6 +36,8 @@ public sealed class SnapMetadataClient : IDisposable
     private readonly SemaphoreSlim versionGate = new(1, 1);
     private string? version;
     private Dictionary<int, WeaponEntry>? weapons;
+    private Dictionary<int, TowerScheduleEntry>? abyssSchedules;
+    private Dictionary<int, TowerFloorEntry>? abyssFloors;
     private Dictionary<int, ScheduleEntry>? theaterSchedules;
     private Dictionary<int, ScheduleEntry>? stygianSchedules;
 
@@ -109,6 +112,11 @@ public sealed class SnapMetadataClient : IDisposable
         {
             return null;
         }
+        if (mode == ChallengeMode.SpiralAbyss)
+        {
+            return await ResolveAbyssScheduleAsync(id, cancellationToken);
+        }
+
         Dictionary<int, ScheduleEntry> schedules = mode switch
         {
             ChallengeMode.ImaginariumTheater => theaterSchedules ??=
@@ -126,9 +134,21 @@ public sealed class SnapMetadataClient : IDisposable
                 schedule.Name,
                 schedule.Begin,
                 schedule.End,
-                "Snap.Metadata")
+                "Snap.Metadata",
+                Theater: mode == ChallengeMode.ImaginariumTheater &&
+                    (schedule.Elements is not null || schedule.InitialAvatars is not null || schedule.SpecialAvatars is not null)
+                    ? new TheaterScheduleMetadata(
+                        (schedule.Elements ?? []).Distinct().ToArray(),
+                        ReadAvatarIds(schedule.InitialAvatars), ReadAvatarIds(schedule.SpecialAvatars)) : null)
             : null;
     }
+
+    private static string[] DescribeEffects(string?[]? descriptions) =>
+        (descriptions ?? [])
+            .OfType<string>()
+            .Select(text => Regex.Replace(text, "</?color(?:=[^>]+)?>", string.Empty).Trim())
+            .Where(text => text.Length > 0)
+            .ToArray();
 
     private async Task<Dictionary<int, ScheduleEntry>> ReadScheduleTableAsync(
         string fileName,
@@ -137,6 +157,10 @@ public sealed class SnapMetadataClient : IDisposable
         .Where(schedule => schedule.Id > 0)
         .GroupBy(schedule => schedule.Id)
         .ToDictionary(group => group.Key, group => group.First());
+
+    private static string[] ReadAvatarIds(long[]? values) =>
+        (values ?? []).Where(id => id > 0).Distinct()
+            .Select(id => id.ToString(System.Globalization.CultureInfo.InvariantCulture)).ToArray();
 
     private static string? IconUrl(string? icon) =>
         string.IsNullOrWhiteSpace(icon)
@@ -148,17 +172,14 @@ public sealed class SnapMetadataClient : IDisposable
         CancellationToken cancellationToken)
         where T : class
     {
-        byte[]? bytes = await ReadFileAsync(relativePath, cancellationToken);
-        if (bytes is null)
-        {
-            return null;
-        }
         try
         {
-            return JsonSerializer.Deserialize<T>(bytes, JsonOptions);
+            byte[]? bytes = await ReadFileAsync(relativePath, cancellationToken);
+            return bytes is null ? null : JsonSerializer.Deserialize<T>(bytes, JsonOptions);
         }
-        catch (JsonException)
+        catch (Exception exception) when (exception is JsonException or IOException or UnauthorizedAccessException)
         {
+            // Optional display metadata cannot fail a saved-history query.
             return null;
         }
     }
@@ -309,9 +330,16 @@ public sealed class SnapMetadataClient : IDisposable
     private sealed record WeaponEntry(
         int Id, string? Name, string? Icon, int? RankLevel);
 
+    private sealed record TowerScheduleEntry(
+        int Id, int[]? FloorIds, DateTimeOffset? Open, DateTimeOffset? Close,
+        string? BuffName, string?[]? Descriptions);
+
     private sealed record ScheduleEntry(
         int Id,
         string? Name,
         DateTimeOffset? Begin,
-        DateTimeOffset? End);
+        DateTimeOffset? End,
+        int[]? Elements,
+        long[]? InitialAvatars,
+        long[]? SpecialAvatars);
 }

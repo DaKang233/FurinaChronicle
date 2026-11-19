@@ -13,7 +13,7 @@ using FurinaChronicle.Services.Passport;
 
 namespace FurinaChronicle.Tests.Infrastructure.Persistence.Sqlite;
 
-public sealed class ChallengeModeCollectionTests
+public sealed partial class ChallengeModeCollectionTests
 {
     [Fact]
     public async Task TheaterCollectionStoresStagesAndRepeatsAreNoOp()
@@ -55,6 +55,37 @@ public sealed class ChallengeModeCollectionTests
         Assert.Equal(DataCompleteness.Partial, observation.Completeness);
         Assert.Equal(DataOrigin.OfficialApi, observation.Provenance.Origin);
         Assert.Equal("miyoushe", observation.Provenance.Source?.Provider);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TheaterStatisticsSurviveCollectionReopenAndStatsOnlyChanges(bool summaryOnly)
+    {
+        await using var context = SqliteRepositoryTestContext.Create();
+        GameAccount target = await AddAccountAsync(context, "theater-details");
+        var source = new TestSource { Statistics = FurinaChronicle.Tests.TestDoubles.TheaterDetailFixture.Statistics(), SummaryOnly = summaryOnly };
+        var collector = CreateCollector(context, source, target);
+        var passport = CreatePassport();
+        Assert.Equal(ChangeExecutionStatus.Applied,
+            (await collector.ExecuteAsync(target.PlayerArchiveId, target.Id, passport, ChallengeMode.ImaginariumTheater)).Commit?.Status);
+        Assert.Equal(ChangeExecutionStatus.NoOp,
+            (await collector.ExecuteAsync(target.PlayerArchiveId, target.Id, passport, ChallengeMode.ImaginariumTheater)).Commit?.Status);
+        source.Statistics = FurinaChronicle.Tests.TestDoubles.TheaterDetailFixture.Statistics(1251);
+        Assert.Equal(ChangeExecutionStatus.Applied,
+            (await collector.ExecuteAsync(target.PlayerArchiveId, target.Id, passport, ChallengeMode.ImaginariumTheater)).Commit?.Status);
+        await using var reopened = new FurinaDatabase(new SqliteDatabaseOptions(context.DatabasePath));
+        var history = await new SqliteGachaAtomicChangeStore(reopened).GetChallengeObservationsAsync(target.Id);
+        Assert.Equal(2, history.Count);
+        Assert.Contains(history, item => item.TheaterStatistics?.CoinCount == 1250);
+        Assert.Contains(history, item => item.TheaterStatistics?.CoinCount == 1251);
+        Assert.All(history, item =>
+        {
+            Assert.Equal(90761, item.TheaterStatistics!.TotalUseTime);
+            Assert.Equal("3000000000", item.TheaterStatistics.MaxDamage!.Value);
+            Assert.Equal(ChallengeParticipantOrigin.Support, item.TheaterStatistics.BackupAvatars[2].Origin);
+            if (summaryOnly) Assert.Empty(item.Stages);
+        });
     }
 
     [Fact]
@@ -171,6 +202,9 @@ public sealed class ChallengeModeCollectionTests
 
     private sealed class TestSource : IChallengeModeSource
     {
+        public TheaterStatistics? Statistics { get; set; }
+        public ChallengeModeSnapshot? OverrideSnapshot { get; set; }
+        public bool SummaryOnly { get; set; }
         public TestTime Time { get; } = new();
         public int RequestCount { get; private set; }
 
@@ -183,6 +217,8 @@ public sealed class ChallengeModeCollectionTests
             cancellationToken.ThrowIfCancellationRequested();
             RequestCount++;
             Time.Now = Time.Now.AddMinutes(1);
+            if (OverrideSnapshot is { } supplied)
+                return Task.FromResult(new ChallengeModeSourceResult(SpiralAbyssCollectionStatus.Received, supplied with { FetchedAt = Time.Now }));
             ChallengeModeSnapshot snapshot = mode switch
             {
                 ChallengeMode.ImaginariumTheater => new(
@@ -190,6 +226,7 @@ public sealed class ChallengeModeCollectionTests
                     DateTimeOffset.FromUnixTimeSeconds(1794000000),
                     DateTimeOffset.FromUnixTimeSeconds(1795000000),
                     DataCompleteness.Partial,
+                    SummaryOnly ? [] :
                     [
                         new ChallengeStageResult(
                             "1", 1,
@@ -205,7 +242,7 @@ public sealed class ChallengeModeCollectionTests
                                 "https://example.invalid/enemy.png")]),
                         new ChallengeStageResult("2", 0, OccurrenceTime.Unknown),
                     ],
-                    4, 9, Time.Now),
+                    4, 9, Time.Now, Statistics),
                 ChallengeMode.StygianOnslaught => new(
                     mode, "5",
                     DateTimeOffset.FromUnixTimeSeconds(1794000000),

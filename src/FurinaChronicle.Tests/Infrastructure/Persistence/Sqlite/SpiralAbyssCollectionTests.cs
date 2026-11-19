@@ -192,6 +192,122 @@ public sealed class SpiralAbyssCollectionTests
         Assert.Empty(await context.AtomicGacha.GetChallengeObservationsAsync(target.Id));
     }
 
+    [Theory]
+    [InlineData("[{\"index\":2,\"timestamp\":\"1794000039\"},{\"index\":1,\"timestamp\":1794000010}]", 0, 1794000039L)]
+    [InlineData("[{\"index\":1,\"timestamp\":1794000010},{\"index\":2,\"timestamp\":1794000039}]", 3, 1794000039L)]
+    [InlineData("[{\"index\":1,\"timestamp\":1794000010,\"avatars\":[{\"id\":10000089,\"level\":90,\"rarity\":5}]}]", 3, null)]
+    [InlineData("[{\"index\":1,\"timestamp\":1794000040},{\"index\":2,\"timestamp\":1794000039}]", 3, null)]
+    [InlineData("[{\"index\":1,\"timestamp\":1794000010},{\"index\":2,\"timestamp\":9223372036854775807}]", 3, null)]
+    public async Task OfficialBattleCompletionSurvivesReopen(string battles, int stars, long? expectedSeconds)
+    {
+        await using var context = SqliteRepositoryTestContext.Create();
+        GameAccount target = await AddAccountAsync(context, "completion");
+        using var source = new TestSource
+        {
+            Body = $$$"""
+                {"retcode":0,"data":{"schedule_id":901,"floors":[
+                    {"index":12,"levels":[{"index":3,"star":{{{stars}}},"battles":{{{battles}}},
+                    "bottom_half_floor_monster":[{"name":"Fixture enemy","level":99,"icon":"https://example.invalid/enemy.png"}]}]}
+                ]}}
+                """,
+        };
+
+        var result = await CreateCollector(context, source, target)
+            .ExecuteAsync(target.PlayerArchiveId, target.Id, CreatePassport());
+        Assert.Equal(ChangeExecutionStatus.Applied, result.Commit?.Status);
+
+        await using var reopened = new FurinaDatabase(new SqliteDatabaseOptions(context.DatabasePath));
+        var observations = await new SqliteGachaAtomicChangeStore(reopened)
+            .GetChallengeObservationsAsync(target.Id);
+        var chamber = Assert.Single(Assert.Single(Assert.Single(observations).SpiralAbyssFloors).Chambers);
+        Assert.Equal(stars, chamber.Stars);
+        Assert.Equal(expectedSeconds is long seconds
+            ? OccurrenceTime.At(DateTimeOffset.FromUnixTimeSeconds(seconds), TimePrecision.Second)
+            : OccurrenceTime.Unknown, chamber.CompletedAt);
+        var bottom = Assert.Single(chamber.Battles, battle => battle.Half == 2);
+        ChallengeEnemy enemy = Assert.Single(bottom.Enemies);
+        Assert.Equal("Fixture enemy", enemy.Name);
+        Assert.Equal(99, enemy.Level);
+        Assert.Equal("https://example.invalid/enemy.png", enemy.IconUrl);
+        if (battles.Contains("avatars", StringComparison.Ordinal))
+        {
+            var top = Assert.Single(chamber.Battles, battle => battle.Half == 1);
+            ChallengeParticipant participant = Assert.Single(top.Participants);
+            Assert.Equal("10000089", participant.Id);
+            Assert.Equal(90, participant.Level);
+            Assert.Equal(5, participant.Rarity);
+            Assert.Equal(OccurrenceTime.Unknown, bottom.CompletedAt);
+        }
+    }
+
+    [Fact]
+    public async Task OfficialStatisticsAndLongRankValuesSurviveCollectionAndReopen()
+    {
+        await using var context = SqliteRepositoryTestContext.Create();
+        GameAccount target = await AddAccountAsync(context, "statistics");
+        using var source = new TestSource
+        {
+            Body = """
+                {"retcode":0,"data":{"schedule_id":901,
+                  "total_battle_times":17,"total_win_times":12,"max_floor":"12-3","total_star":34,
+                  "reveal_rank":[{"avatar_id":10000089,"value":"12","rarity":5}],
+                  "defeat_rank":[{"avatar_id":10000089,"value":27,"rarity":5}],
+                  "damage_rank":[{"avatar_id":10000089,"value":"3000000000","rarity":5}],
+                  "take_damage_rank":[{"avatar_id":10000089,"value":999,"rarity":5}],
+                  "normal_skill_rank":[{"avatar_id":10000089,"value":24,"rarity":5}],
+                  "energy_skill_rank":[{"avatar_id":10000089,"value":8,"rarity":5}],
+                  "floors":[{"index":12,"levels":[{"index":3,"star":3}]}]}}
+                """,
+        };
+        var collector = CreateCollector(context, source, target);
+        Assert.Equal(ChangeExecutionStatus.Applied,
+            (await collector.ExecuteAsync(target.PlayerArchiveId, target.Id, CreatePassport())).Commit?.Status);
+        source.Time.Now = source.Time.Now.AddMinutes(1);
+        Assert.Equal(ChangeExecutionStatus.NoOp,
+            (await collector.ExecuteAsync(target.PlayerArchiveId, target.Id, CreatePassport())).Commit?.Status);
+
+        source.Time.Now = source.Time.Now.AddMinutes(1);
+        source.Body = source.Body!.Replace("3000000000", "3000000001", StringComparison.Ordinal);
+        Assert.Equal(ChangeExecutionStatus.Applied,
+            (await collector.ExecuteAsync(target.PlayerArchiveId, target.Id, CreatePassport())).Commit?.Status);
+        await using var reopened = new FurinaDatabase(new SqliteDatabaseOptions(context.DatabasePath));
+        var history = await new SqliteGachaAtomicChangeStore(reopened).GetChallengeObservationsAsync(target.Id);
+        Assert.Equal(2, history.Count);
+        Assert.Contains(history, item => item.SpiralAbyssStatistics?.DamageRank[0].Value == 3_000_000_001);
+        var observation = Assert.Single(history, item => item.SpiralAbyssStatistics?.DamageRank[0].Value == 3_000_000_000);
+        SpiralAbyssStatistics statistics = Assert.IsType<SpiralAbyssStatistics>(observation.SpiralAbyssStatistics);
+        Assert.Equal(17, statistics.TotalBattleTimes);
+        Assert.Equal(12, statistics.TotalWinTimes);
+        Assert.Equal(34, statistics.TotalStars);
+        Assert.Equal("12-3", statistics.MaxFloor);
+        Assert.Equal(3_000_000_000, Assert.Single(statistics.DamageRank).Value);
+        Assert.Single(statistics.RevealRank);
+        Assert.Single(statistics.DefeatRank);
+        Assert.Single(statistics.TakeDamageRank);
+        Assert.Single(statistics.NormalSkillRank);
+        Assert.Single(statistics.EnergySkillRank);
+        Assert.Equal(OccurrenceTime.Unknown, observation.SpiralAbyssFloors[0].Chambers[0].CompletedAt);
+    }
+
+    [Theory]
+    [InlineData("\"total_battle_times\":-1")]
+    [InlineData("\"reveal_rank\":[null]")]
+    [InlineData("\"damage_rank\":[{\"avatar_id\":10000089,\"value\":-1}]")]
+    public async Task InvalidStatisticsAreRejectedWithoutWritingHistory(string statistics)
+    {
+        await using var context = SqliteRepositoryTestContext.Create();
+        GameAccount target = await AddAccountAsync(context, "invalid statistics");
+        using var source = new TestSource
+        {
+            Body = "{\"retcode\":0,\"data\":{\"schedule_id\":901," + statistics +
+                ",\"floors\":[{\"index\":12,\"levels\":[{\"index\":3,\"star\":3}]}]}}",
+        };
+        var result = await CreateCollector(context, source, target)
+            .ExecuteAsync(target.PlayerArchiveId, target.Id, CreatePassport());
+        Assert.Equal(SpiralAbyssCollectionStatus.InvalidResponse, result.Status);
+        Assert.Empty(await context.AtomicGacha.GetChallengeObservationsAsync(target.Id));
+    }
+
     [Fact]
     public async Task ReaderRejectsOversizeAndHonorsCancellation()
     {
@@ -311,7 +427,7 @@ public sealed class SpiralAbyssCollectionTests
         public int Stars { get; set; } = 2;
         public int RequestCount { get; private set; }
         public HttpStatusCode Status { get; init; } = HttpStatusCode.OK;
-        public string? Body { get; init; }
+        public string? Body { get; set; }
         public Func<Task>? BeforeResponse { get; set; }
 
         public async Task<SpiralAbyssSourceResult> FetchAsync(

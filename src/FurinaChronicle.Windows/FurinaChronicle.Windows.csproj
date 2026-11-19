@@ -74,6 +74,24 @@
     <ProjectReference Include="..\FurinaChronicle.Presentation\FurinaChronicle.Presentation.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="..\FurinaChronicle.App\Resources\Images\ui_imgsign_itemicon.png">
+      <Link>Assets\ItemRarity\ui_imgsign_itemicon.png</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <Content Include="..\FurinaChronicle.App\Resources\Images\ChallengeDifficulty\*.png">
+      <Link>Assets\ChallengeDifficulty\%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <Content Include="..\FurinaChronicle.App\Resources\Images\ItemRarity\item_background_*.png">
+      <Link>Assets\ItemRarity\%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
   <Import Project="..\..\build\FurinaVersion.targets" />
 
   <!-- The unpackaged publish must carry the current resource index, including embedded XBF. -->

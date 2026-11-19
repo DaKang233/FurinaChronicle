@@ -52,7 +52,7 @@ public sealed class FileGachaItemIconCache : IGachaItemIconCache, IDisposable
         SemaphoreSlim itemGate = itemGates.GetOrAdd(
             gateKey,
             static _ => new SemaphoreSlim(1, 1));
-        await itemGate.WaitAsync(cancellationToken);
+        await itemGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             bool hasOldFile = File.Exists(cachePath);
@@ -71,7 +71,7 @@ public sealed class FileGachaItemIconCache : IGachaItemIconCache, IDisposable
                 await DownloadAsync(
                     sourceUri,
                     cachePath,
-                    cancellationToken);
+                    cancellationToken).ConfigureAwait(false);
                 return cachePath;
             }
             catch (OperationCanceledException) when (
@@ -108,13 +108,18 @@ public sealed class FileGachaItemIconCache : IGachaItemIconCache, IDisposable
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(GetCachedPath(game, itemId));
+    }
+
+    public string? GetCachedPath(GachaGame game, string? itemId, bool freshOnly = false)
+    {
         if (string.IsNullOrWhiteSpace(itemId))
         {
-            return Task.FromResult<string?>(null);
+            return null;
         }
 
         string cachePath = GetCachePath(game, itemId.Trim());
-        return Task.FromResult(File.Exists(cachePath) ? cachePath : null);
+        return File.Exists(cachePath) && (!freshOnly || IsFresh(cachePath)) ? cachePath : null;
     }
 
     public async Task ClearAsync(
@@ -126,7 +131,7 @@ public sealed class FileGachaItemIconCache : IGachaItemIconCache, IDisposable
             for (; acquiredPermits < MaximumConcurrentDownloads;
                 acquiredPermits++)
             {
-                await downloadGate.WaitAsync(cancellationToken);
+                await downloadGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             }
 
             if (!Directory.Exists(options.DirectoryPath))
@@ -170,7 +175,7 @@ public sealed class FileGachaItemIconCache : IGachaItemIconCache, IDisposable
         string cachePath,
         CancellationToken cancellationToken)
     {
-        await downloadGate.WaitAsync(cancellationToken);
+        await downloadGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         string? temporaryPath = null;
         try
         {
@@ -182,7 +187,7 @@ public sealed class FileGachaItemIconCache : IGachaItemIconCache, IDisposable
                 await httpClient.SendAsync(
                     request,
                     HttpCompletionOption.ResponseHeadersRead,
-                    cancellationToken);
+                    cancellationToken).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
             if (response.Content.Headers.ContentLength is long length &&
                 length > options.MaximumFileBytes)
@@ -199,7 +204,7 @@ public sealed class FileGachaItemIconCache : IGachaItemIconCache, IDisposable
                 $".{Path.GetFileName(cachePath)}.{Guid.NewGuid():N}.tmp");
 
             await using Stream source =
-                await response.Content.ReadAsStreamAsync(cancellationToken);
+                await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
             await using (var target = new FileStream(
                 temporaryPath,
                 FileMode.CreateNew,
@@ -214,7 +219,7 @@ public sealed class FileGachaItemIconCache : IGachaItemIconCache, IDisposable
                 {
                     int read = await source.ReadAsync(
                         buffer,
-                        cancellationToken);
+                        cancellationToken).ConfigureAwait(false);
                     if (read == 0)
                     {
                         break;
@@ -227,7 +232,7 @@ public sealed class FileGachaItemIconCache : IGachaItemIconCache, IDisposable
                     }
                     await target.WriteAsync(
                         buffer.AsMemory(0, read),
-                        cancellationToken);
+                        cancellationToken).ConfigureAwait(false);
                 }
             }
 

@@ -37,7 +37,8 @@ public sealed record SpiralAbyssSnapshot(
     DateTimeOffset? PeriodStart,
     DateTimeOffset? PeriodEnd,
     IReadOnlyList<SpiralAbyssFloorResult> Floors,
-    DateTimeOffset FetchedAt);
+    DateTimeOffset FetchedAt,
+    SpiralAbyssStatistics? Statistics = null);
 
 public sealed record SpiralAbyssSourceResult(
     SpiralAbyssCollectionStatus Status,
@@ -156,7 +157,8 @@ public sealed class CollectSpiralAbyss(
                     ObservedAt: snapshot.FetchedAt,
                     FetchedAt: snapshot.FetchedAt),
                 new DataSourceReference(provider: isOversea ? "hoyolab" : "miyoushe"),
-                AcquisitionBatchId.New()));
+                AcquisitionBatchId.New()),
+            spiralAbyssStatistics: snapshot.Statistics);
 
         ArchiveOperationResult committed = await history.CommitChallengeObservationsAsync(
             new ChallengeObservationCommitRequest(

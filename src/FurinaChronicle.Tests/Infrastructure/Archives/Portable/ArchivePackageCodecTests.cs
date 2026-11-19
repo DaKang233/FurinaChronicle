@@ -67,8 +67,12 @@ public sealed class ArchivePackageCodecTests
         Assert.Equal(64, written.PackageSha256.Length);
     }
 
-    [Fact]
-    public async Task StandardIncompleteAndRevisionAreCountedWithoutMerging()
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task StandardIncompleteAndRevisionAreCountedWithoutMerging(bool includeBattle, bool includeStatistics)
     {
         Guid archiveId = Guid.Parse("00000000-0000-0000-0000-000000000201");
         Guid accountId = Guid.Parse("00000000-0000-0000-0000-000000000202");
@@ -174,10 +178,22 @@ public sealed class ArchivePackageCodecTests
                 [new SpiralAbyssChamberResult(
                     3,
                     3,
-                    OccurrenceTime.At(now, TimePrecision.Second))])],
+                    OccurrenceTime.At(now, TimePrecision.Second),
+                    includeBattle
+                        ? [new SpiralAbyssBattleResult(2, OccurrenceTime.At(now, TimePrecision.Second),
+                            [new ChallengeParticipant("10000089", null, null, 90, 5)],
+                            [new ChallengeEnemy("Fixture enemy", 99, null)])]
+                        : [])])],
             new RecordProvenance(
                 DataOrigin.OfficialApi,
-                new RecordTimestamps(ObservedAt: now)));
+                new RecordTimestamps(ObservedAt: now)),
+            spiralAbyssStatistics: includeStatistics ? new SpiralAbyssStatistics(17, 12, "12-3", 34,
+                    [new SpiralAbyssRankEntry("10000089", 12, null, 5)],
+                    [new SpiralAbyssRankEntry("10000089", 27, null, 5)],
+                    [new SpiralAbyssRankEntry("10000089", 3_000_000_000, null, 5)],
+                    [new SpiralAbyssRankEntry("10000089", 999, null, 5)],
+                    [new SpiralAbyssRankEntry("10000089", 24, null, 5)],
+                    [new SpiralAbyssRankEntry("10000089", 8, null, 5)]) : null);
         await using var snapshot = new FakeSnapshot(
             now,
             catalog,
@@ -234,6 +250,10 @@ public sealed class ArchivePackageCodecTests
         Assert.Equal(2, read.GachaCurrentFactCount);
         Assert.Equal(1, read.GachaRevisionCount);
         Assert.Equal(3, read.DomainFactCount);
+        ArchiveDatasetDescriptor challengeDataset = Assert.Single(read.Manifest.Datasets,
+            dataset => dataset.Kind == "challenge-history");
+        Assert.Equal(includeBattle || includeStatistics ? "1.1" : "1.0", challengeDataset.FormatVersion);
+        Assert.Equal(includeBattle || includeStatistics, challengeDataset.Required);
         Assert.Equal(1, read.DomainRevisionCount);
         ArchiveDatasetDescriptor uigf = read.Manifest.Datasets.Single(item =>
             item.Format == "uigf");

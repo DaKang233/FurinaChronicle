@@ -1,6 +1,7 @@
 // Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -17,7 +18,7 @@ using FurinaChronicle.Services.HistoryDomains.Portable;
 
 namespace FurinaChronicle.Infrastructure.HistoryDomains.Portable;
 
-public sealed class ArchiveDomainPortableFileService(
+public sealed partial class ArchiveDomainPortableFileService(
     IPlayerArchiveRepository archives,
     IGameAccountRepository accounts,
     IArchiveDomainHistoryStore history)
@@ -86,10 +87,13 @@ public sealed class ArchiveDomainPortableFileService(
                 challenges));
         }
 
+        bool hasDetailedChallenges = ArchiveDomainPortablePackage.ContainsDetailedChallenges(portableAccounts);
         var package = new ArchiveDomainPortablePackage(
             datasetKind,
-            FormatMajor: 1,
-            FormatMinor: 1,
+            FormatMajor: hasDetailedChallenges ? 2 : 1,
+            FormatMinor: ArchiveDomainPortablePackage.ContainsTheaterBuffDetails(portableAccounts) ? 3 :
+                ArchiveDomainPortablePackage.ContainsStygianDetails(portableAccounts) ? 2 :
+                ArchiveDomainPortablePackage.ContainsTheaterDetails(portableAccounts) ? 1 : hasDetailedChallenges ? 0 : 1,
             PackageFingerprint: string.Empty,
             archive.Id,
             archive.Name,
@@ -166,7 +170,7 @@ public sealed class ArchiveDomainPortableFileService(
                 DisplayJson,
                 cancellationToken) ?? throw new InvalidDataException(
                 "The Portable dataset is empty or invalid.");
-        if (document.Format != FormatName || document.Package.FormatMajor != 1)
+        if (document.Format != FormatName)
         {
             throw new InvalidDataException(
                 "The Portable format name or major version is unsupported.");
@@ -375,6 +379,24 @@ public sealed class ArchiveDomainPortableFileService(
                         $"周期 {FormatTime(observation.PeriodStart)} 至 " +
                         $"{FormatTime(observation.PeriodEnd)}，来源 " +
                         $"{FormatSource(observation.Provenance)}");
+                    if (observation.SpiralAbyssStatistics is { } statistics)
+                    {
+                        if (statistics.TotalBattleTimes is int battles) await destination.WriteLineAsync($"  - 战斗次数：{battles}");
+                        if (statistics.TotalWinTimes is int wins) await destination.WriteLineAsync($"  - 胜利次数：{wins}");
+                        if (statistics.MaxFloor is { } maxFloor) await destination.WriteLineAsync($"  - 最深进度：{EscapeMarkdown(maxFloor)}");
+                        if (statistics.TotalStars is int totalStars) await destination.WriteLineAsync($"  - 官方总星数：{totalStars}");
+                        (string Name, IReadOnlyList<SpiralAbyssRankEntry> Entries)[] rankings =
+                        [
+                            ("出战次数", statistics.RevealRank), ("击破次数", statistics.DefeatRank),
+                            ("最强一击", statistics.DamageRank), ("承受伤害", statistics.TakeDamageRank),
+                            ("元素战技释放", statistics.NormalSkillRank), ("元素爆发释放", statistics.EnergySkillRank),
+                        ];
+                        foreach (var ranking in rankings.Where(ranking => ranking.Entries.Count > 0))
+                            await destination.WriteLineAsync($"  - {ranking.Name}：" + string.Join("、",
+                                ranking.Entries.Select(entry => $"角色 {EscapeMarkdown(entry.AvatarId)} = {entry.Value.ToString(CultureInfo.InvariantCulture)}")));
+                    }
+                    if (observation.TheaterStatistics is { } theaterStatistics)
+                        await WriteTheaterSummaryAsync(destination, theaterStatistics);
                     foreach (SpiralAbyssFloorResult floor in
                              observation.SpiralAbyssFloors)
                     {
@@ -388,7 +410,22 @@ public sealed class ArchiveDomainPortableFileService(
                                 $"    - 第 {chamber.Chamber} 间：" +
                                 $"{chamber.Stars} 星，" +
                                 $"完成时间 {FormatOccurrence(chamber.CompletedAt)}");
+                            foreach (SpiralAbyssBattleResult battle in chamber.Battles)
+                            {
+                                string half = battle.Half == 1 ? "上半" : "下半";
+                                string team = string.Join("、", battle.Participants.Select(item => EscapeMarkdown(item.Name ?? item.Id)));
+                                string enemies = string.Join("、", battle.Enemies.Select(item => EscapeMarkdown(item.Name ?? "未知")));
+                                await destination.WriteLineAsync(
+                                    $"      - {half} · {FormatOccurrence(battle.CompletedAt)}" +
+                                    (team.Length > 0 ? $" · 阵容 {team}" : string.Empty) +
+                                    (enemies.Length > 0 ? $" · 敌人 {enemies}" : string.Empty));
+                            }
                         }
+                    }
+                    if (observation.Mode == ChallengeMode.StygianOnslaught)
+                    {
+                        await WriteStygianDetailsAsync(destination, observation);
+                        continue;
                     }
                     if (observation.Difficulty is not null ||
                         observation.MedalCount is not null)
@@ -403,17 +440,17 @@ public sealed class ArchiveDomainPortableFileService(
                             $"  - `{EscapeMarkdown(stage.StageId)}`：" +
                             $"分数 {stage.Score?.ToString() ?? "未知"}，" +
                             $"完成时间 {FormatOccurrence(stage.CompletedAt)}");
+                        if (stage.TheaterRound is { } round)
+                        {
+                            await destination.WriteLineAsync($"    - 塔罗标记：{round.IsTarot?.ToString() ?? "未知"}，序号：{round.TarotSerialNumber?.ToString() ?? "未知"}");
+                            await WriteTheaterBuffsAsync(destination, round);
+                        }
                         if (stage.Participants.Count > 0)
                         {
                             await destination.WriteLineAsync(
                                 "    - 阵容：" + string.Join(
                                     "、",
-                                    stage.Participants.Select(participant =>
-                                        participant.Name is { } name
-                                            ? participant.Level is int level
-                                                ? $"{name}(Lv.{level})"
-                                                : name
-                                            : participant.Id)));
+                                    stage.Participants.Select(DescribeParticipant)));
                         }
                         if (stage.Buffs.Count > 0)
                         {
@@ -540,7 +577,9 @@ public sealed class ArchiveDomainPortableFileService(
                     challenge.Provenance,
                     challenge.Stages,
                     challenge.Difficulty,
-                    challenge.MedalCount);
+                    challenge.MedalCount,
+                    challenge.SpiralAbyssStatistics,
+                    challenge.TheaterStatistics, challenge.StygianStatistics, challenge.MultiplayerStages);
                 ChallengePlanDecision decision = ClassifyChallenge(
                     existing,
                     mapped);
@@ -639,7 +678,15 @@ public sealed class ArchiveDomainPortableFileService(
         JsonSerializer.Serialize(left.SpiralAbyssFloors, CompactJson) ==
         JsonSerializer.Serialize(right.SpiralAbyssFloors, CompactJson) &&
         JsonSerializer.Serialize(left.Stages, CompactJson) ==
-        JsonSerializer.Serialize(right.Stages, CompactJson);
+        JsonSerializer.Serialize(right.Stages, CompactJson) &&
+        JsonSerializer.Serialize(left.SpiralAbyssStatistics, CompactJson) ==
+        JsonSerializer.Serialize(right.SpiralAbyssStatistics, CompactJson) &&
+        JsonSerializer.Serialize(left.TheaterStatistics, CompactJson) ==
+        JsonSerializer.Serialize(right.TheaterStatistics, CompactJson) &&
+        JsonSerializer.Serialize(left.StygianStatistics, CompactJson) ==
+        JsonSerializer.Serialize(right.StygianStatistics, CompactJson) &&
+        JsonSerializer.Serialize(left.MultiplayerStages, CompactJson) ==
+        JsonSerializer.Serialize(right.MultiplayerStages, CompactJson);
 
     private enum ChallengePlanDecision
     {
@@ -693,7 +740,7 @@ public sealed class ArchiveDomainPortableFileService(
         ArchiveDomainPortablePackage package)
     {
         if (!Enum.IsDefined(package.DatasetKind) ||
-            package.FormatMajor != 1 || package.FormatMinor < 0 ||
+            !package.SupportsVersion() ||
             package.SourceArchiveId == Guid.Empty ||
             string.IsNullOrEmpty(package.SourceArchiveName))
         {
@@ -961,7 +1008,102 @@ public sealed class ArchiveDomainPortableFileService(
         RecordProvenance Provenance,
         IReadOnlyList<ChallengeStageWire>? Stages = null,
         int? Difficulty = null,
-        int? MedalCount = null);
+        int? MedalCount = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        SpiralAbyssStatisticsWire? SpiralAbyssStatistics = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        TheaterStatisticsWire? TheaterStatistics = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        StygianStatisticsWire? StygianStatistics = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        IReadOnlyList<ChallengeStageWire>? MultiplayerStages = null);
+
+    private sealed record TheaterStatisticsWire(
+        int? MaxRoundId, int? Heraldry, int? CoinCount, int? AvatarBonusCount, int? RentCount,
+        int? TarotFinishedCount, int? TotalUseTime, bool? ShowBattleStats, int[]? MedalRounds,
+        ChallengeParticipantWire[]? BackupAvatars,
+        TheaterAvatarStatisticWire? MaxDefeat, TheaterAvatarStatisticWire? MaxDamage,
+        TheaterAvatarStatisticWire? MaxTakeDamage, string? TotalCoinsConsumed,
+        TheaterAvatarStatisticWire[]? ShortestAvatars)
+    {
+        public static TheaterStatisticsWire FromDomain(TheaterStatistics value) =>
+            new(value.MaxRoundId, value.Heraldry, value.CoinCount, value.AvatarBonusCount,
+                value.RentCount, value.TarotFinishedCount, value.TotalUseTime, value.ShowBattleStats,
+                value.MedalRounds.ToArray(), value.BackupAvatars.Select(ChallengeParticipantWire.FromDomain).ToArray(),
+                TheaterAvatarStatisticWire.FromDomain(value.MaxDefeat),
+                TheaterAvatarStatisticWire.FromDomain(value.MaxDamage),
+                TheaterAvatarStatisticWire.FromDomain(value.MaxTakeDamage), value.TotalCoinsConsumed,
+                value.ShortestAvatars.Select(item => TheaterAvatarStatisticWire.FromDomain(item)!).ToArray());
+
+        public TheaterStatistics ToDomain() =>
+            new(MaxRoundId, Heraldry, CoinCount, AvatarBonusCount, RentCount, TarotFinishedCount,
+                TotalUseTime, ShowBattleStats, MedalRounds,
+                (BackupAvatars ?? []).Select(ChallengeParticipantWire.ToDomainChecked).ToArray(),
+                MaxDefeat?.ToDomain(), MaxDamage?.ToDomain(), MaxTakeDamage?.ToDomain(),
+                TotalCoinsConsumed, (ShortestAvatars ?? []).Select(item => item?.ToDomain()
+                    ?? throw new InvalidDataException("A Theater statistic cannot be null.")).ToArray());
+    }
+
+    private sealed record TheaterAvatarStatisticWire(ChallengeParticipantWire Participant, string? Value)
+    {
+        public static TheaterAvatarStatisticWire? FromDomain(TheaterAvatarStatistic? value) =>
+            value is null ? null : new(ChallengeParticipantWire.FromDomain(value.Participant), value.Value);
+        public TheaterAvatarStatistic ToDomain() => new(ChallengeParticipantWire.ToDomainChecked(Participant), Value);
+    }
+
+    private sealed record TheaterRoundWire(bool? IsTarot, int? TarotSerialNumber,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] TheaterBuffWire[]? BuffDetails = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? BuffSummary = null)
+    {
+        public static TheaterRoundWire FromDomain(TheaterRoundDetails value) => new(
+            value.IsTarot, value.TarotSerialNumber, value.BuffDetails?.Select(TheaterBuffWire.FromDomain).ToArray(), value.BuffSummary);
+        public TheaterRoundDetails ToDomain() => new(IsTarot, TarotSerialNumber,
+            BuffDetails?.Select(value => value?.ToDomain() ?? throw new InvalidDataException("A Theater buff cannot be null.")).ToArray(),
+            BuffSummary);
+    }
+
+    private sealed record TheaterBuffWire(string Kind, string Name, long? SourceId, string? Description,
+        string? IconUrl, int? Level, bool? IsEnhanced, IReadOnlyList<string>? Effects)
+    {
+        public static TheaterBuffWire FromDomain(TheaterBuff value) => new(value.Kind switch
+        {
+            TheaterBuffKind.ChoiceCard => "choice_card", TheaterBuffKind.Buff => "buff",
+            TheaterBuffKind.Splendour => "splendour", _ => throw new InvalidDataException("Unknown Theater buff kind."),
+        }, value.Name, value.SourceId, value.Description, value.IconUrl, value.Level, value.IsEnhanced, value.Effects);
+        public TheaterBuff ToDomain() => new(Kind switch
+        {
+            "choice_card" => TheaterBuffKind.ChoiceCard, "buff" => TheaterBuffKind.Buff,
+            "splendour" => TheaterBuffKind.Splendour, _ => throw new InvalidDataException("Unknown Theater buff kind."),
+        }, Name, SourceId, Description, IconUrl, Level, IsEnhanced, Effects);
+    }
+
+    private sealed record SpiralAbyssStatisticsWire(
+        int? TotalBattleTimes, int? TotalWinTimes, string? MaxFloor, int? TotalStars,
+        SpiralAbyssRankWire[]? RevealRank, SpiralAbyssRankWire[]? DefeatRank,
+        SpiralAbyssRankWire[]? DamageRank, SpiralAbyssRankWire[]? TakeDamageRank,
+        SpiralAbyssRankWire[]? NormalSkillRank, SpiralAbyssRankWire[]? EnergySkillRank)
+    {
+        public static SpiralAbyssStatisticsWire FromDomain(SpiralAbyssStatistics value) =>
+            new(value.TotalBattleTimes, value.TotalWinTimes, value.MaxFloor, value.TotalStars,
+                ToWire(value.RevealRank), ToWire(value.DefeatRank), ToWire(value.DamageRank),
+                ToWire(value.TakeDamageRank), ToWire(value.NormalSkillRank), ToWire(value.EnergySkillRank));
+
+        public SpiralAbyssStatistics ToDomain() =>
+            new(TotalBattleTimes, TotalWinTimes, MaxFloor, TotalStars,
+                ToDomain(RevealRank), ToDomain(DefeatRank), ToDomain(DamageRank),
+                ToDomain(TakeDamageRank), ToDomain(NormalSkillRank), ToDomain(EnergySkillRank));
+
+        private static SpiralAbyssRankWire[] ToWire(IReadOnlyList<SpiralAbyssRankEntry> values) =>
+            values.Select(value => new SpiralAbyssRankWire(
+                value.AvatarId, value.Value, value.IconUrl, value.Rarity)).ToArray();
+
+        private static SpiralAbyssRankEntry[] ToDomain(SpiralAbyssRankWire[]? values) =>
+            (values ?? []).Select(value => value is null
+                ? throw new InvalidDataException("An Abyss ranking entry cannot be null.")
+                : new SpiralAbyssRankEntry(value.AvatarId, value.Value, value.IconUrl, value.Rarity)).ToArray();
+    }
+
+    private sealed record SpiralAbyssRankWire(string AvatarId, long Value, string? IconUrl, int? Rarity);
 
     private sealed record ChallengeStageWire(
         string StageId,
@@ -969,14 +1111,45 @@ public sealed class ArchiveDomainPortableFileService(
         OccurrenceTime CompletedAt,
         IReadOnlyList<ChallengeParticipantWire>? Participants = null,
         IReadOnlyList<string>? Buffs = null,
-        IReadOnlyList<ChallengeEnemyWire>? Enemies = null);
+        IReadOnlyList<ChallengeEnemyWire>? Enemies = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        TheaterRoundWire? TheaterRound = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        StygianStageWire? StygianDetails = null)
+    {
+        public static ChallengeStageWire FromDomain(ChallengeStageResult stage) =>
+            new(stage.StageId, stage.Score, stage.CompletedAt,
+                stage.Participants.Select(ChallengeParticipantWire.FromDomain).ToArray(), stage.Buffs.ToArray(),
+                stage.Enemies.Select(enemy => new ChallengeEnemyWire(enemy.Name, enemy.Level, enemy.IconUrl)).ToArray(),
+                stage.TheaterRound is { } round ? TheaterRoundWire.FromDomain(round) : null,
+                stage.StygianDetails is { } details ? StygianStageWire.FromDomain(details) : null);
+
+        public static ChallengeStageResult ToDomainChecked(ChallengeStageWire? stage) =>
+            stage is null ? throw new InvalidDataException("A challenge stage cannot be null.") :
+            new(stage.StageId, stage.Score, stage.CompletedAt,
+                (stage.Participants ?? []).Select(ChallengeParticipantWire.ToDomainChecked), stage.Buffs,
+                (stage.Enemies ?? []).Select(enemy => enemy is null ? throw new InvalidDataException("An enemy cannot be null.") :
+                    new ChallengeEnemy(enemy.Name, enemy.Level, enemy.IconUrl)),
+                stage.TheaterRound?.ToDomain(), stage.StygianDetails?.ToDomain());
+    }
 
     private sealed record ChallengeParticipantWire(
         string Id,
         string? Name,
         string? IconUrl,
         int? Level,
-        int? Rarity);
+        int? Rarity,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        ChallengeParticipantOrigin? Origin = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        int? Constellation = null)
+    {
+        public static ChallengeParticipantWire FromDomain(ChallengeParticipant value) =>
+            new(value.Id, value.Name, value.IconUrl, value.Level, value.Rarity, value.Origin, value.Constellation);
+        public static ChallengeParticipant ToDomainChecked(ChallengeParticipantWire? value) =>
+            value is null ? throw new InvalidDataException("A challenge participant cannot be null.") :
+                new(value.Id, value.Name, value.IconUrl, value.Level, value.Rarity, value.Origin, value.Constellation);
+    }
 
     private sealed record ChallengeEnemyWire(
         string? Name,
@@ -991,7 +1164,29 @@ public sealed class ArchiveDomainPortableFileService(
     private sealed record SpiralAbyssChamberWire(
         int Chamber,
         int Stars,
-        OccurrenceTime CompletedAt);
+        OccurrenceTime CompletedAt,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        SpiralAbyssBattleWire[]? Battles = null);
+
+    private sealed record SpiralAbyssBattleWire(
+        int Half,
+        OccurrenceTime CompletedAt,
+        ChallengeParticipantWire[] Participants,
+        ChallengeEnemyWire[] Enemies)
+    {
+        public static SpiralAbyssBattleWire FromDomain(SpiralAbyssBattleResult battle) =>
+            new(battle.Half, battle.CompletedAt,
+                battle.Participants.Select(item =>
+                    ChallengeParticipantWire.FromDomain(item)).ToArray(),
+                battle.Enemies.Select(item =>
+                    new ChallengeEnemyWire(item.Name, item.Level, item.IconUrl)).ToArray());
+
+        public SpiralAbyssBattleResult ToDomain() =>
+            new(Half, CompletedAt,
+                Participants.Select(item =>
+                    ChallengeParticipantWire.ToDomainChecked(item)),
+                Enemies.Select(item => new ChallengeEnemy(item.Name, item.Level, item.IconUrl)));
+    }
 
     private sealed class ItemStateObservationConverter
         : JsonConverter<ItemStateObservation>
@@ -1060,28 +1255,15 @@ public sealed class ArchiveDomainPortableFileService(
                             new SpiralAbyssChamberResult(
                                 chamber.Chamber,
                                 chamber.Stars,
-                                chamber.CompletedAt)))),
+                                chamber.CompletedAt,
+                                chamber.Battles?.Select(battle => battle.ToDomain()))))),
                 wire.Provenance,
-                (wire.Stages ?? []).Select(stage =>
-                    new ChallengeStageResult(
-                        stage.StageId,
-                        stage.Score,
-                        stage.CompletedAt,
-                        (stage.Participants ?? []).Select(participant =>
-                            new ChallengeParticipant(
-                                participant.Id,
-                                participant.Name,
-                                participant.IconUrl,
-                                participant.Level,
-                                participant.Rarity)),
-                        stage.Buffs ?? [],
-                        (stage.Enemies ?? []).Select(enemy =>
-                            new ChallengeEnemy(
-                                enemy.Name,
-                                enemy.Level,
-                                enemy.IconUrl)))),
+                (wire.Stages ?? []).Select(ChallengeStageWire.ToDomainChecked),
                 wire.Difficulty,
-                wire.MedalCount);
+                wire.MedalCount,
+                wire.SpiralAbyssStatistics?.ToDomain(),
+                wire.TheaterStatistics?.ToDomain(), wire.StygianStatistics?.ToDomain(),
+                (wire.MultiplayerStages ?? []).Select(ChallengeStageWire.ToDomainChecked));
         }
 
         public override void Write(
@@ -1106,30 +1288,20 @@ public sealed class ArchiveDomainPortableFileService(
                                 new SpiralAbyssChamberWire(
                                     chamber.Chamber,
                                     chamber.Stars,
-                                    chamber.CompletedAt)).ToArray()))
+                                    chamber.CompletedAt,
+                                    chamber.Battles.Count == 0 ? null :
+                                        chamber.Battles.Select(SpiralAbyssBattleWire.FromDomain).ToArray())).ToArray()))
                         .ToArray(),
                     value.Provenance,
-                    value.Stages.Select(stage =>
-                        new ChallengeStageWire(
-                            stage.StageId,
-                            stage.Score,
-                            stage.CompletedAt,
-                            stage.Participants.Select(participant =>
-                                new ChallengeParticipantWire(
-                                    participant.Id,
-                                    participant.Name,
-                                    participant.IconUrl,
-                                    participant.Level,
-                                    participant.Rarity)).ToArray(),
-                            stage.Buffs.ToArray(),
-                            stage.Enemies.Select(enemy =>
-                                new ChallengeEnemyWire(
-                                    enemy.Name,
-                                    enemy.Level,
-                                    enemy.IconUrl)).ToArray()))
-                        .ToArray(),
+                    value.Stages.Select(ChallengeStageWire.FromDomain).ToArray(),
                     value.Difficulty,
-                    value.MedalCount),
+                    value.MedalCount,
+                    value.SpiralAbyssStatistics is { } statistics
+                        ? SpiralAbyssStatisticsWire.FromDomain(statistics) : null,
+                    value.TheaterStatistics is { } theaterStatistics
+                        ? TheaterStatisticsWire.FromDomain(theaterStatistics) : null,
+                    value.StygianStatistics is { } stygian ? StygianStatisticsWire.FromDomain(stygian) : null,
+                    value.MultiplayerStages.Count == 0 ? null : value.MultiplayerStages.Select(ChallengeStageWire.FromDomain).ToArray()),
                 options);
     }
 

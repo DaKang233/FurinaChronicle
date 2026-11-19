@@ -104,7 +104,7 @@ public sealed class MiYouSheRoleCombatResponseReader(TimeProvider timeProvider)
         {
             return new(SpiralAbyssCollectionStatus.InvalidResponse);
         }
-        Entry? entry = root.Data?.FirstOrDefault(candidate => candidate.HasData == true);
+        Entry? entry = root.Data?.FirstOrDefault(candidate => candidate?.HasData == true);
         if (entry is null)
         {
             return new(SpiralAbyssCollectionStatus.Empty);
@@ -131,22 +131,45 @@ public sealed class MiYouSheRoleCombatResponseReader(TimeProvider timeProvider)
                 {
                     return new(SpiralAbyssCollectionStatus.InvalidResponse);
                 }
-                participants.Add(new ChallengeParticipant(
-                    avatar.AvatarId.Value.ToString(CultureInfo.InvariantCulture),
-                    avatar.Name,
-                    avatar.Image,
-                    avatar.Level,
-                    avatar.Rarity));
+                participants.Add(ReadAvatar(avatar));
             }
 
             var buffs = new List<string>();
-            foreach (Buff? buff in (round.ChoiceCards ?? [])
-                .Concat(round.Buffs ?? []))
+            var buffDetails = new List<TheaterBuff>();
+            foreach (var (buff, kind) in (round.ChoiceCards ?? []).Select(buff => (buff, TheaterBuffKind.ChoiceCard))
+                .Concat((round.Buffs ?? []).Select(buff => (buff, TheaterBuffKind.Buff))))
             {
                 if (!string.IsNullOrWhiteSpace(buff?.Name))
                 {
-                    buffs.Add(buff.Name);
+                    buffs.Add(DescribeBuff(buff.Name, buff.Description));
+                    buffDetails.Add(new TheaterBuff(kind, buff.Name, buff.Id, buff.Description, buff.Icon,
+                        isEnhanced: buff.IsEnhanced));
                 }
+            }
+
+            if (round.SplendourBuff?.Summary?.Description is { } summary &&
+                !string.IsNullOrWhiteSpace(summary))
+            {
+                buffs.Add(DescribeBuff("祝福总览", summary));
+            }
+            foreach (SplendourEntry? blessing in round.SplendourBuff?.Buffs ?? [])
+            {
+                if (string.IsNullOrWhiteSpace(blessing?.Name))
+                {
+                    continue;
+                }
+
+                string name = blessing.Level is int level && level >= 0
+                    ? $"{blessing.Name} Lv.{level.ToString(CultureInfo.InvariantCulture)}"
+                    : blessing.Name;
+                string effects = string.Join("\n", (blessing.LevelEffect ?? [])
+                    .Where(effect => !string.IsNullOrWhiteSpace(effect?.Description))
+                    .Select(effect => effect!.Description));
+                buffs.Add(DescribeBuff(name, effects));
+                buffDetails.Add(new TheaterBuff(TheaterBuffKind.Splendour, blessing.Name!,
+                    iconUrl: blessing.Icon, level: blessing.Level,
+                    effects: (blessing.LevelEffect ?? []).Where(effect => !string.IsNullOrWhiteSpace(effect?.Description))
+                        .Select(effect => effect!.Description!).ToArray()));
             }
 
             var enemies = new List<ChallengeEnemy>();
@@ -170,9 +193,15 @@ public sealed class MiYouSheRoleCombatResponseReader(TimeProvider timeProvider)
                     : OccurrenceTime.Unknown,
                 participants,
                 buffs,
-                enemies));
+                enemies,
+                round.IsTarot.HasValue || round.TarotSerialNo.HasValue || buffDetails.Count > 0 ||
+                    !string.IsNullOrWhiteSpace(round.SplendourBuff?.Summary?.Description)
+                    ? new TheaterRoundDetails(round.IsTarot, round.TarotSerialNo, buffDetails,
+                        round.SplendourBuff?.Summary?.Description?.Replace("\\n", "\n", StringComparison.Ordinal)) : null));
         }
 
+        if (stages.Select(stage => stage.StageId).Distinct(StringComparer.Ordinal).Count() != stages.Count)
+            return new(SpiralAbyssCollectionStatus.InvalidResponse);
         return new(
             SpiralAbyssCollectionStatus.Received,
             new ChallengeModeSnapshot(
@@ -184,8 +213,67 @@ public sealed class MiYouSheRoleCombatResponseReader(TimeProvider timeProvider)
                 stages,
                 entry.Stat?.DifficultyId,
                 entry.Stat?.MedalNum,
-                fetchedAt));
+                fetchedAt,
+                ReadStatistics(entry)));
     }
+
+    private static ChallengeParticipant ReadAvatar(Avatar? avatar)
+    {
+        if (avatar is not { AvatarId: > 0 } || avatar.Level is < 0 || avatar.Rarity is < 0)
+            throw new ArgumentException("The Theater roster contains an invalid avatar.");
+        return new ChallengeParticipant(
+            avatar.AvatarId.Value.ToString(CultureInfo.InvariantCulture),
+            avatar.Name, avatar.Image, avatar.Level, avatar.Rarity,
+            avatar.AvatarType is int type ? (ChallengeParticipantOrigin)type : null);
+    }
+
+    private static TheaterStatistics? ReadStatistics(Entry entry)
+    {
+        FightStatistics? fight = entry.Detail?.FightStatisic;
+        Stat? stat = entry.Stat;
+        bool hasTotals = stat is not null && (stat.MaxRoundId.HasValue || stat.Heraldry.HasValue ||
+            stat.CoinNum.HasValue || stat.AvatarBonusNum.HasValue || stat.RentCnt.HasValue ||
+            stat.TarotFinishedCnt.HasValue || stat.GetMedalRoundList is not null);
+        if (!hasTotals && fight is null && entry.Detail?.BackupAvatars is null) return null;
+        return new TheaterStatistics(
+            stat?.MaxRoundId, stat?.Heraldry, stat?.CoinNum, stat?.AvatarBonusNum,
+            stat?.RentCnt, stat?.TarotFinishedCnt, fight?.TotalUseTime, fight?.IsShowBattleStats,
+            stat?.GetMedalRoundList,
+            entry.Detail?.BackupAvatars?.Select(ReadAvatar).ToArray(),
+            ReadAvatarStatistic(fight?.MaxDefeatAvatar), ReadAvatarStatistic(fight?.MaxDamageAvatar),
+            ReadAvatarStatistic(fight?.MaxTakeDamageAvatar), ReadValue(fight?.TotalCoinConsumed?.Value ?? default),
+            (fight?.ShortestAvatarList ?? []).Select(value => ReadAvatarStatistic(value)
+                ?? throw new ArgumentException("A shortest-time avatar is missing its identity.")).ToArray());
+    }
+
+    private static TheaterAvatarStatistic? ReadAvatarStatistic(AvatarStatistic? value)
+    {
+        if (value is null || value.AvatarId is null or 0) return null;
+        if (value.AvatarId < 0) throw new ArgumentException("A Theater statistic avatar is invalid.");
+        return new TheaterAvatarStatistic(
+            new ChallengeParticipant(value.AvatarId.Value.ToString(CultureInfo.InvariantCulture),
+                null, value.AvatarIcon, null, value.Rarity), ReadValue(value.Value));
+    }
+
+    private static string? ReadValue(JsonElement value)
+    {
+        string? text = value.ValueKind switch
+        {
+            JsonValueKind.Undefined or JsonValueKind.Null => null,
+            JsonValueKind.String => value.GetString()?.Trim(),
+            JsonValueKind.Number => value.GetRawText(),
+            _ => throw new ArgumentException("A Theater statistic value is invalid."),
+        };
+        if (text is null) return null;
+        if (text.Length == 0) return "0";
+        return decimal.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out decimal number)
+            ? number.ToString("G29", CultureInfo.InvariantCulture) : text;
+    }
+
+    private static string DescribeBuff(string name, string? description) =>
+        string.IsNullOrWhiteSpace(description)
+            ? name
+            : $"{name}：{description.Replace("\\n", "\n", StringComparison.Ordinal).Trim()}";
 
     internal static SpiralAbyssCollectionStatus MapBusinessCode(int retcode) =>
         retcode switch
@@ -212,9 +300,14 @@ public sealed class MiYouSheRoleCombatResponseReader(TimeProvider timeProvider)
 
     private sealed record Schedule(int? ScheduleId, long? StartTime, long? EndTime);
 
-    private sealed record Stat(int? DifficultyId, int? MedalNum);
+    private sealed record Stat(int? DifficultyId, int? MedalNum, int? MaxRoundId, int? Heraldry,
+        int? CoinNum, int? AvatarBonusNum, int? RentCnt, int? TarotFinishedCnt, int[]? GetMedalRoundList);
 
-    private sealed record Detail(Round?[]? RoundsData);
+    private sealed record Detail(Round?[]? RoundsData, Avatar?[]? BackupAvatars, FightStatistics? FightStatisic);
+    private sealed record FightStatistics(AvatarStatistic? MaxDefeatAvatar, AvatarStatistic? MaxDamageAvatar,
+        AvatarStatistic? MaxTakeDamageAvatar, AvatarStatistic? TotalCoinConsumed,
+        AvatarStatistic?[]? ShortestAvatarList, int? TotalUseTime, bool? IsShowBattleStats);
+    private sealed record AvatarStatistic(long? AvatarId, string? AvatarIcon, JsonElement Value, int? Rarity);
 
     private sealed record Round(
         int? RoundId,
@@ -223,16 +316,25 @@ public sealed class MiYouSheRoleCombatResponseReader(TimeProvider timeProvider)
         Avatar?[]? Avatars,
         Buff?[]? Buffs,
         Buff?[]? ChoiceCards,
-        Enemy?[]? Enemies);
+        Enemy?[]? Enemies,
+        SplendourGroup? SplendourBuff,
+        bool? IsTarot,
+        int? TarotSerialNo);
 
     private sealed record Avatar(
         int? AvatarId,
         string? Name,
         string? Image,
         int? Level,
-        int? Rarity);
+        int? Rarity,
+        int? AvatarType);
 
-    private sealed record Buff(string? Name);
+    private sealed record Buff(string? Name, [property: JsonPropertyName("desc")] string? Description,
+        long? Id, string? Icon, bool? IsEnhanced);
+
+    private sealed record SplendourGroup(SplendourDescription? Summary, SplendourEntry?[]? Buffs);
+    private sealed record SplendourEntry(string? Name, int? Level, SplendourDescription?[]? LevelEffect, string? Icon);
+    private sealed record SplendourDescription([property: JsonPropertyName("desc")] string? Description);
 
     private sealed record Enemy(string? Name, string? Icon, int? Level);
 }

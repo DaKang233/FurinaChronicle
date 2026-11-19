@@ -368,7 +368,12 @@ public sealed partial class SqliteGachaAtomicChangeStore
             source.PeriodEnd,
             source.Completeness,
             source.SpiralAbyssFloors,
-            source.Provenance);
+            source.Provenance,
+            source.Stages,
+            source.Difficulty,
+            source.MedalCount,
+            source.SpiralAbyssStatistics,
+            source.TheaterStatistics, source.StygianStatistics, source.MultiplayerStages);
         string payload = JsonSerializer.Serialize(
             ChallengeObservationPayload.FromDomain(mapped),
             DomainJsonOptions);

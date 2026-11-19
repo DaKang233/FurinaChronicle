@@ -1,0 +1,366 @@
+{
+  "format": "furina-domain-history",
+  "package": {
+    "dataset_kind": 2,
+    "format_major": 2,
+    "format_minor": 0,
+    "package_fingerprint": "348a1ea1c4837fe33e0a60e69d6f1917615255744e56d7fe261ae6e5f65971ac",
+    "source_archive_id": "35d406d9-8247-4dfe-b62a-8db3bc7612db",
+    "source_archive_name": "01 \u5408\u6210\u6863\u6848",
+    "exported_at": "2026-10-03T16:16:17+08:00",
+    "accounts": [
+      {
+        "source_account_id": "35ca825b-e492-4cb0-b284-597aab4ffdf0",
+        "role_identity": {
+          "id": "3d2436bc-41eb-5cb4-85fa-364e4a08603b",
+          "natural_identity": {
+            "game_biz": "hk4e_cn",
+            "server": "cn_gf01",
+            "uid": "100000001"
+          }
+        },
+        "item_observations": [],
+        "manual_acquisitions": [],
+        "manual_revisions": [],
+        "challenge_observations": [
+          {
+            "observation_id": "078673fd-9a15-41ec-a5d7-02ed5d2634c3",
+            "game_account_id": "35ca825b-e492-4cb0-b284-597aab4ffdf0",
+            "mode": 1,
+            "season_id": "900001",
+            "period_start": null,
+            "period_end": null,
+            "completeness": 1,
+            "spiral_abyss_floors": [
+              {
+                "floor": 12,
+                "completeness": 1,
+                "chambers": [
+                  {
+                    "chamber": 3,
+                    "stars": 3,
+                    "completed_at": {
+                      "kind": 1,
+                      "start": "2026-10-03T15:16:17+08:00",
+                      "precision": 1
+                    },
+                    "battles": [
+                      {
+                        "half": 1,
+                        "completed_at": {
+                          "kind": 1,
+                          "start": "2026-10-03T15:15:37+08:00",
+                          "precision": 1
+                        },
+                        "participants": [
+                          {
+                            "id": "10000093",
+                            "name": "\u6D4B\u8BD5\u9635\u5BB9 \u00B7 \u95F2\u4E91",
+                            "icon_url": "https://enka.network/ui/UI_AvatarIcon_Xianyun.png",
+                            "level": 90,
+                            "rarity": 5
+                          }
+                        ],
+                        "enemies": []
+                      },
+                      {
+                        "half": 2,
+                        "completed_at": {
+                          "kind": 1,
+                          "start": "2026-10-03T15:16:17+08:00",
+                          "precision": 1
+                        },
+                        "participants": [],
+                        "enemies": [
+                          {
+                            "name": "\u6D4B\u8BD5\u654C\u4EBA \u00B7 \u7532",
+                            "level": 98,
+                            "icon_url": null
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "provenance": {
+              "origin": 1,
+              "timestamps": {
+                "observed_at": "2026-10-03T15:16:17+08:00",
+                "fetched_at": null,
+                "imported_at": null
+              },
+              "source": null,
+              "acquisition_batch_id": null
+            },
+            "stages": [],
+            "difficulty": null,
+            "medal_count": null
+          },
+          {
+            "observation_id": "c67e7b4e-c8e2-4b88-8d3d-0840b0b3441c",
+            "game_account_id": "35ca825b-e492-4cb0-b284-597aab4ffdf0",
+            "mode": 2,
+            "season_id": "900002",
+            "period_start": null,
+            "period_end": null,
+            "completeness": 1,
+            "spiral_abyss_floors": [],
+            "provenance": {
+              "origin": 1,
+              "timestamps": {
+                "observed_at": "2026-10-03T15:16:17+08:00",
+                "fetched_at": null,
+                "imported_at": null
+              },
+              "source": null,
+              "acquisition_batch_id": null
+            },
+            "stages": [
+              {
+                "stage_id": "1",
+                "score": 1,
+                "completed_at": {
+                  "kind": 1,
+                  "start": "2026-10-03T15:16:17+08:00",
+                  "precision": 1
+                },
+                "participants": [
+                  {
+                    "id": "10000093",
+                    "name": "\u6D4B\u8BD5\u9635\u5BB9 \u00B7 \u95F2\u4E91",
+                    "icon_url": "https://enka.network/ui/UI_AvatarIcon_Xianyun.png",
+                    "level": 90,
+                    "rarity": 5
+                  }
+                ],
+                "buffs": [
+                  "\u5267\u8BD7\u589E\u76CA\u6D4B\u8BD5"
+                ],
+                "enemies": [
+                  {
+                    "name": "\u6D4B\u8BD5\u654C\u4EBA \u00B7 \u7532",
+                    "level": 98,
+                    "icon_url": null
+                  }
+                ]
+              }
+            ],
+            "difficulty": 5,
+            "medal_count": 1
+          },
+          {
+            "observation_id": "e3780c75-c869-4d7b-8b24-97582dd70c91",
+            "game_account_id": "35ca825b-e492-4cb0-b284-597aab4ffdf0",
+            "mode": 3,
+            "season_id": "900003",
+            "period_start": null,
+            "period_end": null,
+            "completeness": 1,
+            "spiral_abyss_floors": [],
+            "provenance": {
+              "origin": 1,
+              "timestamps": {
+                "observed_at": "2026-10-03T15:16:17+08:00",
+                "fetched_at": null,
+                "imported_at": null
+              },
+              "source": null,
+              "acquisition_batch_id": null
+            },
+            "stages": [
+              {
+                "stage_id": "\u8BD5\u9A8C\u5173",
+                "score": 60,
+                "completed_at": {
+                  "kind": 0
+                },
+                "participants": [
+                  {
+                    "id": "10000093",
+                    "name": "\u6D4B\u8BD5\u9635\u5BB9 \u00B7 \u95F2\u4E91",
+                    "icon_url": "https://enka.network/ui/UI_AvatarIcon_Xianyun.png",
+                    "level": 90,
+                    "rarity": 5
+                  }
+                ],
+                "buffs": [
+                  "\u5371\u6218\u795D\u798F\u6D4B\u8BD5"
+                ],
+                "enemies": [
+                  {
+                    "name": "\u6D4B\u8BD5\u654C\u4EBA \u00B7 \u7532",
+                    "level": 98,
+                    "icon_url": null
+                  }
+                ]
+              }
+            ],
+            "difficulty": 6,
+            "medal_count": null
+          },
+          {
+            "observation_id": "8954b2a1-5ae9-4bc9-a645-03ab95e4ecd4",
+            "game_account_id": "35ca825b-e492-4cb0-b284-597aab4ffdf0",
+            "mode": 1,
+            "season_id": "900001",
+            "period_start": null,
+            "period_end": null,
+            "completeness": 1,
+            "spiral_abyss_floors": [
+              {
+                "floor": 12,
+                "completeness": 1,
+                "chambers": [
+                  {
+                    "chamber": 3,
+                    "stars": 3,
+                    "completed_at": {
+                      "kind": 1,
+                      "start": "2026-10-03T15:16:17+08:00",
+                      "precision": 1
+                    },
+                    "battles": [
+                      {
+                        "half": 1,
+                        "completed_at": {
+                          "kind": 1,
+                          "start": "2026-10-03T15:15:37+08:00",
+                          "precision": 1
+                        },
+                        "participants": [
+                          {
+                            "id": "10000093",
+                            "name": "\u6D4B\u8BD5\u9635\u5BB9 \u00B7 \u95F2\u4E91",
+                            "icon_url": "https://enka.network/ui/UI_AvatarIcon_Xianyun.png",
+                            "level": 90,
+                            "rarity": 5
+                          }
+                        ],
+                        "enemies": []
+                      },
+                      {
+                        "half": 2,
+                        "completed_at": {
+                          "kind": 1,
+                          "start": "2026-10-03T15:16:17+08:00",
+                          "precision": 1
+                        },
+                        "participants": [],
+                        "enemies": [
+                          {
+                            "name": "\u6D4B\u8BD5\u654C\u4EBA \u00B7 \u7532",
+                            "level": 98,
+                            "icon_url": null
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "provenance": {
+              "origin": 1,
+              "timestamps": {
+                "observed_at": "2026-10-03T16:16:17+08:00",
+                "fetched_at": "2026-10-03T16:16:17+08:00",
+                "imported_at": null
+              },
+              "source": null,
+              "acquisition_batch_id": null
+            },
+            "stages": [],
+            "difficulty": null,
+            "medal_count": null,
+            "spiral_abyss_statistics": {
+              "total_battle_times": 17,
+              "total_win_times": 12,
+              "max_floor": "12-3",
+              "total_stars": 34,
+              "reveal_rank": [
+                {
+                  "avatar_id": "10000093",
+                  "value": 12,
+                  "icon_url": "https://enka.network/ui/UI_AvatarIcon_Liuyun.png",
+                  "rarity": 5
+                }
+              ],
+              "defeat_rank": [
+                {
+                  "avatar_id": "10000093",
+                  "value": 27,
+                  "icon_url": null,
+                  "rarity": 5
+                }
+              ],
+              "damage_rank": [
+                {
+                  "avatar_id": "10000093",
+                  "value": 3000000000,
+                  "icon_url": null,
+                  "rarity": 5
+                }
+              ],
+              "take_damage_rank": [
+                {
+                  "avatar_id": "10000093",
+                  "value": 999,
+                  "icon_url": null,
+                  "rarity": 5
+                }
+              ],
+              "normal_skill_rank": [
+                {
+                  "avatar_id": "10000093",
+                  "value": 24,
+                  "icon_url": null,
+                  "rarity": 5
+                }
+              ],
+              "energy_skill_rank": [
+                {
+                  "avatar_id": "10000093",
+                  "value": 8,
+                  "icon_url": null,
+                  "rarity": 5
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "source_account_id": "e4a57492-ca2a-4999-9fa5-7bfa41d1b055",
+        "role_identity": {
+          "id": "656d708e-3be3-5ffc-a7b7-2cfb6e461c23",
+          "natural_identity": {
+            "game_biz": "hk4e_cn",
+            "server": "cn_gf01",
+            "uid": "100000002"
+          }
+        },
+        "item_observations": [],
+        "manual_acquisitions": [],
+        "manual_revisions": [],
+        "challenge_observations": []
+      },
+      {
+        "source_account_id": "262a261b-d97d-4cd8-9eaa-61d3fd5ac27a",
+        "role_identity": {
+          "id": "a3db4c43-c91c-52c4-a3e3-75825ef2ee26",
+          "natural_identity": {
+            "game_biz": "hk4e_cn",
+            "server": "cn_gf01",
+            "uid": "100000003"
+          }
+        },
+        "item_observations": [],
+        "manual_acquisitions": [],
+        "manual_revisions": [],
+        "challenge_observations": []
+      }
+    ]
+  }
+}

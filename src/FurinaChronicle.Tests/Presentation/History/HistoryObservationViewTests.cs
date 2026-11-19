@@ -71,12 +71,42 @@ public sealed class HistoryObservationViewTests
                 "UID 800000001");
 
         Assert.StartsWith("发生于", view.OccurredText, StringComparison.Ordinal);
+        Assert.Equal(view.OccurredText, view.ListTimeText);
         Assert.Equal("星数：9", view.StarsText);
         Assert.Equal("难度：未知", view.DifficultyText);
         Assert.Equal("奖章：未知", view.MedalText);
         Assert.Equal("秒数成绩：不适用", view.SecondsText);
         Assert.Contains("第 12 层", view.Detail);
         Assert.Contains("深境螺旋", view.Title);
+    }
+
+    [Fact]
+    public async Task AbyssShowsOfficialCountersAndAllSixRankings()
+    {
+        var statistics = new SpiralAbyssStatistics(17, 12, "12-3", 34,
+                    [new SpiralAbyssRankEntry("10000089", 12, null, 5)],
+                    [new SpiralAbyssRankEntry("10000089", 27, null, 5)],
+                    [new SpiralAbyssRankEntry("10000089", 3_000_000_000, null, 5)],
+                    [new SpiralAbyssRankEntry("10000089", 999, null, 5)],
+                    [new SpiralAbyssRankEntry("10000089", 24, null, 5)],
+                    [new SpiralAbyssRankEntry("10000089", 8, null, 5)]);
+        var observation = new ChallengeObservation(
+            ChallengeObservationId.New(), AccountId, ChallengeMode.SpiralAbyss,
+            "124", null, null, DataCompleteness.Partial, [], RecordProvenance.Unknown,
+            spiralAbyssStatistics: statistics);
+        var view = await HistoryObservationViewBuilder.ChallengeAsync(
+            observation, NullDomainMetadataService.Instance, "合成账号");
+        Assert.Contains("34 星", view.Title);
+        Assert.Equal("星数：34", view.StarsText);
+        Assert.Equal(7, view.DetailSections.Count);
+        Assert.Contains("战斗次数：17", view.DetailSections[0].Lines);
+        Assert.Contains("胜利次数：12", view.DetailSections[0].Lines);
+        Assert.Contains("最深进度：12-3", view.DetailSections[0].Lines);
+        Assert.Equal(new[] { "出战次数", "击破次数", "最强一击", "承受伤害", "元素战技释放", "元素爆发释放" },
+            view.DetailSections.Skip(1).Select(section => section.Title));
+        var damage = Assert.Single(view.DetailSections, section => section.Title == "最强一击");
+        Assert.Equal("10000089 · 3000000000", damage.Battles[0].Groups[0].Portraits[0].Label);
+        Assert.Contains("未知", view.OccurredText);
     }
 
     [Fact]
@@ -101,12 +131,13 @@ public sealed class HistoryObservationViewTests
                     OccurrenceTime.At(Time, TimePrecision.Second),
                     participants:
                     [
-                        new ChallengeParticipant("10000002", null, null, 90, 5),
+                        new ChallengeParticipant("10000002", null,
+                            "https://act-webstatic.mihoyo.com/portrait.png", 90, 5),
                     ],
                     buffs: ["攻击提升"],
                     enemies:
                     [
-                        new ChallengeEnemy(null, 95, null),
+                        new ChallengeEnemy(null, 95, "https://example.invalid/probe.png"),
                     ]),
             ],
             difficulty: 4,
@@ -119,11 +150,21 @@ public sealed class HistoryObservationViewTests
                 "UID 800000001");
 
         Assert.StartsWith("发生于", view.OccurredText, StringComparison.Ordinal);
-        Assert.Equal("难度：4", view.DifficultyText);
+        Assert.Equal(view.OccurredText, view.ListTimeText);
+        Assert.Equal("难度：卓越模式（4）", view.DifficultyText);
         Assert.Equal("奖章：9", view.MedalText);
         Assert.Contains("10000002", view.Detail);
         Assert.Contains("攻击提升", view.Detail);
         Assert.Contains("未知", view.Detail);
+        var section = Assert.Single(view.DetailSections);
+        Assert.Contains("攻击提升", section.Lines);
+        var battle = Assert.Single(section.Battles);
+        var character = Assert.Single(battle.Groups[0].Portraits);
+        Assert.Equal("10000002(Lv.90)", character.Label);
+        Assert.Equal("act-webstatic.mihoyo.com", character.Icon?.Host);
+        var enemy = Assert.Single(battle.Groups[1].Portraits);
+        Assert.Equal("未知敌人(Lv.95)", enemy.Label);
+        Assert.Null(enemy.Icon);
     }
 
     [Fact]
