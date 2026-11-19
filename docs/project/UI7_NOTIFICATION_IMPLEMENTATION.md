@@ -1,6 +1,6 @@
 # UI-7 通知统一与抽卡页精简实施记录
 
-状态：工作包 1、2 已实施并通过桌面验收（2026-11-15）；工作包 3、4 待实施。
+状态：工作包 1～4 已实施并通过桌面验收（2026-11-15）；具体未运行项保留于各验收表。
 计划来源：[WINUI_NOTIFICATION_AND_SIMPLIFICATION_PLAN](WINUI_NOTIFICATION_AND_SIMPLIFICATION_PLAN.md)。
 
 ## 工作包 1：窗口级通知体验
@@ -51,7 +51,9 @@
 
 证据：`artifacts/ui7-notification/lead-acceptance/{REPORT.md,Test-Ui7Notifications.ps1,Test-Ui7Gacha.ps1,uia7-*.json}`。
 
-## 剩余
+## 工作包 1、2 交付时的剩余项
+
+本节保留当时的交接记录；工作包 3、4 的后续完成情况见下文同名章节。
 
 1. 工作包 3：完整 `.fca`、分类 Portable、档案与账号、操作历史、登录凭据、设置、领域采集的重复反馈清理。
 2. 工作包 4：页面精简与普通构建复核（概览、Chronicle、角色武器、挑战等）。

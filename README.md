@@ -38,4 +38,4 @@ dotnet build src/FurinaChronicle.App/FurinaChronicle.App.csproj -f net10.0-andro
   -p:EmbeddedAssembliesIntoApk=true
 ```
 
-Windows 默认入口、生产库迁移、回退与已知功能差距见 [WinUI 发布与默认入口](docs/project/UI6_RELEASE_PACKAGING.md)。首次启动默认使用隔离数据目录；生产数据迁移必须在迁移向导中由用户确认。
+Windows 默认入口、生产库迁移、回退与已知功能差距见 [WinUI 发布与默认入口](docs/project/UI6_RELEASE_PACKAGING.md)。默认直接使用与旧 MAUI Windows 宿主相同的生产数据库；首次接管已有库须完成校验、强制备份与确认。显式设置 `FURINA_UI1_DIRECTORY` 时使用隔离测试目录。

@@ -18,7 +18,7 @@
 | D12 | 默认导出最新格式；旧版导入明确列出；未知 major 拒绝 | Accepted | 默认方案 |
 | D13 | 当前正式目标平台为 Windows 和 Android | Accepted | 默认方案 |
 | D14 | Yae 等第三方采集器为可选适配器，不进入 Core | Accepted | 默认方案 |
-| D15 | 社区统计保留扩展空间，默认关闭并独立授权 | Accepted | 维护者补充及默认方案 |
+| D15 | 全服统计按次主动投稿；对应按钮确认本次用途，云备份不自动纳入统计 | Accepted | ADR 0005、0025 |
 | D16 | 档案名称精确匹配；默认启用唯一名称约束；模糊匹配仅提示；异常重复在阻塞式修复后重启 | Accepted | 维护者决定 |
 | D17 | 提供不可逆本地删除，不提供“隐私删除”；保留最小本地 Tombstone，不影响外部副本 | Accepted | 维护者决定 |
 | D18 | 版本化卡池事件元数据内置为离线基线；横幅图只作可清理缓存；在线更新为可选公共元数据能力 | Accepted | ADR 0008 |
@@ -42,5 +42,6 @@
 | D35 | Archive Merge 使用目标本地持久化 Receipt 绑定 OperationId、包、Plan 与目标映射；全局唯一档案名策略成为 Schema 8 权威设置，默认 `true`，不迁移来源本机操作身份 | Accepted | ADR 0022，ADR 0006／0021 的实施映射 |
 | D36 | Archive Replace 使用明确且不可重叠的 Archive／Account／Domain 范围，整体失效命中范围的旧 Undo，并在提交前建立有界本机一致恢复点 | Accepted | ADR 0023，维护者确认 |
 | D37 | 挑战 Portable 1.1 接受三类模式并携带阶段级阵容／增益／敌人与难度／奖章；旧 1.0 可读、无 Migrator；Chronicle 完成节点仍只由深境螺旋 12-3 规则产生 | Accepted | ADR 0024 |
+| D38 | 匿名化应用遥测可默认开启并可关闭；涉及用户本身的数据由用户逐次主动上传 | Accepted | [ADR 0025](0025-anonymous-telemetry-and-user-upload.md)，维护者确认 |
 
 当前工作包契约和后期服务决策集中记录在 [OPEN_QUESTIONS.md](../project/OPEN_QUESTIONS.md)，按实施时点闭合，不得由 Agent 静默改变语义。D19、D20 的核心决定及既有产品行为继续 Accepted；D21 收敛依赖关系，不冻结 Chronicle Draft 的字段或未来同步协议。
