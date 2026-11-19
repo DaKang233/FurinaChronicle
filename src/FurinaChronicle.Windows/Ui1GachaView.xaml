@@ -10,6 +10,8 @@
     <UserControl.Resources>
         <local:GachaRarityBackgroundConverter x:Key="GachaRarityBackground" />
         <local:BooleanVisibilityConverter x:Key="BooleanVisibility" />
+        <local:GachaPullBrushConverter x:Key="GachaPullBrush" />
+        <local:GachaArtworkConverter x:Key="GachaArtwork" />
         <DataTemplate x:Key="GachaHistoryIcon">
             <StackPanel Width="74" Spacing="2">
                 <Border Width="56" Height="56" CornerRadius="6" BorderThickness="1"
@@ -17,8 +19,8 @@
                     <Grid>
                         <Image Source="{Binding Rarity, Converter={StaticResource GachaRarityBackground}}" Stretch="UniformToFill" />
                         <Image Source="ms-appx:///Assets/ItemRarity/ui_imgsign_itemicon.png" Stretch="UniformToFill" />
-                        <Image Loaded="OnArtworkLoaded" Unloaded="OnArtworkUnloaded"
-                            DataContextChanged="OnArtworkContextChanged" Stretch="Uniform" />
+                        <Image Stretch="Uniform" AutomationProperties.Name="{Binding Name}" DataContext="{Binding Converter={StaticResource GachaArtwork}}"
+                            Source="{Binding Source}" Visibility="{Binding HasImage, Converter={StaticResource BooleanVisibility}}" />
                         <Border Background="#B3000000" CornerRadius="4" Padding="3,0"
                             HorizontalAlignment="Right" VerticalAlignment="Top"
                             Visibility="{Binding HasCount, Converter={StaticResource BooleanVisibility}}">
@@ -33,80 +35,107 @@
         <DataTemplate x:Key="GachaItemGroupHeader">
             <TextBlock Text="{Binding Title}" FontSize="18" FontWeight="SemiBold" Margin="8,8,0,6" />
         </DataTemplate>
-        <DataTemplate x:Key="GachaItemListEntry">
-            <Grid ColumnSpacing="12" Margin="4,6">
-                <Grid.ColumnDefinitions><ColumnDefinition Width="82" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                <ContentControl Content="{Binding .}" ContentTemplate="{StaticResource GachaHistoryIcon}"
-                    VerticalAlignment="Top" />
-                <StackPanel Grid.Column="1" Spacing="6">
-                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
-                    <TextBlock Text="{Binding Rank}" />
-                    <Button Content="{Binding Item.ToggleTimesText}" Click="OnToggleItemTimes"
-                        Visibility="{Binding Item.CanExpandTimes, Converter={StaticResource BooleanVisibility}}" />
-                    <TextBlock Text="{Binding Item.TimesText}" TextWrapping="Wrap" IsTextSelectionEnabled="True"
-                        Visibility="{Binding Item.IsTimesVisible, Converter={StaticResource BooleanVisibility}}" />
-                    <TextBlock Text="{Binding Item.TimeCountText}" FontSize="11"
-                        Visibility="{Binding Item.IsTimesVisible, Converter={StaticResource BooleanVisibility}}" />
-                    <Button Content="加载更多获取时间" Click="OnMoreItemTimes"
-                        Visibility="{Binding Item.CanLoadMoreTimes, Converter={StaticResource BooleanVisibility}}" />
-                </StackPanel>
-            </Grid>
+        <DataTemplate x:Key="GachaItemDetail">
+            <StackPanel Spacing="10">
+                <ContentControl Content="{Binding .}" ContentTemplate="{StaticResource GachaHistoryIcon}" HorizontalAlignment="Left" />
+                <TextBlock Text="{Binding ItemType}" />
+                <TextBlock Text="{Binding Item.TimeCountText}" FontSize="12" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding Item.TimesText}" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                <Button Content="加载更多获取时间" Command="{Binding Item.LoadMoreTimesCommand}"
+                    Visibility="{Binding Item.CanLoadMoreTimes, Converter={StaticResource BooleanVisibility}}" />
+                <TextBlock Text="仅统计当前账号或档案范围内的抽卡所得。" FontSize="11" TextWrapping="Wrap" />
+            </StackPanel>
+        </DataTemplate>
+        <DataTemplate x:Key="GachaOverviewIcon">
+            <StackPanel Width="46" Spacing="1" ToolTipService.ToolTip="{Binding Name}">
+                <Border Width="40" Height="40" CornerRadius="5" BorderThickness="1"
+                    BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}">
+                    <Grid>
+                        <Image Source="{Binding Rarity, Converter={StaticResource GachaRarityBackground}}" Stretch="UniformToFill" />
+                        <Image Source="ms-appx:///Assets/ItemRarity/ui_imgsign_itemicon.png" Stretch="UniformToFill" />
+                        <Image Stretch="Uniform" AutomationProperties.Name="{Binding Name}" DataContext="{Binding Converter={StaticResource GachaArtwork}}"
+                            Source="{Binding Source}" Visibility="{Binding HasImage, Converter={StaticResource BooleanVisibility}}" />
+                        <Border Background="#B3000000" CornerRadius="3" Padding="2,0"
+                            HorizontalAlignment="Right" VerticalAlignment="Top"
+                            Visibility="{Binding HasCount, Converter={StaticResource BooleanVisibility}}">
+                            <TextBlock Text="{Binding CountText}" FontSize="10" Foreground="White" />
+                        </Border>
+                    </Grid>
+                </Border>
+                <TextBlock Text="{Binding Subtitle}" FontSize="10" TextAlignment="Center" />
+            </StackPanel>
         </DataTemplate>
         <DataTemplate x:Key="GachaHistoryLine">
-            <Grid ColumnSpacing="8" Margin="2,4">
-                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
-                <TextBlock Grid.Column="1" Text="{Binding Subtitle}" FontWeight="SemiBold" />
+            <Grid Height="40" Margin="0,2" ToolTipService.ToolTip="{Binding DetailText}">
+                <ProgressBar Minimum="0" Maximum="{Binding IntervalMaximum}" Value="{Binding IntervalValue}"
+                    MinHeight="40" Height="40" Opacity="0.28" Background="Transparent"
+                    Foreground="{Binding IntervalRatio, Converter={StaticResource GachaPullBrush}}" IsHitTestVisible="False" />
+                <Grid ColumnSpacing="8" Padding="0,0,6,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="40" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Border Width="40" Height="40" CornerRadius="5">
+                        <Grid>
+                            <Image Source="{Binding Rarity, Converter={StaticResource GachaRarityBackground}}" Stretch="UniformToFill" />
+                            <Image Source="ms-appx:///Assets/ItemRarity/ui_imgsign_itemicon.png" Stretch="UniformToFill" />
+                            <Image Stretch="Uniform" AutomationProperties.Name="{Binding Name}" DataContext="{Binding Converter={StaticResource GachaArtwork}}"
+                            Source="{Binding Source}" Visibility="{Binding HasImage, Converter={StaticResource BooleanVisibility}}" />
+                        </Grid>
+                    </Border>
+                    <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="12" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="2" Text="{Binding Subtitle}" FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center" />
+                </Grid>
             </Grid>
         </DataTemplate>
         <DataTemplate x:Key="OverviewCardTemplate">
-            <Border Width="370" Padding="12" Margin="0,0,12,0" CornerRadius="8"
+            <Border Width="300" Padding="8" Margin="0,0,8,0" CornerRadius="8"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                Loaded="OnOverviewCardLoaded" Unloaded="OnOverviewCardUnloaded">
-                <Grid RowSpacing="8">
+                Height="{Binding ViewportHeight}">
+                <Grid RowSpacing="5">
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
-                    <TextBlock Text="{Binding Title}" FontSize="20" FontWeight="SemiBold" />
-                    <Expander Grid.Row="1" Header="统计信息" IsExpanded="True"
+                    <Expander Header="{Binding Title}" IsExpanded="True"
                         HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
-                        <TextBlock Text="{Binding Statistics}" FontSize="12" LineHeight="18" TextWrapping="Wrap" />
+                        <Expander.HeaderTemplate>
+                            <DataTemplate><TextBlock Text="{Binding}" FontSize="17" FontWeight="SemiBold" /></DataTemplate>
+                        </Expander.HeaderTemplate>
+                        <TextBlock Text="{Binding Statistics}" FontSize="11" LineHeight="16" TextWrapping="Wrap" />
                     </Expander>
-                    <StackPanel Grid.Row="2" Spacing="5">
+                    <StackPanel Grid.Row="1" Spacing="5">
                         <StackPanel Orientation="Horizontal" Spacing="5">
-                            <Button Content="{Binding TruePullsToggleText}" Click="OnOverviewTruePulls"
+                            <Button Content="{Binding TruePullsToggleText}" Command="{Binding ToggleTruePullsCommand}" FontSize="11" Padding="6,3"
                                 Visibility="{Binding CanShowTruePulls, Converter={StaticResource BooleanVisibility}}"
                                 AutomationProperties.Name="切换角色活动祈愿真实抽数" />
-                            <Button Content="{Binding LayoutToggleText}" Click="OnOverviewLayout"
+                            <Button Content="{Binding LayoutToggleText}" Command="{Binding ToggleLayoutCommand}" FontSize="11" Padding="6,3"
                                 Visibility="{Binding CanChangeLayout, Converter={StaticResource BooleanVisibility}}"
                                 AutomationProperties.Name="切换五星图标与列表" />
                         </StackPanel>
                         <TextBlock Text="{Binding HistoryLabel}" FontWeight="SemiBold" />
                     </StackPanel>
-                    <Grid Grid.Row="3">
-                        <GridView ItemsSource="{Binding VisibleItems}" ItemTemplate="{StaticResource GachaHistoryIcon}"
+                    <Grid Grid.Row="2">
+                        <GridView ItemsSource="{Binding VisibleItems}" ItemTemplate="{StaticResource GachaOverviewIcon}"
                             Visibility="{Binding IsGridMode, Converter={StaticResource BooleanVisibility}}"
-                            SelectionMode="None" IsItemClickEnabled="True" ItemClick="OnOpenDetail"
+                            SelectionMode="None"
                             HorizontalContentAlignment="Stretch">
                             <GridView.ItemsPanel>
-                                <ItemsPanelTemplate><ItemsWrapGrid Orientation="Horizontal" ItemWidth="82" ItemHeight="102" /></ItemsPanelTemplate>
+                                <ItemsPanelTemplate><ItemsWrapGrid Orientation="Horizontal" ItemWidth="50" ItemHeight="62" /></ItemsPanelTemplate>
                             </GridView.ItemsPanel>
                             <GridView.Footer>
-                                <Button Content="{Binding LoadMoreText}" Click="OnOverviewMore"
+                                <Button Content="{Binding LoadMoreText}" Command="{Binding LoadMoreCommand}"
                                     Visibility="{Binding CanLoadMore, Converter={StaticResource BooleanVisibility}}" />
                             </GridView.Footer>
                         </GridView>
                         <ListView ItemsSource="{Binding VisibleItems}" ItemTemplate="{StaticResource GachaHistoryLine}"
                             Visibility="{Binding IsListMode, Converter={StaticResource BooleanVisibility}}"
-                            SelectionMode="None" IsItemClickEnabled="True" ItemClick="OnOpenDetail">
+                            SelectionMode="None">
                             <ListView.ItemContainerStyle>
                                 <Style TargetType="ListViewItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /></Style>
                             </ListView.ItemContainerStyle>
                             <ListView.Footer>
-                                <Button Content="{Binding LoadMoreText}" Click="OnOverviewMore"
+                                <Button Content="{Binding LoadMoreText}" Command="{Binding LoadMoreCommand}"
                                     Visibility="{Binding CanLoadMore, Converter={StaticResource BooleanVisibility}}" />
                             </ListView.Footer>
                         </ListView>
@@ -122,12 +151,12 @@
                     <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
                     <TextBlock Grid.Column="2" Text="{Binding History.Total}" FontWeight="SemiBold" />
                 </Grid>
-                <ItemsControl ItemsSource="{Binding History.FeaturedItems}" ItemTemplate="{StaticResource GachaHistoryIcon}">
+                <ItemsControl ItemsSource="{Binding History.FeaturedItems}" ItemTemplate="{StaticResource GachaOverviewIcon}">
                     <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate><WrapGrid Orientation="Horizontal" ItemWidth="76" ItemHeight="95" MaximumRowsOrColumns="4" /></ItemsPanelTemplate>
+                        <ItemsPanelTemplate><WrapGrid Orientation="Horizontal" ItemWidth="44" ItemHeight="50" MaximumRowsOrColumns="6" /></ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                 </ItemsControl>
-                <TextBlock Text="{Binding History.Period}" FontSize="10" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding History.ShortPeriod}" FontSize="10" TextWrapping="Wrap" />
             </StackPanel>
         </DataTemplate>
         <DataTemplate x:Key="GachaPeriodHeader">
@@ -139,9 +168,8 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <Image Height="180" HorizontalAlignment="Left" Stretch="Uniform"
-                                AutomationProperties.Name="{Binding Name}"
-                                Loaded="OnArtworkLoaded" Unloaded="OnArtworkUnloaded"
-                                DataContextChanged="OnArtworkContextChanged" />
+                                AutomationProperties.Name="{Binding Name}" DataContext="{Binding Converter={StaticResource GachaArtwork}}"
+                            Source="{Binding Source}" Visibility="{Binding HasImage, Converter={StaticResource BooleanVisibility}}" />
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
@@ -164,7 +192,7 @@
                         <ItemsPanelTemplate><WrapGrid Orientation="Horizontal" ItemWidth="82" ItemHeight="102" /></ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                 </ItemsControl>
-                <Button Content="{Binding LoadMoreText}" Click="OnHistoryMore"
+                <Button Content="{Binding LoadMoreText}" Command="{Binding LoadMoreCommand}"
                     Visibility="{Binding CanLoadMore, Converter={StaticResource BooleanVisibility}}" />
                 <TextBlock Text="{Binding Metadata}" FontSize="11" TextWrapping="Wrap" />
             </StackPanel>
@@ -180,8 +208,8 @@
                     <Grid.ColumnDefinitions><ColumnDefinition Width="30" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                     <Grid Width="30" Height="30" VerticalAlignment="Top">
                         <Image Source="{Binding Rarity, Converter={StaticResource GachaRarityBackground}}" Stretch="UniformToFill" />
-                        <Image Stretch="Uniform" Loaded="OnArtworkLoaded"
-                            Unloaded="OnArtworkUnloaded" DataContextChanged="OnArtworkContextChanged" />
+                        <Image Stretch="Uniform" AutomationProperties.Name="{Binding Name}" DataContext="{Binding Converter={StaticResource GachaArtwork}}"
+                            Source="{Binding Source}" Visibility="{Binding HasImage, Converter={StaticResource BooleanVisibility}}" />
                     </Grid>
                     <StackPanel Grid.Column="1" Spacing="2">
                         <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
@@ -201,8 +229,8 @@
                     <Grid>
                         <Image Source="{Binding Rarity, Converter={StaticResource GachaRarityBackground}}" Stretch="UniformToFill" />
                         <TextBlock Text="{Binding Rank}" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                        <Image Stretch="Uniform" Loaded="OnArtworkLoaded" Unloaded="OnArtworkUnloaded"
-                            DataContextChanged="OnArtworkContextChanged" />
+                        <Image Stretch="Uniform" AutomationProperties.Name="{Binding Name}" DataContext="{Binding Converter={StaticResource GachaArtwork}}"
+                            Source="{Binding Source}" Visibility="{Binding HasImage, Converter={StaticResource BooleanVisibility}}" />
                     </Grid>
                 </Border>
                 <StackPanel Grid.Column="1" Spacing="3">
@@ -327,19 +355,10 @@
                 </Grid>
                 <Grid x:Name="HistoryPanel" Grid.Row="1" Visibility="Collapsed" RowSpacing="8">
                     <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button x:Name="CacheBannersButton" Content="缓存全部横幅" Click="OnCacheBanners"
-                            AutomationProperties.AutomationId="GachaHistoryCacheBanners" />
-                        <Button x:Name="ClearBannersButton" Content="清除横幅缓存" Click="OnClearBanners"
-                            AutomationProperties.AutomationId="GachaHistoryClearBanners" />
-                        <ComboBox x:Name="HistoryVersionPicker" MinWidth="100"
-                            SelectionChanged="OnHistoryVersionChanged"
-                            AutomationProperties.Name="历史版本" AutomationProperties.AutomationId="GachaHistoryVersion" />
-                        <ToggleSwitch x:Name="HistoryIconToggle" Header="物品图标" IsOn="True" Toggled="OnHistoryDisplayChanged"
-                            AutomationProperties.AutomationId="GachaHistoryIconMode" />
-                    </StackPanel>
+                    <ToggleSwitch x:Name="HistoryIconToggle" OnContent="图标" OffContent="文本" IsOn="True" Toggled="OnHistoryDisplayChanged"
+                        AutomationProperties.Name="历史物品展示模式" AutomationProperties.AutomationId="GachaHistoryIconMode" />
                     <Grid Grid.Row="1" ColumnSpacing="12">
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="330" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="300" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                         <ListView x:Name="HistoryList" ItemTemplate="{StaticResource HistorySelectorTemplate}"
                             SelectionChanged="OnHistorySelectionChanged"
                             AutomationProperties.Name="独立卡池历史" AutomationProperties.AutomationId="GachaHistoryList">
@@ -377,11 +396,7 @@
                 </ListView>
                 <Grid x:Name="ItemPanel" Grid.Row="1" Visibility="Collapsed" RowSpacing="8">
                     <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-                    <StackPanel Orientation="Horizontal" Spacing="12">
-                        <TextBlock x:Name="ItemScopeText" VerticalAlignment="Center" />
-                        <Button x:Name="ItemLayoutButton" Content="列表与时间" Click="OnItemLayoutChanged"
-                            AutomationProperties.AutomationId="GachaItemLayout" />
-                    </StackPanel>
+                    <TextBlock x:Name="ItemScopeText" VerticalAlignment="Center" />
                     <GridView x:Name="ItemGrid" Grid.Row="1" SelectionMode="None" IsItemClickEnabled="True"
                         ItemClick="OnOpenDetail" AutomationProperties.Name="物品网格"
                         AutomationProperties.AutomationId="GachaItemGrid"
@@ -391,16 +406,7 @@
                             <GroupStyle HeaderTemplate="{StaticResource GachaItemGroupHeader}" HidesIfEmpty="True" />
                         </GridView.GroupStyle>
                     </GridView>
-                    <ListView x:Name="ItemList" Grid.Row="1" SelectionMode="None" Visibility="Collapsed"
-                        ItemTemplate="{StaticResource GachaItemListEntry}"
-                        AutomationProperties.Name="物品与获取时间" AutomationProperties.AutomationId="GachaItemList">
-                        <ListView.ItemContainerStyle>
-                            <Style TargetType="ListViewItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /></Style>
-                        </ListView.ItemContainerStyle>
-                        <ListView.GroupStyle>
-                            <GroupStyle HeaderTemplate="{StaticResource GachaItemGroupHeader}" HidesIfEmpty="True" />
-                        </ListView.GroupStyle>
-                    </ListView>
+
                 </Grid>
                 <ScrollViewer x:Name="CalendarScroll" Grid.Row="1" Visibility="Collapsed"
                     HorizontalScrollBarVisibility="Auto" HorizontalScrollMode="Enabled" AutomationProperties.Name="年度抽卡热力图">
@@ -429,6 +435,9 @@
                 <StackPanel Spacing="8">
                     <TextBlock x:Name="DetailTitle" Text="请选择条目" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" />
                     <TextBlock x:Name="DetailBody" TextWrapping="Wrap" IsTextSelectionEnabled="True" AutomationProperties.LiveSetting="Polite" />
+                    <ContentControl x:Name="ItemDetails" ContentTemplate="{StaticResource GachaItemDetail}"
+                        HorizontalContentAlignment="Stretch" Visibility="Collapsed"
+                        AutomationProperties.Name="物品获取信息" AutomationProperties.AutomationId="GachaItemAcquisitionDetails" />
                     <StackPanel x:Name="RecordOperationPanel" Orientation="Horizontal" Spacing="8"
                         Visibility="Collapsed">
                         <Button x:Name="CorrectRecordButton" Content="纠正" Click="OnCorrectRecordCommand"

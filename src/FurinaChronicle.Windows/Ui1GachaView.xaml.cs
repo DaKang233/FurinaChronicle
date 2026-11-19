@@ -38,7 +38,7 @@ public sealed partial class Ui1GachaView : UserControl
         environment = services.Environment;
         source = services.Source;
         selectionPreferences = services.SelectionPreferences;
-        itemMetadata = services.ItemMetadata;
+        Artwork.Configure(services.Environment, services.ItemMetadata);
         exportMetadata = services.ExportMetadata;
         bannerPreloader = services.BannerPreloader;
         dispatcher = services.Dispatcher;
@@ -100,6 +100,7 @@ public sealed partial class Ui1GachaView : UserControl
         entered = false;
         state?.Leave();
         bannerCacheCancellation?.Cancel();
+        Artwork.CancelPending();
     }
 
     public async Task CloseAsync()
@@ -133,6 +134,7 @@ public sealed partial class Ui1GachaView : UserControl
         try
         {
             GachaReadOnlySnapshot s = state.Snapshot;
+            UpdateArtworkScope(s.Rows);
             UpdateScopePicker(ArchivePicker, s.Archives, s.ArchiveId);
             UpdateScopePicker(AccountPicker, s.Accounts, s.AccountId);
             ViewPicker.SelectedItem = GachaReadOnlyViewOption.Options.First(option => option.View == s.View);
@@ -146,6 +148,7 @@ public sealed partial class Ui1GachaView : UserControl
             selectedRow = null;
             DetailTitle.Text = "请选择条目";
             DetailBody.Text = "";
+            DetailBody.Visibility = Visibility.Visible;
             bool calendar = s.View == GachaReadOnlyView.Calendar;
             bool items = s.View == GachaReadOnlyView.Items;
             bool overview = s.View == GachaReadOnlyView.Overview;
@@ -153,19 +156,25 @@ public sealed partial class Ui1GachaView : UserControl
             RenderHistory(s);
             OverviewScroll.Visibility = overview ? Visibility.Visible : Visibility.Collapsed;
             OverviewCards.ItemsSource = overview ? s.Rows.Select(row => row.Overview).OfType<GachaOverviewCard>().ToArray() : null;
+            if (overview) SizeOverviewCards();
             RecordsList.ItemsSource = calendar || items || overview || history ? null : s.Rows;
             RecordsList.Visibility = calendar || items || overview || history ? Visibility.Collapsed : Visibility.Visible;
             RenderItems(s);
+            if (items) DetailTitle.Text = "点击物品查看获取信息";
             CalendarScroll.Visibility = calendar ? Visibility.Visible : Visibility.Collapsed;
             if (calendar) RenderCalendar(s);
             else CalendarGrid.Children.Clear();
             UpdateLayoutMode();
-            SummaryText.Text = s.Summary + (state.SelectionWarning is string warning ? " · " + warning : "");
+            string summary = !s.IsBusy && history ? $"卡池历史 {s.TotalCount} 个"
+                : !s.IsBusy && overview ? $"{s.TotalCount} 个卡池分组" : s.Summary;
+            SummaryText.Text = summary + (state.SelectionWarning is string warning ? " · " + warning : "");
             PageSizePicker.SelectedItem = s.PageSize;
             PageSizePicker.Visibility = s.View == GachaReadOnlyView.Records ? Visibility.Visible : Visibility.Collapsed;
             PageSizePicker.IsEnabled = !s.IsBusy;
             ReportReadFailureOnce(s.Status);
             CancelButton.IsEnabled = s.IsBusy;
+            bool paged = s.View is GachaReadOnlyView.Records or GachaReadOnlyView.Items or GachaReadOnlyView.Calendar;
+            PreviousButton.Visibility = NextButton.Visibility = paged ? Visibility.Visible : Visibility.Collapsed;
             PreviousButton.Content = calendar ? "上一年" : "上一页";
             NextButton.Content = calendar ? "下一年" : "下一页";
             PreviousButton.IsEnabled = calendar ? !s.IsBusy && s.VisibleMonth.HasValue : s.CanPrevious;
@@ -193,12 +202,10 @@ public sealed partial class Ui1GachaView : UserControl
     private void UpdateLayoutMode()
     {
         if (state is null) return;
-        bool calendar = state.Snapshot.View == GachaReadOnlyView.Calendar;
-        bool side = !calendar && !(state.Snapshot.View == GachaReadOnlyView.Items &&
-            (itemListMode || state.Snapshot.ArchiveAccountIds is not null)) &&
-            state.Snapshot.View is not (GachaReadOnlyView.Overview or GachaReadOnlyView.History) &&
-            ViewBody.ActualWidth >= 990;
-        DetailColumn.Width = new GridLength(side ? 320 : 0);
+        bool items = state.Snapshot.View == GachaReadOnlyView.Items;
+        bool side = items || (state.Snapshot.View == GachaReadOnlyView.Records && ViewBody.ActualWidth >= 990);
+        double detailWidth = items ? Math.Clamp(ViewBody.ActualWidth * 0.38, 260, 320) : 320;
+        DetailColumn.Width = new GridLength(side ? detailWidth : 0);
         DetailPane.Visibility = side ? Visibility.Visible : Visibility.Collapsed;
         bool table = state.Snapshot.View == GachaReadOnlyView.Records && ViewBody.ActualWidth - (side ? 332 : 0) >= 640;
         TableHeader.Visibility = table ? Visibility.Visible : Visibility.Collapsed;
@@ -348,6 +355,9 @@ public sealed partial class Ui1GachaView : UserControl
     private async void OnOpenDetail(object sender, ItemClickEventArgs e)
     {
         if (e.ClickedItem is not GachaReadOnlyRow row || source is null) return;
+        if (row.Item is not null) { OpenItemDetails(row); return; }
+        ItemDetails.Visibility = Visibility.Collapsed;
+        DetailBody.Visibility = Visibility.Visible;
         selectedRow = row;
         UpdateCommandAvailability();
         detailLoad?.Cancel();
