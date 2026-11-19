@@ -92,6 +92,21 @@
     </Content>
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="..\FurinaChronicle.App\Resources\Images\Abyss\*.png">
+      <Link>Assets\Challenge\Abyss\%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory><CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <Content Include="..\FurinaChronicle.App\Resources\Images\Navigation\*.png">
+      <Link>Assets\Challenge\Navigation\%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory><CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <Content Include="..\FurinaChronicle.App\Resources\Images\RoleCombat\*.png">
+      <Link>Assets\Challenge\RoleCombat\%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory><CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
   <Import Project="..\..\build\FurinaVersion.targets" />
 
   <!-- The unpackaged publish must carry the current resource index, including embedded XBF. -->

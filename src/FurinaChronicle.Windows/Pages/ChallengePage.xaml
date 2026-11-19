@@ -3,273 +3,95 @@
   Copyright (c) 2026 DaKang233.
   SPDX-License-Identifier: MIT
 -->
-<UserControl
-    x:Class="FurinaChronicle.Windows.Pages.ChallengePage"
+<UserControl x:Class="FurinaChronicle.Windows.Pages.ChallengePage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:local="using:FurinaChronicle.Windows"
     AutomationProperties.AutomationId="Ui5ChallengePage">
-    <UserControl.Resources>
-        <local:GachaRarityBackgroundConverter x:Key="ItemRarityBackground" />
-        <local:BooleanVisibilityConverter x:Key="BooleanVisibility" />
-        <DataTemplate x:Key="ChallengeDetailLine">
-            <TextBlock Text="{Binding}" TextWrapping="Wrap" IsTextSelectionEnabled="True" Margin="0,2" />
-        </DataTemplate>
-        <DataTemplate x:Key="ChallengePortrait">
-            <StackPanel Width="88" Spacing="4" Margin="0,0,8,0">
-                <Border Width="64" Height="64" CornerRadius="6" BorderThickness="1"
-                    BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                    Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
-                    <Grid>
-                        <Image Source="{Binding Rarity, Converter={StaticResource ItemRarityBackground}}" Stretch="UniformToFill" />
-                        <Image Source="ms-appx:///Assets/ItemRarity/ui_imgsign_itemicon.png" Stretch="UniformToFill"
-                            Visibility="{Binding IsCharacter, Converter={StaticResource BooleanVisibility}}" />
-                        <Image Stretch="Uniform" Loaded="OnArtworkLoaded" Unloaded="OnArtworkUnloaded"
-                            DataContextChanged="OnArtworkContextChanged" />
-                    </Grid>
-                </Border>
-                <TextBlock Text="{Binding Label}" FontSize="12" TextWrapping="Wrap"
-                    TextAlignment="Center" />
+    <Grid Padding="20,12" RowSpacing="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" /><RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <Grid ColumnSpacing="10">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Image Source="ms-appx:///Assets/Challenge/Navigation/HardChallenge.png" Width="28" Height="28" />
+                <TextBlock Text="周期挑战" FontSize="26" FontWeight="SemiBold" />
             </StackPanel>
-        </DataTemplate>
-        <DataTemplate x:Key="ChallengePortraitGroup">
-            <StackPanel Spacing="4">
-                <TextBlock Text="{Binding Title}" FontWeight="SemiBold"
-                    Visibility="{Binding HasTitle, Converter={StaticResource BooleanVisibility}}" />
-                <ScrollViewer HorizontalScrollBarVisibility="Auto" HorizontalScrollMode="Enabled"
-                    VerticalScrollBarVisibility="Disabled" VerticalScrollMode="Disabled">
-                    <ItemsControl ItemsSource="{Binding Portraits}" ItemTemplate="{StaticResource ChallengePortrait}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <StackPanel Orientation="Horizontal" />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                    </ItemsControl>
-                </ScrollViewer>
-            </StackPanel>
-        </DataTemplate>
-        <DataTemplate x:Key="ChallengeBuffDetail">
-            <Grid ColumnSpacing="10" Margin="0,6">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="56" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <Border Width="56" Height="56" CornerRadius="6" VerticalAlignment="Top"
-                    Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
-                    <Image DataContext="{Binding Artwork}" Stretch="Uniform"
-                        Loaded="OnArtworkLoaded" Unloaded="OnArtworkUnloaded"
-                        DataContextChanged="OnArtworkContextChanged" />
-                </Border>
-                <StackPanel Grid.Column="1" Spacing="4">
-                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
-                    <TextBlock Text="{Binding Detail}" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+            <Button x:Name="CollectButton" Grid.Column="1" Content="采集最新记录" Click="OnCollect"
+                AutomationProperties.Name="采集当前模式最新挑战记录" AutomationProperties.AutomationId="ChallengePageCollect" />
+            <Button x:Name="ReloadButton" Grid.Column="2" Content="重新载入" Click="OnReload"
+                AutomationProperties.Name="刷新周期挑战观察" AutomationProperties.AutomationId="Ui5ChallengeReload" />
+        </Grid>
+        <Grid x:Name="SelectorPanel" Grid.Row="1" ColumnSpacing="10">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+            <ComboBox x:Name="ArchivePicker" Header="档案" DisplayMemberPath="Label" HorizontalAlignment="Stretch"
+                SelectionChanged="OnArchiveSelectionChanged" AutomationProperties.AutomationId="Ui5ChallengeArchivePicker" />
+            <ComboBox x:Name="AccountPicker" Grid.Column="1" Header="账号" DisplayMemberPath="Label" HorizontalAlignment="Stretch"
+                SelectionChanged="OnAccountSelectionChanged" AutomationProperties.AutomationId="Ui5ChallengeAccountPicker" />
+            <ComboBox x:Name="ModePicker" Grid.Column="2" Header="模式" MinWidth="160"
+                SelectionChanged="OnModeSelectionChanged" AutomationProperties.AutomationId="Ui5ChallengeModePicker" />
+        </Grid>
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8">
+            <ProgressRing x:Name="LoadingRing" Width="20" Height="20" IsActive="False" Visibility="Collapsed" />
+            <TextBlock x:Name="EmptyText" TextWrapping="Wrap" Visibility="Collapsed" AutomationProperties.AutomationId="Ui5ChallengeEmpty" />
+        </StackPanel>
+        <Grid Grid.Row="3" ColumnSpacing="10">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="150" /><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+            <Grid RowSpacing="6">
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                <TextBlock Text="挑战期次" FontWeight="SemiBold" />
+                <ListView x:Name="SeasonList" Grid.Row="1" SelectionChanged="OnSeasonSelectionChanged"
+                    AutomationProperties.Name="挑战期次" AutomationProperties.AutomationId="Ui5ChallengeSeasonList">
+                    <ListView.ItemTemplate><DataTemplate><StackPanel Spacing="4" Padding="2,8">
+                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding Period}" FontSize="11" TextWrapping="Wrap" />
+                    </StackPanel></DataTemplate></ListView.ItemTemplate>
+                </ListView>
+            </Grid>
+            <Grid Grid.Column="1" RowSpacing="6">
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                <TextBlock Text="采集快照" FontWeight="SemiBold" />
+                <ListView x:Name="ObservationList" Grid.Row="1" SelectionChanged="OnObservationSelectionChanged"
+                    AutomationProperties.Name="采集快照" AutomationProperties.AutomationId="Ui5ChallengeObservationList">
+                    <ListView.ItemTemplate><DataTemplate><StackPanel Padding="2,8" Spacing="4">
+                        <TextBlock Text="{Binding CollectionTimeText}" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding CompletenessText}" FontSize="11" TextWrapping="Wrap" />
+                    </StackPanel></DataTemplate></ListView.ItemTemplate>
+                </ListView>
+                <TextBlock x:Name="PageText" Grid.Row="2" FontSize="11" TextWrapping="Wrap" AutomationProperties.AutomationId="Ui5ChallengePaging" />
+                <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="4">
+                    <Button x:Name="PreviousButton" Content="上一页" Padding="7,4" Click="OnPrevious" AutomationProperties.AutomationId="Ui5ChallengePrevious" />
+                    <Button x:Name="NextButton" Content="下一页" Padding="7,4" Click="OnNext" AutomationProperties.AutomationId="Ui5ChallengeNext" />
                 </StackPanel>
             </Grid>
-        </DataTemplate>
-        <DataTemplate x:Key="ChallengeCombatDetail">
-            <StackPanel Spacing="6" Margin="0,4">
-                <ItemsControl ItemsSource="{Binding Lines}" ItemTemplate="{StaticResource ChallengeDetailLine}"
-                    Visibility="{Binding HasLines, Converter={StaticResource BooleanVisibility}}" />
-                <TextBlock Text="{Binding Title}" TextWrapping="Wrap" FontWeight="SemiBold"
-                    Visibility="{Binding HasTitle, Converter={StaticResource BooleanVisibility}}" />
-                <ItemsControl ItemsSource="{Binding Groups}" ItemTemplate="{StaticResource ChallengePortraitGroup}" />
-            </StackPanel>
-        </DataTemplate>
-    </UserControl.Resources>
-    <Grid Padding="24,16,24,16" RowSpacing="8">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-        </Grid.RowDefinitions>
-
-        <StackPanel Spacing="6">
-            <TextBlock Text="周期挑战" FontSize="28" FontWeight="SemiBold" />
-            <TextBlock
-                Text="查看深境螺旋、幻想真境剧诗与幽境危战的挑战观察。"
-                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                TextWrapping="Wrap" />
-            <Button
-                x:Name="CollectButton"
-                Content="采集最新记录"
-                Click="OnCollect"
-                AutomationProperties.Name="采集当前模式最新挑战记录"
-                AutomationProperties.AutomationId="ChallengePageCollect" />
-        </StackPanel>
-
-        <StackPanel Grid.Row="1" Spacing="6">
-            <Grid ColumnSpacing="10">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <ComboBox
-                    x:Name="ArchivePicker"
-                    SelectionChanged="OnArchiveSelectionChanged"
-                    Header="档案"
-                    DisplayMemberPath="Label"
-                    HorizontalAlignment="Stretch"
-                    AutomationProperties.Name="档案"
-                    AutomationProperties.AutomationId="Ui5ChallengeArchivePicker" />
-                <ComboBox
-                    x:Name="AccountPicker"
-                    SelectionChanged="OnAccountSelectionChanged"
-                    Grid.Column="1"
-                    Header="账号"
-                    DisplayMemberPath="Label"
-                    HorizontalAlignment="Stretch"
-                    AutomationProperties.Name="账号"
-                    AutomationProperties.AutomationId="Ui5ChallengeAccountPicker" />
-                <ComboBox
-                    x:Name="ModePicker"
-                    SelectionChanged="OnModeSelectionChanged"
-                    Grid.Column="2"
-                    Header="模式"
-                    MinWidth="150"
-                    AutomationProperties.Name="模式"
-                    AutomationProperties.AutomationId="Ui5ChallengeModePicker" />
-                <ComboBox
-                    x:Name="SeasonPicker"
-                    SelectionChanged="OnSeasonSelectionChanged"
-                    Grid.Column="3"
-                    Header="期次"
-                    MinWidth="130"
-                    AutomationProperties.Name="期次"
-                    AutomationProperties.AutomationId="Ui5ChallengeSeasonPicker" />
-            </Grid>
-            <Grid ColumnSpacing="10">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <Button
-                    x:Name="ReloadButton"
-                    Content="刷新"
-                    Click="OnReload"
-                    AutomationProperties.Name="刷新周期挑战观察"
-                    AutomationProperties.AutomationId="Ui5ChallengeReload" />
-                <Button
-                    x:Name="PreviousButton"
-                    Grid.Column="1"
-                    Content="上一页"
-                    Click="OnPrevious"
-                    AutomationProperties.Name="上一页观察"
-                    AutomationProperties.AutomationId="Ui5ChallengePrevious" />
-                <Button
-                    x:Name="NextButton"
-                    Grid.Column="2"
-                    Content="下一页"
-                    Click="OnNext"
-                    AutomationProperties.Name="下一页观察"
-                    AutomationProperties.AutomationId="Ui5ChallengeNext" />
-                <ProgressRing
-                    x:Name="LoadingRing"
-                    Grid.Column="3"
-                    Width="20"
-                    Height="20"
-                    VerticalAlignment="Center"
-                    IsActive="False"
-                    Visibility="Collapsed"
-                    AutomationProperties.AutomationId="Ui5ChallengeLoading" />
-                <TextBlock
-                    x:Name="PageText"
-                    Grid.Column="4"
-                    VerticalAlignment="Center"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    TextWrapping="Wrap"
-                    AutomationProperties.AutomationId="Ui5ChallengePaging" />
-            </Grid>
-        </StackPanel>
-
-        <TextBlock
-            x:Name="EmptyText"
-            Grid.Row="2"
-            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-            TextWrapping="Wrap"
-            Visibility="Collapsed"
-            AutomationProperties.AutomationId="Ui5ChallengeEmpty" />
-
-        <Grid Grid.Row="3" ColumnSpacing="16">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="2*" />
-                <ColumnDefinition Width="3*" />
-            </Grid.ColumnDefinitions>
-            <ListView
-                x:Name="ObservationList"
-                SelectionChanged="OnObservationSelectionChanged"
-                SelectionMode="Single"
-                AutomationProperties.Name="挑战观察"
-                AutomationProperties.AutomationId="Ui5ChallengeObservationList">
-                <ListView.ItemTemplate>
-                    <DataTemplate>
-                        <StackPanel Padding="8,6" Spacing="2">
-                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
-                            <TextBlock
-                                Text="{Binding ListTimeText}"
-                                FontSize="12"
-                                TextWrapping="Wrap" />
-                        </StackPanel>
-                    </DataTemplate>
-                </ListView.ItemTemplate>
-            </ListView>
-
-            <Grid Grid.Column="1" RowSpacing="8">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" />
-                </Grid.RowDefinitions>
-                <TextBlock
-                    x:Name="DetailTitleText"
-                    FontWeight="SemiBold"
-                    TextWrapping="Wrap"
-                    AutomationProperties.AutomationId="Ui5ChallengeDetailTitle" />
-                <ScrollViewer Grid.Row="1">
-                    <StackPanel Spacing="12">
-                        <TextBlock
-                            x:Name="DetailBodyText"
-                            TextWrapping="Wrap"
-                            IsTextSelectionEnabled="True"
-                            AutomationProperties.AutomationId="Ui5ChallengeDetail" />
-                        <ItemsControl x:Name="DetailSections" AutomationProperties.Name="关卡详情">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Border
-                                        Margin="0,0,0,8"
-                                        Padding="12"
-                                        CornerRadius="8"
-                                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-                                        <StackPanel Spacing="6">
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="Auto" />
-                                                    <ColumnDefinition Width="*" />
-                                                </Grid.ColumnDefinitions>
-                                                <Border Margin="0,0,8,0"
-                                                    Visibility="{Binding HasHeaderArtwork, Converter={StaticResource BooleanVisibility}}">
-                                                    <Image Width="36" Height="36" Stretch="Uniform" DataContext="{Binding HeaderArtwork}"
-                                                        Loaded="OnArtworkLoaded" Unloaded="OnArtworkUnloaded"
-                                                        DataContextChanged="OnArtworkContextChanged" />
-                                                </Border>
-                                                <TextBlock Grid.Column="1" Text="{Binding Title}" VerticalAlignment="Center"
-                                                    FontWeight="SemiBold" TextWrapping="Wrap" />
-                                            </Grid>
-                                            <ItemsControl ItemsSource="{Binding Lines}" ItemTemplate="{StaticResource ChallengeDetailLine}"
-                                                Visibility="{Binding HasLines, Converter={StaticResource BooleanVisibility}}" />
-                                            <ItemsControl ItemsSource="{Binding Buffs}" ItemTemplate="{StaticResource ChallengeBuffDetail}"
-                                                Visibility="{Binding HasBuffs, Converter={StaticResource BooleanVisibility}}" />
-                                            <ItemsControl ItemsSource="{Binding Battles}" ItemTemplate="{StaticResource ChallengeCombatDetail}"
-                                                Visibility="{Binding HasBattles, Converter={StaticResource BooleanVisibility}}" />
-                                        </StackPanel>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+            <Grid Grid.Column="2" RowSpacing="8">
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <StackPanel Spacing="4">
+                        <TextBlock x:Name="DetailTitleText" FontSize="19" FontWeight="SemiBold" TextWrapping="Wrap" AutomationProperties.AutomationId="Ui5ChallengeDetailTitle" />
+                        <TextBlock x:Name="PeriodText" FontSize="11" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <Button x:Name="StatisticsButton" Grid.Column="1" Content="统计数据" Click="OnStatistics" Visibility="Collapsed"
+                        AutomationProperties.AutomationId="ChallengeStatistics" />
+                </Grid>
+                <ListView x:Name="FloorTabs" Grid.Row="1" SelectionChanged="OnFloorChanged" SelectionMode="Single"
+                    Visibility="Collapsed" ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                    AutomationProperties.Name="深境螺旋楼层" AutomationProperties.AutomationId="ChallengeFloorTabs">
+                    <ListView.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ListView.ItemsPanel>
+                    <ListView.ItemTemplate><DataTemplate><TextBlock Text="{Binding Title}" Padding="8,4" /></DataTemplate></ListView.ItemTemplate>
+                </ListView>
+                <ComboBox x:Name="RunPicker" Grid.Row="2" Visibility="Collapsed" SelectionChanged="OnRunChanged"
+                    AutomationProperties.Name="单人或联机挑战" AutomationProperties.AutomationId="ChallengeRunPicker">
+                    <x:String>单人挑战</x:String><x:String>联机挑战</x:String>
+                </ComboBox>
+                <ScrollViewer x:Name="DetailScroll" Grid.Row="3" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                    <StackPanel Spacing="10">
+                        <StackPanel x:Name="DetailContent" Spacing="10" AutomationProperties.Name="挑战关卡详情" AutomationProperties.AutomationId="Ui5ChallengeDetail" />
+                        <Expander Header="来源与采集说明" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                            <TextBlock x:Name="DetailBodyText" FontSize="11" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                        </Expander>
                     </StackPanel>
                 </ScrollViewer>
             </Grid>

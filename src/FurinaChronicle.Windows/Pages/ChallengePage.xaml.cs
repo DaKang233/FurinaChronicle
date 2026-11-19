@@ -25,7 +25,7 @@ public sealed partial class ChallengePage : UserControl
     private readonly IDiagnosticService diagnostics;
     private readonly ChallengeHistoryState state;
     private readonly WindowsHistoryCollection collection;
-    private readonly IChallengeArtworkCache artworkCache;
+    private readonly ChallengeArtworkSource artwork;
     private bool rendering;
     private string? lastReportedFailure;
     private CancellationTokenSource? activeCollection;
@@ -38,7 +38,7 @@ public sealed partial class ChallengePage : UserControl
     {
         this.state = state ?? throw new ArgumentNullException(nameof(state));
         this.collection = collection;
-        this.artworkCache = artworkCache;
+        artwork = new ChallengeArtworkSource(artworkCache);
         this.diagnostics = diagnostics ??
             throw new ArgumentNullException(nameof(diagnostics));
         InitializeComponent();
@@ -66,8 +66,8 @@ public sealed partial class ChallengePage : UserControl
     {
         activeCollection?.Cancel();
         state.Cancel();
-        CancelAllArtwork();
-        DetailSections.ItemsSource = null;
+        artwork.Cancel();
+        DetailContent.Children.Clear();
     }
 
     private async void OnCollect(object sender, RoutedEventArgs e)
@@ -139,19 +139,19 @@ public sealed partial class ChallengePage : UserControl
         rendering = true;
         try
         {
-            ArchivePicker.ItemsSource = snapshot.Archives;
+            if (ArchivePicker.ItemsSource is not IReadOnlyList<HistoryChoice> oldArchives || !oldArchives.SequenceEqual(snapshot.Archives))
+                ArchivePicker.ItemsSource = snapshot.Archives;
             ArchivePicker.SelectedIndex = IndexOf(
                 snapshot.Archives,
                 snapshot.SelectedArchiveId);
-            AccountPicker.ItemsSource = snapshot.Accounts;
+            if (AccountPicker.ItemsSource is not IReadOnlyList<HistoryChoice> oldAccounts || !oldAccounts.SequenceEqual(snapshot.Accounts))
+                AccountPicker.ItemsSource = snapshot.Accounts;
             AccountPicker.SelectedIndex = IndexOf(
                 snapshot.Accounts,
                 snapshot.SelectedAccountId);
             ModePicker.SelectedIndex = Array.IndexOf(Modes, snapshot.Mode);
-            SeasonPicker.ItemsSource = snapshot.Seasons;
-            SeasonPicker.SelectedIndex = snapshot.SelectedSeasonId is string season
-                ? IndexOfSeason(snapshot.Seasons, season)
-                : -1;
+            SeasonList.ItemsSource = snapshot.SeasonChoices;
+            SeasonList.SelectedItem = snapshot.SeasonChoices.FirstOrDefault(item => item.Id == snapshot.SelectedSeasonId);
             ObservationList.ItemsSource = snapshot.Observations;
             ObservationList.SelectedItem = snapshot.SelectedObservation;
             EmptyText.Text = snapshot.EmptyMessage;
@@ -213,14 +213,28 @@ public sealed partial class ChallengePage : UserControl
     private void RenderDetail()
     {
         ChallengeObservationView? view = state.Snapshot.SelectedObservation;
-        DetailTitleText.Text = view?.Title ?? "选择一次观察查看详情";
+        bool changed = !ReferenceEquals(displayedObservation, view);
+        if (changed) { artwork.Reset(); displayedObservation = view; selectedFloor = null; }
+        DetailTitleText.Text = view?.Title ?? "选择一次采集快照查看详情";
         DetailBodyText.Text = view?.SummaryText ?? string.Empty;
-        DetailSections.ItemsSource = view?.DetailSections;
-        AutomationProperties.SetName(
-            DetailBodyText,
-            view is null
-                ? "挑战观察详情"
-                : $"挑战观察详情：{view.Title}");
+        PeriodText.Text = view?.PeriodText ?? string.Empty;
+        bool abyss = state.Snapshot.Mode == ChallengeMode.SpiralAbyss;
+        StatisticsButton.Visibility = abyss && view is not null ? Visibility.Visible : Visibility.Collapsed;
+        FloorTabs.Visibility = abyss && view is not null ? Visibility.Visible : Visibility.Collapsed;
+        RunPicker.Visibility = state.Snapshot.Mode == ChallengeMode.StygianOnslaught && view is not null ? Visibility.Visible : Visibility.Collapsed;
+        bool wasRendering = rendering; rendering = true;
+        try
+        {
+            var floors = view?.DetailSections.Where(item => item.Kind == ChallengeSectionKind.AbyssFloor)
+                .OrderByDescending(item => item.Number).ToArray() ?? [];
+            FloorTabs.ItemsSource = floors;
+            FloorTabs.SelectedItem = floors.FirstOrDefault(item => item.Number == selectedFloor) ?? floors.FirstOrDefault();
+            selectedFloor = (FloorTabs.SelectedItem as ChallengeDetailSection)?.Number;
+            if (changed || RunPicker.SelectedIndex < 0) RunPicker.SelectedIndex = 0;
+        }
+        finally { rendering = wasRendering; }
+        RenderSelectedDetails();
+        if (changed) DetailScroll.ChangeView(null, 0, null, true);
     }
 
     private async Task RunAsync(Func<Task> operation)
@@ -239,6 +253,11 @@ public sealed partial class ChallengePage : UserControl
 
     private void SetLoading(bool loading)
     {
+        // Local reads are cancellable. Do not disable or recreate an open native selector
+        // from inside SelectionChanged; only an actual collection operation locks the scope.
+        bool canSelect = activeCollection is null;
+        ArchivePicker.IsEnabled = AccountPicker.IsEnabled = ModePicker.IsEnabled = SeasonList.IsEnabled = ObservationList.IsEnabled = canSelect;
+        FloorTabs.IsEnabled = RunPicker.IsEnabled = canSelect;
         LoadingRing.IsActive = loading;
         LoadingRing.Visibility = loading ? Visibility.Visible : Visibility.Collapsed;
         ReloadButton.IsEnabled = !loading;
@@ -307,11 +326,11 @@ public sealed partial class ChallengePage : UserControl
         {
             return;
         }
-        if (SeasonPicker.SelectedItem is not string season)
+        if (SeasonList.SelectedItem is not ChallengeSeasonChoice season)
         {
             return;
         }
-        await RunAsync(() => state.SetSeasonAsync(season));
+        await RunAsync(() => state.SetSeasonAsync(season.Id));
     }
 
     private void OnObservationSelectionChanged(

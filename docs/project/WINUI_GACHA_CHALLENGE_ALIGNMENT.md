@@ -252,3 +252,14 @@ WinUI Debug 30.67 秒、Release 23.81 秒，均 0 警告／错误；相关自动
 最终全量 Release 1281/1281，0 失败／跳过；WinUI Debug 18.21 秒／Release 30.72 秒，Android Debug 含程序集 3:39.49，均为 0 警告／错误，显式使用 E:\AndroidSDK。最终 Debug 的真实账号界面和 40 帧悬停采样已复跑；本地 27 个非 SQLite 内部表的前后摘要一致，Schema 12，quick_check=ok、外键无异常。
 
 Android 仅完成共享变更的兼容构建，本轮未安装／真机交互；小时级内存、多 DPI、CI／发布及先前新格式跨端验收边界保持不变。验证证据：E:/Workspace/FurinaWorkspace/.validation/gacha-final-20261120/REPORT.md。没有推送。
+
+## 2026-11-20 周期挑战版式
+
+依据维护者新图示，Windows 挑战改为左侧期次／采集快照，右侧专用深渊、剧诗和危战布局。深渊楼层切换只渲染当前层，上下半并排；统计使用小侧头像弹窗。危战单人／联机分开，保留机制富文本，最佳角色不使用品质底图。剧诗补齐前置信息与每幕双栏，祝福支持富文本悬停／点击查看。内部术语 LINK 标记按实际格式显示下划线。
+
+当前实施、资源语义、实际证据及验收边界见 [Windows 周期挑战展示](../architecture/WINUI_CHALLENGE_PRESENTATION.md)。没有改变已有观察或开放新的公开格式。全量 Release 1299/1299；WinUI Debug／Release 0 警告／错误。四层、快照、弹窗、双模式危战及剧诗祝福实际窗口验证通过，六轮三模式切换正常，27 表摘要及完整性检查通过。Android 页面布局不由本轮 Windows 验收替代。
+
+
+真实剧诗请求已定位为客户端幕次兼容问题，HTTP 200／业务码 0 并非登录失败；新增采集规范化非塔罗 -1 占位并使用塔罗组合键，不改写旧观察。修复后只读正式 Source 成功解析 12 项；通知补安全结果码。详情见 ADR 0026 与展示文档。本次没有触发验证码，没有向正式业务库保存真实挑战，也没有推送或安装。
+
+Android Debug 含程序集、显式 E:\AndroidSDK：3:40.96，0 警告／错误；未安装。最终验证记录：E:/Workspace/FurinaWorkspace/.validation/challenge-layout-20261120/REPORT.md。
