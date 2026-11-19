@@ -202,6 +202,10 @@ public sealed record ChallengeObservationView
 
     public IReadOnlyList<ChallengeDetailSection> DetailSections { get; init; } = [];
 
+    public string CollectionTimeText { get; init; } = "采集时间未知";
+    public string PeriodText { get; init; } = string.Empty;
+    public int? TheaterHeraldry { get; init; }
+
     public string SummaryText => string.Join(
         Environment.NewLine,
         new[]
@@ -227,6 +231,20 @@ public sealed record ChallengeObservationView
 public sealed record ChallengeDetailSection(
     string Title, IReadOnlyList<string> Lines, IReadOnlyList<ChallengeCombatDetail> Battles)
 {
+    public ChallengeSectionKind Kind { get; init; }
+    public int? Number { get; init; }
+    public int? Award { get; init; }
+    public bool IsTarot { get; init; }
+    public string? Run { get; init; }
+    public string? Heading { get; init; }
+    public string? TimeText { get; init; }
+    public string? BlessingText { get; init; }
+    public IReadOnlyList<string> RichLines { get; init; } = [];
+    public IReadOnlyList<string> DisplayLines => RichLines.Count > 0 ? RichLines : Lines;
+    public IReadOnlyList<ChallengeMetric> Metrics { get; init; } = [];
+    public IReadOnlyList<AbyssChamberDetail> Chambers { get; init; } = [];
+    public IReadOnlyList<string> UpperEffects { get; init; } = [];
+    public IReadOnlyList<string> LowerEffects { get; init; } = [];
     public bool HasLines => Lines.Count > 0;
     public bool HasBattles => Battles.Count > 0;
     public IReadOnlyList<ChallengeBuffDetail> Buffs { get; init; } = [];
@@ -239,6 +257,8 @@ public sealed record ChallengeDetailSection(
 public sealed record ChallengeCombatDetail(
     string Title, IReadOnlyList<string> Lines, IReadOnlyList<ChallengePortraitGroup> Groups)
 {
+    public IReadOnlyList<string> RichLines { get; init; } = [];
+    public IReadOnlyList<string> DisplayLines => RichLines.Count > 0 ? RichLines : Lines;
     public bool HasTitle => !string.IsNullOrWhiteSpace(Title);
     public bool HasLines => Lines.Count > 0;
 }
@@ -248,10 +268,22 @@ public sealed record ChallengePortraitGroup(string Title, IReadOnlyList<Challeng
     public bool HasTitle => !string.IsNullOrWhiteSpace(Title);
 }
 
-public sealed record ChallengeBuffDetail(string Title, string Detail, ChallengePortrait Artwork);
+public sealed record ChallengeBuffDetail(string Title, string Detail, ChallengePortrait Artwork)
+{
+    public string? RichDetail { get; init; }
+    public bool IsSplendour { get; init; }
+    public int? Level { get; init; }
+}
 
 public sealed record ChallengePortrait(string Label, Uri? Icon, int? Rarity = null,
-    bool IsCharacter = false, string? ResourceKey = null);
+    bool IsCharacter = false, string? ResourceKey = null)
+{
+    public bool IsSidePortrait { get; init; }
+    public bool UseRarityBackground => IsCharacter && !IsSidePortrait;
+    public string? ShortName { get; init; }
+    public string? LevelText { get; init; }
+    public string? Badge { get; init; }
+}
 
 public static class HistoryObservationViewBuilder
 {
@@ -308,6 +340,7 @@ public static class HistoryObservationViewBuilder
             observation.Mode,
             observation.SeasonId,
             cancellationToken);
+        if (schedule is not null && (schedule.Mode != observation.Mode || schedule.ScheduleId != observation.SeasonId)) schedule = null;
         ChallengeObservationCard card = ChallengeObservationCard.FromObservation(
             observation,
             schedule?.Name);
@@ -337,6 +370,15 @@ public static class HistoryObservationViewBuilder
             Title = card.Title,
             Evidence = card.Evidence,
             Detail = card.Detail,
+            TheaterHeraldry = observation.TheaterStatistics?.Heraldry,
+            CollectionTimeText = observation.Provenance.Timestamps.ObservedAt is { } collected
+                ? "采集 " + collected.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")
+                : observation.Provenance.Timestamps.FetchedAt is { } fetched
+                    ? "抓取 " + fetched.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")
+                    : observation.Provenance.Timestamps.ImportedAt is { } imported
+                        ? "导入 " + imported.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") : "采集时间未知",
+            PeriodText = $"{(observation.PeriodStart is { } start ? start.ToString("yyyy-MM-dd HH:mm zzz") : "起始未知")} ～ " +
+                (observation.PeriodEnd is { } end ? end.ToString("yyyy-MM-dd HH:mm zzz") : "结束未知"),
             ModeLabel = HistoryLabels.Mode(observation.Mode),
             SeasonId = observation.SeasonId,
             DetailSections = await ChallengeObservationCard.BuildDetailSectionsAsync(

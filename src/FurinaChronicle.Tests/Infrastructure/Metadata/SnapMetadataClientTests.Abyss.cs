@@ -69,7 +69,7 @@ public sealed partial class SnapMetadataClientTests
         Assert.Equal("合成幻形敌人", wave.Monsters[0].Name);
         Assert.Equal(3, wave.Monsters[0].Count);
         Assert.True(wave.Monsters[0].AttackMonolith);
-        Assert.Equal("效果", Assert.Single(wave.Monsters[0].Affixes).Description);
+        Assert.Equal("<color=#fff>效果</color>", Assert.Single(wave.Monsters[0].Affixes).Description);
         Assert.Equal("static.snaphutaorp.org", new Uri(wave.Monsters[0].IconUrl!).Host);
         Assert.Null(wave.Monsters[1].Name);
         Assert.Equal(3_000_000_000, wave.Monsters[1].Count);
@@ -98,7 +98,7 @@ public sealed partial class SnapMetadataClientTests
         using var snap = new SnapMetadataClient(new(cacheDirectory, BaseAddress), http);
         var schedule = (await snap.ResolveScheduleAsync(ChallengeMode.SpiralAbyss, "124"))!;
         Assert.Equal("合成渊月祝福", schedule.Blessing!.Name);
-        Assert.Equal("祝福效果", Assert.Single(schedule.Blessing.Descriptions));
+        Assert.Equal("<color=#fff>祝福效果</color>", Assert.Single(schedule.Blessing.Descriptions));
         var floor = Assert.Single(schedule.Abyss!.Floors);
         Assert.Equal(keepsChambers, floor.Chambers.Count > 0);
         if (keepsChambers) Assert.Null(floor.Chambers[0].Upper.Waves[0].Monsters[0].Name);

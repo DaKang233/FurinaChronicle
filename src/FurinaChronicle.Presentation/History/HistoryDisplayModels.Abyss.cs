@@ -23,6 +23,7 @@ public sealed partial record ChallengeObservationCard
             lines.AddRange(layout.LowerEffects.Select(effect => "下半异常：" + HoYoDescriptionText.Plain(effect)));
         }
         var rounds = new List<ChallengeCombatDetail>();
+        var chamberDetails = new List<AbyssChamberDetail>();
         int[] chambers = floor.Chambers.Select(chamber => chamber.Chamber)
             .Concat(layout?.Chambers.Select(chamber => chamber.Chamber) ?? [])
             .Distinct().Order().ToArray();
@@ -36,8 +37,10 @@ public sealed partial record ChallengeObservationCard
             if (chamber?.Battles.Count is not > 0 && chamberLayout is null)
             {
                 rounds.Add(new(title, [], []));
+                chamberDetails.Add(new(title, [], []));
                 continue;
             }
+            var halfDetails = new List<ChallengeCombatDetail>[] { [], [] };
             foreach (int half in new[] { 1, 2 })
             {
                 SpiralAbyssBattleResult? battle = chamber?.Battles.FirstOrDefault(item => item.Half == half);
@@ -45,44 +48,61 @@ public sealed partial record ChallengeObservationCard
                 if (battle is null && halfLayout is null) continue;
                 string halfName = half == 1 ? "上半" : "下半";
                 var battleLines = new List<string>();
-                if (half == 1) battleLines.Add(title);
-                if (battle is null) battleLines.Add("未保存该半场战斗记录。");
+                var richBattleLines = new List<string>();
+                if (half == 1) { battleLines.Add(title); richBattleLines.Add(title); }
+                if (battle is null) { battleLines.Add("未保存该半场战斗记录。"); richBattleLines.Add("未保存该半场战斗记录。"); }
                 if (halfLayout?.Gadget is { } gadget)
                 {
+                    richBattleLines.Add("机关（期次配置）：" + (gadget.Name ?? "名称未知"));
+                    if (gadget.Description is { } rawDescription) richBattleLines.Add(rawDescription);
                     battleLines.Add("机关（期次配置）：" + HoYoDescriptionText.Plain(gadget.Name ?? "名称未知"));
                     if (gadget.Description is { } description) battleLines.Add(HoYoDescriptionText.Plain(description));
                 }
-                if (halfLayout is { HasEnemyData: false }) battleLines.Add("该半场敌方配置缺失。");
+                if (halfLayout is { HasEnemyData: false }) { battleLines.Add("该半场敌方配置缺失。"); richBattleLines.Add("该半场敌方配置缺失。"); }
                 if (halfLayout is { HasEnemyData: true, Waves.Count: 0 })
-                    battleLines.Add("该半场期次配置未列出敌人。");
+                { battleLines.Add("该半场期次配置未列出敌人。"); richBattleLines.Add("该半场期次配置未列出敌人。"); }
                 IReadOnlyList<ChallengePortraitGroup> groups = battle is null ? []
                     : await BuildPortraitGroupsAsync(battle.Participants, battle.Enemies, metadata, names, cancellationToken);
-                rounds.Add(new(
+                var halfBattle = new ChallengeCombatDetail(
                     battle is null ? $"第 {index} 间 · {halfName}（期次配置）"
                         : WithCompletion($"第 {index} 间 · {halfName}", battle.CompletedAt),
-                    battleLines, groups));
+                    battleLines, groups) { RichLines = richBattleLines };
+                rounds.Add(halfBattle);
+                halfDetails[half - 1].Add(halfBattle);
                 foreach (AbyssWaveMetadata wave in halfLayout?.Waves ?? [])
                 {
                     var details = new List<string>();
-                    if (wave.Description is { } description) details.Add(HoYoDescriptionText.Plain(description));
+                    var richDetails = new List<string>();
+                    if (wave.Description is { } description) { details.Add(HoYoDescriptionText.Plain(description)); richDetails.Add(description); }
                     var portraits = new List<ChallengePortrait>();
                     foreach (AbyssMonsterMetadata monster in wave.Monsters)
                     {
                         string name = HoYoDescriptionText.Plain(monster.Name ?? $"敌人 #{monster.DescribeId}");
                         string label = DescribeCombatant(name, chamberLayout?.MonsterLevel) +
                             (monster.Count is long count ? $" ×{count}" : " · 数量未知");
-                        if (monster.AttackMonolith == true) details.Add(name + "：会攻击地脉镇石");
+                        if (monster.AttackMonolith == true) { details.Add(name + "：会攻击地脉镇石"); richDetails.Add(name + "：会攻击地脉镇石"); }
                         foreach (ChallengeDescriptionMetadata affix in monster.Affixes)
+                        {
+                            richDetails.Add(name + " · 词缀：" + string.Join(" · ", new[] { affix.Name, affix.Description }.OfType<string>()));
                             details.Add(name + " · 词缀：" + string.Join(" · ",
                                 new[] { affix.Name, affix.Description }.OfType<string>().Select(HoYoDescriptionText.Plain)));
+                        }
                         portraits.Add(new(label, ReadArtworkUri(monster.IconUrl)));
                     }
-                    rounds.Add(new($"第 {index} 间 · {halfName} · {WaveName(wave)}（期次配置）",
-                        details, [new("敌人（期次配置）", portraits)]));
+                    var waveBattle = new ChallengeCombatDetail($"第 {index} 间 · {halfName} · {WaveName(wave)}（期次配置）",
+                        details, [new("敌人（期次配置）", portraits)]) { RichLines = richDetails };
+                    rounds.Add(waveBattle);
+                    halfDetails[half - 1].Add(waveBattle);
                 }
             }
+            chamberDetails.Add(new(title, halfDetails[0], halfDetails[1]));
         }
-        return new($"第 {floor.Floor} 层 · {floor.Stars} 星", lines, rounds);
+        return new($"第 {floor.Floor} 层 · {floor.Stars} 星", lines, rounds)
+        {
+            Kind = ChallengeSectionKind.AbyssFloor, Number = floor.Floor, Chambers = chamberDetails,
+            UpperEffects = layout?.UpperEffects ?? [], LowerEffects = layout?.LowerEffects ?? [],
+            RichLines = effects.Concat([layout is null ? "该期该层的敌方配置缺失；不从其他期次推断。" : "敌方、异常与机关为期次配置，不表示实际出战或击破。"]).ToArray(),
+        };
     }
 
     private static string WaveName(AbyssWaveMetadata wave)

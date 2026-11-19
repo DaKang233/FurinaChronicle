@@ -43,6 +43,7 @@ public sealed class TheaterObservationViewTests
         var initial = Assert.Single(view.DetailSections, section => section.Title == "初始角色（期次配置）");
         Assert.DoesNotContain("自有", initial.Battles[0].Groups[0].Portraits[0].Label);
         Assert.Equal(showStats, view.DetailSections.Any(section => section.Title == "最强一击"));
+        Assert.All(view.DetailSections.Where(section => section.Kind == ChallengeSectionKind.Metric).SelectMany(section => section.Metrics), metric => Assert.False(metric.Portrait!.UseRarityBackground));
         Assert.All(observation.Stages, stage => Assert.Equal(TimePrecision.Second, stage.CompletedAt.Precision));
     }
 

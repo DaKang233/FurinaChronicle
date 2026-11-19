@@ -17,6 +17,7 @@ public sealed record ChallengeHistorySnapshot
     public Guid? SelectedAccountId { get; init; }
     public ChallengeMode Mode { get; init; } = ChallengeMode.SpiralAbyss;
     public IReadOnlyList<string> Seasons { get; init; } = [];
+    public IReadOnlyList<ChallengeSeasonChoice> SeasonChoices { get; init; } = [];
     public string? SelectedSeasonId { get; init; }
     public IReadOnlyList<ChallengeObservationView> Observations { get; init; } = [];
     public Guid? SelectedObservationId { get; init; }
@@ -221,6 +222,7 @@ public sealed class ChallengeHistoryState
                 .ToArray();
 
             string[] seasons = [];
+            var seasonChoices = new List<ChallengeSeasonChoice>();
             IReadOnlyList<Core.Challenges.ChallengeObservation> items = [];
             int total = 0;
             if (accountId is Guid selectedAccount)
@@ -248,6 +250,16 @@ public sealed class ChallengeHistoryState
                     .Select(item => item.SeasonId)
                     .ToArray();
 
+                foreach (string season in seasons)
+                {
+                    var records = all.Where(item => item.SeasonId == season).ToArray();
+                    var period = records.OrderByDescending(item => item.Provenance.Timestamps.ObservedAt).First();
+                    var schedule = await metadata.ResolveScheduleAsync(mode, season, linked.Token);
+                    if (request != generation) return;
+                    if (schedule is not null && (schedule.Mode != mode || schedule.ScheduleId != season)) schedule = null;
+                    seasonChoices.Add(new(season, schedule?.Name ?? $"第 {season} 期",
+                        $"{(period.PeriodStart ?? schedule?.Start)?.ToString("yyyy.MM.dd") ?? "起始未知"} ～ {(period.PeriodEnd ?? schedule?.End)?.ToString("yyyy.MM.dd") ?? "结束未知"}", records.Length));
+                }
                 if (seasons.Length > 0)
                 {
                     string selected = selectedSeasonId is { } preferredSeason &&
@@ -335,6 +347,7 @@ public sealed class ChallengeHistoryState
                 SelectedAccountId = accountId,
                 Mode = mode,
                 Seasons = seasons,
+                SeasonChoices = seasonChoices,
                 SelectedSeasonId = selectedSeasonId,
                 Observations = views,
                 SelectedObservationId = selectedObservation,

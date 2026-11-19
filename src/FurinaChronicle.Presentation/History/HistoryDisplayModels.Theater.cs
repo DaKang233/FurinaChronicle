@@ -43,7 +43,7 @@ public sealed partial record ChallengeObservationCard
         {
             if (setup.AllowedElements.Count > 0)
                 sections.Add(new ChallengeDetailSection("本期配置",
-                    ["准入元素：" + string.Join("、", setup.AllowedElements.Select(ElementName))], []));
+                    ["准入元素：" + string.Join("、", setup.AllowedElements.Select(ElementName))], []) { Kind = ChallengeSectionKind.TheaterSetup });
             await AddRosterSectionAsync(sections, "初始角色（期次配置）",
                 setup.InitialAvatarIds.Select(id => new ChallengeParticipant(id, null, null, null, null)).ToArray(),
                 metadata, names, cancellationToken);
@@ -68,7 +68,7 @@ public sealed partial record ChallengeObservationCard
         if (statistics.TotalCoinsConsumed is { } consumed)
             lines.Add($"消耗「幻剧之花」（战斗统计）：{consumed}");
         if (statistics.ShowBattleStats == false) lines.Add("官方未开放本次战斗统计。");
-        if (lines.Count > 0) sections.Add(new ChallengeDetailSection("演出总览", lines, []));
+        if (lines.Count > 0) sections.Add(new ChallengeDetailSection("演出总览", lines, []) { Kind = ChallengeSectionKind.TheaterSummary });
         await AddRosterSectionAsync(sections, "候补角色", statistics.BackupAvatars,
             metadata, names, cancellationToken);
         if (statistics.ShowBattleStats == false) return;
@@ -91,7 +91,7 @@ public sealed partial record ChallengeObservationCard
         if (roster.Count == 0) return;
         var groups = await BuildPortraitGroupsAsync(roster, [], metadata, names, cancellationToken);
         sections.Add(new ChallengeDetailSection(title, [],
-            [new ChallengeCombatDetail(string.Empty, [], groups.Select(group => group with { Title = string.Empty }).ToArray())]));
+            [new ChallengeCombatDetail(string.Empty, [], groups.Select(group => group with { Title = string.Empty }).ToArray())]) { Kind = ChallengeSectionKind.TheaterRoster });
     }
 
     private static async Task<ChallengeDetailSection> TheaterMetricSectionAsync(
@@ -103,9 +103,14 @@ public sealed partial record ChallengeObservationCard
         var portraits = groups[0].Portraits.Select((portrait, index) => portrait with
         {
             Label = portrait.Label + " · " + (metrics[index].Value ?? "未知"),
+            IsSidePortrait = true,
         }).ToArray();
         return new ChallengeDetailSection(title, [],
-            [new ChallengeCombatDetail(string.Empty, [], [new ChallengePortraitGroup(string.Empty, portraits)])]);
+            [new ChallengeCombatDetail(string.Empty, [], [new ChallengePortraitGroup(string.Empty, portraits)])])
+        {
+            Kind = ChallengeSectionKind.Metric,
+            Metrics = metrics.Select((metric, index) => new ChallengeMetric(title, metric.Value ?? "未知", portraits[index])).ToArray(),
+        };
     }
 
     private static IReadOnlyList<ChallengeBuffDetail> BuildTheaterBuffCards(ChallengeStageResult stage) =>
@@ -121,7 +126,12 @@ public sealed partial record ChallengeObservationCard
             string details = string.Join("\n", new[] { category, buff.Description }
                 .Where(value => !string.IsNullOrWhiteSpace(value)).Concat(buff.Effects).Select(value => HoYoDescriptionText.Plain(value!)));
             return new ChallengeBuffDetail(title, details,
-                new ChallengePortrait(title, ReadArtworkUri(buff.IconUrl)));
+                new ChallengePortrait(title, ReadArtworkUri(buff.IconUrl)))
+            {
+                IsSplendour = buff.Kind == TheaterBuffKind.Splendour,
+                Level = buff.Level,
+                RichDetail = string.Join("\n", new[] { category, buff.Description }.Where(value => !string.IsNullOrWhiteSpace(value)).Concat(buff.Effects)),
+            };
         }).ToArray();
 
     internal static string TheaterDifficultyName(int? difficulty) => difficulty switch

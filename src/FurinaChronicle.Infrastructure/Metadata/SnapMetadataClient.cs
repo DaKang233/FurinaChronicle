@@ -6,7 +6,6 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Text.RegularExpressions;
 using FurinaChronicle.Core.Challenges;
 using FurinaChronicle.Core.Inventory;
 using FurinaChronicle.Core.Metadata;
@@ -146,7 +145,7 @@ public sealed partial class SnapMetadataClient : IDisposable
     private static string[] DescribeEffects(string?[]? descriptions) =>
         (descriptions ?? [])
             .OfType<string>()
-            .Select(text => Regex.Replace(text, "</?color(?:=[^>]+)?>", string.Empty).Trim())
+            .Select(text => text.Trim())
             .Where(text => text.Length > 0)
             .ToArray();
 

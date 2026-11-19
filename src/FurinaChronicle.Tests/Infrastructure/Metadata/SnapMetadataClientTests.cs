@@ -77,7 +77,7 @@ public sealed partial class SnapMetadataClientTests : IDisposable
         var abyss = await snap.ResolveScheduleAsync(ChallengeMode.SpiralAbyss, "112");
         Assert.NotNull(abyss);
         Assert.Equal("测试祝福", abyss.Blessing?.Name);
-        Assert.Equal("触发增益。", Assert.Single(abyss.Blessing!.Descriptions));
+        Assert.Equal("触发<color=#F39000>增益</color>。", Assert.Single(abyss.Blessing!.Descriptions));
         Assert.Equal("楼层增益 A", Assert.Single(abyss.FloorEffects![12]));
         Assert.Null(await snap.ResolveScheduleAsync(ChallengeMode.SpiralAbyss, "113"));
 

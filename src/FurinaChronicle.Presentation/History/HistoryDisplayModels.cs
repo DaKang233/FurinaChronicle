@@ -127,7 +127,7 @@ public sealed partial record ChallengeObservationCard(
         {
             if (observation.SpiralAbyssStatistics is { } statistics)
             {
-                sections.Add(new ChallengeDetailSection("挑战总览", DescribeAbyssStatistics(statistics), []));
+                sections.Add(new ChallengeDetailSection("挑战总览", DescribeAbyssStatistics(statistics), []) { Kind = ChallengeSectionKind.Summary });
                 (string Title, IReadOnlyList<SpiralAbyssRankEntry> Entries)[] rankings =
                 [
                     ("出战次数", statistics.RevealRank), ("击破次数", statistics.DefeatRank),
@@ -142,7 +142,7 @@ public sealed partial record ChallengeObservationCard(
             {
                 sections.Add(new ChallengeDetailSection(
                     HoYoDescriptionText.Plain(blessing.Name ?? "渊月祝福"),
-                    blessing.Descriptions.Select(HoYoDescriptionText.Plain).ToArray(), []));
+                    blessing.Descriptions.Select(HoYoDescriptionText.Plain).ToArray(), []) { Kind = ChallengeSectionKind.Blessing, RichLines = blessing.Descriptions });
             }
             foreach (SpiralAbyssFloorResult floor in observation.SpiralAbyssFloors)
             {
@@ -174,6 +174,10 @@ public sealed partial record ChallengeObservationCard(
                 DescribeStageFields(stage, observation.Mode, includeCombatants: false),
                 groups.Count > 0 ? [new ChallengeCombatDetail("战斗详情", [], groups)] : [])
             {
+                Kind = ChallengeSectionKind.TheaterRound, Award = stage.Score,
+                IsTarot = stage.TheaterRound?.IsTarot == true,
+                TimeText = DescribeExactCompletion(stage.CompletedAt),
+                BlessingText = stage.TheaterRound?.BuffSummary,
                 Buffs = BuildTheaterBuffCards(stage),
             });
         }
@@ -196,6 +200,7 @@ public sealed partial record ChallengeObservationCard(
         CancellationToken cancellationToken)
     {
         var portraits = new List<ChallengePortrait>(ranking.Count);
+        var metrics = new List<ChallengeMetric>(ranking.Count);
         foreach (SpiralAbyssRankEntry entry in ranking)
         {
             if (!names.TryGetValue(entry.AvatarId, out DomainItemMetadata? item))
@@ -206,10 +211,13 @@ public sealed partial record ChallengeObservationCard(
             }
             portraits.Add(new ChallengePortrait(
                 $"{item?.Name ?? entry.AvatarId} · {entry.Value.ToString(CultureInfo.InvariantCulture)}",
-                ReadArtworkUri(entry.IconUrl) ?? ReadArtworkUri(item?.IconUrl), entry.Rarity ?? item?.Rarity, true));
+                ReadArtworkUri(entry.IconUrl) ?? ReadArtworkUri(item?.IconUrl), entry.Rarity ?? item?.Rarity, true)
+                { IsSidePortrait = true, ShortName = item?.Name ?? entry.AvatarId });
+            metrics.Add(new(title, entry.Value.ToString(CultureInfo.InvariantCulture), portraits[^1]));
         }
         return new ChallengeDetailSection(title, [],
-            [new ChallengeCombatDetail(string.Empty, [], [new ChallengePortraitGroup(string.Empty, portraits)])]);
+            [new ChallengeCombatDetail(string.Empty, [], [new ChallengePortraitGroup(string.Empty, portraits)])])
+            { Kind = ChallengeSectionKind.Metric, Metrics = metrics };
     }
 
     private static async Task<IReadOnlyList<ChallengePortraitGroup>> BuildPortraitGroupsAsync(
@@ -238,7 +246,12 @@ public sealed partial record ChallengeObservationCard(
                 string name = participant.Name ?? item?.Name ?? participant.Id;
                 portraits.Add(new ChallengePortrait(
                     DescribeParticipant(participant, name),
-                    ReadArtworkUri(participant.IconUrl) ?? ReadArtworkUri(item?.IconUrl), participant.Rarity ?? item?.Rarity, true));
+                    ReadArtworkUri(participant.IconUrl) ?? ReadArtworkUri(item?.IconUrl), participant.Rarity ?? item?.Rarity, true)
+                {
+                    ShortName = name,
+                    LevelText = participant.Level?.ToString(CultureInfo.InvariantCulture),
+                    Badge = participant.Origin switch { ChallengeParticipantOrigin.Support => "助演", ChallengeParticipantOrigin.Trial => "试用", _ => null },
+                });
             }
             groups.Add(new ChallengePortraitGroup("阵容", portraits));
         }

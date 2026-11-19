@@ -27,6 +27,11 @@ public sealed class StygianObservationViewTests
         Assert.Contains("未知", view.OccurredText);
         var single = Assert.Single(view.DetailSections, section => section.Title == "单人 · 合成关卡");
         var multiplayer = Assert.Single(view.DetailSections, section => section.Title == "联机 · 合成关卡");
+        Assert.Equal("单人挑战", single.Run);
+        Assert.Equal("联机挑战", multiplayer.Run);
+        Assert.Equal(2, single.Metrics.Count);
+        Assert.All(single.Metrics, metric => Assert.False(metric.Portrait!.UseRarityBackground));
+        Assert.All(single.Battles.SelectMany(battle => battle.Groups).Where(group => group.Title == "阵容").SelectMany(group => group.Portraits), portrait => Assert.True(portrait.UseRarityBackground));
         Assert.Contains(single.Lines, line => line == "敌人说明：合成敌人说明\n合成机制第二行");
         Assert.Contains("敌人标签：合成元素抗性", single.Lines);
         Assert.Contains("敌人标签：合成多人标签", multiplayer.Lines);
@@ -55,6 +60,7 @@ public sealed class StygianObservationViewTests
         var single = Assert.Single(view.DetailSections, section => section.Title == "单人 · 合成关卡");
         Assert.Contains("敌人说明：敌人说明 & 机制\n合成机制第二行", single.Lines);
         Assert.Contains("敌人标签：抗性 & 元素\n下一行", single.Lines);
+        Assert.Contains(single.RichLines, line => line.Contains("<size=20>"));
         Assert.Equal(before, JsonSerializer.Serialize(observation));
         Assert.Contains("<size=20>", observation.Stages[0].StygianDetails!.MonsterDescriptions[0]);
         Assert.Contains("未知", view.OccurredText);

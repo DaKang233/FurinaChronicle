@@ -30,6 +30,10 @@ public sealed class TheaterBuffViewTests
         Assert.Equal("合成辉彩祝福 · Lv.3", stage.Buffs[2].Title);
         Assert.Contains("选择卡牌", stage.Buffs[0].Detail);
         Assert.Contains("辉彩祝福", stage.Buffs[2].Detail);
+        Assert.True(stage.Buffs[2].IsSplendour);
+        Assert.False(stage.Buffs[0].IsSplendour);
+        Assert.Equal(3, stage.Buffs[2].Level);
+        Assert.NotNull(stage.Buffs[2].RichDetail);
         Assert.Contains("效果甲\n后续", stage.Buffs[2].Detail);
         Assert.Equal(untrusted, stage.Buffs[0].Artwork.Icon is null);
         Assert.NotNull(stage.Buffs[1].Artwork.Icon);
@@ -59,6 +63,8 @@ public sealed class TheaterBuffViewTests
         var view = await HistoryObservationViewBuilder.ChallengeAsync(observation, new Metadata(), "合成账号");
         Assert.Contains("祝福总览：只提供总览", Assert.Single(view.DetailSections).Lines);
         Assert.Contains("只提供总览", view.Detail);
+        Assert.Equal(summary, Assert.Single(view.DetailSections).BlessingText);
+        Assert.Equal(ChallengeSectionKind.TheaterRound, Assert.Single(view.DetailSections).Kind);
         Assert.Equal(summary, stage.TheaterRound!.BuffSummary);
         Assert.Empty(stage.Buffs);
     }

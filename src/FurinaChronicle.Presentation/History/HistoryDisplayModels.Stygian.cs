@@ -46,6 +46,9 @@ public sealed partial record ChallengeObservationCard
         }
         sections.Add(new(title, lines, [])
         {
+            Kind = ChallengeSectionKind.StygianSummary, Run = title,
+            Metrics = summary.HasData ? [new("难度", StygianDifficultyName(summary.Difficulty)),
+                new("最佳用时", summary.Seconds is int seconds ? $"{seconds} 秒" : "未知")] : [],
             HeaderArtwork = summary.HasData ? StygianDifficultyArtwork.FromSource(summary.IconUrl,
                 $"{title} · {StygianDifficultyName(summary.Difficulty)}") : null,
         });
@@ -58,10 +61,14 @@ public sealed partial record ChallengeObservationCard
         foreach (var stage in stages)
         {
             var lines = DescribeStageFields(stage, ChallengeMode.StygianOnslaught, includeCombatants: false).ToList();
+            var richLines = lines.ToList();
+            var metrics = new List<ChallengeMetric>();
             var groups = (await BuildPortraitGroupsAsync(stage.Participants, stage.Enemies,
                 metadata, names, cancellationToken)).ToList();
             if (stage.StygianDetails is { } details)
             {
+                richLines.AddRange(details.MonsterDescriptions.Select(description => "敌人说明：" + description));
+                richLines.AddRange(details.MonsterTags.Select(tag => "敌人标签：" + (tag.Description ?? $"未知标签类型（{tag.Type}）")));
                 lines.AddRange(details.MonsterDescriptions.Select(description => "敌人说明：" + HoYoDescriptionText.Plain(description)));
                 lines.AddRange(details.MonsterTags.Select(tag => "敌人标签：" + HoYoDescriptionText.Plain(tag.Description ??
                     $"未知标签类型（{tag.Type}）")));
@@ -69,15 +76,25 @@ public sealed partial record ChallengeObservationCard
                 {
                     var performance = await BuildPortraitGroupsAsync(
                         details.BestAvatars.Select(item => item.Participant).ToArray(), [], metadata, names, cancellationToken);
+                    metrics.AddRange(details.BestAvatars.Select((item, index) => new ChallengeMetric(
+                        StygianPerformanceLabel(item.Type), item.Value?.ToString(CultureInfo.InvariantCulture) ?? "未知",
+                        performance[0].Portraits[index] with { IsSidePortrait = true })));
                     groups.Add(new("最佳角色", performance[0].Portraits.Select((portrait, index) => portrait with
                     {
+                        IsSidePortrait = true,
                         Label = portrait.Label + $" · {StygianPerformanceLabel(details.BestAvatars[index].Type)}：" +
                             (details.BestAvatars[index].Value?.ToString(CultureInfo.InvariantCulture) ?? "未知"),
                     }).ToArray()));
                 }
             }
             sections.Add(new($"{run} · {stage.StageId}", lines,
-                groups.Count > 0 ? [new ChallengeCombatDetail("战斗详情", [], groups)] : []));
+                groups.Count > 0 ? [new ChallengeCombatDetail("战斗详情", [], groups)] : [])
+            {
+                Kind = ChallengeSectionKind.StygianStage, Run = run + "挑战",
+                Heading = stage.Enemies.FirstOrDefault()?.Name ?? stage.StageId,
+                RichLines = richLines, Metrics = metrics,
+                TimeText = stage.Score is int seconds ? $"{seconds} 秒" : "用时未知",
+            });
         }
     }
 

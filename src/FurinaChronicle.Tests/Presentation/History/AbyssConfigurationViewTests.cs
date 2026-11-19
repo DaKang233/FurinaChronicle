@@ -22,6 +22,12 @@ public sealed class AbyssConfigurationViewTests
         string before = JsonSerializer.Serialize(observation);
         var view = await HistoryObservationViewBuilder.ChallengeAsync(observation, new Metadata(Schedule()), "合成账号");
         var floor = Assert.Single(view.DetailSections);
+        Assert.Equal(ChallengeSectionKind.AbyssFloor, floor.Kind);
+        Assert.Equal(12, floor.Number);
+        Assert.Equal(2, floor.Chambers.Count);
+        Assert.Contains(floor.Chambers[0].Upper, half => half.Groups.Any(group => group.Title == "阵容"));
+        Assert.Contains(floor.Chambers[0].Lower, half => half.Title.Contains("下半"));
+        Assert.All(floor.Chambers[1].Upper, half => Assert.DoesNotContain(half.Groups, group => group.Title == "阵容"));
         Assert.Contains(floor.Lines, line => line.Contains("不表示实际出战或击破"));
         Assert.Contains("上半异常：合成上半异常", floor.Lines);
         Assert.Contains("下半异常：合成下半异常", floor.Lines);
@@ -176,6 +182,34 @@ public sealed class AbyssConfigurationViewTests
             battle => battle.Title.Contains("A 组第 1 波"));
         Assert.Null(Assert.Single(target.Groups[0].Portraits).Icon);
         Assert.Contains("合成敌人", Flatten(view));
+    }
+
+    [Fact]
+    public async Task RecordedChamberWithoutHalfDetailsRemainsVisibleAndDoesNotUseAnotherSeason()
+    {
+        var observation = new ChallengeObservation(ChallengeObservationId.New(), Guid.NewGuid(),
+            ChallengeMode.SpiralAbyss, "124", null, null, DataCompleteness.Partial,
+            [new(12, DataCompleteness.Partial, [new(1, 3, OccurrenceTime.Unknown)])], RecordProvenance.Unknown);
+        var unrelated = Schedule() with { ScheduleId = "125", Name = "另一时期" };
+        string before = JsonSerializer.Serialize(observation);
+        var view = await HistoryObservationViewBuilder.ChallengeAsync(observation, new Metadata(unrelated), "合成");
+        var floor = Assert.Single(view.DetailSections);
+        var chamber = Assert.Single(floor.Chambers);
+        Assert.Contains("3 星", chamber.Title);
+        Assert.Empty(chamber.Upper); Assert.Empty(chamber.Lower);
+        Assert.Contains(floor.DisplayLines, line => line.Contains("配置缺失"));
+        Assert.DoesNotContain("另一时期", view.Title);
+        Assert.Equal(before, JsonSerializer.Serialize(observation));
+    }
+
+    [Fact]
+    public async Task SnapshotLabelUsesRealFetchTimeWhenObservationTimeIsMissing()
+    {
+        var observation = Observation();
+        var view = await HistoryObservationViewBuilder.ChallengeAsync(observation, new Metadata(Schedule()), "合成");
+        Assert.Equal("抓取 " + Time.AddMinutes(2).ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"), view.CollectionTimeText);
+        Assert.NotEqual("采集 " + Time.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"), view.CollectionTimeText);
+        Assert.Null(observation.Provenance.Timestamps.ObservedAt);
     }
 
     private static string Flatten(ChallengeObservationView view) => string.Join("\n",
