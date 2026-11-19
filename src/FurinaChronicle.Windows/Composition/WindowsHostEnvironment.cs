@@ -32,6 +32,7 @@ public sealed class WindowsHostEnvironment : IAsyncDisposable
 {
     private readonly SemaphoreSlim gate = new(1, 1);
     private readonly FileGachaItemIconCache gachaIconCache;
+    private readonly FileGachaBannerImageCache gachaBannerCache;
     private readonly MiHoYoGachaLogClient gachaLogClient;
     private readonly TeyvatHelperUigfClient teyvatHelperClient;
     private bool initialized;
@@ -82,7 +83,14 @@ public sealed class WindowsHostEnvironment : IAsyncDisposable
         gachaIconCache = new FileGachaItemIconCache(
             new GachaItemIconCacheOptions(Path.Combine(ImageCacheDirectory, "gacha-item-icons")),
             TimeProvider.System);
+        gachaBannerCache = new FileGachaBannerImageCache(
+            new GachaBannerImageCacheOptions(Path.Combine(ImageCacheDirectory, "gacha-banner-images")),
+            TimeProvider.System);
         gachaLogClient = new MiHoYoGachaLogClient();
+        IGachaLogClient refreshClient = gachaLogClient;
+#if DEBUG
+        if (IsSynthetic) refreshClient = SyntheticGachaRefreshClient.TryCreate() ?? refreshClient;
+#endif
         WindowsCacheUrlProvider = new WindowsGachaCacheUrlProvider();
         GachaRefresher = new RefreshGachaRecords(
             Records,
@@ -90,7 +98,7 @@ public sealed class WindowsHostEnvironment : IAsyncDisposable
             new IsolatedPassportAccountStore(),
             new UnavailableSTokenUrlProvider(),
             WindowsCacheUrlProvider,
-            gachaLogClient,
+            refreshClient,
             new EmptyGachaItemMetadataProvider());
         teyvatHelperClient = new TeyvatHelperUigfClient();
         TeyvatHelperImport = new TeyvatHelperUigfImportSource(
@@ -144,11 +152,15 @@ public sealed class WindowsHostEnvironment : IAsyncDisposable
 
     public FileGachaItemIconCache GachaIconCache => gachaIconCache;
 
+    public FileGachaBannerImageCache GachaBannerCache => gachaBannerCache;
+
     public RefreshGachaRecords GachaRefresher { get; }
 
     public WindowsGachaCacheUrlProvider WindowsCacheUrlProvider { get; }
 
     public TeyvatHelperUigfImportSource TeyvatHelperImport { get; }
+
+    internal ITeyvatHelperUigfClient TeyvatClient => teyvatHelperClient;
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
@@ -171,16 +183,8 @@ public sealed class WindowsHostEnvironment : IAsyncDisposable
         }
     }
 
-    public string? GetCachedIconPath(string? resourceKey)
-    {
-        if (string.IsNullOrWhiteSpace(resourceKey) || !resourceKey.All(char.IsAsciiLetterOrDigit))
-        {
-            return null;
-        }
-
-        string path = Path.Combine(ImageCacheDirectory, resourceKey + ".png");
-        return File.Exists(path) ? path : null;
-    }
+    public string? GetCachedIconPath(string? resourceKey) =>
+        gachaIconCache.GetCachedPath(GachaGame.GenshinImpact, resourceKey);
 
     private async Task SeedAsync(CancellationToken token)
     {
@@ -263,6 +267,7 @@ public sealed class WindowsHostEnvironment : IAsyncDisposable
         try
         {
             gachaIconCache.Dispose();
+            gachaBannerCache.Dispose();
             gachaLogClient.Dispose();
             teyvatHelperClient.Dispose();
             await Database.DisposeAsync().ConfigureAwait(false);

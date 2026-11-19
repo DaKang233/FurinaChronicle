@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 using FurinaChronicle.Core.Challenges;
+using FurinaChronicle.Services.Abstractions;
 using FurinaChronicle.Presentation.Diagnostics;
 using FurinaChronicle.Presentation.History;
 using FurinaChronicle.Presentation.Notifications;
@@ -24,6 +25,7 @@ public sealed partial class ChallengePage : UserControl
     private readonly IDiagnosticService diagnostics;
     private readonly ChallengeHistoryState state;
     private readonly WindowsHistoryCollection collection;
+    private readonly IChallengeArtworkCache artworkCache;
     private bool rendering;
     private string? lastReportedFailure;
     private CancellationTokenSource? activeCollection;
@@ -31,10 +33,12 @@ public sealed partial class ChallengePage : UserControl
     public ChallengePage(
         ChallengeHistoryState state,
         WindowsHistoryCollection collection,
-        IDiagnosticService diagnostics)
+        IDiagnosticService diagnostics,
+        IChallengeArtworkCache artworkCache)
     {
         this.state = state ?? throw new ArgumentNullException(nameof(state));
         this.collection = collection;
+        this.artworkCache = artworkCache;
         this.diagnostics = diagnostics ??
             throw new ArgumentNullException(nameof(diagnostics));
         InitializeComponent();
@@ -62,6 +66,8 @@ public sealed partial class ChallengePage : UserControl
     {
         activeCollection?.Cancel();
         state.Cancel();
+        CancelAllArtwork();
+        DetailSections.ItemsSource = null;
     }
 
     private async void OnCollect(object sender, RoutedEventArgs e)
@@ -208,7 +214,8 @@ public sealed partial class ChallengePage : UserControl
     {
         ChallengeObservationView? view = state.Snapshot.SelectedObservation;
         DetailTitleText.Text = view?.Title ?? "选择一次观察查看详情";
-        DetailBodyText.Text = view?.DetailText ?? string.Empty;
+        DetailBodyText.Text = view?.SummaryText ?? string.Empty;
+        DetailSections.ItemsSource = view?.DetailSections;
         AutomationProperties.SetName(
             DetailBodyText,
             view is null

@@ -29,6 +29,8 @@ using FurinaChronicle.Services.Gacha.Analytics;
 using FurinaChronicle.Services.Gacha.History;
 using FurinaChronicle.Services.Gacha.Portable;
 using FurinaChronicle.Services.Gacha.Writing;
+using FurinaChronicle.Services.Gacha.Refreshing;
+using FurinaChronicle.Services.Gacha.Importing;
 using FurinaChronicle.Services.History;
 using FurinaChronicle.Services.HistoryDomains;
 using FurinaChronicle.Services.HistoryDomains.Portable;
@@ -132,6 +134,7 @@ public sealed class WindowsComposition : IAsyncDisposable
         services.AddSingleton<IArchiveDomainPortableFileService, ArchiveDomainPortableFileService>();
         services.AddSingleton(sp => new SnapMetadataClient(new SnapMetadataOptions(
             Path.Combine(paths.MetadataDirectory, "SnapMetadata"))));
+        services.AddSingleton<EmbeddedGachaEventCatalog>();
         if (paths.IsProduction)
         {
             services.AddSingleton(new GachaMetadataOptions(Path.Combine(paths.MetadataDirectory, "genshin-metadata.db3")));
@@ -139,7 +142,16 @@ public sealed class WindowsComposition : IAsyncDisposable
             services.AddSingleton<IGachaMetadataRemoteSource, GenshinCalculatorMetadataSource>();
             services.AddSingleton<IGachaLocalizationSource, EmbeddedGachaLocalizationSource>();
             services.AddSingleton<IGachaItemMetadataProvider, SqliteGachaItemMetadataProvider>();
+            services.AddSingleton<CachedGachaItemMetadataProvider>();
             services.AddSingleton<IDomainMetadataService, CompositeDomainMetadataService>();
+            services.AddSingleton(new YsHelperGachaEventCatalogOptions(
+                Path.Combine(paths.MetadataDirectory, "yshelper-gacha-events.zh-Hans.json")));
+            services.AddSingleton<IGachaEventCatalog, YsHelperGachaEventCatalog>();
+        }
+
+        else
+        {
+            services.AddSingleton<IGachaEventCatalog>(sp => sp.GetRequiredService<EmbeddedGachaEventCatalog>());
         }
 
         services.AddSingleton<GetPlayerArchives>();
@@ -163,6 +175,9 @@ public sealed class WindowsComposition : IAsyncDisposable
         services.AddSingleton<IArchiveHistorySource, ServiceArchiveHistorySource>();
         services.AddTransient<ArchiveHistoryState>();
         services.AddSingleton<ISettingsAppearanceStore, JsonAppearanceSettingsStore>();
+        services.AddSingleton<IChallengeArtworkCache>(sp => new FileChallengeArtworkCache(
+            Path.Combine(paths.ImageCacheDirectory, "challenge-artwork"),
+            sp.GetRequiredService<TimeProvider>(), allowDownloads: paths.IsProduction));
         services.AddSingleton<ISettingsStoragePort, WindowsSettingsStoragePort>();
         services.AddSingleton<ISettingsHistoryPort, ServiceSettingsHistoryPort>();
         services.AddSingleton<ISettingsApplicationPort, WindowsSettingsApplicationPort>();
@@ -204,6 +219,7 @@ public sealed class WindowsComposition : IAsyncDisposable
         services.AddSingleton(sp =>
             sp.GetRequiredService<STokenRefreshComposition>().Refresher);
         services.AddSingleton<IGachaSTokenRefreshExecutor, ServiceGachaSTokenRefreshExecutor>();
+        services.AddSingleton<PrepareGachaRefreshTarget>();
         services.AddSingleton<GachaSTokenRefreshCoordinator>();
 
         // UI-5 pages: formal isolated Chronicle query service and page-local state machines.
@@ -250,8 +266,15 @@ public sealed class WindowsComposition : IAsyncDisposable
             filePicker,
             sp.GetRequiredService<TimeProvider>(),
             sp.GetRequiredService<GachaSTokenRefreshCoordinator>(),
+            sp.GetRequiredService<STokenRefreshComposition>().TeyvatImport,
+            sp.GetRequiredService<IIsolatedCredentialStore>(),
+            sp.GetRequiredService<IGachaEventCatalog>(),
+            sp.GetService<IGachaItemMetadataProvider>(),
+            sp.GetService<CachedGachaItemMetadataProvider>(),
             sp.GetRequiredService<INotificationCenter>(),
-            sp.GetRequiredService<IDiagnosticService>()));
+            sp.GetRequiredService<IDiagnosticService>(),
+            new GachaSelectionPreferences(new JsonFileArchiveSelectionStore(
+                Path.Combine(Path.GetDirectoryName(paths.SelectionFilePath)!, "gacha-selection.json")))));
 
         return new WindowsComposition(
             services.BuildServiceProvider(new ServiceProviderOptions
@@ -302,8 +325,14 @@ public sealed class WindowsComposition : IAsyncDisposable
         IFilePickerService filePicker,
         TimeProvider timeProvider,
         GachaSTokenRefreshCoordinator sTokenRefresh,
+        TeyvatHelperUigfImportSource teyvatSource,
+        IIsolatedCredentialStore credentialStore,
+        IGachaEventCatalog eventCatalog,
+        IGachaItemMetadataProvider? itemMetadata,
+        IGachaItemMetadataProvider? exportMetadata,
         INotificationCenter notifications,
-        IDiagnosticService diagnostics)
+        IDiagnosticService diagnostics,
+        GachaSelectionPreferences selectionPreferences)
     {
         var planning = new ServiceGachaImportPlanningSource(
             new GetPlayerArchives(environment.Archives),
@@ -317,8 +346,9 @@ public sealed class WindowsComposition : IAsyncDisposable
             new BuildGachaAnalytics(
                 environment.Records,
                 new EmptyGachaItemMetadataProvider(),
-                new EmbeddedGachaEventCatalog()),
-            environment.Changes.GetRecordRevisionsAsync);
+                eventCatalog),
+            environment.Changes.GetRecordRevisionsAsync,
+            eventCatalog);
         return new GachaPageServices(
             environment,
             readOnlySource,
@@ -346,9 +376,16 @@ public sealed class WindowsComposition : IAsyncDisposable
                     environment.WindowsCacheUrlProvider)),
             new GachaTeyvatHelperImportCoordinator(
                 planning,
-                new ServiceGachaTeyvatHelperImportGateway(environment.TeyvatHelperImport)),
+                new ServiceGachaTeyvatHelperImportGateway(teyvatSource), credentialStore),
             sTokenRefresh,
+            new RefreshUnselectedGachaRecords(
+                new PrepareGachaRefreshTarget(environment.Archives, environment.Accounts, timeProvider),
+                environment.GachaRefresher),
+            itemMetadata,
+            new PreloadGachaBannerImages(eventCatalog, environment.GachaBannerCache),
             notifications,
-            diagnostics);
+            diagnostics,
+            exportMetadata,
+            selectionPreferences);
     }
 }

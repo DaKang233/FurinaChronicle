@@ -59,58 +59,25 @@ public sealed partial class Ui1GachaView
         string taskKey = NotificationTaskKeys.GachaExportArchive;
         try
         {
-            Guid[] current = snapshot.ArchiveAccountIds?.ToArray() ?? (snapshot.AccountId is Guid id ? [id] : []);
-            Guid[] all = snapshot.Accounts.Select(account => account.Id).ToArray();
-            var scopes = new List<(string Label, Guid[] Ids)>();
-            if (current.Length > 0 && current.Length < all.Length)
-            {
-                string label = current.Length == 1
-                    ? snapshot.Accounts.First(account => account.Id == current[0]).Label
-                    : $"{current.Length} 个账号";
-                scopes.Add(($"当前选择 · {label}", current));
-            }
-            scopes.Add(($"档案所有账号（{all.Length} 个）", all));
-
-            var scope = new ComboBox { Header = "导出范围", ItemsSource = scopes.Select(item => item.Label).ToArray(), SelectedIndex = current.Length == 0 ? -1 : 0 };
-            var format = new ComboBox { Header = "文件格式", ItemsSource = ExportFormats.Select(item => item.Name).ToArray(), SelectedIndex = 0 };
-            string? archive = snapshot.Archives.FirstOrDefault(item => item.Id == archiveId)?.Label;
-            var dialog = new ContentDialog
-            {
-                XamlRoot = XamlRoot,
-                Title = "导出抽卡数据",
-                PrimaryButtonText = "继续保存",
-                IsPrimaryButtonEnabled = scope.SelectedIndex >= 0,
-                CloseButtonText = "取消",
-                Content = new StackPanel
-                {
-                    Spacing = 10,
-                    Children =
-                    {
-                        new TextBlock { Text = $"档案：{archive}\n导出所选账号的完整记录，当前筛选和分页仅用于查看。", TextWrapping = TextWrapping.Wrap },
-                        scope, format
-                    }
-                }
-            };
-            scope.SelectionChanged += (_, _) => dialog.IsPrimaryButtonEnabled = scope.SelectedIndex >= 0;
-            if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
-
+            GachaExportSelection? selection = await ChooseExportAsync(snapshot, archiveId);
+            if (selection is null) return;
             token.ThrowIfCancellationRequested();
-            var chosen = ExportFormats[format.SelectedIndex];
+            var chosen = ExportFormats[selection.FormatIndex];
             taskKey = chosen.Table is null
                 ? NotificationTaskKeys.GachaExportArchive
                 : NotificationTaskKeys.GachaExportTable;
-            Guid[] accountIds = scopes[scope.SelectedIndex].Ids;
+            Guid[] accountIds = selection.AccountIds;
             PublishProgress(taskKey, "导出抽卡数据", "正在生成导出文件…");
             string path = Path.Combine(preview.TemporaryDirectory, $"gacha-{Guid.NewGuid():N}.tmp");
             await using var artifact = new FileStream(path, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None,
                 65536, FileOptions.Asynchronous | FileOptions.DeleteOnClose);
             var load = new LoadGachaExportData(preview.Archives, preview.Accounts, preview.Records, TimeProvider.System);
-            var metadata = new EmptyGachaItemMetadataProvider();
+            var metadata = exportMetadata ?? new EmptyGachaItemMetadataProvider();
             GachaExportResult result = await Task.Run(() => chosen.Table is GachaTableFormat table
                 ? new ExportGachaTable(load, new GachaTableExportWriter(metadata)).ExecuteAsync(artifact, archiveId, accountIds,
-                    new(table, GachaExportLanguages.SimplifiedChinese), token)
+                    new(table, selection.Uigf.Language), token)
                 : new ExportUigfV42GachaRecords(load, new UigfV42GachaWriter(metadata)).ExecuteAsync(artifact, archiveId, accountIds,
-                    UigfV42ExportOptions.Compatible, token), token);
+                    selection.Uigf, token), token);
 
             token.ThrowIfCancellationRequested();
             PublishProgress(taskKey, "导出抽卡数据", "请选择保存位置…");

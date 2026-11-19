@@ -6,6 +6,9 @@ using FurinaChronicle.Presentation.Diagnostics;
 using FurinaChronicle.Presentation.Gacha;
 using FurinaChronicle.Presentation.Management;
 using FurinaChronicle.Presentation.Notifications;
+using FurinaChronicle.Services.Gacha.Abstractions;
+using FurinaChronicle.Services.Gacha;
+using FurinaChronicle.Services.Gacha.Refreshing;
 
 namespace FurinaChronicle.Windows.Composition;
 
@@ -25,5 +28,10 @@ public sealed record GachaPageServices(
     GachaWindowsCacheRefreshCoordinator WindowsCacheRefresh,
     GachaTeyvatHelperImportCoordinator TeyvatImport,
     GachaSTokenRefreshCoordinator STokenRefresh,
+    RefreshUnselectedGachaRecords UnselectedRefresh,
+    IGachaItemMetadataProvider? ItemMetadata,
+    PreloadGachaBannerImages BannerPreloader,
     INotificationCenter Notifications,
-    IDiagnosticService Diagnostics);
+    IDiagnosticService Diagnostics,
+    IGachaItemMetadataProvider? ExportMetadata = null,
+    GachaSelectionPreferences? SelectionPreferences = null);

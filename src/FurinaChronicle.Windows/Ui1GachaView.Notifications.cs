@@ -141,14 +141,17 @@ public sealed partial class Ui1GachaView
         }
     }
 
-    private async Task<(bool Active, bool Success, string Detail)> ReloadAfterCommitAsync()
+    private async Task<(bool Active, bool Success, string Detail)> ReloadAfterCommitAsync(
+        Guid? selectArchiveId = null, Guid? selectAccountId = null)
     {
         if (state is null) return (false, false, "抽卡页状态不可用");
         if (!entered) return (false, false, "抽卡页已离开");
         try
         {
-            // Read-only refresh of the same scope; never repeats the committed write.
-            await state.EnterAsync();
+            // Read-only refresh; never repeats the committed write.
+            if (selectArchiveId.HasValue)
+                await state.SelectScopeAsync(selectArchiveId, selectAccountId, null);
+            else await state.EnterAsync();
             bool failed = state.Snapshot.Status.Contains("失败", StringComparison.Ordinal);
             return (true, !failed, failed ? "列表更新失败" : "列表已更新");
         }
@@ -161,9 +164,11 @@ public sealed partial class Ui1GachaView
     private async Task PublishCommittedResultAsync(
         string taskKey,
         string title,
-        string message)
+        string message,
+        Guid? selectArchiveId = null,
+        Guid? selectAccountId = null)
     {
-        (bool active, bool success, string detail) = await ReloadAfterCommitAsync();
+        (bool active, bool success, string detail) = await ReloadAfterCommitAsync(selectArchiveId, selectAccountId);
         if (!active)
         {
             PublishSuccess(

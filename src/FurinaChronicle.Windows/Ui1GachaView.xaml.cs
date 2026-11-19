@@ -17,6 +17,7 @@ public sealed partial class Ui1GachaView : UserControl
     private IUiDispatcher? dispatcher;
     private IFilePickerService? filePicker;
     private GachaReadOnlyState? state;
+    private GachaSelectionPreferences? selectionPreferences;
     private CancellationTokenSource? detailLoad;
     private bool rendering;
 
@@ -24,6 +25,10 @@ public sealed partial class Ui1GachaView : UserControl
     {
         InitializeComponent();
         ViewPicker.ItemsSource = GachaReadOnlyViewOption.Options;
+        PageSizePicker.ItemsSource = GachaReadOnlyState.PageSizeOptions;
+        ActualThemeChanged += OnCalendarThemeChanged;
+        AddHandler(PointerWheelChangedEvent,
+            new Microsoft.UI.Xaml.Input.PointerEventHandler(OnOverviewWheel), true);
     }
 
     // Called once by the shell after the shared composition root resolves the isolated
@@ -32,6 +37,10 @@ public sealed partial class Ui1GachaView : UserControl
     {
         environment = services.Environment;
         source = services.Source;
+        selectionPreferences = services.SelectionPreferences;
+        itemMetadata = services.ItemMetadata;
+        exportMetadata = services.ExportMetadata;
+        bannerPreloader = services.BannerPreloader;
         dispatcher = services.Dispatcher;
         filePicker = services.FilePicker;
         importCoordinator = services.Import;
@@ -42,6 +51,7 @@ public sealed partial class Ui1GachaView : UserControl
         windowsCacheRefresh = services.WindowsCacheRefresh;
         teyvatImport = services.TeyvatImport;
         stokenRefresh = services.STokenRefresh;
+        unselectedRefresh = services.UnselectedRefresh;
         importMode ??= new GachaImportModeState();
         notifications = services.Notifications;
         diagnostics = services.Diagnostics;
@@ -64,13 +74,13 @@ public sealed partial class Ui1GachaView : UserControl
                     return;
                 }
 
-                state = new(source, dispatcher);
+                state = new(source, dispatcher, GachaReadOnlyView.Overview, new(null, true, YearView: true), selectionPreferences);
                 state.PropertyChanged += (_, _) => Render();
                 EnsureImportComposition(environment);
                 EnsureDataOperationComposition(environment);
             }
-            await state.EnterAsync();
             entered = true;
+            await state.EnterAsync();
             ClearInlineValidation();
         }
         catch (Exception exception)
@@ -89,11 +99,18 @@ public sealed partial class Ui1GachaView : UserControl
     {
         entered = false;
         state?.Leave();
+        bannerCacheCancellation?.Cancel();
     }
 
     public async Task CloseAsync()
     {
+        CloseRefreshForShutdown();
         Leave();
+        if (bannerCacheTask is Task cachingBanners)
+        {
+            try { await cachingBanners; } catch (Exception) { }
+        }
+        if (state is not null) await state.FlushSelectionAsync();
         exportCancellation?.Cancel();
         if (exportTask is Task runningExport) await runningExport;
         // A commit already started must not be interrupted by page/window navigation; the
@@ -116,16 +133,14 @@ public sealed partial class Ui1GachaView : UserControl
         try
         {
             GachaReadOnlySnapshot s = state.Snapshot;
-            ArchivePicker.ItemsSource = s.Archives;
-            AccountPicker.ItemsSource = s.Accounts;
-            ArchivePicker.SelectedItem = s.Archives.FirstOrDefault(a => a.Id == s.ArchiveId);
-            AccountPicker.SelectedItem = s.Accounts.FirstOrDefault(a => a.Id == s.AccountId);
+            UpdateScopePicker(ArchivePicker, s.Archives, s.ArchiveId);
+            UpdateScopePicker(AccountPicker, s.Accounts, s.AccountId);
             ViewPicker.SelectedItem = GachaReadOnlyViewOption.Options.First(option => option.View == s.View);
             RangeButton.IsEnabled = s.Accounts.Count > 0 && !s.IsBusy;
             UpdateExportAvailability();
             RangeButton.Content = s.ArchiveAccountIds is { } ids ? $"档案范围（{ids.Count}）" : "档案多选";
             FilterButton.Visibility = s.View is GachaReadOnlyView.Records or GachaReadOnlyView.Calendar ? Visibility.Visible : Visibility.Collapsed;
-            FilterButton.Content = s.View == GachaReadOnlyView.Calendar ? "月份与时区" :
+            FilterButton.Content = s.View == GachaReadOnlyView.Calendar ? "年份与时区" :
                 s.Filter.Day is DateOnly day ? $"筛选 · {day:MM-dd}" : s.Filter == new GachaReadOnlyFilter() ? "筛选" : "筛选 · 已应用";
             detailLoad?.Cancel();
             selectedRow = null;
@@ -133,18 +148,26 @@ public sealed partial class Ui1GachaView : UserControl
             DetailBody.Text = "";
             bool calendar = s.View == GachaReadOnlyView.Calendar;
             bool items = s.View == GachaReadOnlyView.Items;
-            RecordsList.ItemsSource = calendar || items ? null : s.Rows;
-            RecordsList.Visibility = calendar || items ? Visibility.Collapsed : Visibility.Visible;
-            ItemGrid.Visibility = items ? Visibility.Visible : Visibility.Collapsed;
-            ItemGrid.ItemsSource = items ? s.Rows : null;
+            bool overview = s.View == GachaReadOnlyView.Overview;
+            bool history = s.View == GachaReadOnlyView.History;
+            RenderHistory(s);
+            OverviewScroll.Visibility = overview ? Visibility.Visible : Visibility.Collapsed;
+            OverviewCards.ItemsSource = overview ? s.Rows.Select(row => row.Overview).OfType<GachaOverviewCard>().ToArray() : null;
+            RecordsList.ItemsSource = calendar || items || overview || history ? null : s.Rows;
+            RecordsList.Visibility = calendar || items || overview || history ? Visibility.Collapsed : Visibility.Visible;
+            RenderItems(s);
             CalendarScroll.Visibility = calendar ? Visibility.Visible : Visibility.Collapsed;
             if (calendar) RenderCalendar(s);
+            else CalendarGrid.Children.Clear();
             UpdateLayoutMode();
-            SummaryText.Text = s.Summary;
+            SummaryText.Text = s.Summary + (state.SelectionWarning is string warning ? " · " + warning : "");
+            PageSizePicker.SelectedItem = s.PageSize;
+            PageSizePicker.Visibility = s.View == GachaReadOnlyView.Records ? Visibility.Visible : Visibility.Collapsed;
+            PageSizePicker.IsEnabled = !s.IsBusy;
             ReportReadFailureOnce(s.Status);
             CancelButton.IsEnabled = s.IsBusy;
-            PreviousButton.Content = calendar ? "上个月" : "上一页";
-            NextButton.Content = calendar ? "下个月" : "下一页";
+            PreviousButton.Content = calendar ? "上一年" : "上一页";
+            NextButton.Content = calendar ? "下一年" : "下一页";
             PreviousButton.IsEnabled = calendar ? !s.IsBusy && s.VisibleMonth.HasValue : s.CanPrevious;
             NextButton.IsEnabled = calendar ? !s.IsBusy && s.VisibleMonth.HasValue : s.CanNext;
             RenderImportState();
@@ -153,53 +176,40 @@ public sealed partial class Ui1GachaView : UserControl
         finally { rendering = false; }
     }
 
+    private static void UpdateScopePicker(
+        ComboBox picker, IReadOnlyList<GachaScopeOption> options, Guid? selectedId)
+    {
+        // Preserve native popup/focus objects when a reload returns the same choices.
+        // A real rename, insertion or deletion still replaces the options.
+        if (picker.ItemsSource is not IReadOnlyList<GachaScopeOption> current ||
+            !current.SequenceEqual(options))
+            picker.ItemsSource = options;
+        picker.SelectedItem = picker.Items.OfType<GachaScopeOption>()
+            .FirstOrDefault(option => option.Id == selectedId);
+    }
+
     private void OnBodySizeChanged(object sender, SizeChangedEventArgs e) => UpdateLayoutMode();
 
     private void UpdateLayoutMode()
     {
         if (state is null) return;
         bool calendar = state.Snapshot.View == GachaReadOnlyView.Calendar;
-        bool side = !calendar && ViewBody.ActualWidth >= 990;
+        bool side = !calendar && !(state.Snapshot.View == GachaReadOnlyView.Items &&
+            (itemListMode || state.Snapshot.ArchiveAccountIds is not null)) &&
+            state.Snapshot.View is not (GachaReadOnlyView.Overview or GachaReadOnlyView.History) &&
+            ViewBody.ActualWidth >= 990;
         DetailColumn.Width = new GridLength(side ? 320 : 0);
         DetailPane.Visibility = side ? Visibility.Visible : Visibility.Collapsed;
         bool table = state.Snapshot.View == GachaReadOnlyView.Records && ViewBody.ActualWidth - (side ? 332 : 0) >= 640;
         TableHeader.Visibility = table ? Visibility.Visible : Visibility.Collapsed;
-        var template = (DataTemplate)Resources[table ? "RecordTableTemplate" : "RecordListTemplate"];
+        string templateName = table ? "RecordTableTemplate" : "RecordListTemplate";
+        var template = (DataTemplate)Resources[templateName];
         if (RecordsList.ItemTemplate != template) RecordsList.ItemTemplate = template;
     }
 
-    private void RenderCalendar(GachaReadOnlySnapshot snapshot)
-    {
-        CalendarGrid.Children.Clear();
-        CalendarGrid.ColumnDefinitions.Clear();
-        CalendarGrid.RowDefinitions.Clear();
-        if (snapshot.IsBusy || snapshot.VisibleMonth is not DateOnly month) return;
-        GachaCalendarCell[] days = GachaCalendarCell.Build(month, snapshot.Rows).ToArray();
-        for (int row = 0; row <= days[^1].Week + 1; row++)
-            CalendarGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        for (int column = 0; column < 7; column++)
-        {
-            CalendarGrid.ColumnDefinitions.Add(new ColumnDefinition());
-            var heading = new TextBlock { Text = GachaCalendarCell.Weekdays[column], HorizontalAlignment = HorizontalAlignment.Center };
-            Grid.SetColumn(heading, column);
-            CalendarGrid.Children.Add(heading);
-        }
-        foreach (GachaCalendarCell cell in days)
-        {
-            var button = new Button
-            {
-                MinWidth = 0, MinHeight = 50, Padding = new Thickness(2), HorizontalAlignment = HorizontalAlignment.Stretch,
-                Content = new TextBlock { Text = $"{cell.Date.Day}\n{cell.Pulls} 抽", TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap }
-            };
-            AutomationProperties.SetName(button, cell.Label);
-            button.Click += async (_, _) => { if (state is not null) await state.OpenCalendarDayAsync(cell.Date); };
-            Grid.SetColumn(button, cell.Column);
-            Grid.SetRow(button, cell.Week + 1);
-            CalendarGrid.Children.Add(button);
-        }
-    }
     private async void OnViewChanged(object sender, SelectionChangedEventArgs e)
     {
+
         if (!rendering && state is not null && ViewPicker.SelectedItem is GachaReadOnlyViewOption option)
             await state.SelectViewAsync(option.View);
     }
@@ -234,6 +244,7 @@ public sealed partial class Ui1GachaView : UserControl
 
     private async void OnFilter(object sender, RoutedEventArgs e)
     {
+
         if (state is null) return;
         if (state.Snapshot.View == GachaReadOnlyView.Calendar)
         {
@@ -244,33 +255,94 @@ public sealed partial class Ui1GachaView : UserControl
         var rank = new ComboBox { Header = "星级", ItemsSource = GachaReadOnlyFilter.Ranks, SelectedIndex = filter.RankIndex };
         var pool = new ComboBox { Header = "卡池", ItemsSource = GachaReadOnlyFilter.Pools, SelectedIndex = filter.PoolIndex };
         var sort = new ComboBox { Header = "排序", ItemsSource = GachaReadOnlyFilter.SortOrders, SelectedIndex = (int)filter.SortOrder };
+        var startDate = new CalendarDatePicker { Header = "开始日期" };
+        var endDate = new CalendarDatePicker { Header = "结束日期" };
+        if ((filter.Day ?? filter.StartDay) is DateOnly from)
+            startDate.Date = new DateTimeOffset(from.ToDateTime(TimeOnly.MinValue));
+        if ((filter.Day ?? filter.EndDay) is DateOnly to)
+            endDate.Date = new DateTimeOffset(to.ToDateTime(TimeOnly.MinValue));
+        var error = new TextBlock { TextWrapping = TextWrapping.Wrap };
+        TimeSpan? offset = filter.Day.HasValue ? filter.DayOffset : filter.RangeOffset;
+        string zone = offset is TimeSpan known
+            ? $"日期按 UTC{(known < TimeSpan.Zero ? "-" : "+")}{known.Duration():hh\\:mm} 筛选。"
+            : "日期按本机时区筛选。";
+        AutomationProperties.SetAutomationId(startDate, "GachaFilterStart");
+        AutomationProperties.SetAutomationId(endDate, "GachaFilterEnd");
+        AutomationProperties.SetAutomationId(rank, "GachaFilterRank");
+        AutomationProperties.SetAutomationId(pool, "GachaFilterPool");
+        AutomationProperties.SetAutomationId(sort, "GachaFilterSort");
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot, Title = "明细筛选", PrimaryButtonText = "应用", SecondaryButtonText = "重置", CloseButtonText = "取消",
-            Content = new StackPanel { Spacing = 8, Children = { rank, pool, sort } }
+            Content = new ScrollViewer
+            {
+                MaxHeight = 420,
+                Content = new StackPanel
+                {
+                    Spacing = 8,
+                    Children = { rank, pool, sort, new TextBlock { Text = zone }, startDate, endDate, error }
+                }
+            }
+        };
+        AutomationProperties.SetAutomationId(dialog, "GachaFilterDialog");
+        dialog.PrimaryButtonClick += (_, args) =>
+        {
+            if (startDate.Date?.Date > endDate.Date?.Date)
+            {
+                error.Text = "结束日期不能早于开始日期。";
+                args.Cancel = true;
+            }
         };
         ContentDialogResult result = await dialog.ShowAsync();
         if (result == ContentDialogResult.Primary)
+        {
             await state.ApplyFilterAsync(GachaReadOnlyFilter.FromIndices(rank.SelectedIndex, pool.SelectedIndex, sort.SelectedIndex)
-                with { Day = filter.Day, DayOffset = filter.DayOffset });
+                with
+                {
+                    StartDay = startDate.Date is { } start ? DateOnly.FromDateTime(start.Date) : null,
+                    EndDay = endDate.Date is { } end ? DateOnly.FromDateTime(end.Date) : null,
+                    RangeOffset = offset
+                });
+        }
         if (result == ContentDialogResult.Secondary) await state.ApplyFilterAsync(new());
+    }
+
+    private async void OnPageSizeChanged(object sender, SelectionChangedEventArgs args)
+    {
+        if (!rendering && state is not null && PageSizePicker.SelectedItem is int size)
+            await state.ChangePageSizeAsync(size);
     }
 
     private async Task ChooseCalendarAsync(GachaReadOnlyState current)
     {
         GachaCalendarFilter calendar = current.Snapshot.Calendar;
-        var month = new CalendarDatePicker { Header = "月份（选择该月任意日期）" };
-        if (current.Snapshot.VisibleMonth is DateOnly date) month.Date = date.ToDateTime(TimeOnly.MinValue);
+        var year = new NumberBox
+        {
+            Header = "年份", Minimum = 1, Maximum = 9998, SmallChange = 1, LargeChange = 1,
+            SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Inline,
+            Value = current.Snapshot.VisibleMonth?.Year ?? DateTime.Today.Year,
+        };
         var zone = new ComboBox { Header = "显示时区", ItemsSource = new[] { "UTC+08:00", "UTC" }, SelectedIndex = calendar.UseChinaTime ? 0 : 1 };
+        AutomationProperties.SetAutomationId(year, "GachaCalendarYear");
+        AutomationProperties.SetAutomationId(zone, "GachaCalendarZone");
+        var error = new TextBlock { TextWrapping = TextWrapping.Wrap };
         var dialog = new ContentDialog
         {
-            XamlRoot = XamlRoot, Title = "日历范围", PrimaryButtonText = "应用", SecondaryButtonText = "最近有记录月份", CloseButtonText = "取消",
-            Content = new StackPanel { Spacing = 8, Children = { month, zone } }
+            XamlRoot = XamlRoot, Title = "日历范围", PrimaryButtonText = "应用", SecondaryButtonText = "最近有记录年份", CloseButtonText = "取消",
+            Content = new StackPanel { Spacing = 8, Children = { year, zone, error } }
+        };
+        dialog.PrimaryButtonClick += (_, args) =>
+        {
+            if (!double.IsFinite(year.Value) || year.Value < 1 || year.Value > 9998 || year.Value != Math.Truncate(year.Value))
+            {
+                error.Text = "请输入 1～9998 之间的整数年份。";
+                args.Cancel = true;
+            }
         };
         ContentDialogResult result = await dialog.ShowAsync();
         if (result is ContentDialogResult.Primary or ContentDialogResult.Secondary)
-            await current.ApplyCalendarAsync(new(result == ContentDialogResult.Primary && month.Date is DateTimeOffset selected
-                ? DateOnly.FromDateTime(selected.Date) : null, zone.SelectedIndex == 0));
+            await current.ApplyCalendarAsync(new(result == ContentDialogResult.Primary
+                ? new DateOnly((int)year.Value, 1, 1) : null, zone.SelectedIndex == 0, YearView: true));
     }
 
     private async void OnOpenDetail(object sender, ItemClickEventArgs e)

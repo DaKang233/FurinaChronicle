@@ -4,6 +4,7 @@
 using System.Text.Json;
 using FurinaChronicle.Infrastructure.Diagnostics;
 using FurinaChronicle.Presentation.Management;
+using FurinaChronicle.Services.Abstractions;
 using FurinaChronicle.Windows.Shell;
 
 namespace FurinaChronicle.Windows.Composition;
@@ -73,7 +74,8 @@ public sealed class JsonAppearanceSettingsStore(WindowsPaths paths) : ISettingsA
 // content, credential values or full user paths.
 public sealed class WindowsSettingsStoragePort(
     WindowsPaths paths,
-    WindowsHostEnvironment environment) : ISettingsStoragePort
+    WindowsHostEnvironment environment,
+    IChallengeArtworkCache challengeArtwork) : ISettingsStoragePort
 {
     public string DataRootPath => environment.RootDirectory;
 
@@ -122,8 +124,11 @@ public sealed class WindowsSettingsStoragePort(
         }
     }
 
-    public Task ClearIconCacheAsync(CancellationToken cancellationToken = default) =>
-        environment.GachaIconCache.ClearAsync(cancellationToken);
+    public async Task ClearIconCacheAsync(CancellationToken cancellationToken = default)
+    {
+        await environment.GachaIconCache.ClearAsync(cancellationToken);
+        await challengeArtwork.ClearAsync(cancellationToken);
+    }
 
     public async Task<string> ExportDiagnosticsAsync(
         string versionText,

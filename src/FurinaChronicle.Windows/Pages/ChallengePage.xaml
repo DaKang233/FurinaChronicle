@@ -7,7 +7,75 @@
     x:Class="FurinaChronicle.Windows.Pages.ChallengePage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:FurinaChronicle.Windows"
     AutomationProperties.AutomationId="Ui5ChallengePage">
+    <UserControl.Resources>
+        <local:GachaRarityBackgroundConverter x:Key="ItemRarityBackground" />
+        <local:BooleanVisibilityConverter x:Key="BooleanVisibility" />
+        <DataTemplate x:Key="ChallengeDetailLine">
+            <TextBlock Text="{Binding}" TextWrapping="Wrap" IsTextSelectionEnabled="True" Margin="0,2" />
+        </DataTemplate>
+        <DataTemplate x:Key="ChallengePortrait">
+            <StackPanel Width="88" Spacing="4" Margin="0,0,8,0">
+                <Border Width="64" Height="64" CornerRadius="6" BorderThickness="1"
+                    BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                    Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
+                    <Grid>
+                        <Image Source="{Binding Rarity, Converter={StaticResource ItemRarityBackground}}" Stretch="UniformToFill" />
+                        <Image Source="ms-appx:///Assets/ItemRarity/ui_imgsign_itemicon.png" Stretch="UniformToFill"
+                            Visibility="{Binding IsCharacter, Converter={StaticResource BooleanVisibility}}" />
+                        <Image Stretch="Uniform" Loaded="OnArtworkLoaded" Unloaded="OnArtworkUnloaded"
+                            DataContextChanged="OnArtworkContextChanged" />
+                    </Grid>
+                </Border>
+                <TextBlock Text="{Binding Label}" FontSize="12" TextWrapping="Wrap"
+                    TextAlignment="Center" />
+            </StackPanel>
+        </DataTemplate>
+        <DataTemplate x:Key="ChallengePortraitGroup">
+            <StackPanel Spacing="4">
+                <TextBlock Text="{Binding Title}" FontWeight="SemiBold"
+                    Visibility="{Binding HasTitle, Converter={StaticResource BooleanVisibility}}" />
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" HorizontalScrollMode="Enabled"
+                    VerticalScrollBarVisibility="Disabled" VerticalScrollMode="Disabled">
+                    <ItemsControl ItemsSource="{Binding Portraits}" ItemTemplate="{StaticResource ChallengePortrait}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                </ScrollViewer>
+            </StackPanel>
+        </DataTemplate>
+        <DataTemplate x:Key="ChallengeBuffDetail">
+            <Grid ColumnSpacing="10" Margin="0,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="56" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Border Width="56" Height="56" CornerRadius="6" VerticalAlignment="Top"
+                    Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
+                    <Image DataContext="{Binding Artwork}" Stretch="Uniform"
+                        Loaded="OnArtworkLoaded" Unloaded="OnArtworkUnloaded"
+                        DataContextChanged="OnArtworkContextChanged" />
+                </Border>
+                <StackPanel Grid.Column="1" Spacing="4">
+                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding Detail}" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                </StackPanel>
+            </Grid>
+        </DataTemplate>
+        <DataTemplate x:Key="ChallengeCombatDetail">
+            <StackPanel Spacing="6" Margin="0,4">
+                <ItemsControl ItemsSource="{Binding Lines}" ItemTemplate="{StaticResource ChallengeDetailLine}"
+                    Visibility="{Binding HasLines, Converter={StaticResource BooleanVisibility}}" />
+                <TextBlock Text="{Binding Title}" TextWrapping="Wrap" FontWeight="SemiBold"
+                    Visibility="{Binding HasTitle, Converter={StaticResource BooleanVisibility}}" />
+                <ItemsControl ItemsSource="{Binding Groups}" ItemTemplate="{StaticResource ChallengePortraitGroup}" />
+            </StackPanel>
+        </DataTemplate>
+    </UserControl.Resources>
     <Grid Padding="24,16,24,16" RowSpacing="8">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -40,6 +108,7 @@
                 </Grid.ColumnDefinitions>
                 <ComboBox
                     x:Name="ArchivePicker"
+                    SelectionChanged="OnArchiveSelectionChanged"
                     Header="档案"
                     DisplayMemberPath="Label"
                     HorizontalAlignment="Stretch"
@@ -47,6 +116,7 @@
                     AutomationProperties.AutomationId="Ui5ChallengeArchivePicker" />
                 <ComboBox
                     x:Name="AccountPicker"
+                    SelectionChanged="OnAccountSelectionChanged"
                     Grid.Column="1"
                     Header="账号"
                     DisplayMemberPath="Label"
@@ -55,6 +125,7 @@
                     AutomationProperties.AutomationId="Ui5ChallengeAccountPicker" />
                 <ComboBox
                     x:Name="ModePicker"
+                    SelectionChanged="OnModeSelectionChanged"
                     Grid.Column="2"
                     Header="模式"
                     MinWidth="150"
@@ -62,6 +133,7 @@
                     AutomationProperties.AutomationId="Ui5ChallengeModePicker" />
                 <ComboBox
                     x:Name="SeasonPicker"
+                    SelectionChanged="OnSeasonSelectionChanged"
                     Grid.Column="3"
                     Header="期次"
                     MinWidth="130"
@@ -130,6 +202,7 @@
             </Grid.ColumnDefinitions>
             <ListView
                 x:Name="ObservationList"
+                SelectionChanged="OnObservationSelectionChanged"
                 SelectionMode="Single"
                 AutomationProperties.Name="挑战观察"
                 AutomationProperties.AutomationId="Ui5ChallengeObservationList">
@@ -138,7 +211,7 @@
                         <StackPanel Padding="8,6" Spacing="2">
                             <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
                             <TextBlock
-                                Text="{Binding OccurredText}"
+                                Text="{Binding ListTimeText}"
                                 FontSize="12"
                                 TextWrapping="Wrap" />
                         </StackPanel>
@@ -157,11 +230,47 @@
                     TextWrapping="Wrap"
                     AutomationProperties.AutomationId="Ui5ChallengeDetailTitle" />
                 <ScrollViewer Grid.Row="1">
-                    <TextBlock
-                        x:Name="DetailBodyText"
-                        TextWrapping="Wrap"
-                        IsTextSelectionEnabled="True"
-                        AutomationProperties.AutomationId="Ui5ChallengeDetail" />
+                    <StackPanel Spacing="12">
+                        <TextBlock
+                            x:Name="DetailBodyText"
+                            TextWrapping="Wrap"
+                            IsTextSelectionEnabled="True"
+                            AutomationProperties.AutomationId="Ui5ChallengeDetail" />
+                        <ItemsControl x:Name="DetailSections" AutomationProperties.Name="关卡详情">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border
+                                        Margin="0,0,0,8"
+                                        Padding="12"
+                                        CornerRadius="8"
+                                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                                        <StackPanel Spacing="6">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <Border Margin="0,0,8,0"
+                                                    Visibility="{Binding HasHeaderArtwork, Converter={StaticResource BooleanVisibility}}">
+                                                    <Image Width="36" Height="36" Stretch="Uniform" DataContext="{Binding HeaderArtwork}"
+                                                        Loaded="OnArtworkLoaded" Unloaded="OnArtworkUnloaded"
+                                                        DataContextChanged="OnArtworkContextChanged" />
+                                                </Border>
+                                                <TextBlock Grid.Column="1" Text="{Binding Title}" VerticalAlignment="Center"
+                                                    FontWeight="SemiBold" TextWrapping="Wrap" />
+                                            </Grid>
+                                            <ItemsControl ItemsSource="{Binding Lines}" ItemTemplate="{StaticResource ChallengeDetailLine}"
+                                                Visibility="{Binding HasLines, Converter={StaticResource BooleanVisibility}}" />
+                                            <ItemsControl ItemsSource="{Binding Buffs}" ItemTemplate="{StaticResource ChallengeBuffDetail}"
+                                                Visibility="{Binding HasBuffs, Converter={StaticResource BooleanVisibility}}" />
+                                            <ItemsControl ItemsSource="{Binding Battles}" ItemTemplate="{StaticResource ChallengeCombatDetail}"
+                                                Visibility="{Binding HasBattles, Converter={StaticResource BooleanVisibility}}" />
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
                 </ScrollViewer>
             </Grid>
         </Grid>

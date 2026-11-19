@@ -93,12 +93,14 @@ public sealed partial class MainWindow : Window
 
         RootGrid.Loaded += OnRootLoaded;
         Closed += OnClosed;
+        AppWindow.Closing += (_, args) => { if (GachaView.IsRefreshRunning) args.Cancel = true; };
         ApplyBackdrop();
         ResizeInitialWindow();
     }
 
     private async void OnRootLoaded(object sender, RoutedEventArgs e)
     {
+        InitializeWindowSizing();
         if (startupStarted) return;
         startupStarted = true;
 #if DEBUG
@@ -244,6 +246,7 @@ public sealed partial class MainWindow : Window
     {
         if (shellBuilt) return;
         GachaView.Initialize(composition.Services.GetRequiredService<GachaPageServices>());
+        GachaView.RefreshInteractionChanged += OnGachaRefreshInteractionChanged;
 
         overviewPage = new OverviewPage(
             composition.Services.GetRequiredService<OverviewState>(),
@@ -319,7 +322,8 @@ public sealed partial class MainWindow : Window
         challengePage = new ChallengePage(
             composition.Services.GetRequiredService<ChallengeHistoryState>(),
             composition.Services.GetRequiredService<WindowsHistoryCollection>(),
-            diagnostics)
+            diagnostics,
+            composition.Services.GetRequiredService<FurinaChronicle.Services.Abstractions.IChallengeArtworkCache>())
         {
             Visibility = Visibility.Collapsed
         };
@@ -339,6 +343,20 @@ public sealed partial class MainWindow : Window
         passportPage.RefreshRequested += OnPassportRefreshRequested;
         PageHost.Children.Add(passportPage);
         shellBuilt = true;
+    }
+
+    private void OnGachaRefreshInteractionChanged(object? sender, EventArgs args)
+    {
+        bool enabled = !GachaView.IsRefreshInteractionLocked;
+        foreach (var item in Navigation.MenuItems.Concat(Navigation.FooterMenuItems).OfType<NavigationViewItem>())
+            item.IsEnabled = enabled;
+        Navigation.IsPaneToggleButtonVisible = enabled;
+        if (notificationCenterPanel is not null)
+        {
+            notificationCenterPanel.IsEnabled = enabled;
+            notificationCenterPanel.IsHitTestVisible = enabled;
+            notificationCenterPanel.Opacity = enabled ? 1 : 0;
+        }
     }
 
     private void hideCurrentPages()
@@ -414,15 +432,16 @@ public sealed partial class MainWindow : Window
         NavigationView sender,
         NavigationViewSelectionChangedEventArgs args)
     {
-        if (!shellReady || switching) return;
+        if (!shellReady || switching || GachaView.IsRefreshInteractionLocked) return;
         if (args.SelectedItemContainer is not NavigationViewItem item) return;
         await ShowPageAsync(item.Tag?.ToString());
     }
 
     private async Task ShowPageAsync(string? tag)
     {
-        if (tag is null || tag == currentPageTag || !shellBuilt) return;
+        if (tag is null || tag == currentPageTag || !shellBuilt || GachaView.IsRefreshInteractionLocked) return;
         switching = true;
+        Navigation.IsEnabled = false;
         try
         {
             hideCurrentPages();
@@ -483,6 +502,7 @@ public sealed partial class MainWindow : Window
         finally
         {
             switching = false;
+            Navigation.IsEnabled = shellReady && !disposed;
         }
     }
 
@@ -496,6 +516,8 @@ public sealed partial class MainWindow : Window
     {
         if (disposed) return;
         disposed = true;
+        DetachWindowSizing();
+        challengePage?.Leave();
         await GachaView.CloseAsync();
         await composition.DisposeAsync();
     }
@@ -505,6 +527,7 @@ public sealed partial class MainWindow : Window
         nint windowHandle = WinRT.Interop.WindowNative.GetWindowHandle(this);
         WindowId windowId = Win32Interop.GetWindowIdFromWindow(windowHandle);
         AppWindow appWindow = AppWindow.GetFromWindowId(windowId);
+        ApplyMinimumWindowSize();
         appWindow.Resize(new SizeInt32(1100, 720));
     }
 

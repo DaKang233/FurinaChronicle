@@ -56,7 +56,7 @@ public sealed partial class Ui1GachaView
 
     private void UpdateDataOperationAvailability()
     {
-        bool idle = dataOperationTask is null && importFlowTask is null &&
+        bool idle = !IsRefreshInteractionLocked && dataOperationTask is null && importFlowTask is null &&
             exportTask is null && exportCancellation is null;
         bool reading = state?.Snapshot.IsBusy == true;
         bool hasRecord = selectedRow?.Reference is not null;
@@ -503,15 +503,9 @@ public sealed partial class Ui1GachaView
     private async Task ManualRefreshAsync()
     {
         if (manualRefresher is null || importMode is null ||
-            state?.Snapshot is not { IsBusy: false, ArchiveId: Guid archiveId } snapshot)
+            state?.Snapshot is not { IsBusy: false } snapshot)
         {
-            ShowInlineValidation("请先选择档案并等待当前读取结束。");
-            return;
-        }
-
-        if (snapshot.AccountId is not Guid accountId)
-        {
-            ShowInlineValidation("请先选择要刷新的账号。");
+            ShowInlineValidation("请等待当前读取结束。");
             return;
         }
 
@@ -548,6 +542,12 @@ public sealed partial class Ui1GachaView
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
 
         string manualUrl = urlBox.Password;
+        if (snapshot.ArchiveId is not Guid archiveId || snapshot.AccountId is not Guid accountId)
+        {
+            await RefreshWithoutAccountAsync(snapshot,
+                FurinaChronicle.Services.Gacha.Refreshing.GachaRefreshSource.ManualUrl, manualUrl);
+            return;
+        }
         GachaManualRefreshPlanResult planned = await manualRefresher.PlanAsync(
             manualUrl,
             archiveId,
@@ -570,7 +570,9 @@ public sealed partial class Ui1GachaView
         GachaManualRefreshOutcome outcome;
         try
         {
-            outcome = await manualRefresher.ExecuteAsync(planned.Plan, manualUrl);
+            outcome = await WithRefreshProgressAsync("手动链接刷新", progress =>
+                manualRefresher.ExecuteAsync(planned.Plan, manualUrl, progress: progress),
+                result => (result.Succeeded, result.Result));
         }
         catch (Exception exception)
         {
@@ -602,16 +604,21 @@ public sealed partial class Ui1GachaView
     private async Task RefreshFromLoginAccountAsync()
     {
         if (stokenRefresh is null || importMode is null ||
-            state?.Snapshot is not { IsBusy: false, AccountId: Guid accountId } snapshot)
+            state?.Snapshot is not { IsBusy: false } snapshot)
         {
-            ShowInlineValidation("请先选择要刷新的账号并等待当前读取结束。");
+            ShowInlineValidation("请等待当前读取结束。");
+            return;
+        }
+        if (snapshot.AccountId is not Guid accountId)
+        {
+            await RefreshSTokenWithoutAccountAsync(snapshot);
             return;
         }
 
         ClearInlineValidation();
-        // Full mode is frozen here; the coordinator snapshots target account and mode before any
+        // The selected mode is frozen here; the coordinator snapshots target account and mode before any
         // credential/network work.
-        GachaSTokenRefreshPlanResult planned = await stokenRefresh.PlanAsync(accountId);
+        GachaSTokenRefreshPlanResult planned = await stokenRefresh.PlanAsync(accountId, importMode.Snapshot());
         if (!planned.Succeeded || planned.Plan is null)
         {
             ReportFailure(
@@ -651,7 +658,8 @@ public sealed partial class Ui1GachaView
         GachaSTokenRefreshOutcome outcome;
         try
         {
-            outcome = await stokenRefresh.ExecuteAsync(plan);
+            outcome = await WithRefreshProgressAsync("登录账号刷新", progress => stokenRefresh.ExecuteAsync(plan, progress),
+                result => (result.Succeeded, result.Result));
         }
         catch (Exception exception)
         {
@@ -677,7 +685,7 @@ public sealed partial class Ui1GachaView
         await PublishCommittedResultAsync(
             NotificationTaskKeys.GachaRefreshSToken,
             "登录账号刷新完成",
-            $"刷新完成：{DescribeRefresh(outcome.Result)}");
+            outcome.Message);
     }
 
     private async Task ClearIconCacheAsync()

@@ -52,14 +52,17 @@ public sealed partial class Ui1GachaView
     {
         GachaReadOnlySnapshot? snapshot = state?.Snapshot;
         bool reading = snapshot?.IsBusy == true;
-        bool idle = importFlowTask is null && exportTask is null &&
+        bool ready = snapshot is not null && !reading;
+        bool idle = !IsRefreshInteractionLocked && importFlowTask is null && exportTask is null &&
             exportCancellation is null && dataOperationTask is null;
-        ArchivePicker.IsEnabled = idle && !reading;
-        AccountPicker.IsEnabled = idle && !reading;
-        RangeButton.IsEnabled = idle && !reading && snapshot is { Accounts.Count: > 0 };
-        FilterButton.IsEnabled = idle && !reading;
-        ViewPicker.IsEnabled = idle && !reading;
-        ReloadButton.IsEnabled = idle;
+        // Local reads can be superseded safely by the state generation/cancellation guard.
+        // Disabling an expanded picker would dismiss it midway through keyboard navigation.
+        ArchivePicker.IsEnabled = idle && snapshot is { Archives.Count: > 0 };
+        AccountPicker.IsEnabled = idle && snapshot is { Accounts.Count: > 0 };
+        RangeButton.IsEnabled = idle && ready && snapshot is { Accounts.Count: > 0 };
+        FilterButton.IsEnabled = idle && ready;
+        ViewPicker.IsEnabled = idle && snapshot is not null;
+        ReloadButton.IsEnabled = idle && snapshot is not null;
         CancelButton.IsEnabled = reading && !importBusy && importFlowTask is null;
         bool calendar = snapshot?.View == GachaReadOnlyView.Calendar;
         PreviousButton.IsEnabled = idle && snapshot is not null &&
@@ -159,7 +162,8 @@ public sealed partial class Ui1GachaView
         CancellationToken cancellationToken,
         string taskKey,
         string operationTitle,
-        GachaImportTargetRequest? preselectedTarget = null)
+        GachaImportTargetRequest? preselectedTarget = null,
+        string? expectedSourceUid = null)
     {
         if (importCoordinator is null) return;
         importBusy = true;
@@ -184,6 +188,13 @@ public sealed partial class Ui1GachaView
                 return;
             }
 
+            if (expectedSourceUid is not null &&
+                !GachaTeyvatHelperImportCoordinator.MatchesDownloadedRole(read.Summary, expectedSourceUid))
+            {
+                ReportFailure(taskKey, taskKey, "来源角色不匹配",
+                    "第三方返回的 UIGF 账号与请求的角色不一致；未写入任何数据。");
+                return;
+            }
             GachaImportPlan? plan = null;
             GachaImportTargetRequest? target = preselectedTarget;
             while (true)

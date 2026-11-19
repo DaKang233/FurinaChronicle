@@ -8,7 +8,167 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:FurinaChronicle.Windows">
     <UserControl.Resources>
-        <local:CachedImageConverter x:Key="CachedImage" />
+        <local:GachaRarityBackgroundConverter x:Key="GachaRarityBackground" />
+        <local:BooleanVisibilityConverter x:Key="BooleanVisibility" />
+        <DataTemplate x:Key="GachaHistoryIcon">
+            <StackPanel Width="74" Spacing="2">
+                <Border Width="56" Height="56" CornerRadius="6" BorderThickness="1"
+                    BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}">
+                    <Grid>
+                        <Image Source="{Binding Rarity, Converter={StaticResource GachaRarityBackground}}" Stretch="UniformToFill" />
+                        <Image Source="ms-appx:///Assets/ItemRarity/ui_imgsign_itemicon.png" Stretch="UniformToFill" />
+                        <Image Loaded="OnArtworkLoaded" Unloaded="OnArtworkUnloaded"
+                            DataContextChanged="OnArtworkContextChanged" Stretch="Uniform" />
+                        <Border Background="#B3000000" CornerRadius="4" Padding="3,0"
+                            HorizontalAlignment="Right" VerticalAlignment="Top"
+                            Visibility="{Binding HasCount, Converter={StaticResource BooleanVisibility}}">
+                            <TextBlock Text="{Binding CountText}" FontSize="11" Foreground="White" />
+                        </Border>
+                    </Grid>
+                </Border>
+                <TextBlock Text="{Binding Name}" FontSize="11" TextTrimming="CharacterEllipsis" TextAlignment="Center" />
+                <TextBlock Text="{Binding Subtitle}" FontSize="11" TextAlignment="Center" />
+            </StackPanel>
+        </DataTemplate>
+        <DataTemplate x:Key="GachaItemGroupHeader">
+            <TextBlock Text="{Binding Title}" FontSize="18" FontWeight="SemiBold" Margin="8,8,0,6" />
+        </DataTemplate>
+        <DataTemplate x:Key="GachaItemListEntry">
+            <Grid ColumnSpacing="12" Margin="4,6">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="82" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                <ContentControl Content="{Binding .}" ContentTemplate="{StaticResource GachaHistoryIcon}"
+                    VerticalAlignment="Top" />
+                <StackPanel Grid.Column="1" Spacing="6">
+                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding Rank}" />
+                    <Button Content="{Binding Item.ToggleTimesText}" Click="OnToggleItemTimes"
+                        Visibility="{Binding Item.CanExpandTimes, Converter={StaticResource BooleanVisibility}}" />
+                    <TextBlock Text="{Binding Item.TimesText}" TextWrapping="Wrap" IsTextSelectionEnabled="True"
+                        Visibility="{Binding Item.IsTimesVisible, Converter={StaticResource BooleanVisibility}}" />
+                    <TextBlock Text="{Binding Item.TimeCountText}" FontSize="11"
+                        Visibility="{Binding Item.IsTimesVisible, Converter={StaticResource BooleanVisibility}}" />
+                    <Button Content="加载更多获取时间" Click="OnMoreItemTimes"
+                        Visibility="{Binding Item.CanLoadMoreTimes, Converter={StaticResource BooleanVisibility}}" />
+                </StackPanel>
+            </Grid>
+        </DataTemplate>
+        <DataTemplate x:Key="GachaHistoryLine">
+            <Grid ColumnSpacing="8" Margin="2,4">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="1" Text="{Binding Subtitle}" FontWeight="SemiBold" />
+            </Grid>
+        </DataTemplate>
+        <DataTemplate x:Key="OverviewCardTemplate">
+            <Border Width="370" Padding="12" Margin="0,0,12,0" CornerRadius="8"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                Loaded="OnOverviewCardLoaded" Unloaded="OnOverviewCardUnloaded">
+                <Grid RowSpacing="8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Text="{Binding Title}" FontSize="20" FontWeight="SemiBold" />
+                    <Expander Grid.Row="1" Header="统计信息" IsExpanded="True"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                        <TextBlock Text="{Binding Statistics}" FontSize="12" LineHeight="18" TextWrapping="Wrap" />
+                    </Expander>
+                    <StackPanel Grid.Row="2" Spacing="5">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <Button Content="{Binding TruePullsToggleText}" Click="OnOverviewTruePulls"
+                                Visibility="{Binding CanShowTruePulls, Converter={StaticResource BooleanVisibility}}"
+                                AutomationProperties.Name="切换角色活动祈愿真实抽数" />
+                            <Button Content="{Binding LayoutToggleText}" Click="OnOverviewLayout"
+                                Visibility="{Binding CanChangeLayout, Converter={StaticResource BooleanVisibility}}"
+                                AutomationProperties.Name="切换五星图标与列表" />
+                        </StackPanel>
+                        <TextBlock Text="{Binding HistoryLabel}" FontWeight="SemiBold" />
+                    </StackPanel>
+                    <Grid Grid.Row="3">
+                        <GridView ItemsSource="{Binding VisibleItems}" ItemTemplate="{StaticResource GachaHistoryIcon}"
+                            Visibility="{Binding IsGridMode, Converter={StaticResource BooleanVisibility}}"
+                            SelectionMode="None" IsItemClickEnabled="True" ItemClick="OnOpenDetail"
+                            HorizontalContentAlignment="Stretch">
+                            <GridView.ItemsPanel>
+                                <ItemsPanelTemplate><ItemsWrapGrid Orientation="Horizontal" ItemWidth="82" ItemHeight="102" /></ItemsPanelTemplate>
+                            </GridView.ItemsPanel>
+                            <GridView.Footer>
+                                <Button Content="{Binding LoadMoreText}" Click="OnOverviewMore"
+                                    Visibility="{Binding CanLoadMore, Converter={StaticResource BooleanVisibility}}" />
+                            </GridView.Footer>
+                        </GridView>
+                        <ListView ItemsSource="{Binding VisibleItems}" ItemTemplate="{StaticResource GachaHistoryLine}"
+                            Visibility="{Binding IsListMode, Converter={StaticResource BooleanVisibility}}"
+                            SelectionMode="None" IsItemClickEnabled="True" ItemClick="OnOpenDetail">
+                            <ListView.ItemContainerStyle>
+                                <Style TargetType="ListViewItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /></Style>
+                            </ListView.ItemContainerStyle>
+                            <ListView.Footer>
+                                <Button Content="{Binding LoadMoreText}" Click="OnOverviewMore"
+                                    Visibility="{Binding CanLoadMore, Converter={StaticResource BooleanVisibility}}" />
+                            </ListView.Footer>
+                        </ListView>
+                    </Grid>
+                </Grid>
+            </Border>
+        </DataTemplate>
+        <DataTemplate x:Key="HistorySelectorTemplate">
+            <StackPanel Spacing="4" Padding="2,6">
+                <Grid ColumnSpacing="6">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding History.Version}" FontWeight="SemiBold" />
+                    <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Grid.Column="2" Text="{Binding History.Total}" FontWeight="SemiBold" />
+                </Grid>
+                <ItemsControl ItemsSource="{Binding History.FeaturedItems}" ItemTemplate="{StaticResource GachaHistoryIcon}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><WrapGrid Orientation="Horizontal" ItemWidth="76" ItemHeight="95" MaximumRowsOrColumns="4" /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
+                <TextBlock Text="{Binding History.Period}" FontSize="10" TextWrapping="Wrap" />
+            </StackPanel>
+        </DataTemplate>
+        <DataTemplate x:Key="GachaPeriodHeader">
+            <StackPanel Spacing="8">
+                <TextBlock Text="{Binding Title}" FontSize="22" FontWeight="SemiBold" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding Period}" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding Total}" FontWeight="SemiBold" />
+                <ItemsControl ItemsSource="{Binding Banners}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Image Height="180" HorizontalAlignment="Left" Stretch="Uniform"
+                                AutomationProperties.Name="{Binding Name}"
+                                Loaded="OnArtworkLoaded" Unloaded="OnArtworkUnloaded"
+                                DataContextChanged="OnArtworkContextChanged" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </DataTemplate>
+        <DataTemplate x:Key="SelectedHistoryTextTemplate">
+            <StackPanel Spacing="10" Padding="8,0">
+                <ContentControl Content="{Binding}" ContentTemplate="{StaticResource GachaPeriodHeader}"
+                    HorizontalContentAlignment="Stretch" />
+                <TextBlock Text="{Binding ItemsText}" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                <TextBlock Text="{Binding Metadata}" FontSize="11" TextWrapping="Wrap" />
+            </StackPanel>
+        </DataTemplate>
+        <DataTemplate x:Key="SelectedHistoryTemplate">
+            <StackPanel Spacing="10" Padding="8,0">
+                <ContentControl Content="{Binding}" ContentTemplate="{StaticResource GachaPeriodHeader}"
+                    HorizontalContentAlignment="Stretch" />
+                <ItemsControl ItemsSource="{Binding VisibleItems}" ItemTemplate="{StaticResource GachaHistoryIcon}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><WrapGrid Orientation="Horizontal" ItemWidth="82" ItemHeight="102" /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
+                <Button Content="{Binding LoadMoreText}" Click="OnHistoryMore"
+                    Visibility="{Binding CanLoadMore, Converter={StaticResource BooleanVisibility}}" />
+                <TextBlock Text="{Binding Metadata}" FontSize="11" TextWrapping="Wrap" />
+            </StackPanel>
+        </DataTemplate>
         <DataTemplate x:Key="RecordTableTemplate">
             <Grid ColumnSpacing="10" Padding="4,8">
                 <Grid.ColumnDefinitions>
@@ -16,10 +176,18 @@
                     <ColumnDefinition Width="58" /><ColumnDefinition Width="64" /><ColumnDefinition Width="116" />
                 </Grid.ColumnDefinitions>
                 <TextBlock Text="{Binding Time}" TextWrapping="Wrap" />
-                <StackPanel Grid.Column="1" Spacing="2">
-                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
-                    <TextBlock Text="{Binding AccountLabel}" TextWrapping="Wrap" />
-                </StackPanel>
+                <Grid Grid.Column="1" ColumnSpacing="7">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="30" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                    <Grid Width="30" Height="30" VerticalAlignment="Top">
+                        <Image Source="{Binding Rarity, Converter={StaticResource GachaRarityBackground}}" Stretch="UniformToFill" />
+                        <Image Stretch="Uniform" Loaded="OnArtworkLoaded"
+                            Unloaded="OnArtworkUnloaded" DataContextChanged="OnArtworkContextChanged" />
+                    </Grid>
+                    <StackPanel Grid.Column="1" Spacing="2">
+                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding AccountLabel}" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                </Grid>
                 <TextBlock Grid.Column="2" Text="{Binding Rank}" TextWrapping="Wrap" />
                 <TextBlock Grid.Column="3" Text="{Binding ItemType}" TextWrapping="Wrap" />
                 <TextBlock Grid.Column="4" Text="{Binding Pool}" TextWrapping="Wrap" />
@@ -31,8 +199,10 @@
                 <Border Width="44" Height="44" CornerRadius="6" VerticalAlignment="Top"
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                     <Grid>
+                        <Image Source="{Binding Rarity, Converter={StaticResource GachaRarityBackground}}" Stretch="UniformToFill" />
                         <TextBlock Text="{Binding Rank}" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                        <Image Source="{Binding Image.CachedPath, Converter={StaticResource CachedImage}}" Stretch="Uniform" />
+                        <Image Stretch="Uniform" Loaded="OnArtworkLoaded" Unloaded="OnArtworkUnloaded"
+                            DataContextChanged="OnArtworkContextChanged" />
                     </Grid>
                 </Border>
                 <StackPanel Grid.Column="1" Spacing="3">
@@ -42,6 +212,8 @@
             </Grid>
         </DataTemplate>
     </UserControl.Resources>
+    <Grid>
+    <ContentControl x:Name="GachaWorkspace" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
     <Grid Padding="16,12" RowSpacing="8">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -58,13 +230,13 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <ComboBox x:Name="ArchivePicker" Header="档案" DisplayMemberPath="Label"
+            <ComboBox x:Name="ArchivePicker" IsEnabled="False" Header="档案" DisplayMemberPath="Label"
                 HorizontalAlignment="Stretch" AutomationProperties.AutomationId="Ui1Archive"
                 SelectionChanged="OnArchiveChanged" />
-            <ComboBox x:Name="AccountPicker" Grid.Column="1" Header="账号" DisplayMemberPath="Label"
+            <ComboBox x:Name="AccountPicker" IsEnabled="False" Grid.Column="1" Header="账号" DisplayMemberPath="Label"
                 HorizontalAlignment="Stretch" AutomationProperties.AutomationId="Ui1Account"
                 SelectionChanged="OnAccountChanged" />
-            <Button x:Name="RangeButton" Grid.Column="2" Content="档案多选" VerticalAlignment="Bottom" Click="OnRange"
+            <Button x:Name="RangeButton" IsEnabled="False" Grid.Column="2" Content="档案多选" VerticalAlignment="Bottom" Click="OnRange"
                 AutomationProperties.AutomationId="GachaRange" />
         </Grid>
         <Grid Grid.Row="2" ColumnSpacing="10">
@@ -72,12 +244,12 @@
                 <ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <ComboBox x:Name="ViewPicker" DisplayMemberPath="Label" SelectionChanged="OnViewChanged" AutomationProperties.Name="分析视图"
+            <ComboBox x:Name="ViewPicker" IsEnabled="False" DisplayMemberPath="Label" SelectionChanged="OnViewChanged" AutomationProperties.Name="分析视图"
                 AutomationProperties.AutomationId="GachaView" />
-            <Button x:Name="FilterButton" Grid.Column="1" Content="筛选" Click="OnFilter"
+            <Button x:Name="FilterButton" IsEnabled="False" Grid.Column="1" Content="筛选" Click="OnFilter"
                 AutomationProperties.AutomationId="GachaFilter" />
             <TextBlock x:Name="SummaryText" Grid.Column="2" VerticalAlignment="Center" TextWrapping="Wrap" AutomationProperties.AutomationId="Ui1Summary" />
-            <Button x:Name="ReloadButton" Grid.Column="3" Content="重新载入" Click="OnReload"
+            <Button x:Name="ReloadButton" IsEnabled="False" Grid.Column="3" Content="重新载入" Click="OnReload"
                 AutomationProperties.AutomationId="GachaReload">
                 <Button.KeyboardAccelerators><KeyboardAccelerator Key="F5" /></Button.KeyboardAccelerators>
             </Button>
@@ -153,30 +325,103 @@
                     <TextBlock Grid.Column="2" Text="星级" /><TextBlock Grid.Column="3" Text="类型" />
                     <TextBlock Grid.Column="4" Text="卡池" />
                 </Grid>
+                <Grid x:Name="HistoryPanel" Grid.Row="1" Visibility="Collapsed" RowSpacing="8">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button x:Name="CacheBannersButton" Content="缓存全部横幅" Click="OnCacheBanners"
+                            AutomationProperties.AutomationId="GachaHistoryCacheBanners" />
+                        <Button x:Name="ClearBannersButton" Content="清除横幅缓存" Click="OnClearBanners"
+                            AutomationProperties.AutomationId="GachaHistoryClearBanners" />
+                        <ComboBox x:Name="HistoryVersionPicker" MinWidth="100"
+                            SelectionChanged="OnHistoryVersionChanged"
+                            AutomationProperties.Name="历史版本" AutomationProperties.AutomationId="GachaHistoryVersion" />
+                        <ToggleSwitch x:Name="HistoryIconToggle" Header="物品图标" IsOn="True" Toggled="OnHistoryDisplayChanged"
+                            AutomationProperties.AutomationId="GachaHistoryIconMode" />
+                    </StackPanel>
+                    <Grid Grid.Row="1" ColumnSpacing="12">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="330" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <ListView x:Name="HistoryList" ItemTemplate="{StaticResource HistorySelectorTemplate}"
+                            SelectionChanged="OnHistorySelectionChanged"
+                            AutomationProperties.Name="独立卡池历史" AutomationProperties.AutomationId="GachaHistoryList">
+                            <ListView.ItemContainerStyle>
+                                <Style TargetType="ListViewItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /></Style>
+                            </ListView.ItemContainerStyle>
+                        </ListView>
+                        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
+                            <StackPanel Spacing="10">
+                                <ContentControl x:Name="HistoryContent" ContentTemplate="{StaticResource SelectedHistoryTemplate}"
+                                    HorizontalContentAlignment="Stretch" AutomationProperties.Name="所选卡池详情"
+                                    AutomationProperties.AutomationId="GachaHistoryDetail" />
+                                <TextBlock x:Name="HistoryText" Visibility="Collapsed" TextWrapping="Wrap"
+                                    IsTextSelectionEnabled="True" AutomationProperties.AutomationId="GachaHistoryText" />
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
+                </Grid>
+                <ScrollViewer x:Name="OverviewScroll" Grid.Row="1" Visibility="Collapsed"
+                    HorizontalScrollBarVisibility="Auto" HorizontalScrollMode="Enabled"
+                    VerticalScrollBarVisibility="Disabled" VerticalScrollMode="Disabled"
+                    SizeChanged="OnOverviewViewportSizeChanged">
+                    <ItemsControl x:Name="OverviewCards" ItemTemplate="{StaticResource OverviewCardTemplate}"
+                        AutomationProperties.Name="按卡池分组的抽卡总览">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                </ScrollViewer>
                 <ListView x:Name="RecordsList" Grid.Row="1" SelectionMode="None" IsItemClickEnabled="True"
                     ItemClick="OnOpenDetail" ItemTemplate="{StaticResource RecordListTemplate}" AutomationProperties.AutomationId="Ui1Records">
                     <ListView.ItemContainerStyle>
                         <Style TargetType="ListViewItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /></Style>
                     </ListView.ItemContainerStyle>
                 </ListView>
-                <GridView x:Name="ItemGrid" Grid.Row="1" Visibility="Collapsed" SelectionMode="None" IsItemClickEnabled="True"
-                    ItemClick="OnOpenDetail" AutomationProperties.Name="物品网格">
-                    <GridView.ItemsPanel><ItemsPanelTemplate><ItemsWrapGrid Orientation="Horizontal" ItemWidth="154" ItemHeight="144" /></ItemsPanelTemplate></GridView.ItemsPanel>
-                    <GridView.ItemTemplate>
-                        <DataTemplate>
-                            <StackPanel Width="138" Padding="8" Spacing="4" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-                                <Grid Height="38">
-                                    <TextBlock Text="{Binding Rank}" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                    <Image Source="{Binding Image.CachedPath, Converter={StaticResource CachedImage}}" Stretch="Uniform" />
-                                </Grid>
-                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
-                                <TextBlock Text="{Binding Subtitle}" TextWrapping="Wrap" />
-                            </StackPanel>
-                        </DataTemplate>
-                    </GridView.ItemTemplate>
-                </GridView>
-                <ScrollViewer x:Name="CalendarScroll" Grid.Row="1" Visibility="Collapsed" AutomationProperties.Name="月历">
-                    <Grid x:Name="CalendarGrid" ColumnSpacing="4" RowSpacing="4" />
+                <Grid x:Name="ItemPanel" Grid.Row="1" Visibility="Collapsed" RowSpacing="8">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <TextBlock x:Name="ItemScopeText" VerticalAlignment="Center" />
+                        <Button x:Name="ItemLayoutButton" Content="列表与时间" Click="OnItemLayoutChanged"
+                            AutomationProperties.AutomationId="GachaItemLayout" />
+                    </StackPanel>
+                    <GridView x:Name="ItemGrid" Grid.Row="1" SelectionMode="None" IsItemClickEnabled="True"
+                        ItemClick="OnOpenDetail" AutomationProperties.Name="物品网格"
+                        AutomationProperties.AutomationId="GachaItemGrid"
+                        ItemTemplate="{StaticResource GachaHistoryIcon}">
+                        <GridView.ItemsPanel><ItemsPanelTemplate><ItemsWrapGrid Orientation="Horizontal" ItemWidth="86" ItemHeight="102" /></ItemsPanelTemplate></GridView.ItemsPanel>
+                        <GridView.GroupStyle>
+                            <GroupStyle HeaderTemplate="{StaticResource GachaItemGroupHeader}" HidesIfEmpty="True" />
+                        </GridView.GroupStyle>
+                    </GridView>
+                    <ListView x:Name="ItemList" Grid.Row="1" SelectionMode="None" Visibility="Collapsed"
+                        ItemTemplate="{StaticResource GachaItemListEntry}"
+                        AutomationProperties.Name="物品与获取时间" AutomationProperties.AutomationId="GachaItemList">
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="ListViewItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /></Style>
+                        </ListView.ItemContainerStyle>
+                        <ListView.GroupStyle>
+                            <GroupStyle HeaderTemplate="{StaticResource GachaItemGroupHeader}" HidesIfEmpty="True" />
+                        </ListView.GroupStyle>
+                    </ListView>
+                </Grid>
+                <ScrollViewer x:Name="CalendarScroll" Grid.Row="1" Visibility="Collapsed"
+                    HorizontalScrollBarVisibility="Auto" HorizontalScrollMode="Enabled" AutomationProperties.Name="年度抽卡热力图">
+                    <StackPanel Spacing="12" Padding="6,10">
+                        <TextBlock x:Name="CalendarMonthText" FontSize="18" FontWeight="SemiBold" />
+                        <TextBlock x:Name="CalendarSummaryText" TextWrapping="Wrap" />
+                        <Grid x:Name="CalendarGrid" ColumnSpacing="3" RowSpacing="3" HorizontalAlignment="Left"
+                            AutomationProperties.AutomationId="GachaCalendarHeatmap" />
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <TextBlock Text="少" VerticalAlignment="Center" Margin="0,0,4,0" />
+                            <Border x:Name="CalendarLegend0" Width="12" Height="12" CornerRadius="3" />
+                            <Border x:Name="CalendarLegend1" Width="12" Height="12" CornerRadius="3" />
+                            <Border x:Name="CalendarLegend2" Width="12" Height="12" CornerRadius="3" />
+                            <Border x:Name="CalendarLegend3" Width="12" Height="12" CornerRadius="3" />
+                            <Border x:Name="CalendarLegend4" Width="12" Height="12" CornerRadius="3" />
+                            <Border x:Name="CalendarLegend5" Width="12" Height="12" CornerRadius="3" />
+                            <TextBlock Text="多" VerticalAlignment="Center" Margin="4,0,0,0" />
+                        </StackPanel>
+                        <TextBlock Text="每列为一周，每行为星期一至星期日。悬停查看当天统计，点击查看明细。"
+                            FontSize="12" TextWrapping="Wrap" />
+                    </StackPanel>
                 </ScrollViewer>
             </Grid>
             <ScrollViewer x:Name="DetailPane" Grid.Column="1" Visibility="Collapsed" Padding="12"
@@ -204,6 +449,48 @@
             <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
             <Button x:Name="PreviousButton" Content="上一页" Click="OnPrevious" />
             <Button x:Name="NextButton" Grid.Column="1" Content="下一页" Click="OnNext" />
+            <ComboBox x:Name="PageSizePicker" Grid.Column="2" HorizontalAlignment="Right"
+                SelectionChanged="OnPageSizeChanged" AutomationProperties.Name="每页记录数"
+                AutomationProperties.AutomationId="GachaPageSize" Visibility="Collapsed" />
+        </Grid>
+    </Grid>
+    </ContentControl>
+        <Grid x:Name="RefreshOverlay" Visibility="Collapsed" Background="#C5000000"
+            AutomationProperties.Name="抽卡刷新进度" AutomationProperties.AutomationId="GachaRefreshProgress">
+            <Border MaxWidth="740" Margin="16" Padding="20" CornerRadius="10" BorderThickness="1"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
+                <Grid RowSpacing="10">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <StackPanel Spacing="6">
+                        <TextBlock x:Name="RefreshTitle" FontSize="22" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <ProgressRing x:Name="RefreshRing" Width="24" Height="24" IsActive="True" />
+                            <TextBlock x:Name="RefreshPool" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"
+                                AutomationProperties.AutomationId="GachaRefreshPool" AutomationProperties.LiveSetting="Polite" />
+                        </StackPanel>
+                        <TextBlock x:Name="RefreshDetail" TextWrapping="Wrap"
+                            AutomationProperties.AutomationId="GachaRefreshDetail" />
+                    </StackPanel>
+                    <TextBlock Grid.Row="1" Text="刷新过程中无法切换页面或执行其他数据操作。这里展示本次获取的物品，实际保存数量以完成统计为准。"
+                        FontSize="12" TextWrapping="Wrap" />
+                    <TextBlock x:Name="RefreshTotals" Grid.Row="2" FontWeight="SemiBold"
+                        AutomationProperties.AutomationId="GachaRefreshTotals" />
+                    <GridView x:Name="RefreshItems" Grid.Row="3" SelectionMode="None"
+                        ItemTemplate="{StaticResource GachaHistoryIcon}"
+                        AutomationProperties.Name="本次刷新获取到的物品" AutomationProperties.AutomationId="GachaRefreshItems">
+                        <GridView.ItemsPanel>
+                            <ItemsPanelTemplate><ItemsWrapGrid Orientation="Horizontal" ItemWidth="86" ItemHeight="102" /></ItemsPanelTemplate>
+                        </GridView.ItemsPanel>
+                    </GridView>
+                    <Button x:Name="RefreshClose" Grid.Row="4" Content="关闭" IsEnabled="False" HorizontalAlignment="Right"
+                        Click="OnCloseRefresh" AutomationProperties.Name="关闭抽卡刷新结果"
+                        AutomationProperties.AutomationId="GachaRefreshClose" />
+                </Grid>
+            </Border>
         </Grid>
     </Grid>
 </UserControl>

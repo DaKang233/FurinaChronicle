@@ -39,20 +39,20 @@ public sealed partial class Ui1GachaView
     private async Task RefreshFromWindowsCacheAsync()
     {
         if (windowsCacheRefresh is null || importMode is null ||
-            state?.Snapshot is not { IsBusy: false, ArchiveId: Guid archiveId } snapshot)
+            state?.Snapshot is not { IsBusy: false } snapshot)
         {
-            ShowInlineValidation("请先选择档案并等待当前读取结束。");
-            return;
-        }
-
-        if (snapshot.AccountId is not Guid accountId)
-        {
-            ShowInlineValidation("请先选择要刷新的账号。");
+            ShowInlineValidation("请等待当前读取结束。");
             return;
         }
 
         string? gameFolder = await PickGameInstallationFolderAsync();
         if (gameFolder is null) return;
+        if (snapshot.ArchiveId is not Guid archiveId || snapshot.AccountId is not Guid accountId)
+        {
+            await RefreshWithoutAccountAsync(snapshot,
+                FurinaChronicle.Services.Gacha.Refreshing.GachaRefreshSource.WindowsWebCache, gameFolder: gameFolder);
+            return;
+        }
 
         ClearInlineValidation();
         // Full-import mode and the target account are fixed before the cache is read.
@@ -101,7 +101,8 @@ public sealed partial class Ui1GachaView
         GachaWindowsCacheRefreshOutcome outcome;
         try
         {
-            outcome = await windowsCacheRefresh.ExecuteAsync(plan);
+            outcome = await WithRefreshProgressAsync("网页缓存刷新", progress =>
+                windowsCacheRefresh.ExecuteAsync(plan, progress: progress), result => (result.Succeeded, result.Result));
         }
         catch (Exception exception)
         {
@@ -130,7 +131,7 @@ public sealed partial class Ui1GachaView
             $"刷新完成：{DescribeRefresh(outcome.Result)}");
     }
 
-    private async Task ImportFromTeyvatHelperAsync()
+    private async Task ImportTeyvatManuallyAsync()
     {
         if (teyvatImport is null || importCoordinator is null || importMode is null ||
             state?.Snapshot is not { IsBusy: false, ArchiveId: Guid archiveId } snapshot)
@@ -166,8 +167,7 @@ public sealed partial class Ui1GachaView
                 {
                     new TextBlock
                     {
-                        Text = "自动导入：不可用（需要用户页通行证登录与角色选择；孤立宿主未提供该上下文）。" +
-                            "请手动输入 UID 与抽卡链接。",
+                        Text = "请手动输入 UID 与有效抽卡链接；无需登录账号或选择角色。",
                         TextWrapping = TextWrapping.Wrap
                     },
                     new TextBlock
@@ -230,30 +230,7 @@ public sealed partial class Ui1GachaView
             return;
         }
 
-        if (!download.Succeeded || download.Content is null)
-        {
-            ReportFailure(
-                NotificationTaskKeys.GachaImportTeyvat,
-                "gacha.import.teyvat",
-                "提瓦特小助手导入失败",
-                download.FailureMessage ?? "从提瓦特小助手导入未完成，未写入任何数据。");
-            return;
-        }
-
-        byte[] content = download.Content;
-        string fileName = download.FileName ?? "teyvat-helper-uigf.json";
-        var source = new GachaImportSource(
-            fileName,
-            _ => Task.FromResult<Stream>(new MemoryStream(content, writable: false)));
-        await ImportPreparedSourceAsync(
-            source,
-            snapshot,
-            archiveId,
-            mode,
-            CancellationToken.None,
-            NotificationTaskKeys.GachaImportTeyvat,
-            "从提瓦特小助手导入",
-            target);
+        await ImportTeyvatPayloadAsync(download, snapshot, archiveId, mode, target, plan.Uid);
     }
 
     private async Task<bool> ConfirmTeyvatPrivacyAsync(GachaTeyvatHelperImportPlan plan)

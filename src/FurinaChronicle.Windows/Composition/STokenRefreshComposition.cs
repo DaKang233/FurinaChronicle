@@ -7,6 +7,7 @@ using FurinaChronicle.Infrastructure.Gacha.Refreshing;
 using FurinaChronicle.Services.Gacha.Refreshing;
 using FurinaChronicle.Services.Gacha.Writing;
 using FurinaChronicle.Services.Passport;
+using FurinaChronicle.Services.Gacha.Importing;
 
 namespace FurinaChronicle.Windows.Composition;
 
@@ -24,6 +25,16 @@ public sealed class STokenRefreshComposition : IAsyncDisposable
     {
         provider = new MiHoYoSTokenGachaUrlProvider();
         client = new MiHoYoGachaLogClient();
+        ISTokenGachaUrlProvider importProvider = provider;
+        ITeyvatHelperUigfClient importClient = environment.TeyvatClient;
+#if DEBUG
+        if (SyntheticTeyvatHelperSource.TryCreate(environment) is { } scripted)
+        {
+            importProvider = scripted;
+            importClient = scripted;
+        }
+#endif
+        TeyvatImport = new TeyvatHelperUigfImportSource(passportAccountStore, null, importProvider, importClient);
         Refresher = new RefreshGachaRecords(
             environment.Records,
             new CommitGachaRecords(environment.Changes),
@@ -35,6 +46,8 @@ public sealed class STokenRefreshComposition : IAsyncDisposable
     }
 
     public RefreshGachaRecords Refresher { get; }
+
+    public TeyvatHelperUigfImportSource TeyvatImport { get; }
 
     public ValueTask DisposeAsync()
     {
