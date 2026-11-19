@@ -13,6 +13,7 @@ using FurinaChronicle.Services.Gacha.Abstractions;
 using FurinaChronicle.Services.Gacha;
 using FurinaChronicle.Services.Gacha.Refreshing;
 using FurinaChronicle.Services.Gacha.Writing;
+using FurinaChronicle.Services.Gacha.Metadata;
 using FurinaChronicle.Services.Passport;
 using FurinaChronicle.Tests.Infrastructure.Persistence.Sqlite;
 
@@ -352,6 +353,32 @@ public sealed class RefreshGachaRecordsTests
     public void ManualUrl_InvalidInput_IsRejected(string value)
     {
         Assert.Throws<FormatException>(() => GachaRefreshUrl.Parse(value));
+    }
+
+    [Fact]
+    public async Task OptionalMetadataFailureDoesNotDiscardNewOfficialFacts()
+    {
+        var repository = new InMemoryGachaRecordRepository([]);
+        var client = new StubGachaLogClient();
+        client.Add("301", null, Page(Remote("991") with { ItemId = null, ItemName = "合成未解析角色" }));
+        var service = new RefreshGachaRecords(repository, new RepositoryCommitter(repository),
+            new StubPassportStore(), new StubSTokenProvider(), new StubWindowsProvider(false), client,
+            new UnavailableMetadata());
+        var result = await service.ExecuteAsync(new GachaRefreshRequest(GameAccount,
+            GachaRefreshSource.ManualUrl, ManualUrl: ValidUrl.AbsoluteUri));
+        Assert.Equal(1, result.InsertedCount);
+        var stored = Assert.Single(await repository.GetRecentAsync(GameAccountId, 10));
+        Assert.Null(stored.ItemId);
+        Assert.Equal("合成未解析角色", stored.ItemName);
+        Assert.Equal(DataOrigin.OfficialApi, stored.Provenance.Origin);
+    }
+
+    private sealed class UnavailableMetadata : IGachaItemMetadataProvider
+    {
+        public ValueTask<GachaItemMetadata?> FindByIdAsync(GachaGame game, string itemId, CancellationToken cancellationToken = default) =>
+            throw new GachaMetadataUnavailableException("Synthetic metadata outage", new IOException());
+        public ValueTask<GachaItemMetadata?> FindByNameAsync(GachaGame game, string itemName, CancellationToken cancellationToken = default) =>
+            throw new GachaMetadataUnavailableException("Synthetic metadata outage", new IOException());
     }
 
     private static RefreshGachaRecords CreateService(

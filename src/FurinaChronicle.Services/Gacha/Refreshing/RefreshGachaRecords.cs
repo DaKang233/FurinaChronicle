@@ -12,6 +12,7 @@ using FurinaChronicle.Services.Gacha.Abstractions;
 using FurinaChronicle.Services.Passport;
 using FurinaChronicle.Services.Gacha;
 using FurinaChronicle.Services.Gacha.Writing;
+using FurinaChronicle.Services.Gacha.Metadata;
 
 namespace FurinaChronicle.Services.Gacha.Refreshing;
 
@@ -342,10 +343,18 @@ public sealed class RefreshGachaRecords(
             itemName,
             out GachaItemMetadata? metadata))
         {
-            metadata = await metadataProvider.FindByNameAsync(
-                GachaGame.GenshinImpact,
-                itemName,
-                cancellationToken);
+            try
+            {
+                metadata = await metadataProvider.FindByNameAsync(
+                    GachaGame.GenshinImpact,
+                    itemName,
+                    cancellationToken);
+            }
+            catch (GachaMetadataUnavailableException)
+            {
+                // Display metadata is optional: retain the official fact even while offline.
+                metadata = null;
+            }
             metadataByName.Add(itemName, metadata);
         }
 

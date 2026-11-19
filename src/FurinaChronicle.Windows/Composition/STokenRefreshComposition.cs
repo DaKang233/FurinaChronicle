@@ -6,6 +6,7 @@ using FurinaChronicle.Infrastructure.Gacha.Metadata;
 using FurinaChronicle.Infrastructure.Gacha.Refreshing;
 using FurinaChronicle.Services.Gacha.Refreshing;
 using FurinaChronicle.Services.Gacha.Writing;
+using FurinaChronicle.Services.Gacha.Abstractions;
 using FurinaChronicle.Services.Passport;
 using FurinaChronicle.Services.Gacha.Importing;
 
@@ -21,10 +22,15 @@ public sealed class STokenRefreshComposition : IAsyncDisposable
 
     public STokenRefreshComposition(
         WindowsHostEnvironment environment,
-        IPassportAccountStore passportAccountStore)
+        IPassportAccountStore passportAccountStore,
+        IGachaItemMetadataProvider? itemMetadata = null)
     {
         provider = new MiHoYoSTokenGachaUrlProvider();
         client = new MiHoYoGachaLogClient();
+        IGachaLogClient refreshClient = client;
+#if DEBUG
+        if (environment.IsSynthetic) refreshClient = SyntheticGachaRefreshClient.TryCreate() ?? refreshClient;
+#endif
         ISTokenGachaUrlProvider importProvider = provider;
         ITeyvatHelperUigfClient importClient = environment.TeyvatClient;
 #if DEBUG
@@ -41,8 +47,8 @@ public sealed class STokenRefreshComposition : IAsyncDisposable
             passportAccountStore,
             provider,
             environment.WindowsCacheUrlProvider,
-            client,
-            new EmptyGachaItemMetadataProvider());
+            refreshClient,
+            itemMetadata ?? new EmptyGachaItemMetadataProvider());
     }
 
     public RefreshGachaRecords Refresher { get; }

@@ -215,7 +215,8 @@ public sealed class WindowsComposition : IAsyncDisposable
         services.AddTransient<PassportCredentialState>();
         services.AddSingleton(sp => new STokenRefreshComposition(
             sp.GetRequiredService<WindowsHostEnvironment>(),
-            sp.GetRequiredService<IPassportAccountStore>()));
+            sp.GetRequiredService<IPassportAccountStore>(),
+            sp.GetService<IGachaItemMetadataProvider>()));
         services.AddSingleton(sp =>
             sp.GetRequiredService<STokenRefreshComposition>().Refresher);
         services.AddSingleton<IGachaSTokenRefreshExecutor, ServiceGachaSTokenRefreshExecutor>();
@@ -266,6 +267,7 @@ public sealed class WindowsComposition : IAsyncDisposable
             filePicker,
             sp.GetRequiredService<TimeProvider>(),
             sp.GetRequiredService<GachaSTokenRefreshCoordinator>(),
+            sp.GetRequiredService<RefreshGachaRecords>(),
             sp.GetRequiredService<STokenRefreshComposition>().TeyvatImport,
             sp.GetRequiredService<IIsolatedCredentialStore>(),
             sp.GetRequiredService<IGachaEventCatalog>(),
@@ -325,6 +327,7 @@ public sealed class WindowsComposition : IAsyncDisposable
         IFilePickerService filePicker,
         TimeProvider timeProvider,
         GachaSTokenRefreshCoordinator sTokenRefresh,
+        RefreshGachaRecords refresher,
         TeyvatHelperUigfImportSource teyvatSource,
         IIsolatedCredentialStore credentialStore,
         IGachaEventCatalog eventCatalog,
@@ -345,7 +348,7 @@ public sealed class WindowsComposition : IAsyncDisposable
             environment.GetCachedIconPath,
             new BuildGachaAnalytics(
                 environment.Records,
-                new EmptyGachaItemMetadataProvider(),
+                exportMetadata ?? new EmptyGachaItemMetadataProvider(),
                 eventCatalog),
             environment.Changes.GetRecordRevisionsAsync,
             eventCatalog);
@@ -368,11 +371,11 @@ public sealed class WindowsComposition : IAsyncDisposable
             new GachaRecordOperationCoordinator(environment.GachaHistory, environment.Changes),
             new GachaManualRefreshCoordinator(
                 planning,
-                new ServiceGachaManualRefreshGateway(environment.GachaRefresher)),
+                new ServiceGachaManualRefreshGateway(refresher)),
             new GachaWindowsCacheRefreshCoordinator(
                 planning,
                 new ServiceGachaWindowsCacheRefreshGateway(
-                    environment.GachaRefresher,
+                    refresher,
                     environment.WindowsCacheUrlProvider)),
             new GachaTeyvatHelperImportCoordinator(
                 planning,
@@ -380,7 +383,7 @@ public sealed class WindowsComposition : IAsyncDisposable
             sTokenRefresh,
             new RefreshUnselectedGachaRecords(
                 new PrepareGachaRefreshTarget(environment.Archives, environment.Accounts, timeProvider),
-                environment.GachaRefresher),
+                refresher),
             itemMetadata,
             new PreloadGachaBannerImages(eventCatalog, environment.GachaBannerCache),
             notifications,
