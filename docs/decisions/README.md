@@ -26,3 +26,5 @@
 - [0020：平台专属 UI 宿主与最小展示边界](0020-platform-specific-ui-hosts.md)
 - [0021：跨端逻辑 Archive v1 的保真与本地状态边界](0021-logical-archive-v1-fidelity.md)
 - [0022：Archive Merge 的本地回执与设置状态](0022-archive-merge-receipt-and-settings.md)
+- [0025：匿名化遥测与用户主动上传](0025-anonymous-telemetry-and-user-upload.md)
+- [0026：挑战详情兼容](0026-spiral-abyss-battle-details.md)
