@@ -91,6 +91,7 @@ internal static class PresentationServiceCollectionExtensions
         services.AddSingleton<Phase8BValidationPage>();
 #endif
 
+        services.AddAiAnalysis();
         services.AddSingleton<AppShell>();
         services.AddSingleton<ApplicationStartupService>();
 

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 using FurinaChronicle.App.UI.Pages;
+using FurinaChronicle.App.Ai;
 using FurinaChronicle.App.UI.Controls;
 using FurinaChronicle.App.ViewModels;
 
@@ -29,6 +30,7 @@ public partial class AppShell : Shell
     private readonly ArchivePage archivePage;
     private readonly ArchiveTransferPage archiveTransferPage;
     private readonly SettingsPage settingsPage;
+    private readonly AiAnalysisPage aiPage;
 #if PHASE8B_VALIDATION
     private readonly Phase8BValidationPage phase8BValidationPage;
 #endif
@@ -48,6 +50,7 @@ public partial class AppShell : Shell
         ArchivePage archivePage,
         ArchiveTransferPage archiveTransferPage,
         SettingsPage settingsPage,
+        AiAnalysisPage aiPage,
 #if PHASE8B_VALIDATION
         Phase8BValidationPage phase8BValidationPage,
 #endif
@@ -64,6 +67,7 @@ public partial class AppShell : Shell
         this.archivePage = archivePage;
         this.archiveTransferPage = archiveTransferPage;
         this.settingsPage = settingsPage;
+        this.aiPage = aiPage;
 #if PHASE8B_VALIDATION
         this.phase8BValidationPage = phase8BValidationPage;
 #endif
@@ -192,12 +196,13 @@ public partial class AppShell : Shell
 #else
         if (OperatingSystem.IsAndroid())
         {
-            // Four destinations (UI-4 §6.3): overview / chronicle / data / archive.
+            // AI is an explicitly requested fifth optional destination.
             // History, user/login and settings are reachable from the archive page.
             FlyoutBehavior = FlyoutBehavior.Disabled;
             var tabs = new TabBar { Route = "main" };
             tabs.Items.Add(CreateContent("概览", OverviewRoute, overviewPage));
             tabs.Items.Add(CreateContent("游戏历程", "chronicle", chroniclePage));
+            tabs.Items.Add(CreateContent("AI 分析", "ai", aiPage));
             tabs.Items.Add(CreateContent("数据", "data", dataHubPage));
             tabs.Items.Add(CreateContent("档案", "archive", archivePage));
             Items.Add(tabs);
@@ -209,6 +214,7 @@ public partial class AppShell : Shell
         FlyoutHeader = passportFlyoutHeader;
         Items.Add(CreateFlyoutItem("主页", "home", homePage));
         Items.Add(CreateFlyoutItem("游戏历程", "chronicle", chroniclePage));
+        Items.Add(CreateFlyoutItem("AI 分析", "ai", aiPage));
         Items.Add(CreateFlyoutItem("抽卡记录", "gacha", gachaPage));
         Items.Add(CreateFlyoutItem("档案修改历史", "archive-history", archiveHistoryPage));
         Items.Add(CreateFlyoutItem("档案与账号管理", "archive", archivePage));

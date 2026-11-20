@@ -36,6 +36,10 @@
                     AutomationProperties.AutomationId="Ui4NavigationChronicle">
                     <NavigationViewItem.Icon><SymbolIcon Symbol="Clock" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
+                <NavigationViewItem x:Name="AiDestination" Content="AI 分析" Tag="ai"
+                    AutomationProperties.AutomationId="NavigationAi">
+                    <NavigationViewItem.Icon><SymbolIcon Symbol="Message" /></NavigationViewItem.Icon>
+                </NavigationViewItem>
                 <NavigationViewItem x:Name="GachaDestination" Content="数据 · 抽卡" Tag="gacha"
                     AutomationProperties.AutomationId="Ui1Navigation">
                     <NavigationViewItem.Icon><SymbolIcon Symbol="List" /></NavigationViewItem.Icon>

@@ -34,6 +34,7 @@ public sealed partial class MainWindow : Window
     private ChroniclePage? chroniclePage;
     private CharacterWeaponPage? characterWeaponPage;
     private ChallengePage? challengePage;
+    private AiPage? aiPage;
     private PassportPage? passportPage;
     private NotificationCenterPanel? notificationCenterPanel;
     private HostAdoptionPage? adoptionPage;
@@ -329,6 +330,10 @@ public sealed partial class MainWindow : Window
         };
         PageHost.Children.Add(challengePage);
 
+        aiPage = new AiPage(composition.Services.GetRequiredService<FurinaChronicle.Presentation.Ai.AiWorkspaceState>(),
+            notificationCenter, composition.Services.GetRequiredService<IFilePickerService>()) { Visibility = Visibility.Collapsed };
+        PageHost.Children.Add(aiPage);
+
         passportPage = new PassportPage(
             composition.Services.GetRequiredService<PassportCredentialState>(),
             composition.Services.GetRequiredService<MainlandPassportLoginService>(),
@@ -366,6 +371,7 @@ public sealed partial class MainWindow : Window
         chroniclePage?.Leave();
         characterWeaponPage?.Leave();
         challengePage?.Leave();
+        aiPage?.Leave();
         if (overviewPage is not null) overviewPage.Visibility = Visibility.Collapsed;
         if (archivePage is not null) archivePage.Visibility = Visibility.Collapsed;
         if (historyPage is not null) historyPage.Visibility = Visibility.Collapsed;
@@ -374,6 +380,7 @@ public sealed partial class MainWindow : Window
         if (chroniclePage is not null) chroniclePage.Visibility = Visibility.Collapsed;
         if (characterWeaponPage is not null) characterWeaponPage.Visibility = Visibility.Collapsed;
         if (challengePage is not null) challengePage.Visibility = Visibility.Collapsed;
+        if (aiPage is not null) aiPage.Visibility = Visibility.Collapsed;
         if (passportPage is not null) passportPage.Visibility = Visibility.Collapsed;
     }
 
@@ -492,6 +499,11 @@ public sealed partial class MainWindow : Window
                     challengePage!.Visibility = Visibility.Visible;
                     await challengePage.EnterAsync();
                     break;
+                case "ai":
+                    currentPageTag = tag;
+                    aiPage!.Visibility = Visibility.Visible;
+                    await aiPage.EnterAsync();
+                    break;
                 case "passport":
                     currentPageTag = tag;
                     passportPage!.Visibility = Visibility.Visible;
@@ -518,6 +530,7 @@ public sealed partial class MainWindow : Window
         disposed = true;
         DetachWindowSizing();
         challengePage?.Leave();
+        aiPage?.Leave();
         await GachaView.CloseAsync();
         await composition.DisposeAsync();
     }

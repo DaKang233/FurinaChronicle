@@ -242,6 +242,7 @@ public sealed class WindowsComposition : IAsyncDisposable
                 sp.GetRequiredService<IGameAccountRepository>())));
         services.AddTransient<CharacterWeaponHistoryState>();
         services.AddTransient<ChallengeHistoryState>();
+        services.AddAiAnalysis(paths);
         services.AddSingleton<IStartupProbe, WindowsStartupProbe>();
         services.AddTransient<StartupState>();
         services.AddSingleton<IProcessIdentityPort, WindowsProcessIdentityPort>();
