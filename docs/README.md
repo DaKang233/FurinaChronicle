@@ -50,6 +50,8 @@
 - [可移植数据集](architecture/PORTABLE_DATASET.md)
 - [备份与恢复](architecture/BACKUP_AND_RESTORE.md)
 - [服务端扩展](architecture/SERVER_EXTENSIBILITY.md)
+- [可选 AI 只读分析](architecture/AI_ANALYSIS.md)
+- [AI 接入验收](development/AI_ANALYSIS_ACCEPTANCE.md)
 - [Chronicle 时间线](architecture/CHRONICLE_TIMELINE.md)
 - [页面选择状态与跨页刷新](architecture/PRESENTATION_SELECTION_STATE.md)
 

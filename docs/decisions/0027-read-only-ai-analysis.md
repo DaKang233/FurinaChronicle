@@ -1,6 +1,8 @@
 # ADR 0027：只读 AI 分析与去标识化发送
 
-状态：Accepted implementation（维护者于 2026-11-21 授权实施既有 AI 路线图并要求去标识化）
+状态：Accepted（维护者于 2026-11-21 授权实施既有 AI 路线图；UID 规则按本轮补充确认）
+
+实施状态：首版工程与 Windows 合成数据交互已验证；Android 真机待验收，详见 [AI 验收记录](../development/AI_ANALYSIS_ACCEPTANCE.md)。
 
 ## 决定
 
