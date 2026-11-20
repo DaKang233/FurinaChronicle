@@ -1,4 +1,4 @@
-// Copyright (c) 2026 DaKang233.
+﻿// Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
 using System.Globalization;
@@ -61,6 +61,7 @@ public sealed partial record ChallengeObservationCard
         foreach (var stage in stages)
         {
             var lines = DescribeStageFields(stage, ChallengeMode.StygianOnslaught, includeCombatants: false).ToList();
+            var summaryLines = lines.ToArray();
             var richLines = lines.ToList();
             var metrics = new List<ChallengeMetric>();
             var groups = (await BuildPortraitGroupsAsync(stage.Participants, stage.Enemies,
@@ -93,6 +94,11 @@ public sealed partial record ChallengeObservationCard
                 Kind = ChallengeSectionKind.StygianStage, Run = run + "挑战",
                 Heading = stage.Enemies.FirstOrDefault()?.Name ?? stage.StageId,
                 RichLines = richLines, Metrics = metrics,
+                StygianText = new(summaryLines,
+                    (stage.StygianDetails?.MonsterDescriptions ?? []).Where(text => !string.IsNullOrWhiteSpace(text)).ToArray(),
+                    (stage.StygianDetails?.MonsterTags ?? [])
+                        .Where(tag => tag.Description is null || !string.IsNullOrWhiteSpace(tag.Description))
+                        .Select(tag => tag.Description ?? $"未知标签类型（{tag.Type}）").ToArray()),
                 TimeText = stage.Score is int seconds ? $"{seconds} 秒" : "用时未知",
             });
         }

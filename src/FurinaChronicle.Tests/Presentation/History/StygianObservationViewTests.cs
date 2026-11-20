@@ -1,4 +1,4 @@
-// Copyright (c) 2026 DaKang233.
+﻿// Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
 using System.Text.Json;
@@ -172,6 +172,42 @@ public sealed class StygianObservationViewTests
         Assert.Contains("未知", view.OccurredText);
         Assert.Empty(observation.Stages);
         Assert.Equal(stamp, observation.Provenance.Timestamps.FetchedAt);
+    }
+
+    [Fact]
+    public async Task MechanismsRenderEveryNonemptyParagraphAndTagWithoutFlatteningOrChangingSource()
+    {
+        var root = System.Text.Json.Nodes.JsonNode.Parse(StygianDetailFixture.Response)!;
+        string[] descriptions = ["<color=#FFD780FF>第一阶段</color>", "", "  ",
+            "{LINK#N211101}<b>电涌</b>{/LINK}\\n第二行", "<u>后续机制</u>", "<u>后续机制</u>"];
+        root["data"]!["data"]![0]!["single"]!["challenge"]![0]!["monster"]!["desc"] =
+            new System.Text.Json.Nodes.JsonArray(descriptions.Select(text => (System.Text.Json.Nodes.JsonNode?)System.Text.Json.Nodes.JsonValue.Create(text)).ToArray());
+        var snapshot = (await StygianDetailFixture.ReadAsync(root.ToJsonString())).Snapshot!;
+        var observation = StygianDetailFixture.Observation(Guid.NewGuid(), snapshot);
+        string before = JsonSerializer.Serialize(observation);
+        var view = await HistoryObservationViewBuilder.ChallengeAsync(observation, new Metadata(), "合成");
+        var single = Assert.Single(view.DetailSections, section => section.Kind == ChallengeSectionKind.StygianStage && section.Run == "单人挑战");
+        var text = Assert.IsType<StygianStageText>(single.StygianText);
+        Assert.Equal(descriptions.Where(value => !string.IsNullOrWhiteSpace(value)), text.Descriptions);
+        Assert.Equal(new[] { "合成元素抗性", "合成机制标签" }, text.Tags);
+        Assert.Equal(new[] { "75 秒" }, text.Summary);
+        Assert.Contains(HoYoRichText.Parse(text.Descriptions[1]), run => run.Underline && run.Bold && run.GameTermId == "N211101" && run.Text == "电涌");
+        Assert.Contains(HoYoRichText.Parse(text.Descriptions[0]), run => run.Color == "#FFD780FF");
+        Assert.Equal(before, JsonSerializer.Serialize(observation));
+        var multiplayer = Assert.Single(view.DetailSections, section => section.Kind == ChallengeSectionKind.StygianStage && section.Run == "联机挑战");
+        Assert.Equal(new[] { "合成多人机制" }, multiplayer.StygianText!.Descriptions);
+    }
+
+    [Fact]
+    public async Task OlderObservationDoesNotBorrowMechanismsFromAnotherSnapshot()
+    {
+        var snapshot = (await StygianDetailFixture.ReadAsync()).Snapshot!;
+        var stage = snapshot.Stages[0];
+        var old = snapshot with { Stages = [new ChallengeStageResult(stage.StageId, stage.Score, stage.CompletedAt, stage.Participants, stage.Buffs, stage.Enemies)] };
+        var view = await HistoryObservationViewBuilder.ChallengeAsync(StygianDetailFixture.Observation(Guid.NewGuid(), old), new Metadata(), "合成");
+        var section = Assert.Single(view.DetailSections, value => value.Kind == ChallengeSectionKind.StygianStage && value.Run == "单人挑战");
+        Assert.Empty(section.StygianText!.Descriptions);
+        Assert.Empty(section.StygianText.Tags);
     }
 
     private sealed class Metadata : IDomainMetadataService

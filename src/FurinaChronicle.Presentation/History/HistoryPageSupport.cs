@@ -1,4 +1,4 @@
-// Copyright (c) 2026 DaKang233.
+﻿// Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
 using System.Globalization;
@@ -239,6 +239,7 @@ public sealed record ChallengeDetailSection(
     public string? Heading { get; init; }
     public string? TimeText { get; init; }
     public string? BlessingText { get; init; }
+    public StygianStageText? StygianText { get; init; }
     public IReadOnlyList<string> RichLines { get; init; } = [];
     public IReadOnlyList<string> DisplayLines => RichLines.Count > 0 ? RichLines : Lines;
     public IReadOnlyList<ChallengeMetric> Metrics { get; init; } = [];

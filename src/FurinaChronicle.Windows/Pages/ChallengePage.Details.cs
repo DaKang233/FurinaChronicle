@@ -1,4 +1,4 @@
-// Copyright (c) 2026 DaKang233.
+﻿// Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
 using System.Globalization;
@@ -158,12 +158,28 @@ public sealed partial class ChallengePage
         {
             var body = Stack();
             var enemyGroups = stage.Battles.SelectMany(battle => battle.Groups).Where(group => group.Title == "敌人").ToArray();
-            var title = Stack(); title.Children.Add(Text(stage.Heading ?? stage.Title, 17, true)); title.Children.Add(Text("战斗用时 · " + stage.TimeText, 12));
+            var title = Stack(); title.Children.Add(Text(stage.Heading ?? stage.Title, 17, true));
+            foreach (var enemyDetail in enemyGroups.SelectMany(group => group.Portraits).Select(item => item.Label))
+                if (enemyDetail != stage.Heading) title.Children.Add(Text(enemyDetail, 12));
+            title.Children.Add(Text("战斗用时 · " + stage.TimeText, 12));
             var heading = new Grid { ColumnSpacing = 10 };
             heading.ColumnDefinitions.Add(new() { Width = GridLength.Auto }); heading.ColumnDefinitions.Add(new() { Width = new(1, GridUnitType.Star) });
             if (enemyGroups.SelectMany(group => group.Portraits).FirstOrDefault() is { } enemy) heading.Children.Add(Portrait(enemy, 48, false));
             Grid.SetColumn(title, 1); heading.Children.Add(title); body.Children.Add(heading);
-            AddLines(body, stage.DisplayLines.Where(line => line != stage.TimeText));
+            if (stage.StygianText is { } text)
+            {
+                AddLines(body, text.Summary.Where(line => line != stage.TimeText));
+                var mechanics = Stack(); mechanics.Children.Add(Text("强敌机制", 13, true));
+                if (text.Descriptions.Count > 0) AddLines(mechanics, text.Descriptions);
+                else mechanics.Children.Add(Text("此快照未提供强敌机制说明。", 12));
+                if (text.Tags.Count > 0)
+                {
+                    mechanics.Children.Add(Text("强敌特性", 12, true));
+                    AddLines(mechanics, text.Tags);
+                }
+                body.Children.Add(mechanics);
+            }
+            else AddLines(body, stage.DisplayLines.Where(line => line != stage.TimeText));
             foreach (var group in stage.Battles.SelectMany(battle => battle.Groups).Where(group => group.Title == "阵容")) body.Children.Add(PortraitGroup(group, true));
             if (stage.Metrics.Count > 0)
             {
