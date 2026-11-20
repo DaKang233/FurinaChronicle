@@ -1,4 +1,4 @@
-// Copyright (c) 2026 DaKang233.
+﻿// Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
 using FurinaChronicle.Core.Archives;
@@ -241,11 +241,15 @@ public sealed class ChallengeHistoryState
                     .Select(group => new
                     {
                         SeasonId = group.Key,
+                        PeriodStart = group.Max(item => item.PeriodStart),
+                        PeriodEnd = group.Max(item => item.PeriodEnd),
                         Latest = group.Max(item =>
                             item.Provenance.Timestamps.ObservedAt ??
                             DateTimeOffset.MinValue),
                     })
-                    .OrderByDescending(item => item.Latest)
+                    .OrderByDescending(item => item.PeriodStart)
+                    .ThenByDescending(item => item.PeriodEnd)
+                    .ThenByDescending(item => item.Latest)
                     .ThenBy(item => item.SeasonId, StringComparer.Ordinal)
                     .Select(item => item.SeasonId)
                     .ToArray();

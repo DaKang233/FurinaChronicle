@@ -1,4 +1,4 @@
-// Copyright (c) 2026 DaKang233.
+﻿// Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
 using System.Globalization;
@@ -38,6 +38,7 @@ public sealed class MiYouSheHardChallengeResponseReader(TimeProvider timeProvide
                 HttpStatus: (int)response.StatusCode);
         }
 
+        int? providerCode = null;
         try
         {
             await response.Content.LoadIntoBufferAsync(
@@ -47,22 +48,24 @@ public sealed class MiYouSheHardChallengeResponseReader(TimeProvider timeProvide
                 cancellationToken);
             Envelope? envelope = await JsonSerializer.DeserializeAsync<Envelope>(
                 body, JsonOptions, cancellationToken);
+            providerCode = envelope?.Retcode;
             return Map(envelope, fetchedAt) with
             {
                 HttpStatus = (int)response.StatusCode,
+                ProviderCode = providerCode,
             };
         }
         catch (JsonException)
         {
-            return new(SpiralAbyssCollectionStatus.InvalidResponse);
+            return new(SpiralAbyssCollectionStatus.InvalidResponse, HttpStatus: (int)response.StatusCode, ProviderCode: providerCode);
         }
         catch (ArgumentException)
         {
-            return new(SpiralAbyssCollectionStatus.InvalidResponse);
+            return new(SpiralAbyssCollectionStatus.InvalidResponse, HttpStatus: (int)response.StatusCode, ProviderCode: providerCode);
         }
         catch (HttpRequestException)
         {
-            return new(SpiralAbyssCollectionStatus.InvalidResponse);
+            return new(SpiralAbyssCollectionStatus.InvalidResponse, HttpStatus: (int)response.StatusCode, ProviderCode: providerCode);
         }
     }
 
@@ -92,10 +95,23 @@ public sealed class MiYouSheHardChallengeResponseReader(TimeProvider timeProvide
         {
             return new(SpiralAbyssCollectionStatus.InvalidResponse);
         }
-        Entry? entry = root.Data?.FirstOrDefault(candidate =>
-            candidate?.Single?.HasData == true || candidate?.Mp?.HasData == true ||
-            candidate?.Blings is { Length: > 0 });
-        if (entry is null) return new(SpiralAbyssCollectionStatus.Empty);
+        var snapshots = new List<ChallengeModeSnapshot>();
+        foreach (Entry? candidate in root.Data ?? [])
+        {
+            if (!(candidate?.Single?.HasData == true || candidate?.Mp?.HasData == true || candidate?.Blings is { Length: > 0 })) continue;
+            ChallengeModeSourceResult result = MapEntry(candidate!, fetchedAt);
+            if (result.Status != SpiralAbyssCollectionStatus.Received || result.Snapshot is null) return result;
+            snapshots.Add(result.Snapshot);
+        }
+        if (snapshots.Count == 0) return new(SpiralAbyssCollectionStatus.Empty);
+        if (snapshots.Count > 2 || snapshots.Select(item => item.SeasonId).Distinct(StringComparer.Ordinal).Count() != snapshots.Count)
+            return new(SpiralAbyssCollectionStatus.InvalidResponse);
+        return new(SpiralAbyssCollectionStatus.Received, snapshots[0])
+        { AdditionalSnapshots = snapshots.Skip(1).ToArray() };
+    }
+
+    private static ChallengeModeSourceResult MapEntry(Entry entry, DateTimeOffset fetchedAt)
+    {
         if (entry.Schedule is not { ScheduleId: > 0 } schedule)
             return new(SpiralAbyssCollectionStatus.InvalidResponse);
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 DaKang233.
+﻿// Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
 using FurinaChronicle.Core.Archives;
@@ -205,6 +205,10 @@ public sealed partial class ChallengeModeCollectionTests
         public TheaterStatistics? Statistics { get; set; }
         public ChallengeModeSnapshot? OverrideSnapshot { get; set; }
         public bool SummaryOnly { get; set; }
+        public bool IncludePrevious { get; set; }
+        public bool DuplicateSeason { get; set; }
+        public int? PreviousDifficulty { get; set; }
+        public ChallengeMode? PreviousMode { get; set; }
         public TestTime Time { get; } = new();
         public int RequestCount { get; private set; }
 
@@ -256,7 +260,15 @@ public sealed partial class ChallengeModeCollectionTests
                 _ => throw new ArgumentOutOfRangeException(nameof(mode)),
             };
             return Task.FromResult(new ChallengeModeSourceResult(
-                SpiralAbyssCollectionStatus.Received, snapshot, HttpStatus: 200));
+                SpiralAbyssCollectionStatus.Received, snapshot, HttpStatus: 200)
+            {
+                AdditionalSnapshots = IncludePrevious ? [snapshot with
+                {
+                    SeasonId = DuplicateSeason ? snapshot.SeasonId : "previous-season",
+                    Difficulty = PreviousDifficulty ?? snapshot.Difficulty,
+                    Mode = PreviousMode ?? mode,
+                }] : [],
+            });
         }
     }
 

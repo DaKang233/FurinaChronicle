@@ -1,4 +1,4 @@
-// Copyright (c) 2026 DaKang233.
+﻿// Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
 using System.Net;
@@ -16,7 +16,7 @@ using FurinaChronicle.Services.Passport;
 
 namespace FurinaChronicle.Tests.Infrastructure.Persistence.Sqlite;
 
-public sealed class SpiralAbyssCollectionTests
+public sealed partial class SpiralAbyssCollectionTests
 {
     [Fact]
     public async Task SyntheticHttp_StoresScopedHistoryAndPreservesReturnToEarlierContent()
@@ -429,6 +429,7 @@ public sealed class SpiralAbyssCollectionTests
         public HttpStatusCode Status { get; init; } = HttpStatusCode.OK;
         public string? Body { get; set; }
         public Func<Task>? BeforeResponse { get; set; }
+        public Func<SpiralAbyssPeriod, CancellationToken, Task<SpiralAbyssSourceResult>>? FetchOverride { get; set; }
 
         public async Task<SpiralAbyssSourceResult> FetchAsync(
             PassportAccount passport, GameRoleNaturalIdentity role,
@@ -437,6 +438,7 @@ public sealed class SpiralAbyssCollectionTests
         {
             RequestedPeriods.Add(period);
             PromptAvailable.Add(verificationPrompt is not null);
+            if (FetchOverride is { } custom) return await custom(period, cancellationToken);
             using HttpResponseMessage response = await client.GetAsync(
                 "https://fixture.invalid/current-season", HttpCompletionOption.ResponseHeadersRead,
                 cancellationToken);

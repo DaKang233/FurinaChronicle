@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <!--
   Copyright (c) 2026 DaKang233.
   SPDX-License-Identifier: MIT
@@ -18,8 +18,8 @@
                 <Image Source="ms-appx:///Assets/Challenge/Navigation/HardChallenge.png" Width="28" Height="28" />
                 <TextBlock Text="周期挑战" FontSize="26" FontWeight="SemiBold" />
             </StackPanel>
-            <Button x:Name="CollectButton" Grid.Column="1" Content="采集最新记录" Click="OnCollect"
-                AutomationProperties.Name="采集当前模式最新挑战记录" AutomationProperties.AutomationId="ChallengePageCollect" />
+            <Button x:Name="CollectButton" Grid.Column="1" Content="采集本期和上期" Click="OnCollect"
+                AutomationProperties.Name="采集当前模式本期和上期挑战记录" AutomationProperties.AutomationId="ChallengePageCollect" />
             <Button x:Name="ReloadButton" Grid.Column="2" Content="重新载入" Click="OnReload"
                 AutomationProperties.Name="刷新周期挑战观察" AutomationProperties.AutomationId="Ui5ChallengeReload" />
         </Grid>

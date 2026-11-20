@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8" ?>
+﻿<?xml version="1.0" encoding="UTF-8" ?>
 <!--
   Copyright (c) 2026 DaKang233.
   SPDX-License-Identifier: MIT
@@ -32,8 +32,8 @@
                         AutomationId="ChallengeAccountPicker" />
             </Grid>
             <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
-                <Picker x:Name="PeriodPicker" Title="采集期次" AutomationId="ChallengeCollectionPeriod" />
-                <Button x:Name="RefreshButton" Grid.Column="1" Text="刷新到当前档案"
+                <Picker x:Name="PeriodPicker" Title="隔离验证期次" AutomationId="ChallengeCollectionPeriod" />
+                <Button x:Name="RefreshButton" Grid.Column="1" Text="采集本期和上期"
                         Clicked="OnRefreshClicked" AutomationId="RefreshChallengeCollection" />
                 <Button x:Name="ValidateButton" Grid.Column="2" Text="隔离验证采集"
                         Clicked="OnValidateClicked" AutomationId="ValidateChallengeCollection" />

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 DaKang233.
+﻿// Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
 using FurinaChronicle.Core.Archives;
@@ -95,15 +95,28 @@ public sealed class CollectSpiralAbyss(
     IArchiveDomainHistoryStore history,
     TimeProvider timeProvider)
 {
-    public async Task<SpiralAbyssCollectionResult> ExecuteAsync(
-        Guid archiveId,
-        Guid gameAccountId,
-        PassportAccount passport,
+    // Explicit single-period entry point retained for isolated diagnostics.
+    public Task<SpiralAbyssCollectionResult> ExecuteAsync(
+        Guid archiveId, Guid gameAccountId, PassportAccount passport,
         CancellationToken cancellationToken = default,
         SpiralAbyssPeriod period = SpiralAbyssPeriod.Current,
-        GameRecordVerificationPrompt? verificationPrompt = null)
-    {
+        GameRecordVerificationPrompt? verificationPrompt = null) =>
+        ExecuteCoreAsync(archiveId, gameAccountId, passport, [period], cancellationToken, verificationPrompt);
 
+    public Task<SpiralAbyssCollectionResult> ExecuteRecentAsync(
+        Guid archiveId, Guid gameAccountId, PassportAccount passport,
+        CancellationToken cancellationToken = default,
+        GameRecordVerificationPrompt? verificationPrompt = null) =>
+        ExecuteCoreAsync(archiveId, gameAccountId, passport,
+            [SpiralAbyssPeriod.Current, SpiralAbyssPeriod.Previous], cancellationToken, verificationPrompt);
+
+    private async Task<SpiralAbyssCollectionResult> ExecuteCoreAsync(
+        Guid archiveId, Guid gameAccountId, PassportAccount passport,
+        IReadOnlyList<SpiralAbyssPeriod> periods, CancellationToken cancellationToken,
+        GameRecordVerificationPrompt? verificationPrompt)
+    {
+        ArgumentNullException.ThrowIfNull(passport);
+        cancellationToken.ThrowIfCancellationRequested();
         DateTimeOffset startedAt = timeProvider.GetUtcNow();
         GameAccount? account = await accounts.GetByIdAsync(
             gameAccountId, cancellationToken);
@@ -128,52 +141,56 @@ public sealed class CollectSpiralAbyss(
             return new(SpiralAbyssCollectionStatus.RoleNotBound);
         }
 
-        SpiralAbyssSourceResult fetched = await source.FetchAsync(
-            passport, role, period, cancellationToken, verificationPrompt);
-        if (fetched.Status != SpiralAbyssCollectionStatus.Received)
+        var observations = new List<ChallengeObservation>();
+        var seasons = new HashSet<string>(StringComparer.Ordinal);
+        AcquisitionBatchId batch = AcquisitionBatchId.New();
+        GameRecordVerificationStage? verificationStage = null;
+        bool? sessionCookieSent = null;
+        bool notUnlocked = true;
+        foreach (SpiralAbyssPeriod period in periods)
         {
-            return new(fetched.Status, RetryAfter: fetched.RetryAfter,
-                HttpStatus: fetched.HttpStatus, ProviderCode: fetched.ProviderCode,
-                VerificationStage: fetched.VerificationStage,
-                VerificationSessionCookieSent: fetched.VerificationSessionCookieSent);
+            SpiralAbyssSourceResult fetched = await source.FetchAsync(
+                passport, role, period, cancellationToken, verificationPrompt);
+            verificationStage = fetched.VerificationStage ?? verificationStage;
+            sessionCookieSent = fetched.VerificationSessionCookieSent ?? sessionCookieSent;
+            if (fetched.Status is SpiralAbyssCollectionStatus.Empty or SpiralAbyssCollectionStatus.NotUnlocked)
+            {
+                notUnlocked &= fetched.Status == SpiralAbyssCollectionStatus.NotUnlocked;
+                continue;
+            }
+            if (fetched.Status != SpiralAbyssCollectionStatus.Received)
+                return new(fetched.Status, RetryAfter: fetched.RetryAfter,
+                    HttpStatus: fetched.HttpStatus, ProviderCode: fetched.ProviderCode,
+                    VerificationStage: fetched.VerificationStage,
+                    VerificationSessionCookieSent: fetched.VerificationSessionCookieSent);
+            if (fetched.Snapshot is not { } snapshot || !seasons.Add(snapshot.SeasonId))
+                return new(SpiralAbyssCollectionStatus.InvalidResponse);
+            observations.Add(new ChallengeObservation(
+                ChallengeObservationId.New(), gameAccountId, ChallengeMode.SpiralAbyss,
+                snapshot.SeasonId, snapshot.PeriodStart, snapshot.PeriodEnd,
+                DataCompleteness.Partial, snapshot.Floors,
+                new RecordProvenance(DataOrigin.OfficialApi,
+                    new RecordTimestamps(ObservedAt: snapshot.FetchedAt, FetchedAt: snapshot.FetchedAt),
+                    new DataSourceReference(provider: isOversea ? "hoyolab" : "miyoushe"), batch),
+                spiralAbyssStatistics: snapshot.Statistics));
         }
-        if (fetched.Snapshot is not { } snapshot)
-        {
-            return new(SpiralAbyssCollectionStatus.InvalidResponse);
-        }
-
-        var observation = new ChallengeObservation(
-            ChallengeObservationId.New(),
-            gameAccountId,
-            ChallengeMode.SpiralAbyss,
-            snapshot.SeasonId,
-            snapshot.PeriodStart,
-            snapshot.PeriodEnd,
-            DataCompleteness.Partial,
-            snapshot.Floors,
-            new RecordProvenance(
-                DataOrigin.OfficialApi,
-                new RecordTimestamps(
-                    ObservedAt: snapshot.FetchedAt,
-                    FetchedAt: snapshot.FetchedAt),
-                new DataSourceReference(provider: isOversea ? "hoyolab" : "miyoushe"),
-                AcquisitionBatchId.New()),
-            spiralAbyssStatistics: snapshot.Statistics);
+        if (observations.Count == 0)
+            return new(notUnlocked ? SpiralAbyssCollectionStatus.NotUnlocked : SpiralAbyssCollectionStatus.Empty);
 
         ArchiveOperationResult committed = await history.CommitChallengeObservationsAsync(
             new ChallengeObservationCommitRequest(
                 OperationId.New(),
                 DataChangeOperationKind.Refresh,
                 DataOrigin.OfficialApi,
-                "Refresh Spiral Abyss",
+                "Refresh Spiral Abyss recent seasons",
                 startedAt,
                 timeProvider.GetUtcNow(),
-                [observation],
+                observations,
                 expectedTarget: account),
             cancellationToken);
 
-        return new(SpiralAbyssCollectionStatus.Received, committed, VerificationStage: fetched.VerificationStage,
-                VerificationSessionCookieSent: fetched.VerificationSessionCookieSent);
+        return new(SpiralAbyssCollectionStatus.Received, committed, VerificationStage: verificationStage,
+                VerificationSessionCookieSent: sessionCookieSent);
     }
 
     private static bool Matches(PassportGameRole candidate, GameRoleNaturalIdentity role) =>

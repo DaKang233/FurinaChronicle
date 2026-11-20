@@ -107,11 +107,23 @@ public sealed class MiYouSheRoleCombatResponseReader(TimeProvider timeProvider)
         {
             return new(SpiralAbyssCollectionStatus.InvalidResponse);
         }
-        Entry? entry = root.Data?.FirstOrDefault(candidate => candidate?.HasData == true);
-        if (entry is null)
+        var snapshots = new List<ChallengeModeSnapshot>();
+        foreach (Entry? candidate in root.Data ?? [])
         {
-            return new(SpiralAbyssCollectionStatus.Empty);
+            if (!(candidate?.HasData == true)) continue;
+            ChallengeModeSourceResult result = MapEntry(candidate!, fetchedAt);
+            if (result.Status != SpiralAbyssCollectionStatus.Received || result.Snapshot is null) return result;
+            snapshots.Add(result.Snapshot);
         }
+        if (snapshots.Count == 0) return new(SpiralAbyssCollectionStatus.Empty);
+        if (snapshots.Count > 2 || snapshots.Select(item => item.SeasonId).Distinct(StringComparer.Ordinal).Count() != snapshots.Count)
+            return new(SpiralAbyssCollectionStatus.InvalidResponse);
+        return new(SpiralAbyssCollectionStatus.Received, snapshots[0])
+        { AdditionalSnapshots = snapshots.Skip(1).ToArray() };
+    }
+
+    private static ChallengeModeSourceResult MapEntry(Entry entry, DateTimeOffset fetchedAt)
+    {
         if (entry.Schedule is not { ScheduleId: > 0 } schedule)
         {
             return new(SpiralAbyssCollectionStatus.InvalidResponse);

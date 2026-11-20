@@ -1,4 +1,4 @@
-// Copyright (c) 2026 DaKang233.
+﻿// Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
 using FurinaChronicle.Core.Archives;
@@ -374,15 +374,13 @@ public partial class ChallengeHistoryPage : ContentPage
             }
 
             ChallengeMode mode = SelectedMode();
-            StatusLabel.Text = "正在刷新到当前档案…";
+            StatusLabel.Text = "正在检查本期和上期记录…";
             if (mode == ChallengeMode.SpiralAbyss)
             {
-                var period = PeriodPicker.SelectedIndex == 1
-                    ? SpiralAbyssPeriod.Previous : SpiralAbyssPeriod.Current;
                 SpiralAbyssCollectionResult result =
-                    await businessAbyss.ExecuteAsync(
+                    await businessAbyss.ExecuteRecentAsync(
                         target.PlayerArchiveId, target.Id, passport, ct,
-                        period, PresentVerificationAsync);
+                        PresentVerificationAsync);
                 if (result.Commit?.Status is not (
                     ChangeExecutionStatus.Applied or
                     ChangeExecutionStatus.NoOp))

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 DaKang233.
+﻿// Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
 using FurinaChronicle.Core.Archives;
@@ -150,6 +150,28 @@ public sealed class ChallengeHistoryStateTests
 
         Assert.Equal(second.Id, state.Snapshot.SelectedAccountId);
         Assert.False(state.Snapshot.IsBusy);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RecentSeasonIsDefaultEvenWhenPreviousIsFetchedAtTheSameTimeOrLater(bool sameTime)
+    {
+        await using var context = SqliteRepositoryTestContext.Create();
+        (_, var account) = await Parents(context);
+        ChallengeObservation ForPeriod(string id, DateTimeOffset start, DateTimeOffset fetched) => new(
+            ChallengeObservationId.New(), account.Id, ChallengeMode.SpiralAbyss, id, start, start.AddDays(30),
+            DataCompleteness.Partial, Abyss(account.Id, id, Time, 3).SpiralAbyssFloors,
+            new RecordProvenance(DataOrigin.OfficialApi, new RecordTimestamps(ObservedAt: fetched, FetchedAt: fetched)));
+        await CommitChallengeAsync(context, ForPeriod("current", Time.AddDays(-5), Time));
+        await CommitChallengeAsync(context, ForPeriod("previous", Time.AddDays(-35), sameTime ? Time : Time.AddSeconds(2)));
+        var state = CreateState(context);
+        await state.EnterAsync();
+        Assert.Equal(new[] { "current", "previous" }, state.Snapshot.Seasons);
+        Assert.Equal("current", state.Snapshot.SelectedSeasonId);
+        await state.SetSeasonAsync("previous");
+        await state.ReloadAsync();
+        Assert.Equal("previous", state.Snapshot.SelectedSeasonId);
     }
 
     private static ChallengeHistoryState CreateState(

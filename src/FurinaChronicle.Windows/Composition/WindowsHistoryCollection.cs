@@ -1,4 +1,4 @@
-// Copyright (c) 2026 DaKang233.
+﻿// Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
 using FurinaChronicle.Core.Archives;
@@ -48,7 +48,8 @@ public sealed class WindowsHistoryCollection(
         var content = new StackPanel { Spacing = 8 };
         content.Children.Add(new TextBlock
         {
-            Text = $"将查询官方服务，并保存到当前档案的角色 {account.Uid}。",
+            Text = mode is null ? $"将查询官方服务，并保存到当前档案的角色 {account.Uid}。"
+                : $"将检查本期和上期的官方记录，并保存到当前档案的角色 {account.Uid}。",
             TextWrapping = TextWrapping.Wrap
         });
         content.Children.Add(picker);
@@ -96,7 +97,7 @@ public sealed class WindowsHistoryCollection(
             }
             if (mode == ChallengeMode.SpiralAbyss)
             {
-                SpiralAbyssCollectionResult result = await abyss.ExecuteAsync(
+                SpiralAbyssCollectionResult result = await abyss.ExecuteRecentAsync(
                     archiveId,
                     accountId,
                     selected,

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 DaKang233.
+﻿// Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
 using FurinaChronicle.Core.Archives;
@@ -13,7 +13,7 @@ using FurinaChronicle.Services.Passport;
 namespace FurinaChronicle.Services.HistoryDomains.Collecting;
 
 /// <summary>
-/// One non-Abyss challenge observation. The theater exposes round medals and
+/// A non-Abyss challenge season observation. The theater exposes round medals and
 /// finish times; the Stygian onslaught exposes per-challenge seconds, so both
 /// use the shared stage shape instead of forcing an Abyss floor structure.
 /// </summary>
@@ -36,7 +36,11 @@ public sealed record ChallengeModeSourceResult(
     ChallengeModeSnapshot? Snapshot = null,
     TimeSpan? RetryAfter = null,
     int? HttpStatus = null,
-    int? ProviderCode = null);
+    int? ProviderCode = null)
+{
+    // The API returns at most the current and previous seasons in one response.
+    public IReadOnlyList<ChallengeModeSnapshot> AdditionalSnapshots { get; init; } = [];
+}
 
 public interface IChallengeModeSource
 {
@@ -55,7 +59,7 @@ public sealed record ChallengeModeCollectionResult(
     int? ProviderCode = null);
 
 /// <summary>
-/// Explicit, single-copy collection for the theater and the Stygian onslaught.
+/// Explicit, single-copy collection of both available seasons for theater and Stygian.
 /// Role ownership is re-checked before any transport request.
 /// </summary>
 public sealed class CollectChallengeMode(
@@ -116,39 +120,30 @@ public sealed class CollectChallengeMode(
                 HttpStatus: fetched.HttpStatus,
                 ProviderCode: fetched.ProviderCode);
         }
-        if (fetched.Snapshot is not { } snapshot ||
-            snapshot.Mode != mode)
-        {
+        if (fetched.Snapshot is not { } first || fetched.AdditionalSnapshots is null)
             return new(SpiralAbyssCollectionStatus.InvalidResponse);
-        }
-        if (snapshot.Stages.Count == 0 && snapshot.TheaterStatistics is null && snapshot.StygianStatistics is null &&
-            snapshot.MultiplayerStages is not { Count: > 0 })
-        {
-            return new(SpiralAbyssCollectionStatus.Empty);
-        }
+        ChallengeModeSnapshot[] snapshots = [first, .. fetched.AdditionalSnapshots];
+        if (snapshots.Length > 2 || snapshots.Any(item => item is null || item.Mode != mode) ||
+            snapshots.Select(item => item.SeasonId).Distinct(StringComparer.Ordinal).Count() != snapshots.Length)
+            return new(SpiralAbyssCollectionStatus.InvalidResponse);
 
-        var observation = new ChallengeObservation(
-            ChallengeObservationId.New(),
-            gameAccountId,
-            snapshot.Mode,
-            snapshot.SeasonId,
-            snapshot.PeriodStart,
-            snapshot.PeriodEnd,
-            snapshot.Completeness,
-            spiralAbyssFloors: [],
-            new RecordProvenance(
-                DataOrigin.OfficialApi,
-                new RecordTimestamps(
-                    ObservedAt: snapshot.FetchedAt,
-                    FetchedAt: snapshot.FetchedAt),
-                new DataSourceReference(
-                    provider: isOversea ? "hoyolab" : "miyoushe"),
-                AcquisitionBatchId.New()),
-            snapshot.Stages,
-            snapshot.Difficulty,
-            snapshot.MedalCount,
-            theaterStatistics: snapshot.TheaterStatistics,
-            stygianStatistics: snapshot.StygianStatistics, multiplayerStages: snapshot.MultiplayerStages);
+        var observations = new List<ChallengeObservation>();
+        AcquisitionBatchId batch = AcquisitionBatchId.New();
+        foreach (ChallengeModeSnapshot snapshot in snapshots)
+        {
+            if (snapshot.Stages.Count == 0 && snapshot.TheaterStatistics is null && snapshot.StygianStatistics is null &&
+                snapshot.MultiplayerStages is not { Count: > 0 }) continue;
+            observations.Add(new ChallengeObservation(
+                ChallengeObservationId.New(), gameAccountId, snapshot.Mode, snapshot.SeasonId,
+                snapshot.PeriodStart, snapshot.PeriodEnd, snapshot.Completeness, spiralAbyssFloors: [],
+                new RecordProvenance(DataOrigin.OfficialApi,
+                    new RecordTimestamps(ObservedAt: snapshot.FetchedAt, FetchedAt: snapshot.FetchedAt),
+                    new DataSourceReference(provider: isOversea ? "hoyolab" : "miyoushe"), batch),
+                snapshot.Stages, snapshot.Difficulty, snapshot.MedalCount,
+                theaterStatistics: snapshot.TheaterStatistics,
+                stygianStatistics: snapshot.StygianStatistics, multiplayerStages: snapshot.MultiplayerStages));
+        }
+        if (observations.Count == 0) return new(SpiralAbyssCollectionStatus.Empty);
 
         ArchiveOperationResult committed =
             await history.CommitChallengeObservationsAsync(
@@ -156,10 +151,10 @@ public sealed class CollectChallengeMode(
                     OperationId.New(),
                     DataChangeOperationKind.Refresh,
                     DataOrigin.OfficialApi,
-                    $"Refresh {snapshot.Mode}",
+                    $"Refresh {mode} current and previous seasons",
                     startedAt,
                     timeProvider.GetUtcNow(),
-                    [observation],
+                    observations,
                     expectedTarget: account),
                 cancellationToken);
 
