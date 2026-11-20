@@ -8,7 +8,7 @@ public enum ChallengeSectionKind
 {
     Other, Summary, Metric, Blessing, AbyssFloor,
     TheaterSetup, TheaterRoster, TheaterSummary, TheaterRound,
-    StygianSummary, StygianStage,
+    StygianSummary, StygianStage, TheaterTeam,
 }
 
 public sealed record ChallengeMetric(string Name, string Value, ChallengePortrait? Portrait = null);

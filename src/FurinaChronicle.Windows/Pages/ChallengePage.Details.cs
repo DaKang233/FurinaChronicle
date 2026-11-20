@@ -91,6 +91,18 @@ public sealed partial class ChallengePage
         summaryHeader.Children.Add(Text(view.DifficultyText + " · " + view.MedalText, 17, true)); summary.Children.Add(summaryHeader);
         foreach (var section in view.DetailSections.Where(section => section.Kind == ChallengeSectionKind.TheaterSummary)) AddLines(summary, section.DisplayLines);
         foreach (var metric in view.DetailSections.Where(section => section.Kind == ChallengeSectionKind.Metric).SelectMany(section => section.Metrics)) summary.Children.Add(MetricRow(metric));
+        foreach (var section in view.DetailSections.Where(section => section.Kind == ChallengeSectionKind.TheaterTeam))
+        {
+            var row = new Grid { ColumnSpacing = 12, MinHeight = 38 };
+            row.ColumnDefinitions.Add(new() { Width = new(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+            row.Children.Add(Text(section.Title, 12, true));
+            var team = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 5 };
+            foreach (var portrait in section.Battles.SelectMany(battle => battle.Groups).SelectMany(group => group.Portraits))
+                team.Children.Add(Portrait(portrait, 32, false));
+            AutomationProperties.SetAutomationId(team, "TheaterFastestTeam");
+            Grid.SetColumn(team, 1); row.Children.Add(team); summary.Children.Add(Card(row, 8));
+        }
         foreach (var roster in rosters.Where(section => section.Title == "候补角色")) summary.Children.Add(Roster(roster, "待命角色"));
         DetailContent.Children.Add(Card(summary));
 

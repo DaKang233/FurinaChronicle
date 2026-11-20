@@ -80,7 +80,16 @@ public sealed partial record ChallengeObservationCard
         foreach (var metric in metrics.Where(metric => metric.Value is not null))
             sections.Add(await TheaterMetricSectionAsync(metric.Title, [metric.Value!], metadata, names, cancellationToken));
         if (statistics.ShortestAvatars.Count > 0)
-            sections.Add(await TheaterMetricSectionAsync("最快演出", statistics.ShortestAvatars, metadata, names, cancellationToken));
+            {
+            var groups = await BuildPortraitGroupsAsync(statistics.ShortestAvatars.Select(item => item.Participant).ToArray(),
+                [], metadata, names, cancellationToken);
+            var team = new ChallengePortraitGroup(string.Empty, groups[0].Portraits.Select(portrait => portrait with
+            {
+                IsSidePortrait = true, Label = portrait.ShortName ?? portrait.Label, LevelText = null, Badge = null,
+            }).ToArray());
+            sections.Add(new ChallengeDetailSection("最快演出", [], [new ChallengeCombatDetail(string.Empty, [], [team])])
+            { Kind = ChallengeSectionKind.TheaterTeam });
+        }
     }
 
     private static async Task AddRosterSectionAsync(
