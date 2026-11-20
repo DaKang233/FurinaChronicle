@@ -45,3 +45,5 @@
 | D38 | 匿名化应用遥测可默认开启并可关闭；涉及用户本身的数据由用户逐次主动上传 | Accepted | [ADR 0025](0025-anonymous-telemetry-and-user-upload.md)，维护者确认 |
 
 当前工作包契约和后期服务决策集中记录在 [OPEN_QUESTIONS.md](../project/OPEN_QUESTIONS.md)，按实施时点闭合，不得由 Agent 静默改变语义。D19、D20 的核心决定及既有产品行为继续 Accepted；D21 收敛依赖关系，不冻结 Chronicle Draft 的字段或未来同步协议。
+
+AI 首版只读、去标识化、逐次发送确认与设备安全配置见 [ADR 0027](0027-read-only-ai-analysis.md)，由维护者 2026-11-21 实施请求授权。

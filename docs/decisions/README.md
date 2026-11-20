@@ -28,3 +28,4 @@
 - [0022：Archive Merge 的本地回执与设置状态](0022-archive-merge-receipt-and-settings.md)
 - [0025：匿名化遥测与用户主动上传](0025-anonymous-telemetry-and-user-upload.md)
 - [0026：挑战详情兼容](0026-spiral-abyss-battle-details.md)
+- [0027：只读 AI 分析与去标识化发送](0027-read-only-ai-analysis.md)
