@@ -31,3 +31,5 @@
 - [0027：只读 AI 分析与去标识化发送](0027-read-only-ai-analysis.md)
 
 - [0028：本地 AI 聊天、附件及设置页](0028-local-ai-chat-and-attachments.md)
+
+多供应商与模型选择见 [ADR 0029](0029-multiple-ai-providers-and-models.md)。

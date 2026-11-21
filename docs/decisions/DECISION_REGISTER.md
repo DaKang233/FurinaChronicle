@@ -49,3 +49,5 @@
 AI 首版只读、去标识化、逐次发送确认与设备安全配置见 [ADR 0027](0027-read-only-ai-analysis.md)，由维护者 2026-11-21 实施请求授权。
 
 本地聊天和附件、设置页配置由 [ADR 0028](0028-local-ai-chat-and-attachments.md) 扩展，替代 ADR 0027 的临时会话限制。
+
+多供应商与模型选择见 [ADR 0029](0029-multiple-ai-providers-and-models.md)。
