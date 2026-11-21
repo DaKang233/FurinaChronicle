@@ -79,7 +79,8 @@ public sealed class WindowsComposition : IAsyncDisposable
     {
         var paths = new WindowsPaths();
         var databaseSession = new SqliteDatabaseSession(new SqliteDatabaseOptions(paths.DatabasePath));
-        var environmentHolder = new EnvironmentHolder(paths, databaseSession);
+        var conversations = new FurinaChronicle.Infrastructure.Ai.JsonAiConversationStore(Path.Combine(paths.SettingsDirectory, "ai", "conversations"));
+        var environmentHolder = new EnvironmentHolder(paths, databaseSession, conversations);
         var version = WindowsVersionInfo.FromAssembly(typeof(WindowsComposition).Assembly);
         var dispatcherQueue = DispatcherQueue.GetForCurrentThread()
             ?? throw new InvalidOperationException("The WinUI composition root must run on the UI thread.");
@@ -242,7 +243,7 @@ public sealed class WindowsComposition : IAsyncDisposable
                 sp.GetRequiredService<IGameAccountRepository>())));
         services.AddTransient<CharacterWeaponHistoryState>();
         services.AddTransient<ChallengeHistoryState>();
-        services.AddAiAnalysis(paths);
+        services.AddAiAnalysis(paths, conversations);
         services.AddSingleton<IStartupProbe, WindowsStartupProbe>();
         services.AddTransient<StartupState>();
         services.AddSingleton<IProcessIdentityPort, WindowsProcessIdentityPort>();

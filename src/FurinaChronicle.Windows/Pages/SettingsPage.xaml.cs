@@ -18,6 +18,7 @@ public sealed partial class SettingsPage : UserControl
     private static readonly string[] ThemeLabels = ["跟随系统", "浅色", "深色"];
 
     private readonly SettingsState state;
+    private readonly AiSettingsPanel aiSettings;
     private readonly Action<SettingsTheme> applyTheme;
     private bool renderGuard;
     private string? lastLoadError;
@@ -26,7 +27,8 @@ public sealed partial class SettingsPage : UserControl
         SettingsState state,
         Action<SettingsTheme> applyTheme,
         INotificationCenter notifications,
-        IDiagnosticService diagnostics)
+        IDiagnosticService diagnostics,
+        FurinaChronicle.Presentation.Ai.AiSettingsState aiState)
     {
         this.state = state;
         this.notifications = notifications;
@@ -34,6 +36,7 @@ public sealed partial class SettingsPage : UserControl
         this.applyTheme = applyTheme;
         InitializeComponent();
         ThemePicker.ItemsSource = ThemeLabels;
+        aiSettings = new AiSettingsPanel(aiState); SettingsSections.Children.Insert(1, aiSettings);
     }
 
     public async Task EnterAsync(CancellationToken cancellationToken = default)
@@ -41,6 +44,7 @@ public sealed partial class SettingsPage : UserControl
         try
         {
             await state.EnterAsync(cancellationToken);
+            await aiSettings.LoadAsync();
             applyTheme(state.Snapshot.Theme);
             Render();
         }

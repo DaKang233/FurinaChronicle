@@ -36,7 +36,7 @@
                     AutomationProperties.AutomationId="Ui4NavigationChronicle">
                     <NavigationViewItem.Icon><SymbolIcon Symbol="Clock" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem x:Name="AiDestination" Content="AI 分析" Tag="ai"
+                <NavigationViewItem x:Name="AiDestination" Content="AI 聊天" Tag="ai"
                     AutomationProperties.AutomationId="NavigationAi">
                     <NavigationViewItem.Icon><SymbolIcon Symbol="Message" /></NavigationViewItem.Icon>
                 </NavigationViewItem>

@@ -8,7 +8,7 @@ namespace FurinaChronicle.Windows.Composition;
 // Lazily owns the one host environment (production or isolated). Construction is deferred until
 // the startup gate has proven the actual data root usable, so a bad path can never throw from the
 // application launch path before the error UI exists.
-public sealed class EnvironmentHolder(WindowsPaths paths, SqliteDatabaseSession databaseSession)
+public sealed class EnvironmentHolder(WindowsPaths paths, SqliteDatabaseSession databaseSession, FurinaChronicle.Services.Ai.IAiConversationCopyCoordinator? copies = null)
 {
     private readonly SemaphoreSlim gate = new(1, 1);
     private WindowsHostEnvironment? environment;
@@ -21,7 +21,7 @@ public sealed class EnvironmentHolder(WindowsPaths paths, SqliteDatabaseSession 
         await gate.WaitAsync(cancellationToken);
         try
         {
-            return environment ??= new WindowsHostEnvironment(paths, databaseSession);
+            return environment ??= new WindowsHostEnvironment(paths, databaseSession, copies);
         }
         finally
         {

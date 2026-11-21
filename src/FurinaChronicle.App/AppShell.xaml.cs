@@ -202,7 +202,7 @@ public partial class AppShell : Shell
             var tabs = new TabBar { Route = "main" };
             tabs.Items.Add(CreateContent("概览", OverviewRoute, overviewPage));
             tabs.Items.Add(CreateContent("游戏历程", "chronicle", chroniclePage));
-            tabs.Items.Add(CreateContent("AI 分析", "ai", aiPage));
+            tabs.Items.Add(CreateContent("AI 聊天", "ai", aiPage));
             tabs.Items.Add(CreateContent("数据", "data", dataHubPage));
             tabs.Items.Add(CreateContent("档案", "archive", archivePage));
             Items.Add(tabs);
@@ -214,7 +214,7 @@ public partial class AppShell : Shell
         FlyoutHeader = passportFlyoutHeader;
         Items.Add(CreateFlyoutItem("主页", "home", homePage));
         Items.Add(CreateFlyoutItem("游戏历程", "chronicle", chroniclePage));
-        Items.Add(CreateFlyoutItem("AI 分析", "ai", aiPage));
+        Items.Add(CreateFlyoutItem("AI 聊天", "ai", aiPage));
         Items.Add(CreateFlyoutItem("抽卡记录", "gacha", gachaPage));
         Items.Add(CreateFlyoutItem("档案修改历史", "archive-history", archiveHistoryPage));
         Items.Add(CreateFlyoutItem("档案与账号管理", "archive", archivePage));

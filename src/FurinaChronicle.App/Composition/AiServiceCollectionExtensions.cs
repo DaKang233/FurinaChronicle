@@ -15,6 +15,13 @@ internal static class AiServiceCollectionExtensions
         services.AddSingleton<IAiSecretStore, MauiAiSecretStore>();
         services.AddSingleton<IAiConfigurationStore>(sp => new JsonAiConfigurationStore(
             Path.Combine(FileSystem.Current.AppDataDirectory, "DeviceAi", "settings.json"), sp.GetRequiredService<IAiSecretStore>()));
+        // The retained MAUI Windows host shares business data with WinUI, so its managed
+        // chat copies must share the same directory and irreversible-delete protection.
+        services.AddSingleton<IAiConversationStore>(sp => new JsonAiConversationStore(OperatingSystem.IsWindows()
+            ? Path.Combine(FileSystem.Current.AppDataDirectory, "UI4", "WinUI", "settings", "ai", "conversations")
+            : Path.Combine(FileSystem.Current.AppDataDirectory, "DeviceAi", "conversations")));
+        services.AddSingleton<IAiConversationCopyCoordinator>(sp => (IAiConversationCopyCoordinator)sp.GetRequiredService<IAiConversationStore>());
+        services.AddTransient<AiAttachmentReader>(); services.AddTransient<AiSettingsState>();
         services.AddSingleton<IAiChatClient>(_ => new HttpAiChatClient());
         services.AddTransient<BuildAiContext>(); services.AddTransient<ReadAiEvidence>(); services.AddTransient<AiAnalysisSession>();
         services.AddTransient<AiWorkspaceState>(); services.AddSingleton<AiAnalysisPage>();

@@ -37,7 +37,7 @@ public sealed class WindowsHostEnvironment : IAsyncDisposable
     private readonly TeyvatHelperUigfClient teyvatHelperClient;
     private bool initialized;
 
-    public WindowsHostEnvironment(WindowsPaths paths, SqliteDatabaseSession databaseSession)
+    public WindowsHostEnvironment(WindowsPaths paths, SqliteDatabaseSession databaseSession, FurinaChronicle.Services.Ai.IAiConversationCopyCoordinator? copies = null)
     {
         RootDirectory = paths.DataRoot;
         DatabasePath = paths.DatabasePath;
@@ -49,7 +49,7 @@ public sealed class WindowsHostEnvironment : IAsyncDisposable
         Archives = new(Database);
         Accounts = new(Database);
         Records = new(Database);
-        Changes = new(Database);
+        Changes = copies is null ? new(Database) : new(Database, null, copies);
         var uigfReader = new UigfCompatibleGachaReader(
             new UigfV42GachaReader(),
             new EmbeddedGachaLocalizationSource(),

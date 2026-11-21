@@ -282,7 +282,8 @@ public sealed partial class MainWindow : Window
             composition.Services.GetRequiredService<SettingsState>(),
             ApplyTheme,
             notificationCenter,
-            diagnostics)
+            diagnostics,
+            composition.Services.GetRequiredService<FurinaChronicle.Presentation.Ai.AiSettingsState>())
         {
             Visibility = Visibility.Collapsed
         };
@@ -331,7 +332,9 @@ public sealed partial class MainWindow : Window
         PageHost.Children.Add(challengePage);
 
         aiPage = new AiPage(composition.Services.GetRequiredService<FurinaChronicle.Presentation.Ai.AiWorkspaceState>(),
-            notificationCenter, composition.Services.GetRequiredService<IFilePickerService>()) { Visibility = Visibility.Collapsed };
+            notificationCenter, composition.Services.GetRequiredService<IFilePickerService>(),
+            composition.Services.GetRequiredService<FurinaChronicle.Infrastructure.Ai.AiAttachmentReader>(),
+            () => Navigation.SelectedItem = SettingsDestination) { Visibility = Visibility.Collapsed };
         PageHost.Children.Add(aiPage);
 
         passportPage = new PassportPage(
@@ -530,7 +533,7 @@ public sealed partial class MainWindow : Window
         disposed = true;
         DetachWindowSizing();
         challengePage?.Leave();
-        aiPage?.Leave();
+        if (aiPage is not null) await aiPage.LeaveAsync();
         await GachaView.CloseAsync();
         await composition.DisposeAsync();
     }

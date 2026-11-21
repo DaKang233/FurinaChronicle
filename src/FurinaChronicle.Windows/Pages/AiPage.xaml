@@ -5,63 +5,44 @@
 <UserControl x:Class="FurinaChronicle.Windows.Pages.AiPage"
  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
- <ScrollViewer VerticalScrollBarVisibility="Auto">
-  <StackPanel Padding="24" Spacing="12">
-   <TextBlock Text="AI 分析" FontSize="28" FontWeight="SemiBold" />
-   <TextBlock Text="围绕所选本地资料分析和追问。发送前可查看完整正文；模型结果不会写回档案事实。" TextWrapping="Wrap" />
-   <Expander x:Name="ServiceExpander" Header="模型服务" IsExpanded="True" HorizontalAlignment="Stretch">
-    <StackPanel Spacing="8" HorizontalAlignment="Stretch" x:Name="ServiceInputs">
-     <ComboBox x:Name="ProtocolInput" Header="接口类型" HorizontalAlignment="Stretch" AutomationProperties.AutomationId="AiProtocol" />
-     <TextBox x:Name="AddressInput" Header="服务 API 基址" PlaceholderText="https://服务地址/v1" AutomationProperties.AutomationId="AiBaseAddress" />
-     <TextBox x:Name="ModelInput" Header="模型名称" AutomationProperties.AutomationId="AiModel" />
-     <PasswordBox x:Name="KeyInput" Header="API 密钥（留空保留此服务已有密钥）" AutomationProperties.AutomationId="AiApiKey" />
-     <StackPanel Orientation="Horizontal" Spacing="8">
-      <NumberBox x:Name="BudgetInput" Header="资料上限（字符，不是 token）" Minimum="4000" Maximum="1000000" SmallChange="1000" Value="24000" Width="240" />
-      <NumberBox x:Name="OutputInput" Header="输出上限（token）" Minimum="128" Maximum="8192" Value="2048" Width="180" />
-     </StackPanel>
-     <CheckBox x:Name="DisableThinkingInput" Content="关闭兼容服务的思考模式（DeepSeek 等支持 thinking 参数的服务；其他服务请勿勾选）" />
-     <StackPanel x:Name="OllamaInputs" Orientation="Horizontal" Spacing="12">
-      <NumberBox x:Name="ContextInput" Header="Ollama 上下文（token）" Minimum="2048" Maximum="131072" Value="4096" Width="240" />
-      <CheckBox x:Name="CpuInput" Content="仅 CPU（节省显存）" />
-     </StackPanel>
-     <StackPanel Orientation="Horizontal" Spacing="8">
-      <Button x:Name="SaveButton" Content="保存配置与密钥" Click="OnSaveSettings" AutomationProperties.AutomationId="AiSaveSettings" />
-      <Button x:Name="ModelsButton" Content="查看模型（不发送档案）" Click="OnModels" />
-      <Button x:Name="ClearKeyButton" Content="移除此服务密钥" Click="OnClearKey" />
-     </StackPanel>
+ <Grid Padding="16" ColumnSpacing="16">
+  <Grid.ColumnDefinitions><ColumnDefinition Width="230"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+  <Grid RowSpacing="8">
+   <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+   <Button Content="＋ 新对话" Click="OnNew" HorizontalAlignment="Stretch" AutomationProperties.AutomationId="AiNewChat" />
+   <TextBox x:Name="SearchInput" Grid.Row="1" PlaceholderText="搜索标题或本地 UID" TextChanged="OnSearch" AutomationProperties.AutomationId="AiSearch" />
+   <ListView x:Name="ChatList" Grid.Row="2" DisplayMemberPath="Label" SelectionChanged="OnChatSelected" AutomationProperties.AutomationId="AiConversations" />
+  </Grid>
+  <Grid Grid.Column="1" RowSpacing="8">
+   <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+   <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+    <StackPanel><TextBlock x:Name="TitleText" FontSize="24" FontWeight="SemiBold"/><TextBlock x:Name="ModelText" Opacity="0.7"/></StackPanel>
+    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+     <Button Content="重命名" Click="OnRename"/><Button Content="置顶/取消" Click="OnPin"/><Button Content="删除" Click="OnDelete"/><Button Content="设置" Click="OnSettings" AutomationProperties.AutomationId="AiOpenSettings"/>
     </StackPanel>
-   </Expander>
-   <Grid ColumnSpacing="12">
-    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-    <ComboBox x:Name="ArchiveInput" Header="档案" DisplayMemberPath="Label" SelectionChanged="OnArchiveChanged" HorizontalAlignment="Stretch" AutomationProperties.AutomationId="AiArchive" />
-    <ComboBox x:Name="AccountInput" Header="分析范围" DisplayMemberPath="Label" Grid.Column="1" SelectionChanged="OnAccountChanged" HorizontalAlignment="Stretch" AutomationProperties.AutomationId="AiAccount" />
    </Grid>
-   <StackPanel Orientation="Horizontal" Spacing="8">
-    <TextBox x:Name="FromInput" Header="UTC 起始日期（可留空）" PlaceholderText="YYYY-MM-DD" Width="220" TextChanged="OnScopeEdited" />
-    <TextBox x:Name="ToInput" Header="UTC 结束日期（含当日）" PlaceholderText="YYYY-MM-DD" Width="220" TextChanged="OnScopeEdited" />
+   <TextBlock x:Name="StatusText" Grid.Row="1" TextWrapping="Wrap" AutomationProperties.AutomationId="AiStatus"/>
+   <ScrollViewer x:Name="MessagesScroll" Grid.Row="2" VerticalScrollBarVisibility="Auto" ViewChanged="OnScrollChanged" AutomationProperties.AutomationId="AiMessages">
+    <StackPanel x:Name="MessagesPanel" Spacing="16" Padding="0,8"/>
+   </ScrollViewer>
+   <StackPanel Grid.Row="3" Spacing="4">
+    <TextBlock x:Name="ContextText" TextWrapping="Wrap"/>
+    <ScrollViewer MaxHeight="120" VerticalScrollBarVisibility="Auto"><StackPanel x:Name="AttachmentsPanel" Spacing="4"/></ScrollViewer>
+    <CheckBox x:Name="ImageConsent" Content="已检查图片内容，并已移除 UID、凭据和个人标识" Click="OnImageConsent" Visibility="Collapsed" />
    </StackPanel>
-   <StackPanel Orientation="Horizontal" Spacing="12">
-    <CheckBox x:Name="GachaInput" Content="抽卡统计与记录" IsChecked="True" Click="OnScopeClicked" />
-    <CheckBox x:Name="ItemsInput" Content="角色与武器历程" IsChecked="True" Click="OnScopeClicked" />
-    <CheckBox x:Name="ChallengesInput" Content="周期挑战" IsChecked="True" Click="OnScopeClicked" />
-    <CheckBox x:Name="ChronicleInput" Content="游戏历程节点" IsChecked="True" Click="OnScopeClicked" />
-   </StackPanel>
-   <CheckBox x:Name="UidInput" Content="档案分析默认携带 UID 区分账号（发送前必须明确同意；也可改用按 UID 升序编号）" IsChecked="True" Click="OnScopeClicked" AutomationProperties.AutomationId="AiArchiveUids" />
-   <TextBlock Text="单账号分析始终不发送 UID。昵称、档案名、备注与凭据不进入资料；问题中的长号码会隐藏。" TextWrapping="Wrap" />
-   <StackPanel Orientation="Horizontal" Spacing="8">
-    <Button x:Name="PrepareButton" Content="准备本次资料" Click="OnPrepare" AutomationProperties.AutomationId="AiPrepare" />
-    <Button x:Name="PreviewButton" Content="查看资料与证据" Click="OnPreview" />
-    <Button x:Name="CancelButton" Content="取消" Click="OnCancel" AutomationProperties.AutomationId="AiCancel" />
-   </StackPanel>
-   <TextBlock x:Name="StatusText" TextWrapping="Wrap" AutomationProperties.AutomationId="AiStatus" />
-   <TextBox x:Name="QuestionInput" Header="分析问题／继续追问" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" MaxHeight="160" PlaceholderText="例如：分析抽卡效率、养成变化和挑战历程，并说明记录有哪些缺口。" AutomationProperties.AutomationId="AiQuestion" />
-   <StackPanel Orientation="Horizontal" Spacing="8">
-    <Button x:Name="SendButton" Content="审查并发送" Click="OnSend" AutomationProperties.AutomationId="AiSend" />
-    <Button x:Name="ExportButton" Content="导出 Markdown 报告" Click="OnExport" />
-   </StackPanel>
-   <TextBox x:Name="ReplyText" Header="模型分析（请结合证据复核）" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="160" MaxHeight="480" ScrollViewer.VerticalScrollBarVisibility="Auto" AutomationProperties.AutomationId="AiReply" />
-   <TextBlock Text="本次资料的本地证据" FontWeight="SemiBold" />
-   <ListView x:Name="EvidenceList" DisplayMemberPath="DisplayLabel" SelectionMode="Single" IsItemClickEnabled="True" ItemClick="OnEvidence" MaxHeight="220" AutomationProperties.AutomationId="AiEvidence" />
-  </StackPanel>
- </ScrollViewer>
+   <TextBox x:Name="QuestionInput" Grid.Row="4" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="74" MaxHeight="160" PlaceholderText="发送消息；Shift+Enter 换行。可附加文件或档案资料。" TextChanged="OnDraftChanged" KeyDown="OnComposerKey" AutomationProperties.AutomationId="AiQuestion"/>
+   <Grid Grid.Row="5" ColumnSpacing="8" RowSpacing="6">
+    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <StackPanel Orientation="Horizontal" Spacing="6">
+     <Button x:Name="FileButton" Content="文件/图片" Click="OnFile" AutomationProperties.AutomationId="AiAttachFile"/>
+     <Button x:Name="DataButton" Content="档案资料" Click="OnData" AutomationProperties.AutomationId="AiPrepare"/>
+     <Button Content="资料/证据" Click="OnEvidence"/>
+    </StackPanel>
+    <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="6"><Button Content="导出" Click="OnExport"/><Button Content="↓ 回到底部" Click="OnBottom"/></StackPanel>
+    <Button x:Name="SendButton" Grid.Column="1" Content="发送" Click="OnSend" AutomationProperties.AutomationId="AiSend"/>
+    <Button x:Name="CancelButton" Grid.Column="1" Grid.Row="1" Content="停止" Click="OnStop" AutomationProperties.AutomationId="AiCancel"/>
+   </Grid>
+  </Grid>
+ </Grid>
 </UserControl>

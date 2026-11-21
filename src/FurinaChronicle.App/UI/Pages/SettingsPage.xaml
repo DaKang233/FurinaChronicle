@@ -19,8 +19,9 @@
                 FontSize="12"
                 LineBreakMode="WordWrap"
                 Opacity="0.72"
-                Text="外观、隔离数据与存储、历史撤销保留和应用信息。所有操作只作用于本应用包私有目录；不修改生产库或凭据。" />
+                Text="外观、AI 服务、数据存储、历史撤销与应用信息。AI 密钥仅保存到本机安全存储。" />
 
+            <ContentView x:Name="AiSettingsHost" />
             <Border Padding="14">
                 <VerticalStackLayout Spacing="10">
                     <Label FontAttributes="Bold" FontSize="18" Text="外观" />

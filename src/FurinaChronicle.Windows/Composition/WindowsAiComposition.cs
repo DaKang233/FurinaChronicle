@@ -16,11 +16,14 @@ namespace FurinaChronicle.Windows.Composition;
 
 internal static class WindowsAiComposition
 {
-    public static void AddAiAnalysis(this IServiceCollection services, WindowsPaths paths)
+    public static void AddAiAnalysis(this IServiceCollection services, WindowsPaths paths, JsonAiConversationStore conversations)
     {
         string directory = Path.Combine(paths.SettingsDirectory, "ai");
         services.AddSingleton<IAiSecretStore>(new DpapiAiSecretStore(Path.Combine(directory, "keys.bin")));
         services.AddSingleton<IAiConfigurationStore>(sp => new JsonAiConfigurationStore(Path.Combine(directory, "settings.json"), sp.GetRequiredService<IAiSecretStore>()));
+        services.AddSingleton<IAiConversationStore>(conversations);
+        services.AddSingleton<IAiConversationCopyCoordinator>(conversations);
+        services.AddTransient<AiAttachmentReader>(); services.AddTransient<AiSettingsState>();
         services.AddSingleton<IAiChatClient>(_ => new HttpAiChatClient());
         services.AddTransient(sp => new BuildGachaAnalytics(sp.GetRequiredService<IGachaRecordRepository>(),
             sp.GetService<IGachaItemMetadataProvider>() ?? new EmptyMetadata(), sp.GetRequiredService<IGachaEventCatalog>()));

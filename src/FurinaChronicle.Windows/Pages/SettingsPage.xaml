@@ -9,7 +9,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     AutomationProperties.AutomationId="Ui4SettingsPage">
     <ScrollViewer Padding="24">
-        <StackPanel MaxWidth="1000" HorizontalAlignment="Left" Spacing="16">
+        <StackPanel x:Name="SettingsSections" MaxWidth="1000" HorizontalAlignment="Left" Spacing="16">
             <StackPanel Spacing="4">
                 <TextBlock Text="设置" FontSize="28" FontWeight="SemiBold" />
                 <TextBlock
