@@ -33,3 +33,7 @@
 - [0028：本地 AI 聊天、附件及设置页](0028-local-ai-chat-and-attachments.md)
 
 多供应商与模型选择见 [ADR 0029](0029-multiple-ai-providers-and-models.md)。
+
+三种 AI 服务协议及旧配置兼容见 [ADR 0030](0030-ai-chat-responses-and-messages.md)。
+
+AI 全局提示词、称呼及受限本地只读工具见 [ADR 0031](0031-ai-chat-preferences-and-read-only-tools.md)。
