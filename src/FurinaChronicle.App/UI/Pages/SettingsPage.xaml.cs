@@ -15,7 +15,7 @@ public partial class SettingsPage : ContentPage
     private readonly SettingsState state;
     private readonly GachaAppearanceSettings appearance;
     private bool rendering;
-    private readonly FurinaChronicle.App.Ai.AiSettingsView aiSettings;
+    private readonly FurinaChronicle.Presentation.Ai.AiSettingsState aiState;
 
     public SettingsPage(
         SettingsState state,
@@ -26,7 +26,7 @@ public partial class SettingsPage : ContentPage
         this.appearance = appearance ??
             throw new ArgumentNullException(nameof(appearance));
         InitializeComponent();
-        aiSettings = new FurinaChronicle.App.Ai.AiSettingsView(aiState); AiSettingsHost.Content = aiSettings;
+        this.aiState = aiState;
     }
 
     // UI-0/UI-1 technical previews only in the isolated validation build.
@@ -44,8 +44,15 @@ public partial class SettingsPage : ContentPage
         ItemBackgroundPicker.SelectedIndex =
             appearance.UseClassicBackground ? 1 : 0;
         await state.EnterAsync();
-        await aiSettings.LoadAsync();
         Render();
+    }
+
+    private async void OnOpenAiSettingsClicked(object? sender, EventArgs e)
+    {
+        if (!AiSettingsButton.IsEnabled) return;
+        AiSettingsButton.IsEnabled = false;
+        try { await Navigation.PushAsync(new FurinaChronicle.App.Ai.AiSettingsPage(aiState)); }
+        finally { AiSettingsButton.IsEnabled = true; }
     }
 
     private void Render()

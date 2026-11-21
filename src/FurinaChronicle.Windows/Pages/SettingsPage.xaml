@@ -13,10 +13,29 @@
             <StackPanel Spacing="4">
                 <TextBlock Text="设置" FontSize="28" FontWeight="SemiBold" />
                 <TextBlock
-                    Text="管理外观、存储与诊断。"
+                    Text="管理外观、AI 服务、存储与诊断。"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     TextWrapping="Wrap" />
             </StackPanel>
+
+            <Border Padding="16" CornerRadius="8"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                <Grid ColumnSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="AI" FontSize="18" FontWeight="SemiBold" />
+                        <TextBlock Text="管理供应商、模型、服务密钥与模型参数。"
+                            FontSize="12" TextWrapping="Wrap"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+                    <Button x:Name="AiSettingsButton" Grid.Column="1" Content="AI 设置"
+                        VerticalAlignment="Center" Click="OnOpenAiSettings"
+                        AutomationProperties.AutomationId="AiSettingsEntry" />
+                </Grid>
+            </Border>
 
             <Border Padding="16" CornerRadius="8"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">

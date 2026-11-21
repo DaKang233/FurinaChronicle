@@ -21,7 +21,15 @@
                 Opacity="0.72"
                 Text="外观、AI 服务、数据存储、历史撤销与应用信息。AI 密钥仅保存到本机安全存储。" />
 
-            <ContentView x:Name="AiSettingsHost" />
+            <Border Padding="14">
+                <VerticalStackLayout Spacing="10">
+                    <Label FontAttributes="Bold" FontSize="18" Text="AI" />
+                    <Label FontSize="12" Opacity="0.72"
+                        Text="管理供应商、模型、服务密钥与模型参数。" />
+                    <Button x:Name="AiSettingsButton" Text="AI 设置" MinimumHeightRequest="44"
+                        Clicked="OnOpenAiSettingsClicked" AutomationId="AiSettingsEntry" />
+                </VerticalStackLayout>
+            </Border>
             <Border Padding="14">
                 <VerticalStackLayout Spacing="10">
                     <Label FontAttributes="Bold" FontSize="18" Text="外观" />

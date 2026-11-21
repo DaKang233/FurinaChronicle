@@ -29,7 +29,15 @@ public sealed class AiSettingsView : ContentView
         providers.SelectedIndexChanged+=(_,_)=>{if(!filling&&providers.SelectedItem is AiProviderProfile p){state.EditProvider(p.Id);Fill();}};
         profiles.SelectedIndexChanged+=(_,_)=>{if(!filling&&profiles.SelectedItem is AiModelProfile m){state.EditModel(m.Id);Fill();}};
     }
-    private Page Host=>Window?.Page??throw new AiAnalysisException("页面尚未就绪。");
+    private Page Host
+    {
+        get
+        {
+            for(Element? element=this; element is not null; element=element.Parent)
+                if(element is Page page) return page;
+            throw new AiAnalysisException("页面尚未就绪。");
+        }
+    }
     private static View Row(params View[] views){var g=new Grid{ColumnSpacing=6,ColumnDefinitions={new(GridLength.Star),new(GridLength.Star)}};for(int i=0;i<views.Length;i++){Grid.SetColumn(views[i],i);g.Add(views[i]);}return g;}
     private Button Command(string label,Func<Task> action,string id){var b=new Button{Text=label,AutomationId=id};b.Clicked+=async(_,_)=>await Run(action);return b;}
     public async Task LoadAsync()=>await Run(async()=>{await state.LoadAsync();Fill();});

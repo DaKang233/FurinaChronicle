@@ -12,6 +12,8 @@ public sealed class AiSettingsPanel : StackPanel
 {
     private readonly AiSettingsState state;
     private bool filling;
+    private readonly Func<ContentDialog, Task<ContentDialogResult>> showDialog;
+    public bool IsBusy { get; private set; }
     private readonly ComboBox providers=new(){Header="供应商",DisplayMemberPath="Label"},profiles=new(){Header="已保存模型",DisplayMemberPath="Label"};
     private readonly TextBox name=new(){Header="供应商名称"},alias=new(){Header="模型显示名称（可选）"};
     private readonly ComboBox protocol=new(){Header="接口类型",ItemsSource=new[]{"OpenAI 兼容","Ollama"}};
@@ -20,9 +22,9 @@ public sealed class AiSettingsPanel : StackPanel
     private readonly NumberBox budget=new(){Header="上下文额度（字符）",Minimum=4000,Maximum=1_000_000},output=new(){Header="输出额度（token）",Minimum=128,Maximum=8192},context=new(){Header="Ollama 上下文（token）",Minimum=2048,Maximum=131072};
     private readonly CheckBox images=new(){Content="此模型支持图片输入"},thinking=new(){Content="关闭兼容服务思考模式（仅支持 thinking 参数的服务）"},cpu=new(){Content="Ollama 仅 CPU"};
     private readonly TextBlock status=new(){TextWrapping=TextWrapping.Wrap};
-    public AiSettingsPanel(AiSettingsState state)
+    public AiSettingsPanel(AiSettingsState state, Func<ContentDialog, Task<ContentDialogResult>> showDialog)
     {
-        this.state=state;Spacing=8;AutomationProperties.SetAutomationId(this,"AiSettingsPanel");
+        this.state=state;this.showDialog=showDialog;Spacing=8;AutomationProperties.SetAutomationId(this,"AiSettingsPanel");
         Children.Add(new TextBlock{Text="AI 供应商与模型",FontSize=20});
         Children.Add(new TextBlock{Text="先保存当前编辑内容，再切换编辑项。保存后设为新对话的默认模型；已有对话保留自己的模型选择。",TextWrapping=TextWrapping.Wrap});
         Children.Add(providers);Children.Add(Row(Command("添加供应商",()=>{state.NewProvider();Fill();return Task.CompletedTask;},"AiAddProvider"),Command("删除供应商",DeleteProviderAsync,"AiDeleteProvider")));
@@ -59,20 +61,20 @@ public sealed class AiSettingsPanel : StackPanel
     {
         var list=new ListView{ItemsSource=await state.ModelsAsync(Inputs(),string.IsNullOrWhiteSpace(key.Password)?null:key.Password),MaxHeight=360};
         var dialog=new ContentDialog{XamlRoot=XamlRoot,Title="模型列表（不发送聊天或档案）",Content=list,PrimaryButtonText="填入所选模型",CloseButtonText="取消"};
-        if(await dialog.ShowAsync()==ContentDialogResult.Primary&&list.SelectedItem is string value){model.Text=value;if(string.IsNullOrWhiteSpace(alias.Text))alias.Text=value;status.Text="已填入模型，请保存。图片能力需自行确认。";}
+        if(await showDialog(dialog)==ContentDialogResult.Primary&&list.SelectedItem is string value){model.Text=value;if(string.IsNullOrWhiteSpace(alias.Text))alias.Text=value;status.Text="已填入模型，请保存。图片能力需自行确认。";}
     }
     private async Task DeleteProviderAsync()
     {
-        if(await new ContentDialog{XamlRoot=XamlRoot,Title="删除供应商？",Content="删除配置及当前地址密钥，保留所有聊天；使用该配置的会话须重新选择模型。",PrimaryButtonText="删除",CloseButtonText="取消",DefaultButton=ContentDialogButton.Close}.ShowAsync()!=ContentDialogResult.Primary)return;
+        if(await showDialog(new ContentDialog{XamlRoot=XamlRoot,Title="删除供应商？",Content="删除配置及当前地址密钥，保留所有聊天；使用该配置的会话须重新选择模型。",PrimaryButtonText="删除",CloseButtonText="取消",DefaultButton=ContentDialogButton.Close})!=ContentDialogResult.Primary)return;
         await state.DeleteProviderAsync();Fill();status.Text="供应商已删除，聊天记录保留。";
     }
     private async Task DeleteModelAsync()
     {
-        if(await new ContentDialog{XamlRoot=XamlRoot,Title="删除模型配置？",Content="保留历史回答，使用该模型配置的会话发送前须重新选择。",PrimaryButtonText="删除",CloseButtonText="取消",DefaultButton=ContentDialogButton.Close}.ShowAsync()!=ContentDialogResult.Primary)return;
+        if(await showDialog(new ContentDialog{XamlRoot=XamlRoot,Title="删除模型配置？",Content="保留历史回答，使用该模型配置的会话发送前须重新选择。",PrimaryButtonText="删除",CloseButtonText="取消",DefaultButton=ContentDialogButton.Close})!=ContentDialogResult.Primary)return;
         await state.DeleteModelAsync();Fill();
     }
     private static void EnableControls(Panel panel,bool enabled)
     {foreach(var child in panel.Children){if(child is Control control)control.IsEnabled=enabled;else if(child is Panel nested)EnableControls(nested,enabled);}}
     private async Task Run(Func<Task> action)
-    {EnableControls(this,false);try{await action();}catch(Exception e){status.Text=e is AiAnalysisException?e.Message:"AI 设置操作未完成，请检查本地存储或服务。";}finally{EnableControls(this,true);}}
+    {if(IsBusy)return;IsBusy=true;EnableControls(this,false);try{await action();}catch(Exception e){status.Text=e is AiAnalysisException?e.Message:"AI 设置操作未完成，请检查本地存储或服务。";}finally{IsBusy=false;EnableControls(this,true);}}
 }

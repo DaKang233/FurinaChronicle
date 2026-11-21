@@ -18,7 +18,7 @@ public sealed partial class SettingsPage : UserControl
     private static readonly string[] ThemeLabels = ["跟随系统", "浅色", "深色"];
 
     private readonly SettingsState state;
-    private readonly AiSettingsPanel aiSettings;
+    private readonly FurinaChronicle.Presentation.Ai.AiSettingsState aiState;
     private readonly Action<SettingsTheme> applyTheme;
     private bool renderGuard;
     private string? lastLoadError;
@@ -36,7 +36,7 @@ public sealed partial class SettingsPage : UserControl
         this.applyTheme = applyTheme;
         InitializeComponent();
         ThemePicker.ItemsSource = ThemeLabels;
-        aiSettings = new AiSettingsPanel(aiState); SettingsSections.Children.Insert(1, aiSettings);
+        this.aiState = aiState;
     }
 
     public async Task EnterAsync(CancellationToken cancellationToken = default)
@@ -44,7 +44,6 @@ public sealed partial class SettingsPage : UserControl
         try
         {
             await state.EnterAsync(cancellationToken);
-            await aiSettings.LoadAsync();
             applyTheme(state.Snapshot.Theme);
             Render();
         }
@@ -58,6 +57,20 @@ public sealed partial class SettingsPage : UserControl
                 DiagnosticSeverity.Error,
                 exception));
         }
+    }
+
+    private async void OnOpenAiSettings(object sender, RoutedEventArgs e)
+    {
+        if (!AiSettingsButton.IsEnabled) return;
+        AiSettingsButton.IsEnabled = false;
+        try { await AiSettingsDialog.ShowAsync(XamlRoot, aiState); }
+        catch (OperationCanceledException) { }
+        catch (Exception)
+        {
+            notifications.Publish(new(NotificationSeverity.Warning, NotificationCategory.System,
+                "AI 设置", "AI 设置暂未打开，请重试。"));
+        }
+        finally { AiSettingsButton.IsEnabled = true; }
     }
 
     private void Render()
