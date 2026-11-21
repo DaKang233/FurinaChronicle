@@ -7,7 +7,7 @@ namespace FurinaChronicle.Services.Ai;
 
 public static class AiPrivacy
 {
-    private static readonly Regex Credentials = new(@"(?:cookie|[sl]token|cookie_token|authkey|api[_-]?key|authorization)\s*[:=]|\bbearer\s+\S+|\bsk-[A-Za-z0-9_-]{12,}",
+    private static readonly Regex Credentials = new(@"(?:cookie|cookie[_-]?token|[sl]token(?:[_-]?v2)?|authkey|login[_-]?ticket|access[_-]?token|refresh[_-]?token|api[_-]?key|client[_-]?secret|password|authorization)[""']?\s*[:=]|\bbearer\s+\S+|\bsk-[A-Za-z0-9_-]{12,}|(?:^|[\t ])(?:[sl]token(?:[_-]?v2)?|cookie[_-]?token|login[_-]?ticket|access[_-]?token|refresh[_-]?token)[\t ]+[A-Za-z0-9._%+-]{8,}",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking, TimeSpan.FromMilliseconds(200));
     private static readonly Regex Identifiers = new(@"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b|\d{8,}|[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}|https?://[^\s]+|[A-Za-z]:[\\/][^\r\n]+",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking, TimeSpan.FromMilliseconds(200));

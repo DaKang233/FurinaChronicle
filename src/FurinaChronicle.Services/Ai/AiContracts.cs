@@ -19,7 +19,8 @@ public sealed record AiServiceSettings(
     int MaxOutputTokens = 2048,
     int OllamaContextTokens = 4096,
     bool CpuOnly = false,
-    bool DisableCompatibleThinking = false)
+    bool DisableCompatibleThinking = false,
+    bool SupportsImages = false)
 {
     public Uri Endpoint
     {
@@ -55,7 +56,7 @@ public sealed record AiServiceSettings(
 }
 
 public sealed class AiAnalysisException(string message) : Exception(message);
-public sealed record AiMessage(string Role, string Content);
+public sealed record AiMessage(string Role, string Content, IReadOnlyList<AiImage>? Images = null);
 public sealed record AiChatDelta(string Text = "", bool Done = false, bool Truncated = false);
 
 // Deliberately not a record: secrets must never appear in generated ToString output.
@@ -133,6 +134,8 @@ public sealed class PreparedAiContext(AiContextPacket packet, IReadOnlyList<AiLo
     }
     public bool IncludesUids => Packet.IdentityMode == "archive_uid_with_confirmation";
     public string Json => JsonSerializer.Serialize(Packet, AiJson.Options);
+    public AiContextState Snapshot() => new(Packet, Evidence, PrivateIdentifiers, uidAliases ?? new Dictionary<string,string>());
+    public static PreparedAiContext Restore(AiContextState state) => new(state.Packet, state.Evidence, state.PrivateIdentifiers, state.UidAliases);
 }
 public static class AiJson
 {

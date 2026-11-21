@@ -11,7 +11,7 @@ namespace FurinaChronicle.Presentation.Ai;
 public sealed record AiAccountChoice(Guid? Id, string Label);
 
 public sealed class AiWorkspaceState(IPlayerArchiveRepository archives, IGameAccountRepository accounts,
-    BuildAiContext builder, AiAnalysisSession session, ReadAiEvidence reader, INotificationCenter notifications)
+    BuildAiContext builder, AiAnalysisSession session, ReadAiEvidence reader, INotificationCenter notifications, IAiConversationCopyCoordinator? copies = null)
 {
     private CancellationTokenSource? operation;
     private int generation;
@@ -29,7 +29,7 @@ public sealed class AiWorkspaceState(IPlayerArchiveRepository archives, IGameAcc
     private void OnSessionChanged(object? sender, EventArgs args) { Status = session.Status; Changed?.Invoke(this, EventArgs.Empty); }
     public Task EnterAsync() => RunAsync(async token =>
     {
-        session.Reset(); PreparedScope = null;
+        await session.InitializeAsync(token);
         await session.LoadSettingsAsync(token);
         var list = await archives.GetAllAsync(token);
         token.ThrowIfCancellationRequested();
@@ -39,7 +39,7 @@ public sealed class AiWorkspaceState(IPlayerArchiveRepository archives, IGameAcc
     }, replace: true);
     public Task SelectArchiveAsync(Guid id) => RunAsync(async token =>
     {
-        session.Reset(); PreparedScope = null; SelectedArchiveId = id; SelectedAccountId = null;
+        PreparedScope = null; SelectedArchiveId = id; SelectedAccountId = null;
         await LoadAccountsAsync(token);
     }, replace: true);
     private async Task LoadAccountsAsync(CancellationToken token)
@@ -49,12 +49,12 @@ public sealed class AiWorkspaceState(IPlayerArchiveRepository archives, IGameAcc
         Accounts = new[] { new AiAccountChoice(null, "整个档案（全部账号）") }.Concat(list.Select(item =>
             new AiAccountChoice(item.Id, HistoryLabels.AccountLabel(item)))).ToArray();
         if (SelectedAccountId is null || !list.Any(item => item.Id == SelectedAccountId)) SelectedAccountId = list.FirstOrDefault()?.Id;
-        Status = list.Count == 0 ? "当前档案没有可分析的账号。" : "选择数据类别与日期后准备资料。";
+        Status = "可直接聊天；需要游戏分析时附加档案资料。";
     }
-    public void SelectAccount(Guid? id) { SelectedAccountId = id; Invalidate(); }
+    public void SelectAccount(Guid? id) { if (id == SelectedAccountId) return; SelectedAccountId = id; PreparedScope = null; Changed?.Invoke(this, EventArgs.Empty); }
     public void Invalidate()
-    { generation++; operation?.Cancel(); session.Reset(); PreparedScope = null; Changed?.Invoke(this, EventArgs.Empty); }
-    public void Leave() => Invalidate();
+    { generation++; operation?.Cancel(); session.InvalidateDrafts(); PreparedScope = null; Changed?.Invoke(this, EventArgs.Empty); }
+    public void Leave() { operation?.Cancel(); session.InvalidateDrafts(); }
     public void Cancel() { operation?.Cancel(); session.Cancel(); }
     public Task SaveSettingsAsync(AiServiceSettings settings, string? key, bool clearKey = false) =>
         RunAsync(async token => { PreparedScope = null; await session.SaveSettingsAsync(settings, key, clearKey, token); });
@@ -67,13 +67,20 @@ public sealed class AiWorkspaceState(IPlayerArchiveRepository archives, IGameAcc
     public Task PrepareAsync(DateOnly? from, DateOnly? to, AiDatasets datasets, bool allowArchiveUids) => RunAsync(async token =>
     {
         if (SelectedArchiveId is not Guid archive) throw new AiAnalysisException("请先选择档案。");
-        session.Reset();
         var scope = new AiAnalysisScope(archive, SelectedAccountId, from, to, datasets, AllowArchiveUids: allowArchiveUids);
         int current = generation;
+        await using var copyLease = copies is null ? null : await copies.ProtectCopiesAsync(token);
         var context = await builder.ExecuteAsync(scope, session.Settings.ContextCharacters, token);
         token.ThrowIfCancellationRequested();
         if (current != generation) return;
-        session.SetContext(context); PreparedScope = scope;
+        bool fresh = session.Turns.Count == 0 && session.Context is null;
+        var pending = fresh ? session.PendingAttachments.ToArray() : [];
+        string draft = fresh ? session.DraftText : "";
+        if (!fresh) await session.NewConversationAsync(token);
+        session.SetContext(context);
+        foreach (var attachment in pending) session.AddAttachment(attachment);
+        session.UpdateDraft(draft);
+        await session.SaveAsync(token); PreparedScope = scope;
     });
     public AiSendDraft CreateDraft(string question) => session.CreateDraft(question);
     public async Task GenerateAsync(AiSendDraft draft, bool approved, bool uidApproved)
@@ -87,7 +94,7 @@ public sealed class AiWorkspaceState(IPlayerArchiveRepository archives, IGameAcc
     private async Task RunAsync(Func<CancellationToken, Task> work, bool replace = false)
     {
         if (IsBusy && !replace) return;
-        if (replace) { operation?.Cancel(); session.Reset(); }
+        if (replace) { operation?.Cancel(); session.InvalidateDrafts(); }
         int request = ++generation;
         using var cancel = new CancellationTokenSource(); operation = cancel;
         Error = null; Changed?.Invoke(this, EventArgs.Empty);

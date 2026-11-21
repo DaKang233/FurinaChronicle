@@ -188,6 +188,10 @@ public sealed class GachaRecordOperationCoordinator(
         {
             throw;
         }
+        catch (FurinaChronicle.Services.Ai.AiConversationDeletionBlockedException exception)
+        {
+            return new(GachaRecordOperationOutcomeKind.Conflict, exception.Message);
+        }
         catch (KeyNotFoundException)
         {
             return new(

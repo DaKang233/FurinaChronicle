@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text;
+using FurinaChronicle.Services.Ai;
 using System.Text.Json;
 using System.Security.Cryptography;
 using FurinaChronicle.Core.Gacha;
@@ -28,6 +29,7 @@ public sealed partial class SqliteGachaAtomicChangeStore
     private const long FixedWriteReserveBytes = 8192;
     private const long PerMutationWriteReserveBytes = 1024;
 
+    private readonly IAiConversationCopyCoordinator? chatCopies;
     private readonly FurinaDatabase database;
     private readonly IHistoryStorageCapacityProvider capacityProvider;
     private readonly IArchiveRestoreFailureInjector archiveRestoreFailureInjector;
@@ -46,6 +48,11 @@ public sealed partial class SqliteGachaAtomicChangeStore
             NoArchiveRestoreFailureInjector.Instance)
     {
     }
+
+    public SqliteGachaAtomicChangeStore(FurinaDatabase database, IHistoryStorageCapacityProvider? capacityProvider,
+        IAiConversationCopyCoordinator chatCopies)
+        : this(database, capacityProvider ?? UnknownStorageCapacityProvider.Instance, NoArchiveRestoreFailureInjector.Instance)
+    { this.chatCopies = chatCopies; }
 
     internal SqliteGachaAtomicChangeStore(
         FurinaDatabase database,
@@ -822,6 +829,16 @@ public sealed partial class SqliteGachaAtomicChangeStore
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+        if (chatCopies is not null && await ReadAlreadyCommittedBeforeCopyGuardAsync(request.OperationId, cancellationToken) is { } committedResult)
+            return committedResult;
+        IAsyncDisposable? deletionLease = null;
+        try { if (chatCopies is not null) deletionLease = await chatCopies.ProtectDeletionAsync(request.Reference.GameAccountId, cancellationToken); }
+        catch (AiConversationDeletionBlockedException)
+        {
+            if (await ReadAlreadyCommittedBeforeCopyGuardAsync(request.OperationId, cancellationToken) is { } repeated) return repeated;
+            throw;
+        }
+        await using var copyLease = deletionLease;
         await database.InitializeAsync(cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -993,6 +1010,18 @@ public sealed partial class SqliteGachaAtomicChangeStore
         return ToArchiveOperationResult(result);
     }
 
+    private async Task<GachaAtomicChangeResult?> ReadAlreadyCommittedBeforeCopyGuardAsync(OperationId operationId, CancellationToken token)
+    {
+        await database.InitializeAsync(token);
+        GachaAtomicChangeResult? result = null;
+        await database.Connection.RunInTransactionAsync(connection =>
+        {
+            token.ThrowIfCancellationRequested();
+            if (ReadCommitResult(connection, operationId) is { } receipt) result = ToAlreadyCommittedResult(receipt);
+        });
+        return result;
+    }
+
     private async Task<GachaAtomicChangeResult> PurgeScopeAsync(
         GachaScopePurgeRequest request,
         bool purgeArchive,
@@ -1009,6 +1038,16 @@ public sealed partial class SqliteGachaAtomicChangeStore
                 "Commit time cannot be earlier than start time.");
         }
         ArgumentException.ThrowIfNullOrWhiteSpace(request.Summary);
+        if (chatCopies is not null && await ReadAlreadyCommittedBeforeCopyGuardAsync(request.OperationId, cancellationToken) is { } committedResult)
+            return committedResult;
+        IAsyncDisposable? deletionLease = null;
+        try { if (chatCopies is not null) deletionLease = await chatCopies.ProtectDeletionAsync(request.ScopeId, cancellationToken); }
+        catch (AiConversationDeletionBlockedException)
+        {
+            if (await ReadAlreadyCommittedBeforeCopyGuardAsync(request.OperationId, cancellationToken) is { } repeated) return repeated;
+            throw;
+        }
+        await using var copyLease = deletionLease;
         await database.InitializeAsync(cancellationToken);
 
         GachaAtomicChangeResult? result = null;

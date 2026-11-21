@@ -50,9 +50,22 @@ public sealed class HttpAiChatClient : IAiChatClient, IDisposable
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         input.Settings.Validate();
-        if (input.Messages.Count is < 1 or > 20 || input.Messages.Any(item => item.Role is not ("system" or "user" or "assistant") || item.Content.Length > 1_200_000))
+        if (input.Messages.Count is < 1 or > 256 || input.Messages.Any(item => item.Role is not ("system" or "user" or "assistant") || item.Content.Length > 1_200_000))
             throw new AiAnalysisException("发送消息的数量或长度无效。");
-        var messages = input.Messages.Select(item => new { role = item.Role, content = item.Content }).ToArray();
+        var messages = input.Messages.Select(item =>
+        {
+            var message = new Dictionary<string,object> { ["role"] = item.Role, ["content"] = item.Content };
+            if (item.Images is { Count: > 0 } images)
+            {
+                if (!input.Settings.SupportsImages || item.Role != "user" || images.Count > 8 ||
+                    images.Any(i => i.MediaType is not ("image/png" or "image/jpeg" or "image/webp") || i.Base64.Length > 3_000_000))
+                    throw new AiAnalysisException("图片能力或附件格式/大小无效。");
+                if (input.Settings.Protocol == AiProtocol.Ollama) message["images"] = images.Select(i => i.Base64).ToArray();
+                else message["content"] = new object[] { new { type = "text", text = item.Content } }.Concat(images.Select(i =>
+                    (object)new { type = "image_url", image_url = new { url = $"data:{i.MediaType};base64,{i.Base64}" } })).ToArray();
+            }
+            return message;
+        }).ToArray();
         object payload = input.Settings.Protocol == AiProtocol.Ollama
             ? new { model = input.Settings.Model.Trim(), messages, stream = true, think = false, keep_alive = 0,
                 options = new Dictionary<string, object> { ["num_ctx"] = input.Settings.OllamaContextTokens,
@@ -72,7 +85,7 @@ public sealed class HttpAiChatClient : IAiChatClient, IDisposable
             payload = root;
         }
         byte[] body = JsonSerializer.SerializeToUtf8Bytes(payload);
-        if (body.Length > 8 * 1024 * 1024) throw new AiAnalysisException("请求超过安全长度，请缩小资料或对话范围。");
+        if (body.Length > 24 * 1024 * 1024) throw new AiAnalysisException("请求超过安全长度，请缩小资料或对话范围。");
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromMinutes(5));
         using var request = Request(HttpMethod.Post, input.Settings,
