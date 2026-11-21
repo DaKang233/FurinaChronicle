@@ -20,7 +20,9 @@ public sealed record AiServiceSettings(
     int OllamaContextTokens = 4096,
     bool CpuOnly = false,
     bool DisableCompatibleThinking = false,
-    bool SupportsImages = false)
+    bool SupportsImages = false,
+    Guid? ProviderId = null,
+    Guid? ModelProfileId = null)
 {
     public Uri Endpoint
     {

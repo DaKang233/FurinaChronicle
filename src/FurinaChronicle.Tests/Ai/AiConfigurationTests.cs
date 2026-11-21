@@ -18,7 +18,9 @@ public sealed class AiConfigurationTests
             var store = new JsonAiConfigurationStore(Path.Combine(folder, "settings.json"), secrets);
             var first = new AiServiceSettings(BaseAddress: "https://first.example/v1", Model: "model");
             await store.SaveAsync(first); await store.SetApiKeyAsync(first, "synthetic-only-secret");
-            Assert.Equal(first, await store.LoadAsync());
+            var loaded = await store.LoadAsync();
+            Assert.NotNull(loaded.ProviderId); Assert.NotNull(loaded.ModelProfileId);
+            Assert.Equal(first, loaded with { ProviderId = null, ModelProfileId = null });
             Assert.DoesNotContain("synthetic-only-secret", await File.ReadAllTextAsync(Path.Combine(folder, "settings.json")));
             Assert.Equal("synthetic-only-secret", await store.GetApiKeyAsync(first with { Model = "another" }));
             Assert.Null(await store.GetApiKeyAsync(first with { BaseAddress = "https://second.example/v1" }));

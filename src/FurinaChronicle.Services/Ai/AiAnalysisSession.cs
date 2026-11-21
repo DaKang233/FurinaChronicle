@@ -34,6 +34,8 @@ public sealed class AiAnalysisTurn(string question)
     public bool Complete { get; internal set; }
     public string Status { get; internal set; }="正在生成…";
     public string Model { get; internal set; }="";
+    public string ProviderName { get; internal set; }="";
+    public string ModelLabel => string.IsNullOrWhiteSpace(ProviderName)?Model:ProviderName+" · "+Model;
     public IReadOnlyList<AiAttachment> Attachments { get; internal set; }=[];
     public IReadOnlyList<string> ValidReferences { get; internal set; }=[];
     public IReadOnlyList<string> UnknownReferences { get; internal set; }=[];
@@ -78,6 +80,10 @@ public sealed class AiAnalysisSession(IAiChatClient client,IAiConfigurationStore
     public string StorageNotice { get; private set; }="";
     public PreparedAiContext? Context { get; private set; }
     public AiServiceSettings Settings { get; private set; }=new();
+    public AiProviderConfiguration Providers { get; private set; }=new(null, []);
+    public string ProviderName => Providers.Find(Settings.ProviderId)?.Name ?? "";
+    private Guid? selectedProvider, selectedModel;
+    public bool SelectionMissing { get; private set; }
     public IReadOnlyList<AiAnalysisTurn> Turns=>turns;
     public IReadOnlyList<AiAttachment> PendingAttachments=>pending;
     public bool IsBusy { get; private set; }
@@ -93,9 +99,31 @@ public sealed class AiAnalysisSession(IAiChatClient client,IAiConfigurationStore
     }
     public async Task LoadSettingsAsync(CancellationToken cancellationToken=default)
     {
-        var next=await configuration.LoadAsync(cancellationToken);
+        AiServiceSettings next;
+        if(configuration is IAiProviderConfigurationStore profiles)
+        {
+            Providers=await profiles.LoadProvidersAsync(cancellationToken);
+            var provider=Providers.Find(selectedProvider ?? Providers.SelectedProviderId);
+            Guid? model=selectedModel ?? provider?.SelectedModelId;
+            SelectionMissing=selectedProvider is not null && (provider is null || !provider.Models.Any(m=>m.Id==model));
+            next=provider is not null && model is not null && provider.Models.Any(m=>m.Id==model)
+                ? provider.Resolve(model) : new();
+            if(SelectionMissing)Status="原供应商或模型配置已删除；会话保留，请先重新选择，尚未发送。";
+            else {selectedProvider=next.ProviderId;selectedModel=next.ModelProfileId;}
+        }
+        else next=await configuration.LoadAsync(cancellationToken);
         if(next!=Settings) {InvalidateDrafts(); Settings=next;}
         Notify();
+    }
+    public async Task SelectModelAsync(Guid providerId, Guid modelId, CancellationToken token=default)
+    {
+        if(IsBusy)throw new AiAnalysisException("请先停止或等待生成完成。");
+        if(configuration is not IAiProviderConfigurationStore profiles)throw new AiAnalysisException("当前宿主不支持多供应商。");
+        await profiles.SelectAsync(providerId,modelId,token);
+        InvalidateDrafts();selectedProvider=providerId;selectedModel=modelId;
+        await LoadSettingsAsync(token);
+        if(initialized)await SaveAsync(token);
+        Status="已切换模型；历史保留，下一次发送仍需审查接收方。";Notify();
     }
     public async Task SaveSettingsAsync(AiServiceSettings settings,string? newKey=null,bool clearKey=false,CancellationToken cancellationToken=default)
     {
@@ -128,12 +156,13 @@ public sealed class AiAnalysisSession(IAiChatClient client,IAiConfigurationStore
         StorageNotice=list.UnreadableFiles>0?$"{list.UnreadableFiles} 个聊天文件不可读取，未覆盖原文件。":"";Notify();
     }
     private AiConversation Snapshot()=>new(ConversationId,Title,Pinned,createdAt,DateTimeOffset.UtcNow,Context?.Snapshot(),
-        turns.Select(t=>new AiStoredTurn(t.Id,t.Question,t.Answer,t.Complete,t.Status,t.CreatedAt,t.Attachments,t.Model)).ToArray(),DraftText,pending.ToArray());
+        turns.Select(t=>new AiStoredTurn(t.Id,t.Question,t.Answer,t.Complete,t.Status,t.CreatedAt,t.Attachments,t.Model,t.ProviderName)).ToArray(),DraftText,pending.ToArray(),selectedProvider ?? Settings.ProviderId,selectedModel ?? Settings.ModelProfileId);
     public Task SaveAsync(CancellationToken token=default)=>store?.SaveAsync(Snapshot(),token)??Task.CompletedTask;
     public async Task NewConversationAsync(CancellationToken token=default)
     {
         InvalidateDrafts();if(turns.Count>0||Context is not null||pending.Count>0||DraftText.Length>0)await SaveAsync(token);
         Reset();ConversationId=Guid.NewGuid();createdAt=DateTimeOffset.UtcNow;Title="新对话";Pinned=false;
+        selectedProvider=null;selectedModel=null;await LoadSettingsAsync(token);
         await SaveAsync(token);await RefreshConversationsAsync(token);Status="新对话已创建。";Notify();
     }
     public async Task OpenConversationAsync(Guid id,CancellationToken token=default)
@@ -143,14 +172,18 @@ public sealed class AiAnalysisSession(IAiChatClient client,IAiConfigurationStore
         InvalidateDrafts();if(turns.Count>0||Context is not null||pending.Count>0||DraftText.Length>0)await SaveAsync(token);
         var saved=await (store?.LoadAsync(id,token)??Task.FromResult<AiConversation?>(null))??throw new AiAnalysisException("会话已不存在。");
         Reset();ConversationId=saved.Id;Title=saved.Title;Pinned=saved.Pinned;createdAt=saved.CreatedAt;
+        selectedProvider=saved.ProviderId;selectedModel=saved.ModelProfileId;
         Context=saved.Context is {} c?PreparedAiContext.Restore(c):null;TrackContext();DraftText=saved.DraftText;pending.AddRange(saved.DraftAttachments??[]);
         foreach(var item in saved.Turns)
         {
             var turn=new AiAnalysisTurn(item.Question){Id=item.Id,CreatedAt=item.CreatedAt,Answer=item.Answer,Complete=item.Complete,
-                Status=!item.Complete&&item.Status.Contains("生成",StringComparison.Ordinal)?"上次生成已中断；可重新生成。":item.Status,Attachments=item.Attachments,Model=item.Model};
+                Status=!item.Complete&&item.Status.Contains("生成",StringComparison.Ordinal)?"上次生成已中断；可重新生成。":item.Status,Attachments=item.Attachments,Model=item.Model,ProviderName=item.ProviderName};
             References(turn);turns.Add(turn);
         }
-        Status="已打开本地会话，尚未发送。";Notify();
+        // Restore the complete chat before any fallible configuration I/O. A later Leave/Save
+        // must never replace existing messages with a partial load if settings are corrupt.
+        await LoadSettingsAsync(token);
+        Status=SelectionMissing?"原供应商或模型配置已删除；请重新选择后发送。":"已打开本地会话，尚未发送。";Notify();
     }
     public async Task RenameAsync(string title,CancellationToken token=default)
     {Title=AiPrivacy.Sanitize(title,maxLength:120).Trim();if(Title.Length==0)Title="未命名对话";await SaveAsync(token);await RefreshConversationsAsync(token);}
@@ -161,6 +194,7 @@ public sealed class AiAnalysisSession(IAiChatClient client,IAiConfigurationStore
         InvalidateDrafts();Guid id=ConversationId;
         if(store is not null)await store.DeleteAsync(id,token);
         Reset();ConversationId=Guid.NewGuid();Title="新对话";Pinned=false;createdAt=DateTimeOffset.UtcNow;
+        selectedProvider=null;selectedModel=null;await LoadSettingsAsync(token);
         await RefreshConversationsAsync(token);Status="已删除选中本地会话。";Notify();
     }
     public async Task<string> ForkFromAsync(Guid turnId,CancellationToken token=default)
@@ -202,7 +236,8 @@ public sealed class AiAnalysisSession(IAiChatClient client,IAiConfigurationStore
     }
     public AiSendDraft CreateDraft(string question)
     {
-        if(IsBusy)throw new AiAnalysisException("请先停止或等待生成完成。");Settings.Validate();
+        if(IsBusy)throw new AiAnalysisException("请先停止或等待生成完成。");
+        if(SelectionMissing)throw new AiAnalysisException("原供应商或模型已删除，请重新选择。");Settings.Validate();
         string safe=Safe(question,16000).Trim();if(safe.Length==0&&pending.Count>0)safe="请分析附加资料。";
         if(safe.Length==0)throw new AiAnalysisException("请填写消息或附加文件。");
         var head=new List<AiMessage>{new("system",SystemPrompt)};
@@ -236,10 +271,11 @@ public sealed class AiAnalysisSession(IAiChatClient client,IAiConfigurationStore
     public async Task GenerateAsync(AiSendDraft draft,bool approved,bool uidApproved=false,CancellationToken cancellationToken=default)
     {
         if(!approved||draft.IncludesUids&&!uidApproved)throw new AiAnalysisException("本次发送未获得所需的数据授权。");
+        await LoadSettingsAsync(cancellationToken);
         if(IsBusy||draft.Generation!=generation||!ReferenceEquals(draft.Context,Context)||draft.Settings!=Settings)throw new AiAnalysisException("范围或配置已变化，请重新审查。");
         if(turns.Count>=1000)throw new AiAnalysisException("当前会话达到 1000 轮，请新建会话；历史不会自动删除。");
         active?.Dispose();using var operation=CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);active=operation;int current=generation;
-        var turn=new AiAnalysisTurn(draft.Question){Attachments=draft.Attachments,Model=Settings.Model};turns.Add(turn);
+        var turn=new AiAnalysisTurn(draft.Question){Attachments=draft.Attachments,Model=Settings.Model,ProviderName=ProviderName};turns.Add(turn);
         if(Title=="新对话")Title=draft.Question[..Math.Min(48,draft.Question.Length)];
         IsBusy=true;Status="正在生成…";Notify();var text=new StringBuilder();var timer=Stopwatch.StartNew();var checkpoint=Stopwatch.StartNew();bool done=false,truncated=false;string? providerKey=null;
         try
@@ -291,7 +327,7 @@ public sealed class AiAnalysisSession(IAiChatClient client,IAiConfigurationStore
         {
             text.AppendLine($"## 用户\n\n{turn.Question}\n");
             foreach(var file in turn.Attachments)text.AppendLine($"附件：{file.Name}（{file.MediaType}，{file.Bytes} 字节；图片不嵌入报告）\n");
-            text.AppendLine($"## 助手 · {turn.Model}\n\n{turn.Answer}\n\n状态：{turn.Status}\n");
+            text.AppendLine($"## 助手 · {turn.ModelLabel}\n\n{turn.Answer}\n\n状态：{turn.Status}\n");
         }
         if(Context is {} context)
         {

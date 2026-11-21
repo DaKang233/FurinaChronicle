@@ -13,9 +13,9 @@ public sealed record AiImage(string MediaType, string Base64, string Sha256);
 public sealed record AiContextState(AiContextPacket Packet, IReadOnlyList<AiLocalEvidence> Evidence,
     IReadOnlyList<string> PrivateIdentifiers, IReadOnlyDictionary<string,string> UidAliases);
 public sealed record AiStoredTurn(Guid Id, string Question, string Answer, bool Complete, string Status,
-    DateTimeOffset CreatedAt, IReadOnlyList<AiAttachment> Attachments, string Model);
+    DateTimeOffset CreatedAt, IReadOnlyList<AiAttachment> Attachments, string Model, string ProviderName = "");
 public sealed record AiConversation(Guid Id, string Title, bool Pinned, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt,
-    AiContextState? Context, IReadOnlyList<AiStoredTurn> Turns, string DraftText = "", IReadOnlyList<AiAttachment>? DraftAttachments = null);
+    AiContextState? Context, IReadOnlyList<AiStoredTurn> Turns, string DraftText = "", IReadOnlyList<AiAttachment>? DraftAttachments = null, Guid? ProviderId = null, Guid? ModelProfileId = null);
 public sealed record AiConversationSummary(Guid Id, string Title, bool Pinned, DateTimeOffset UpdatedAt, int Turns, string LocalScope = "")
 {
     public string Label => (Pinned ? "★ " : "") + Title + (LocalScope.Length > 0 ? " · " + LocalScope : "");
