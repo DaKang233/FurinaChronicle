@@ -53,6 +53,7 @@
 - [可选 AI 只读分析](architecture/AI_ANALYSIS.md)
 - [AI 首版接入验收（历史）](development/AI_ANALYSIS_ACCEPTANCE.md)
 - [本地 AI 聊天验收](development/AI_LOCAL_CHAT_ACCEPTANCE.md)
+- [多个 AI 供应商与模型验收](development/AI_PROVIDERS_ACCEPTANCE.md)
 - [Chronicle 时间线](architecture/CHRONICLE_TIMELINE.md)
 - [页面选择状态与跨页刷新](architecture/PRESENTATION_SELECTION_STATE.md)
 
