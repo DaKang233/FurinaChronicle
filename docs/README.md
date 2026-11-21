@@ -55,6 +55,7 @@
 - [本地 AI 聊天验收](development/AI_LOCAL_CHAT_ACCEPTANCE.md)
 - [多个 AI 供应商与模型验收](development/AI_PROVIDERS_ACCEPTANCE.md)
 - [AI 设置卡片入口验收](development/AI_SETTINGS_ENTRY_ACCEPTANCE.md)
+- [三种 AI 协议及全局提示词/工具验收](development/AI_PROTOCOLS_AND_TOOLS_ACCEPTANCE.md)
 - [Chronicle 时间线](architecture/CHRONICLE_TIMELINE.md)
 - [页面选择状态与跨页刷新](architecture/PRESENTATION_SELECTION_STATE.md)
 

@@ -1,6 +1,6 @@
 # 多个 AI 供应商与模型验收
 
-更新：2026-11-22。基线 `master / 1f9a50c`、工作区起始干净；业务 Schema 12、`0.10.0 / Phase 10.0` 不变。契约见 [ADR 0029](../decisions/0029-multiple-ai-providers-and-models.md)，实际行为见 [AI 架构](../architecture/AI_ANALYSIS.md)。此记录补充先前本地聊天验收，不重新关闭其未运行项。后续卡片入口/弹窗与二级页面见 [设置入口验收](AI_SETTINGS_ENTRY_ACCEPTANCE.md)。
+更新：2026-11-22。基线 `master / 1f9a50c`、工作区起始干净；业务 Schema 12、`0.10.0 / Phase 10.0` 不变。契约见 [ADR 0029](../decisions/0029-multiple-ai-providers-and-models.md)，实际行为见 [AI 架构](../architecture/AI_ANALYSIS.md)。此记录补充先前本地聊天验收，不重新关闭其未运行项。后续三协议和全局配置/工具见 [协议与工具验收](AI_PROTOCOLS_AND_TOOLS_ACCEPTANCE.md)；卡片入口/弹窗与二级页面见 [设置入口验收](AI_SETTINGS_ENTRY_ACCEPTANCE.md)。
 
 ## 交付范围
 
