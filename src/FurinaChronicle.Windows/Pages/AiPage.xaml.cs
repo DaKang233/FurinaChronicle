@@ -53,12 +53,25 @@ public sealed partial class AiPage : UserControl
         else content=Preview(file.Text??"");
         await new ContentDialog{XamlRoot=XamlRoot,Title=file.Name,Content=content,CloseButtonText="关闭"}.ShowAsync();
     }
+    private async void OnModel(object sender, RoutedEventArgs e)=>await UiAsync(async()=>
+    {
+        var session=state.Session;await session.LoadSettingsAsync();
+        if(session.Providers.Providers.Count==0)throw new AiAnalysisException("请先在设置页添加供应商和模型。");
+        var provider=new ComboBox{Header="供应商",ItemsSource=session.Providers.Providers,DisplayMemberPath="Label",HorizontalAlignment=HorizontalAlignment.Stretch};
+        var model=new ComboBox{Header="模型",DisplayMemberPath="Label",HorizontalAlignment=HorizontalAlignment.Stretch};
+        AutomationProperties.SetAutomationId(provider,"AiChatProvider");AutomationProperties.SetAutomationId(model,"AiChatModel");
+        void Update(){var p=provider.SelectedItem as AiProviderProfile;model.ItemsSource=p?.Models;model.SelectedItem=p?.Models.FirstOrDefault(m=>m.Id==(p.Id==session.Settings.ProviderId?session.Settings.ModelProfileId:p.SelectedModelId))??p?.Models.FirstOrDefault();}
+        provider.SelectionChanged+=(_,_)=>Update();provider.SelectedItem=session.Providers.Find(session.Settings.ProviderId)??session.Providers.Providers.FirstOrDefault();Update();
+        var body=new StackPanel{Spacing=8};body.Children.Add(provider);body.Children.Add(model);body.Children.Add(new TextBlock{Text="仅切换配置，不发送资料。下一次发送将审查接收方与历史。",TextWrapping=TextWrapping.Wrap});
+        var dialog=new ContentDialog{XamlRoot=XamlRoot,Title="选择供应商与模型",Content=body,PrimaryButtonText="切换",CloseButtonText="取消",DefaultButton=ContentDialogButton.Close};
+        if(await dialog.ShowAsync()==ContentDialogResult.Primary&&provider.SelectedItem is AiProviderProfile p&&model.SelectedItem is AiModelProfile m)await session.SelectModelAsync(p.Id,m.Id);
+    });
     private void Render()
     {
         if(rendering)return;rendering=true;
         try
         {
-            var s=state.Session;TitleText.Text=s.Title;ModelText.Text=string.IsNullOrWhiteSpace(s.Settings.Model)?"请先在设置页配置模型":s.Settings.Model;
+            var s=state.Session;TitleText.Text=s.Title;ModelText.Text=s.SelectionMissing?"原配置已删除，请重新选择":string.IsNullOrWhiteSpace(s.Settings.Model)?"请先在设置页配置模型":s.ProviderName+" · "+s.Settings.Model;ModelButton.IsEnabled=!state.IsBusy;
             StatusText.Text=state.Status+" "+s.StorageNotice;
             SendButton.IsEnabled=FileButton.IsEnabled=DataButton.IsEnabled=!state.IsBusy;CancelButton.IsEnabled=state.IsBusy;
             ContextText.Text=s.Context is {} c?$"已附加 {c.Evidence.Count} 项游戏证据 · "+(c.IncludesUids?"档案 UID 每次发送须确认":"不发送 UID"):"普通聊天 · 未附加档案数据";
@@ -78,7 +91,7 @@ public sealed partial class AiPage : UserControl
                     var actions=new StackPanel{Orientation=Orientation.Horizontal,Spacing=8};
                     actions.Children.Add(Button("复制问题",()=>{Copy(turn.Question);return Task.CompletedTask;}));
                     actions.Children.Add(Button("编辑/重新生成",async()=>{QuestionInput.Text=await s.ForkFromAsync(turn.Id);renderedTurns="";Render();}));card.Children.Add(actions);
-                    card.Children.Add(new TextBlock{Text="助手 · "+turn.Model,FontWeight=FontWeights.SemiBold});var body=new StackPanel{Spacing=6};card.Children.Add(body);
+                    card.Children.Add(new TextBlock{Text="助手 · "+turn.ModelLabel,FontWeight=FontWeights.SemiBold});var body=new StackPanel{Spacing=6};card.Children.Add(body);
                     var status=new TextBlock{TextWrapping=TextWrapping.Wrap,Opacity=0.65};card.Children.Add(status);
                     card.Children.Add(Button("复制回答",()=>{Copy(turn.Answer);return Task.CompletedTask;}));bubbles[turn.Id]=(body,status,"");
                     MessagesPanel.Children.Add(new Border{Padding=new Thickness(14),CornerRadius=new CornerRadius(8),BorderThickness=new Thickness(1),BorderBrush=(Brush)Application.Current.Resources["DividerStrokeColorDefaultBrush"],Child=card});

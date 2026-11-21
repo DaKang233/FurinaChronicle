@@ -34,7 +34,7 @@ public sealed class AiAnalysisPage : ContentPage
         var root=new Grid{Padding=12,RowSpacing=8,RowDefinitions={new(GridLength.Auto),new(GridLength.Auto),new(GridLength.Star),new(GridLength.Auto),new(GridLength.Auto),new(GridLength.Auto)}};
         var header=new Grid{ColumnDefinitions={new(GridLength.Star),new(GridLength.Auto)}};header.Add(title);
         var menu=Button("⋯",MenuAsync);Grid.SetColumn(menu,1);header.Add(menu);root.Add(header);
-        var top=new HorizontalStackLayout{Spacing=6};top.Add(Button("对话",ChatsAsync));top.Add(Button("新建",()=>state.Session.NewConversationAsync()));top.Add(Button("设置",async()=>{if(Shell.Current is AppShell app)await app.ShowSettingsPageAsync();}));top.Add(Button("↓",async()=>{follow=true;await scroll.ScrollToAsync(0,messages.Height,false);}));Grid.SetRow(top,1);root.Add(top);
+        var top=new HorizontalStackLayout{Spacing=6};top.Add(Button("对话",ChatsAsync));top.Add(Button("新建",()=>state.Session.NewConversationAsync()));top.Add(Button("模型",ModelsAsync));top.Add(Button("设置",async()=>{if(Shell.Current is AppShell app)await app.ShowSettingsPageAsync();}));top.Add(Button("↓",async()=>{follow=true;await scroll.ScrollToAsync(0,messages.Height,false);}));Grid.SetRow(top,1);root.Add(top);
         scroll.Content=messages;Grid.SetRow(scroll,2);root.Add(scroll);scroll.Scrolled+=(_,e)=>follow=messages.Height-scroll.Height-e.ScrollY<80;
         var extra=new VerticalStackLayout{Spacing=4};extra.Add(contextLabel);extra.Add(new ScrollView{Content=attachments,MaximumHeightRequest=120});
         imageConsentRow=Check(imageConsent,"已检查图片，移除了 UID、凭据和个人标识");extra.Add(imageConsentRow);extra.Add(status);Grid.SetRow(extra,3);root.Add(extra);
@@ -48,13 +48,29 @@ public sealed class AiAnalysisPage : ContentPage
     protected override async void OnAppearing(){base.OnAppearing();if(presentingReview)return;entered=true;await state.EnterAsync();Render();}
     protected override async void OnDisappearing(){if(!presentingReview&&entered){entered=false;state.Leave();if(state.Session.IsInitialized)await UiAsync(()=>state.Session.SaveAsync());}base.OnDisappearing();}
     private Button Button(string text,Func<Task> action){var button=new Button{Text=text,Padding=new Thickness(10,5)};button.Clicked+=async(_,_)=>await UiAsync(action);return button;}
+    private async Task ModelsAsync()
+    {
+        if(state.IsBusy)throw new AiAnalysisException("请先停止或等待生成完成。");
+        var session=state.Session;await session.LoadSettingsAsync();
+        if(session.Providers.Providers.Count==0)throw new AiAnalysisException("请先在设置页添加供应商和模型。");
+        var provider=new Picker{Title="供应商",ItemsSource=session.Providers.Providers.ToArray(),ItemDisplayBinding=new Binding("Label"),AutomationId="AiChatProvider"};
+        var model=new Picker{Title="模型",ItemDisplayBinding=new Binding("Label"),AutomationId="AiChatModel"};
+        void Update(){var p=provider.SelectedItem as AiProviderProfile;model.ItemsSource=p?.Models.ToArray();model.SelectedItem=p?.Models.FirstOrDefault(m=>m.Id==(p.Id==session.Settings.ProviderId?session.Settings.ModelProfileId:p.SelectedModelId))??p?.Models.FirstOrDefault();}
+        provider.SelectedIndexChanged+=(_,_)=>Update();provider.SelectedItem=session.Providers.Find(session.Settings.ProviderId)??session.Providers.Providers.FirstOrDefault();Update();
+        var body=new VerticalStackLayout{Spacing=12};body.Add(provider);body.Add(model);body.Add(new Label{Text="仅切换配置，不发送资料；下次发送仍需审查接收方与历史。"});
+        if(await Review("选择供应商与模型",body,"切换")==AiReviewChoice.Send)
+        {
+            if(provider.SelectedItem is not AiProviderProfile p||model.SelectedItem is not AiModelProfile m)throw new AiAnalysisException("请选择有效供应商和模型。");
+            await session.SelectModelAsync(p.Id,m.Id);
+        }
+    }
     private void Render()
     {
         if(rendering)return;rendering=true;
         try
         {
             var s=state.Session;title.Text=s.Title;status.Text=state.Status+" "+s.StorageNotice;
-            contextLabel.Text=(string.IsNullOrWhiteSpace(s.Settings.Model)?"请在设置页配置模型":s.Settings.Model)+" · "+(s.Context is {} c?$"{c.Evidence.Count} 项游戏证据" :"普通聊天");
+            contextLabel.Text=(s.SelectionMissing?"原配置已删除，请重新选择":string.IsNullOrWhiteSpace(s.Settings.Model)?"请在设置页配置模型":s.ProviderName+" · "+s.Settings.Model)+" · "+(s.Context is {} c?$"{c.Evidence.Count} 项游戏证据" :"普通聊天");
             file.IsEnabled=data.IsEnabled=send.IsEnabled=!state.IsBusy;stop.IsEnabled=state.IsBusy;
             string key=s.ConversationId+":"+string.Join(',',s.Turns.Select(x=>x.Id));
             if(key!=renderKey)
@@ -67,7 +83,7 @@ public sealed class AiAnalysisPage : ContentPage
                     var card=new VerticalStackLayout{Spacing=6,Padding=10};card.Add(new Label{Text="你 · "+turn.CreatedAt.ToLocalTime().ToString("MM-dd HH:mm"),FontAttributes=FontAttributes.Bold});card.Add(new Label{Text=turn.Question});
                     foreach(var saved in turn.Attachments)card.Add(Button("附件 · "+saved.Label,()=>ViewAttachment(saved)));
                     var buttons=new HorizontalStackLayout{Spacing=6};buttons.Add(Button("复制问题",()=>Clipboard.Default.SetTextAsync(turn.Question)));buttons.Add(Button("编辑/重试",async()=>{composer.Text=await s.ForkFromAsync(turn.Id);renderKey="";Render();}));card.Add(buttons);
-                    card.Add(new Label{Text="助手 · "+turn.Model,FontAttributes=FontAttributes.Bold});var answer=new VerticalStackLayout{Spacing=6};card.Add(answer);var info=new Label{FontSize=11};card.Add(info);card.Add(Button("复制回答",()=>Clipboard.Default.SetTextAsync(turn.Answer)));
+                    card.Add(new Label{Text="助手 · "+turn.ModelLabel,FontAttributes=FontAttributes.Bold});var answer=new VerticalStackLayout{Spacing=6};card.Add(answer);var info=new Label{FontSize=11};card.Add(info);card.Add(Button("复制回答",()=>Clipboard.Default.SetTextAsync(turn.Answer)));
                     bubbles[turn.Id]=(answer,info,"");messages.Add(new Border{Padding=0,Content=card,StrokeShape=new Microsoft.Maui.Controls.Shapes.RoundRectangle{CornerRadius=8}});
                 }
             }

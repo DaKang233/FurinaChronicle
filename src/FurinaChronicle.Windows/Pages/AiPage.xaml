@@ -16,7 +16,7 @@
   <Grid Grid.Column="1" RowSpacing="8">
    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-    <StackPanel><TextBlock x:Name="TitleText" FontSize="24" FontWeight="SemiBold"/><TextBlock x:Name="ModelText" Opacity="0.7"/></StackPanel>
+    <StackPanel><TextBlock x:Name="TitleText" FontSize="24" FontWeight="SemiBold"/><StackPanel Orientation="Horizontal" Spacing="8"><TextBlock x:Name="ModelText" Opacity="0.7" VerticalAlignment="Center"/><Button x:Name="ModelButton" Content="切换模型" Click="OnModel" AutomationProperties.AutomationId="AiSwitchModel"/></StackPanel></StackPanel>
     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
      <Button Content="重命名" Click="OnRename"/><Button Content="置顶/取消" Click="OnPin"/><Button Content="删除" Click="OnDelete"/><Button Content="设置" Click="OnSettings" AutomationProperties.AutomationId="AiOpenSettings"/>
     </StackPanel>
