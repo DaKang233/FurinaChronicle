@@ -29,3 +29,5 @@
 - [0025：匿名化遥测与用户主动上传](0025-anonymous-telemetry-and-user-upload.md)
 - [0026：挑战详情兼容](0026-spiral-abyss-battle-details.md)
 - [0027：只读 AI 分析与去标识化发送](0027-read-only-ai-analysis.md)
+
+- [0028：本地 AI 聊天、附件及设置页](0028-local-ai-chat-and-attachments.md)

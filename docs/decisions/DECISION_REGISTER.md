@@ -47,3 +47,5 @@
 当前工作包契约和后期服务决策集中记录在 [OPEN_QUESTIONS.md](../project/OPEN_QUESTIONS.md)，按实施时点闭合，不得由 Agent 静默改变语义。D19、D20 的核心决定及既有产品行为继续 Accepted；D21 收敛依赖关系，不冻结 Chronicle Draft 的字段或未来同步协议。
 
 AI 首版只读、去标识化、逐次发送确认与设备安全配置见 [ADR 0027](0027-read-only-ai-analysis.md)，由维护者 2026-11-21 实施请求授权。
+
+本地聊天和附件、设置页配置由 [ADR 0028](0028-local-ai-chat-and-attachments.md) 扩展，替代 ADR 0027 的临时会话限制。
