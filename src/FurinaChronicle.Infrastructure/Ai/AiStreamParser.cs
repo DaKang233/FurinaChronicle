@@ -139,7 +139,7 @@ internal sealed class AiStreamParser(AiProtocol protocol, IReadOnlyList<AiToolDe
                 if (root.GetProperty("delta").TryGetProperty("stop_reason", out var stop) && stop.ValueKind == JsonValueKind.String)
                 {
                     string? reason = stop.GetString();
-                    
+
                     if (reason is not ("end_turn" or "stop_sequence" or "max_tokens" or "model_context_window_exceeded" or "refusal" or "tool_use"))
                         throw new AiAnalysisException("模型返回了不支持的终止原因。");
                     anthropicStopReason = true; expectsCalls |= reason == "tool_use"; Truncated |= reason is "max_tokens" or "model_context_window_exceeded" or "refusal";
