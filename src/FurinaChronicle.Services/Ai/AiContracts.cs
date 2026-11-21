@@ -9,7 +9,22 @@ using System.Text.Unicode;
 
 namespace FurinaChronicle.Services.Ai;
 
-public enum AiProtocol { OpenAiCompatible, Ollama }
+// These persisted values and names also participate in existing device-secret slots.
+public enum AiProtocol { OpenAiCompatible = 0, Ollama = 1, OpenAiResponses = 2, AnthropicMessages = 3 }
+public sealed record AiProtocolChoice(AiProtocol Value, string Label);
+public static class AiProtocols
+{
+    public static string Label(AiProtocol protocol) => Choices(protocol).First(c=>c.Value==protocol).Label;
+    public static string ChatPath(AiProtocol protocol) => protocol switch
+    {
+        AiProtocol.OpenAiCompatible=>"chat/completions", AiProtocol.OpenAiResponses=>"responses",
+        AiProtocol.AnthropicMessages=>"messages", AiProtocol.Ollama=>"api/chat",
+        _=>throw new AiAnalysisException("不支持此模型协议。")
+    };
+    public static IReadOnlyList<AiProtocolChoice> Choices(AiProtocol existing) => existing == AiProtocol.Ollama
+        ? [new(AiProtocol.OpenAiCompatible, "OpenAI Chat Completions"), new(AiProtocol.OpenAiResponses, "OpenAI Responses"), new(AiProtocol.AnthropicMessages, "Anthropic Messages"), new(AiProtocol.Ollama, "Ollama（旧配置）")]
+        : [new(AiProtocol.OpenAiCompatible, "OpenAI Chat Completions"), new(AiProtocol.OpenAiResponses, "OpenAI Responses"), new(AiProtocol.AnthropicMessages, "Anthropic Messages")];
+}
 
 public sealed record AiServiceSettings(
     AiProtocol Protocol = AiProtocol.OpenAiCompatible,
@@ -58,13 +73,15 @@ public sealed record AiServiceSettings(
 }
 
 public sealed class AiAnalysisException(string message) : Exception(message);
-public sealed record AiMessage(string Role, string Content, IReadOnlyList<AiImage>? Images = null);
-public sealed record AiChatDelta(string Text = "", bool Done = false, bool Truncated = false);
+public sealed record AiMessage(string Role, string Content, IReadOnlyList<AiImage>? Images = null, IReadOnlyList<AiToolCall>? ToolCalls = null, string? ToolCallId = null, IReadOnlyList<AiModelContinuation>? Continuation = null);
+public sealed record AiChatDelta(string Text = "", bool Done = false, bool Truncated = false, AiToolCall? ToolCall = null, AiModelContinuation? Continuation = null);
 
 // Deliberately not a record: secrets must never appear in generated ToString output.
-public sealed class AiChatRequest(AiServiceSettings settings, IReadOnlyList<AiMessage> messages, string? apiKey)
+public sealed class AiChatRequest(AiServiceSettings settings, IReadOnlyList<AiMessage> messages, string? apiKey, IReadOnlyList<AiToolDefinition>? tools = null, bool disableTools = false)
 {
     public AiServiceSettings Settings { get; } = settings;
+    public IReadOnlyList<AiToolDefinition> Tools { get; } = tools ?? [];
+    public bool DisableTools { get; } = disableTools;
     public IReadOnlyList<AiMessage> Messages { get; } = messages;
     [JsonIgnore] public string? ApiKey { get; } = apiKey;
     public override string ToString() => "AI chat request (credentials omitted)";

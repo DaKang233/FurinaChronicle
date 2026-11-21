@@ -35,7 +35,7 @@ public sealed class JsonAiConfigurationStore(string filePath, IAiSecretStore sec
             using var document = JsonDocument.Parse(text);
             if (document.RootElement.TryGetProperty("version", out var version))
             {
-                if (version.GetInt32() != 2) throw new AiAnalysisException("此 AI 配置版本不受支持，已保留原文件。");
+                if (version.GetInt32() is not (2 or 3)) throw new AiAnalysisException("此 AI 配置版本不受支持，已保留原文件。");
                 var envelope = JsonSerializer.Deserialize<Envelope>(text, AiJson.Options)
                     ?? throw new AiAnalysisException("AI 配置无效。");
                 Validate(envelope.Configuration);
@@ -67,6 +67,7 @@ public sealed class JsonAiConfigurationStore(string filePath, IAiSecretStore sec
             c.Providers.Select(p => p.Id).Distinct().Count() != c.Providers.Count ||
             (c.SelectedProviderId is not null && c.Find(c.SelectedProviderId) is null))
             throw new AiAnalysisException("AI 供应商列表无效。");
+        c.Preferences.Validate();
         foreach (var p in c.Providers) p.Validate();
     }
     private async Task WriteLockedAsync(AiProviderConfiguration configuration, CancellationToken token)
@@ -76,7 +77,7 @@ public sealed class JsonAiConfigurationStore(string filePath, IAiSecretStore sec
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(filePath))!);
-            string json = JsonSerializer.Serialize(new Envelope(2, configuration), AiJson.Options);
+            string json = JsonSerializer.Serialize(new Envelope(3, configuration), AiJson.Options);
             if (Encoding.UTF8.GetByteCount(json) > 2 * 1024 * 1024) throw new AiAnalysisException("AI 配置超过本机大小限制。");
             await File.WriteAllTextAsync(temporary, json, token);
             token.ThrowIfCancellationRequested();
@@ -95,7 +96,7 @@ public sealed class JsonAiConfigurationStore(string filePath, IAiSecretStore sec
             var current = await ReadLockedAsync(token);
             var profiles = current.Find(provider.Id) is null ? current.Providers.Append(provider).ToArray()
                 : current.Providers.Select(p => p.Id == provider.Id ? provider : p).ToArray();
-            var next = new AiProviderConfiguration(current.SelectedProviderId ?? provider.Id, profiles);
+            var next = new AiProviderConfiguration(current.SelectedProviderId ?? provider.Id, profiles, current.ChatPreferences);
             var target = new AiServiceSettings(provider.Protocol, provider.BaseAddress, ProviderId: provider.Id);
             string slot = Slot(target);
             string? oldKey = null;
@@ -118,7 +119,7 @@ public sealed class JsonAiConfigurationStore(string filePath, IAiSecretStore sec
             var current = await ReadLockedAsync(token);
             var profile = current.Find(id) ?? throw new AiAnalysisException("供应商已不存在。");
             await WriteLockedAsync(new(current.SelectedProviderId == id ? null : current.SelectedProviderId,
-                current.Providers.Where(p => p.Id != id).ToArray()), token);
+                current.Providers.Where(p => p.Id != id).ToArray(), current.ChatPreferences), token);
             await RemoveOrphanKeyAsync(Slot(new(profile.Protocol, profile.BaseAddress, ProviderId: id)));
         }
         finally { gate.Release(); }
@@ -137,8 +138,14 @@ public sealed class JsonAiConfigurationStore(string filePath, IAiSecretStore sec
             var current = await ReadLockedAsync(token);
             var profile = current.Find(providerId) ?? throw new AiAnalysisException("供应商已不存在，请重新选择。");
             profile.Resolve(modelId).Validate();
-            await WriteLockedAsync(new(providerId, current.Providers.Select(p => p.Id == providerId ? p with { SelectedModelId = modelId } : p).ToArray()), token);
+            await WriteLockedAsync(new(providerId, current.Providers.Select(p => p.Id == providerId ? p with { SelectedModelId = modelId } : p).ToArray(), current.ChatPreferences), token);
         }
+        finally { gate.Release(); }
+    }
+    public async Task SavePreferencesAsync(AiChatPreferences preferences, CancellationToken token = default)
+    {
+        preferences.Validate(); await gate.WaitAsync(token);
+        try { var current = await ReadLockedAsync(token); await WriteLockedAsync(current with { ChatPreferences = preferences }, token); }
         finally { gate.Release(); }
     }
     public async Task SaveAsync(AiServiceSettings settings, CancellationToken cancellationToken = default)

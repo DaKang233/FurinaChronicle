@@ -41,8 +41,10 @@ public sealed record AiProviderProfile(Guid Id, string Name, AiProtocol Protocol
     }
 }
 
-public sealed record AiProviderConfiguration(Guid? SelectedProviderId, IReadOnlyList<AiProviderProfile> Providers)
+public sealed record AiProviderConfiguration(Guid? SelectedProviderId, IReadOnlyList<AiProviderProfile> Providers, AiChatPreferences? ChatPreferences = null)
 {
+    [System.Text.Json.Serialization.JsonIgnore]
+    public AiChatPreferences Preferences => ChatPreferences ?? new();
     [System.Text.Json.Serialization.JsonIgnore]
     public AiServiceSettings Current => Providers.FirstOrDefault(p => p.Id == SelectedProviderId) is { } provider && provider.SelectedModelId is not null
         ? provider.Resolve() : new();
@@ -55,4 +57,5 @@ public interface IAiProviderConfigurationStore : IAiConfigurationStore
     Task SaveProviderAsync(AiProviderProfile provider, string? key = null, bool clearKey = false, CancellationToken token = default);
     Task DeleteProviderAsync(Guid id, CancellationToken token = default);
     Task SelectAsync(Guid providerId, Guid modelId, CancellationToken token = default);
+    Task SavePreferencesAsync(AiChatPreferences preferences, CancellationToken token = default);
 }

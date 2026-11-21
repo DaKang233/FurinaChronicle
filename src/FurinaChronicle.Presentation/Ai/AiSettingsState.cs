@@ -19,6 +19,8 @@ public sealed class AiSettingsState(IAiConfigurationStore configuration, IAiChat
         if ((Catalog.Find(Catalog.SelectedProviderId) ?? Catalog.Providers.FirstOrDefault()) is { } first) EditProvider(first.Id);
         else NewProvider();
     }
+    public async Task SavePreferencesAsync(AiChatPreferences preferences, CancellationToken token = default)
+    { preferences.Validate(); await Store.SavePreferencesAsync(preferences, token); Catalog = await Store.LoadProvidersAsync(token); }
     public void EditProvider(Guid id)
     {
         EditingProvider = Catalog.Find(id) ?? throw new AiAnalysisException("供应商已不存在。");

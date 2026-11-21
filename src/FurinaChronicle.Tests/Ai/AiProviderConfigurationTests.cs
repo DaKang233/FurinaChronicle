@@ -47,7 +47,7 @@ public sealed class AiProviderConfigurationTests
         Assert.Equal(legacy,current with {ProviderId=null,ModelProfileId=null});Assert.NotNull(current.ProviderId);
         Assert.Equal("synthetic-legacy-key",await env.Store.GetApiKeyAsync(current));Assert.Null(await env.Keys.GetAsync(slot));
         var again=await env.Store.LoadProvidersAsync();Assert.Single(again.Providers);Assert.Equal(current,again.Current);
-        Assert.Equal(2,JsonDocument.Parse(await File.ReadAllTextAsync(env.File)).RootElement.GetProperty("version").GetInt32());
+        Assert.Equal(3,JsonDocument.Parse(await File.ReadAllTextAsync(env.File)).RootElement.GetProperty("version").GetInt32());
     }
     [Fact]
     public async Task CanceledMigrationKeepsOriginalFileAndOriginalKey()
