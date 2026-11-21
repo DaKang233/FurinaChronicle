@@ -72,7 +72,7 @@ public sealed class AiAnalysisPage : ContentPage
             var s=state.Session;title.Text=s.Title;status.Text=state.Status+" "+s.StorageNotice;
             contextLabel.Text=(s.SelectionMissing?"原配置已删除，请重新选择":string.IsNullOrWhiteSpace(s.Settings.Model)?"请在设置页配置模型":s.ProviderName+" · "+s.Settings.Model)+" · "+(s.Context is {} c?$"{c.Evidence.Count} 项游戏证据" :"普通聊天");
             file.IsEnabled=data.IsEnabled=send.IsEnabled=!state.IsBusy;stop.IsEnabled=state.IsBusy;
-            string key=s.ConversationId+":"+string.Join(',',s.Turns.Select(x=>x.Id));
+            string key=s.Preferences.UserDisplayName+":"+s.ConversationId+":"+string.Join(',',s.Turns.Select(x=>x.Id));
             if(key!=renderKey)
             {
                 if(renderedId!=s.ConversationId){renderedId=s.ConversationId;visible=30;composer.Text=s.DraftText;follow=true;}
@@ -80,7 +80,7 @@ public sealed class AiAnalysisPage : ContentPage
                 if(s.Turns.Count>visible)messages.Add(Button("加载更早消息",()=>{visible+=30;renderKey="";Render();return Task.CompletedTask;}));
                 foreach(var turn in s.Turns.TakeLast(visible))
                 {
-                    var card=new VerticalStackLayout{Spacing=6,Padding=10};card.Add(new Label{Text="你 · "+turn.CreatedAt.ToLocalTime().ToString("MM-dd HH:mm"),FontAttributes=FontAttributes.Bold});card.Add(new Label{Text=turn.Question});
+                    var card=new VerticalStackLayout{Spacing=6,Padding=10};card.Add(new Label{Text=s.Preferences.UserDisplayName+" · "+turn.CreatedAt.ToLocalTime().ToString("MM-dd HH:mm"),FontAttributes=FontAttributes.Bold});card.Add(new Label{Text=turn.Question});
                     foreach(var saved in turn.Attachments)card.Add(Button("附件 · "+saved.Label,()=>ViewAttachment(saved)));
                     var buttons=new HorizontalStackLayout{Spacing=6};buttons.Add(Button("复制问题",()=>Clipboard.Default.SetTextAsync(turn.Question)));buttons.Add(Button("编辑/重试",async()=>{composer.Text=await s.ForkFromAsync(turn.Id);renderKey="";Render();}));card.Add(buttons);
                     card.Add(new Label{Text="助手 · "+turn.ModelLabel,FontAttributes=FontAttributes.Bold});var answer=new VerticalStackLayout{Spacing=6};card.Add(answer);var info=new Label{FontSize=11};card.Add(info);card.Add(Button("复制回答",()=>Clipboard.Default.SetTextAsync(turn.Answer)));
@@ -167,8 +167,8 @@ public sealed class AiAnalysisPage : ContentPage
         for(int attempt=0;attempt<2;attempt++)
         {
             var draft=state.CreateDraft(composer.Text??"");var body=new VerticalStackLayout{Spacing=6};
-            body.Add(new Label{Text=$"接收方：{draft.Settings.Endpoint}\n模型：{draft.Settings.Model}\n本次省略旧轮数 {draft.OmittedTurns}（本地仍保留）。"+(draft.IncludesUids?"\n此次携带档案 UID，须明确同意。":"\n游戏资料不发送 UID。")});
-            foreach(var image in draft.Attachments.Where(x=>x.IsImage))body.Add(new Image{Source=ImageSource.FromStream(()=>new MemoryStream(Convert.FromBase64String(image.ImageBase64!))),HeightRequest=140});body.Add(TextView(draft.Preview));
+            body.Add(new Label{Text=$"接收方：{new Uri(draft.Settings.Endpoint,AiProtocols.ChatPath(draft.Settings.Protocol))}\n接口：{AiProtocols.Label(draft.Settings.Protocol)}\n模型：{draft.Settings.Model}\n本次省略旧轮数 {draft.OmittedTurns}（本地仍保留）。"+(draft.IncludesUids?"\n此次携带档案 UID，须明确同意。":"\n游戏资料不发送 UID。")});
+            foreach(var image in draft.Attachments.Where(x=>x.IsImage))body.Add(new Image{Source=ImageSource.FromStream(()=>new MemoryStream(Convert.FromBase64String(image.ImageBase64!))),HeightRequest=140});body.Add(new Label{Text=draft.Tools.Count>0?$"本轮允许查询已附加的本地档案证据/统计，最多 {draft.Preferences.MaxToolCalls} 次；结果发送给上述服务。":"本轮不启用工具调用。"});body.Add(TextView(draft.Preview));
             var choice=await Review("确认本次发送",body,draft.IncludesUids?"同意携带 UID 并发送":"确认发送",draft.IncludesUids?"改用编号":null);
             if(choice==AiReviewChoice.Anonymous){await state.Session.UseAnonymousContextAsync();continue;}
             if(choice==AiReviewChoice.Send){follow=true;await state.GenerateAsync(draft,true,draft.IncludesUids);composer.Text=state.Session.DraftText;}return;

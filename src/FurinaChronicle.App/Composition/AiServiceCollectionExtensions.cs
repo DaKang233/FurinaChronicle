@@ -23,7 +23,7 @@ internal static class AiServiceCollectionExtensions
         services.AddSingleton<IAiConversationCopyCoordinator>(sp => (IAiConversationCopyCoordinator)sp.GetRequiredService<IAiConversationStore>());
         services.AddTransient<AiAttachmentReader>(); services.AddTransient<AiSettingsState>();
         services.AddSingleton<IAiChatClient>(_ => new HttpAiChatClient());
-        services.AddTransient<BuildAiContext>(); services.AddTransient<ReadAiEvidence>(); services.AddTransient<AiAnalysisSession>();
+        services.AddTransient<BuildAiContext>(); services.AddTransient<ReadAiEvidence>(); services.AddTransient<IAiReadOnlyToolRunner, AiArchiveToolRunner>(); services.AddTransient<AiAnalysisSession>();
         services.AddTransient<AiWorkspaceState>(); services.AddSingleton<AiAnalysisPage>();
         return services;
     }

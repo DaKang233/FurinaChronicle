@@ -32,7 +32,7 @@ internal static class WindowsAiComposition
             sp.GetRequiredService<BuildGachaAnalytics>(), sp.GetRequiredService<FurinaChronicle.Services.HistoryDomains.IArchiveDomainHistoryStore>(),
             sp.GetService<IDomainMetadataService>() ?? NullDomainMetadataService.Instance,
             sp.GetRequiredService<FurinaChronicle.Services.Chronicle.IChronicleQueryService>()));
-        services.AddTransient<AiAnalysisSession>(); services.AddTransient<ReadAiEvidence>(); services.AddTransient<AiWorkspaceState>();
+        services.AddTransient<IAiReadOnlyToolRunner, AiArchiveToolRunner>(); services.AddTransient<AiAnalysisSession>(); services.AddTransient<ReadAiEvidence>(); services.AddTransient<AiWorkspaceState>();
     }
     private sealed class EmptyMetadata : IGachaItemMetadataProvider
     {

@@ -77,7 +77,7 @@ public sealed partial class AiPage : UserControl
             ContextText.Text=s.Context is {} c?$"已附加 {c.Evidence.Count} 项游戏证据 · "+(c.IncludesUids?"档案 UID 每次发送须确认":"不发送 UID"):"普通聊天 · 未附加档案数据";
             string chatKey=SearchInput.Text+string.Join("|",s.Conversations.Select(x=>$"{x.Id}:{x.Title}:{x.Pinned}:{x.Turns}"));
             if(chatKey!=renderedChats){renderedChats=chatKey;ChatList.ItemsSource=s.Conversations.Where(x=>x.Label.Contains(SearchInput.Text,StringComparison.OrdinalIgnoreCase)).ToArray();ChatList.SelectedItem=s.Conversations.FirstOrDefault(x=>x.Id==s.ConversationId);}
-            string key=s.ConversationId+":"+string.Join(',',s.Turns.Select(x=>x.Id));
+            string key=s.Preferences.UserDisplayName+":"+s.ConversationId+":"+string.Join(',',s.Turns.Select(x=>x.Id));
             if(key!=renderedTurns)
             {
                 if(renderedId!=s.ConversationId){visible=40;renderedId=s.ConversationId;QuestionInput.Text=s.DraftText;follow=true;}
@@ -85,7 +85,7 @@ public sealed partial class AiPage : UserControl
                 if(s.Turns.Count>visible)MessagesPanel.Children.Add(Button("加载更早消息",()=>{visible+=40;renderedTurns="";Render();return Task.CompletedTask;}));
                 foreach(var turn in s.Turns.TakeLast(visible))
                 {
-                    var card=new StackPanel{Spacing=8};card.Children.Add(new TextBlock{Text="你 · "+turn.CreatedAt.ToLocalTime().ToString("MM-dd HH:mm"),FontWeight=FontWeights.SemiBold});
+                    var card=new StackPanel{Spacing=8};card.Children.Add(new TextBlock{Text=s.Preferences.UserDisplayName+" · "+turn.CreatedAt.ToLocalTime().ToString("MM-dd HH:mm"),FontWeight=FontWeights.SemiBold});
                     card.Children.Add(new TextBlock{Text=turn.Question,TextWrapping=TextWrapping.Wrap,IsTextSelectionEnabled=true});
                     foreach(var file in turn.Attachments){var saved=file;card.Children.Add(Button("附件 · "+file.Label,()=>OpenAttachment(saved)));}
                     var actions=new StackPanel{Orientation=Orientation.Horizontal,Spacing=8};
@@ -172,9 +172,10 @@ public sealed partial class AiPage : UserControl
         for(int attempt=0;attempt<2;attempt++)
         {
             var draft=state.CreateDraft(QuestionInput.Text);var body=new StackPanel{Spacing=8};
-            body.Children.Add(new TextBlock{Text=$"接收方：{draft.Settings.Endpoint}\n模型：{draft.Settings.Model}\n本次省略旧轮数：{draft.OmittedTurns}（仍保存在本地）。"+(draft.IncludesUids?"\n此次包含整个档案 UID，必须明确同意。":"\n此次游戏资料不包含 UID。"),TextWrapping=TextWrapping.Wrap});
+            body.Children.Add(new TextBlock{Text=$"接收方：{new Uri(draft.Settings.Endpoint,AiProtocols.ChatPath(draft.Settings.Protocol))}\n接口：{AiProtocols.Label(draft.Settings.Protocol)}\n模型：{draft.Settings.Model}\n本次省略旧轮数：{draft.OmittedTurns}（仍保存在本地）。"+(draft.IncludesUids?"\n此次包含整个档案 UID，必须明确同意。":"\n此次游戏资料不包含 UID。"),TextWrapping=TextWrapping.Wrap});
             foreach(var file in draft.Attachments.Where(x=>x.IsImage))
             {using var stream=new MemoryStream(Convert.FromBase64String(file.ImageBase64!));var bitmap=new BitmapImage{DecodePixelHeight=180};await bitmap.SetSourceAsync(stream.AsRandomAccessStream());body.Children.Add(new Image{Source=bitmap,MaxHeight=140,Stretch=Stretch.Uniform});}
+            body.Children.Add(new TextBlock{Text=draft.Tools.Count>0?$"本轮允许查询已附加的本地档案证据/统计，最多 {draft.Preferences.MaxToolCalls} 次；结果会发送给上述服务。":"本轮不启用工具调用。",TextWrapping=TextWrapping.Wrap});
             body.Children.Add(Preview(draft.Preview));
             var dialog=new ContentDialog{XamlRoot=XamlRoot,Title="确认本次发送",Content=new ScrollViewer{Content=body,MaxHeight=540},PrimaryButtonText=draft.IncludesUids?"同意携带 UID 并发送":"确认发送",SecondaryButtonText=draft.IncludesUids?"改用编号":"",CloseButtonText="取消",DefaultButton=ContentDialogButton.Close};AutomationProperties.SetAutomationId(dialog,"AiSendReview");
             var result=await dialog.ShowAsync();
