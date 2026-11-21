@@ -1,5 +1,7 @@
 # AI 分析首版验收与交接
 
+> 历史记录：当前已由 ADR 0028 扩展为本地聊天，新的页面/存储/附件验收见 [本地聊天验收](AI_LOCAL_CHAT_ACCEPTANCE.md)。本文中的临时会话行为不再代表当前实现。
+
 2026-11-21。基线：`master` / `697b07a`，Schema 12，版本配置 `0.10.0 / Phase 10.0`；AI 规则按维护者本轮授权和 [ADR 0027](../decisions/0027-read-only-ai-analysis.md)。实际功能及字段边界见 [AI 架构](../architecture/AI_ANALYSIS.md)。
 
 ## 自动化与运行证据
