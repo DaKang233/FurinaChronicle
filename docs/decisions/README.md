@@ -37,3 +37,5 @@
 三种 AI 服务协议及旧配置兼容见 [ADR 0030](0030-ai-chat-responses-and-messages.md)。
 
 AI 全局提示词、称呼及受限本地只读工具见 [ADR 0031](0031-ai-chat-preferences-and-read-only-tools.md)。
+
+- [0032：官方 API 成功记录完整度与全字段解析](0032-official-api-record-completeness.md)

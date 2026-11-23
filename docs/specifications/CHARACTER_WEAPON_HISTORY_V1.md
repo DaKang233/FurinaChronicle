@@ -11,6 +11,8 @@
 
 ## 完整度
 
+所有新官方 API 成功采集记录按 [ADR 0032](../decisions/0032-official-api-record-completeness.md) 声明 Complete，成功须覆盖响应全部字段。下列集合与条目范围继续适用：已装备武器响应不等于完整武器仓库。当前有限字段 Response 和装备汇总尚未完成新契约适配，不能仅把集合 Partial 改成 Complete 来冒充覆盖；见 [实施差距](../development/OFFICIAL_API_FIELD_COVERAGE.md)。
+
 观察头声明项目种类和集合覆盖：`Complete` 表示该来源在该次观察声明的角色或武器集合已全部枚举；`Partial` 表示只覆盖已列项目；`Unknown` 表示无法证明集合边界。
 
 每个条目另行声明字段集合。条目 `Complete` 只表示所声明的等级／命座或等级／精炼／数量字段均由来源提供。未知字段使用空值，不编码为零。任何低层完整度都不提升为账号仓库、账号历史或档案完整。

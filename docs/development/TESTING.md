@@ -116,3 +116,15 @@ AI 定向测试与人工/服务验收见 [AI 接入验收](AI_ANALYSIS_ACCEPTANC
 ## 官方挑战单次完整度
 
 依据 2026-11-23 更新的 ADR 0017，三类挑战的新官方采集均声明单次响应范围的 Complete。覆盖本期／上期、深渊楼层、概要结果和仅联机结果；失败不新增观察，缺失发生时间不补造，Complete 不作为通关／满星证据。须验证旧 Partial／Unknown 官方观察在重开数据库后原样保留，新刷新形成独立 Complete 观察且再次刷新 NoOp；文件导入／Portable／Archive 不重标来源完整度。具体测试位于 `ChallengeCollectionCompletenessTests.cs`、两类 `*CollectionTests` 和 `RecentChallengeResponseTests`。
+
+## 官方 API 全字段成功门槛
+
+[ADR 0032](../decisions/0032-official-api-record-completeness.md) 是所有领域的新验收要求，不代表现有 Reader 已完成：
+
+- 每个正式接口维护包含所有嵌套字段、数组及可选分支的来源字段清单；覆盖传输／业务状态、分页与域事实的不同去向。
+- 测试未知顶层与嵌套字段、类型变化、缺失与 null、空数组、合法零值、未知枚举、截断、重复身份及非法必要值；不能因默认忽略未知字段仍标成功。
+- 成功记录 Complete；未能完成全字段解析／校验则不提交完整成功，也不留下原子批次的部分新事实。没有数据与失败分开。
+- 验证 Response → 领域 → Repository 重开后的支持字段保真，以及适用 Portable／Archive 往返、版本门槛与缺失字段不补默认值。安全／控制字段明确分类，秘密不进入普通事实或输出。
+- 证明单条／单页／装备范围的 Complete 不提升为全仓库、所有分页或历年历史完整；保留旧不可变观察的完整度／指纹。真实来源样例须去敏，不用合成最小样例代替全部字段覆盖证据。
+
+当前静态核查结果与未完成项见 [字段覆盖实施差距](OFFICIAL_API_FIELD_COVERAGE.md)。本次为准则固化，没有运行新的代码或设备验收。

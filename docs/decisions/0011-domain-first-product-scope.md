@@ -31,7 +31,7 @@
 - 当前业务实现、路线图和验收范围以原神为主；共享身份必须保留游戏区分，可移植数据应能声明所属游戏，领域接口不得无必要地依赖原神显示名称或平台 DTO。
 - 未来游戏按照实际需求逐步接入。只有在已有实现和真实接入需求证明语义相同时，才复用或扩展为共享领域基础；不得为了假设性的兼容性预先统一角色、装备、挑战、背包或资源等全部领域模型。
 - 首个潜在扩展为《崩坏：星穹铁道》，预计优先复用 UIGF 接入抽卡记录。该方向表示优先复用标准 Codec、导入导出管线和通用抽卡基础，不表示当前 Phase 已承诺星穹铁道 UI、账号 Provider、其他数据域或交付时间。
-- `Confidence` 使用 `Confirmed / High / Medium / Low / Unknown`，`Completeness` 使用 `Complete / Partial / Unknown`。完整度枚举共享，但其声明范围由每个领域或数据类型定义；低层级 `Complete` 不得推导更高层级完整性。
+- `Confidence` 使用 `Confirmed / High / Medium / Low / Unknown`，`Completeness` 使用 `Complete / Partial / Unknown`。完整度枚举共享，但其声明范围由每个领域或数据类型定义；低层级 `Complete` 不得推导更高层级完整性。2026-11-23 的 [ADR 0032](0032-official-api-record-completeness.md) 进一步规定所有领域官方 API 成功采集记录一律为 Complete，并将全字段解析、校验与安全承载作为成功前提。
 
 ## 原因
 
