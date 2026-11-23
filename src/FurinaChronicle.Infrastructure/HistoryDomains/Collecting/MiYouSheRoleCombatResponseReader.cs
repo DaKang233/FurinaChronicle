@@ -231,7 +231,7 @@ public sealed class MiYouSheRoleCombatResponseReader(TimeProvider timeProvider)
                 schedule.ScheduleId.Value.ToString(CultureInfo.InvariantCulture),
                 ReadUnixTime(schedule.StartTime),
                 ReadUnixTime(schedule.EndTime),
-                DataCompleteness.Partial,
+                DataCompleteness.Complete,
                 stages,
                 entry.Stat?.DifficultyId,
                 entry.Stat?.MedalNum,

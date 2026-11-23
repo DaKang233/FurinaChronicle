@@ -52,7 +52,7 @@ public sealed partial class ChallengeModeCollectionTests
         Assert.Equal("闲云", Assert.Single(detailed.Participants).Name);
         Assert.Equal(["元素战技强化"], detailed.Buffs);
         Assert.Equal("深渊法师", Assert.Single(detailed.Enemies).Name);
-        Assert.Equal(DataCompleteness.Partial, observation.Completeness);
+        Assert.Equal(DataCompleteness.Complete, observation.Completeness);
         Assert.Equal(DataOrigin.OfficialApi, observation.Provenance.Origin);
         Assert.Equal("miyoushe", observation.Provenance.Source?.Provider);
     }
@@ -81,6 +81,7 @@ public sealed partial class ChallengeModeCollectionTests
         Assert.Contains(history, item => item.TheaterStatistics?.CoinCount == 1251);
         Assert.All(history, item =>
         {
+            Assert.Equal(DataCompleteness.Complete, item.Completeness);
             Assert.Equal(90761, item.TheaterStatistics!.TotalUseTime);
             Assert.Equal("3000000000", item.TheaterStatistics.MaxDamage!.Value);
             Assert.Equal(ChallengeParticipantOrigin.Support, item.TheaterStatistics.BackupAvatars[2].Origin);
@@ -105,6 +106,7 @@ public sealed partial class ChallengeModeCollectionTests
         var observation = Assert.Single(
             await context.AtomicGacha.GetChallengeObservationsAsync(
                 target.Id, ChallengeMode.StygianOnslaught));
+        Assert.Equal(DataCompleteness.Complete, observation.Completeness);
         Assert.Equal("5", observation.SeasonId);
         Assert.Equal(6, observation.Difficulty);
         Assert.Null(observation.MedalCount);

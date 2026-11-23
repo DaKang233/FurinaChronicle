@@ -168,7 +168,7 @@ public sealed class CollectSpiralAbyss(
             observations.Add(new ChallengeObservation(
                 ChallengeObservationId.New(), gameAccountId, ChallengeMode.SpiralAbyss,
                 snapshot.SeasonId, snapshot.PeriodStart, snapshot.PeriodEnd,
-                DataCompleteness.Partial, snapshot.Floors,
+                DataCompleteness.Complete, snapshot.Floors,
                 new RecordProvenance(DataOrigin.OfficialApi,
                     new RecordTimestamps(ObservedAt: snapshot.FetchedAt, FetchedAt: snapshot.FetchedAt),
                     new DataSourceReference(provider: isOversea ? "hoyolab" : "miyoushe"), batch),

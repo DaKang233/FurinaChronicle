@@ -34,7 +34,7 @@ public sealed class StygianDetailsTests
         Assert.Equal(6_000_000_000, single.StygianDetails.BestAvatars[1].Value);
         Assert.Equal(9_000_000_000, multiplayer.StygianDetails!.BestAvatars[0].Value);
         Assert.Equal(new bool?[] { true, false, null }, snapshot.StygianStatistics.BlingAvatars.Select(avatar => avatar.IsPlus));
-        Assert.Equal(DataCompleteness.Partial, snapshot.Completeness);
+        Assert.Equal(DataCompleteness.Complete, snapshot.Completeness);
     }
 
     [Fact]
@@ -44,6 +44,7 @@ public sealed class StygianDetailsTests
         var entry = root["data"]!["data"]![0]!;
         entry["single"] = new JsonObject { ["has_data"] = false, ["best"] = new JsonObject { ["difficulty"] = 0, ["second"] = 0 } };
         var snapshot = (await StygianDetailFixture.ReadAsync(root.ToJsonString())).Snapshot!;
+        Assert.Equal(DataCompleteness.Complete, snapshot.Completeness);
         Assert.Empty(snapshot.Stages);
         Assert.Null(snapshot.Difficulty);
         Assert.False(snapshot.StygianStatistics!.SinglePlayer!.HasData);

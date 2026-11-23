@@ -27,6 +27,7 @@ public sealed partial class SpiralAbyssCollectionTests
         Assert.All(source.PromptAvailable, Assert.True);
         var stored = await context.AtomicGacha.GetChallengeObservationsAsync(target.Id);
         Assert.Equal(2, stored.Count);
+        Assert.All(stored, item => Assert.Equal(DataCompleteness.Complete, item.Completeness));
         Assert.Single(stored.Select(item => item.Provenance.AcquisitionBatchId).Distinct());
         Assert.Equal(ChangeExecutionStatus.NoOp,
             (await collector.ExecuteRecentAsync(target.PlayerArchiveId, target.Id, passport)).Commit?.Status);

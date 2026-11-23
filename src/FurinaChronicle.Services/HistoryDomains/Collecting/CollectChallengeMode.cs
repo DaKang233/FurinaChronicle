@@ -135,7 +135,7 @@ public sealed class CollectChallengeMode(
                 snapshot.MultiplayerStages is not { Count: > 0 }) continue;
             observations.Add(new ChallengeObservation(
                 ChallengeObservationId.New(), gameAccountId, snapshot.Mode, snapshot.SeasonId,
-                snapshot.PeriodStart, snapshot.PeriodEnd, snapshot.Completeness, spiralAbyssFloors: [],
+                snapshot.PeriodStart, snapshot.PeriodEnd, DataCompleteness.Complete, spiralAbyssFloors: [],
                 new RecordProvenance(DataOrigin.OfficialApi,
                     new RecordTimestamps(ObservedAt: snapshot.FetchedAt, FetchedAt: snapshot.FetchedAt),
                     new DataSourceReference(provider: isOversea ? "hoyolab" : "miyoushe"), batch),

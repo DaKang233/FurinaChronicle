@@ -4,6 +4,7 @@
 using System.Net;
 using System.Text.Json.Nodes;
 using FurinaChronicle.Core.Challenges;
+using FurinaChronicle.Core.Records;
 using FurinaChronicle.Infrastructure.HistoryDomains.Collecting;
 using FurinaChronicle.Services.HistoryDomains.Collecting;
 using FurinaChronicle.Tests.TestDoubles;
@@ -30,6 +31,8 @@ public sealed class RecentChallengeResponseTests
         var second = Assert.Single(result.AdditionalSnapshots);
         Assert.NotEqual(second.SeasonId, result.Snapshot.SeasonId);
         Assert.Equal(second.FetchedAt, result.Snapshot.FetchedAt);
+        Assert.Equal(DataCompleteness.Complete, result.Snapshot.Completeness);
+        Assert.Equal(DataCompleteness.Complete, second.Completeness);
         if (stygian)
         {
             Assert.Equal(result.Snapshot.Stages[0].StygianDetails!.MonsterDescriptions,

@@ -128,7 +128,7 @@ public sealed class MiYouSheHardChallengeResponseReader(TimeProvider timeProvide
             new ChallengeModeSnapshot(ChallengeMode.StygianOnslaught,
                 schedule.ScheduleId.Value.ToString(CultureInfo.InvariantCulture),
                 ReadUnixTime(schedule.StartTime), ReadUnixTime(schedule.EndTime),
-                DataCompleteness.Partial, stages, single?.Difficulty, null, fetchedAt,
+                DataCompleteness.Complete, stages, single?.Difficulty, null, fetchedAt,
                 StygianStatistics: new(single, multiplayer, blings), MultiplayerStages: multiplayerStages));
     }
 

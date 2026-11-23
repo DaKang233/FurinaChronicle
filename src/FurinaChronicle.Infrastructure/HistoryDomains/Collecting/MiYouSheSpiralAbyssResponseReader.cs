@@ -159,7 +159,7 @@ public sealed class MiYouSheSpiralAbyssResponseReader(TimeProvider timeProvider)
                 }
             }
             mappedFloors.Add(new SpiralAbyssFloorResult(
-                floorIndex, DataCompleteness.Partial, chambers));
+                floorIndex, DataCompleteness.Complete, chambers));
         }
 
         DateTimeOffset? periodStart = ReadUnixTime(data.StartTime);

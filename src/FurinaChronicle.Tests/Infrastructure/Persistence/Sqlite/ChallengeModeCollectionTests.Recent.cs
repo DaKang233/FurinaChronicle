@@ -3,6 +3,7 @@
 
 using FurinaChronicle.Core.Challenges;
 using FurinaChronicle.Core.History;
+using FurinaChronicle.Core.Records;
 using FurinaChronicle.Services.History;
 using FurinaChronicle.Services.HistoryDomains.Collecting;
 
@@ -26,6 +27,7 @@ public sealed partial class ChallengeModeCollectionTests
         Assert.Equal(2, result.Commit!.AffectedRecordCount);
         var stored = await context.AtomicGacha.GetChallengeObservationsAsync(target.Id);
         Assert.Equal(2, stored.Count);
+        Assert.All(stored, item => Assert.Equal(DataCompleteness.Complete, item.Completeness));
         Assert.Equal(2, stored.Select(item => item.SeasonId).Distinct().Count());
         Assert.Single(stored.Select(item => item.Provenance.AcquisitionBatchId).Distinct());
         Assert.Empty(await context.AtomicGacha.GetChallengeObservationsAsync(other.Id));

@@ -65,7 +65,8 @@ public sealed partial class SpiralAbyssCollectionTests
             Assert.NotNull(row.Provenance.AcquisitionBatchId);
             Assert.Equal(row.Provenance.Timestamps.ObservedAt, row.Provenance.Timestamps.FetchedAt);
             Assert.Null(row.Provenance.Timestamps.ImportedAt);
-            Assert.Equal(DataCompleteness.Partial, row.Completeness);
+            Assert.Equal(DataCompleteness.Complete, row.Completeness);
+            Assert.All(row.SpiralAbyssFloors, floor => Assert.Equal(DataCompleteness.Complete, floor.Completeness));
             Assert.Equal(OccurrenceTime.Unknown, row.SpiralAbyssFloors.Single().Chambers.Single().CompletedAt);
         });
         Assert.Equal(firstFetch, observations[0].Provenance.Timestamps.FetchedAt);
@@ -152,7 +153,7 @@ public sealed partial class SpiralAbyssCollectionTests
         ChallengeObservation observation = Assert.Single(
             await context.AtomicGacha.GetChallengeObservationsAsync(target.Id));
         Assert.Empty(Assert.Single(observation.SpiralAbyssFloors).Chambers);
-        Assert.Equal(DataCompleteness.Partial, observation.Completeness);
+        Assert.Equal(DataCompleteness.Complete, observation.Completeness);
     }
 
     [Theory]
