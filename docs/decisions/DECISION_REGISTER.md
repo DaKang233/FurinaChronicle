@@ -35,7 +35,7 @@
 | D29 | 抽卡页统一全量导入模式作用于刷新、UIGF／小助手、兼容 JSON 和 Portable；只覆盖来源明确包含的同记录，不删除来源缺失记录，且覆盖必须保留 Revision／Undo 与既有 Tombstone 安全语义 | Accepted | ADR 0015，维护者确认 |
 
 | D30 | 角色／武器观察分别声明集合与字段完整度；无实例 ID 武器保存类型汇总；手工 Week 为周一 UTC+8 `[start,end)`；Portable 携带观察与事实修订但不迁移本机 Undo/Tombstone | Accepted | ADR 0016，维护者确认 |
-| D31 | 挑战观察使用稳定引用和相邻内容判重；可信顺序保留 A→B→A；迟到不倒退当前视图；同刻冲突不按导入顺序覆盖 | Accepted | ADR 0017，维护者确认 |
+| D31 | 挑战观察使用稳定引用和相邻内容判重；可信顺序保留 A→B→A；迟到不倒退当前视图；同刻冲突不按导入顺序覆盖；新官方采集单次观察相对于当次单期响应为 Complete，不改写旧观察 | Accepted | ADR 0017，维护者确认 |
 | D32 | Chronicle 使用有界不可变 generation；新增事实不污染旧快照，纠正／删除／Undo／purge 使旧游标显式失效；全无时间事实进入 Undated | Accepted | ADR 0018，维护者确认 |
 | D33 | 深境螺旋首版以版本化目标末关 12-3 的规范化 Chamber 结果作为完成证据；完成与满星分离，每期主时间线最多一个完成节点 | Accepted | ADR 0019，维护者确认 |
 | D34 | Archive v1 作为跨端逻辑档案，保留已支持事实、历史观察、已保留事实 Revision、空父对象和白名单设置；不迁移源 Undo／操作历史／Receipt／LocalOnlyTombstone／Chronicle，并用独立 Gacha history 承载 UIGF 无法表达的内容 | Accepted | ADR 0021，维护者确认 |

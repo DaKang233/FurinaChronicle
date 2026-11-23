@@ -112,3 +112,7 @@ AI 定向测试与人工/服务验收见 [AI 接入验收](AI_ANALYSIS_ACCEPTANC
 多个 AI 供应商还须验证相同地址下的密钥隔离、旧配置/密钥原子迁移与失败恢复、模型独立额度/图片能力、选择持久化、失效配置拒绝发送、接收方变化后旧审查失效；见 [供应商验收](AI_PROVIDERS_ACCEPTANCE.md)。
 
 三种原生 AI 协议与只读工具还须覆盖独立认证/图片编码、正式终止与截断、工具授权及总次数、未知工具/跨范围参数拒绝、提示词去标识、本地称呼不外发、临时思考续接不持久化、配置 v2→v3 保真；见 [协议与工具验收](AI_PROTOCOLS_AND_TOOLS_ACCEPTANCE.md)。
+
+## 官方挑战单次完整度
+
+依据 2026-11-23 更新的 ADR 0017，三类挑战的新官方采集均声明单次响应范围的 Complete。覆盖本期／上期、深渊楼层、概要结果和仅联机结果；失败不新增观察，缺失发生时间不补造，Complete 不作为通关／满星证据。须验证旧 Partial／Unknown 官方观察在重开数据库后原样保留，新刷新形成独立 Complete 观察且再次刷新 NoOp；文件导入／Portable／Archive 不重标来源完整度。具体测试位于 `ChallengeCollectionCompletenessTests.cs`、两类 `*CollectionTests` 和 `RecentChallengeResponseTests`。
