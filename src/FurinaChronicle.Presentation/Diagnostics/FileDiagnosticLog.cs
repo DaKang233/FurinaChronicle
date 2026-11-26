@@ -72,7 +72,18 @@ public sealed class FileDiagnosticLog : IDiagnosticLog
             "yyyyMMdd-HHmmss-fff",
             System.Globalization.CultureInfo.InvariantCulture);
         string archive = Path.Combine(directory, $"diagnostics-{stamp}.jsonl");
-        File.Move(active, archive, overwrite: false);
+        for (int suffix = 1; ; suffix++)
+        {
+            try
+            {
+                File.Move(active, archive, overwrite: false);
+                break;
+            }
+            catch (IOException) when (File.Exists(archive))
+            {
+                archive = Path.Combine(directory, $"diagnostics-{stamp}_{suffix:D6}.jsonl");
+            }
+        }
         string[] archives = Directory
             .EnumerateFiles(directory, "diagnostics-*.jsonl")
             .OrderBy(path => path, StringComparer.Ordinal)
