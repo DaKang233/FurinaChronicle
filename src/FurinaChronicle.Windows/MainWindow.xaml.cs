@@ -318,7 +318,8 @@ public sealed partial class MainWindow : Window
             composition.Services.GetRequiredService<CharacterWeaponHistoryState>(),
             composition.Services.GetRequiredService<WindowsHistoryCollection>(),
             diagnostics,
-            composition.Services.GetRequiredService<FurinaChronicle.Services.Abstractions.IDomainMetadataService>())
+            composition.Services.GetService<FurinaChronicle.Services.Abstractions.IDomainMetadataService>() ??
+                FurinaChronicle.Presentation.History.NullDomainMetadataService.Instance)
         {
             Visibility = Visibility.Collapsed
         };

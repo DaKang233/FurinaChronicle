@@ -8,7 +8,7 @@
 
 | 路径 | 当前证据 | 下一步／验收缺口 |
 |---|---|---|
-| `src/FurinaChronicle.Infrastructure/HistoryDomains/Collecting/MiYouSheCharacterWeaponResponseReader.cs` | Character DTO 仅 Id、Level、ActivedConstellationNum、Weapon；Weapon 仅 Id、Level、AffixLevel；只按有限字段生成条目，装备武器汇总为 Partial | 对照所调用接口完整响应补齐各层 DTO 与字段清单，设计角色详情和装备结果的可靠承载；不得将装备子集称为完整仓库 |
+| 米游社角色列表、详情及养成计算器 | 2026-11-27 已加入强类型 Response、未知字段拒绝、角色 ID 集校验、不可变快照和便携保真机制。详情映射面板、技能、命座、武器、圣遗物、词条次数及字典。计算器有界分页按角色 ID 提供突破补充证据。 | 合成响应及分类 Portable 往返已验证；需用真实响应校准可选字段与分支。已装备武器汇总仍只覆盖装备。HoYoLAB 沿用概况采集。 |
 | `src/FurinaChronicle.Infrastructure/HistoryDomains/Collecting/MiYouSheSpiralAbyssResponseReader.cs` | 显式有限 AbyssData／Floor／Level／Battle DTO；JsonOptions 未设置未知成员拒绝或其他全字段覆盖证明；此前已将新观察与楼层标 Complete | 补齐正式响应字段及嵌套分支对照；校验和映射完整后验收新成功门槛 |
 | `src/FurinaChronicle.Infrastructure/HistoryDomains/Collecting/MiYouSheRoleCombatResponseReader.cs` | 显式有限 Schedule／Stat／Detail／Round 等 DTO；JsonOptions 默认反序列化行为不是全字段证据 | 补齐本期／上期、概要／明细、普通／圣牌和候补／统计分支的全字段 fixture 与持久化对照 |
 | `src/FurinaChronicle.Infrastructure/HistoryDomains/Collecting/MiYouSheHardChallengeResponseReader.cs` | 显式有限 Schedule／单人／联机／增辉／强敌 DTO；已有机制文本和大数测试不证明所有源字段覆盖 | 补齐各可选分支及未知字段门禁，验证完整解析后仍保留缺失／null 与未知发生时间 |
@@ -28,4 +28,4 @@
 
 - 前一轮 91 项挑战定向测试通过，仅证明所用 fixture 的内容、Complete 标记、历史保真及既有采集规则。
 - 全字段覆盖：Not verified；全部新门禁：Not implemented。
-- 本轮是文档变更，未运行新单元测试、真账号采集或设备验收；不重新使用旧测试／构建回执声称新规范已完成。
+- 基线审计未运行采集或设备验收。2026-11-27 的角色代码另已完成自动测试，两端构建与真实设备交互记录分别汇报。
