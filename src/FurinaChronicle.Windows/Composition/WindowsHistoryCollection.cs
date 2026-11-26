@@ -93,7 +93,7 @@ public sealed class WindowsHistoryCollection(
             {
                 CharacterWeaponCollectionResult result =
                     await characterWeapon.ExecuteAsync(archiveId, accountId, selected, token);
-                return Report(result.Commit, result.Status.ToString(), subject, taskKey);
+                return Report(result.Commit, result.Status.ToString(), subject, taskKey, result.ProviderCode, result.HttpStatus);
             }
             if (mode == ChallengeMode.SpiralAbyss)
             {

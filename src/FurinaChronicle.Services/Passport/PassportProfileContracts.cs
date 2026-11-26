@@ -27,6 +27,17 @@ public interface IMiHoYoAccountProfileClient
     Task<PassportAccountProfile> GetAsync(
         PassportAccount account,
         CancellationToken cancellationToken = default);
+
+    async Task<IReadOnlyList<PassportGameRole>> GetGameRolesAsync(
+        PassportAccount account,
+        CancellationToken cancellationToken = default) =>
+        (await GetAsync(account, cancellationToken)).Roles;
+}
+
+public sealed class PassportProfileRequestException(string operation, int providerCode)
+    : InvalidOperationException($"MiHoYo {operation} request failed ({providerCode}).")
+{
+    public int ProviderCode { get; } = providerCode;
 }
 
 public sealed record PassportSelection(

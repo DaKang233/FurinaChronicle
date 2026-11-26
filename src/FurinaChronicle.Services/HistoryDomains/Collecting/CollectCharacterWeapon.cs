@@ -105,9 +105,43 @@ public sealed class CollectCharacterWeapon(
             return new(CharacterWeaponCollectionStatus.UnsupportedRealm);
         }
 
-        PassportAccountProfile profile = await profiles.GetAsync(
-            passport, cancellationToken);
-        if (profile.Roles.Count(candidate => Matches(candidate, role)) != 1)
+        IReadOnlyList<PassportGameRole> roles;
+        try
+        {
+            roles = await profiles.GetGameRolesAsync(passport, cancellationToken);
+        }
+        catch (PassportProfileRequestException exception)
+        {
+            var status = exception.ProviderCode switch
+            {
+                -100 or 1004 or 10001 => CharacterWeaponCollectionStatus.AuthenticationRequired,
+                1034 or 5003 or 10306 => CharacterWeaponCollectionStatus.VerificationRequired,
+                -110 or 10101 => CharacterWeaponCollectionStatus.RateLimited,
+                10102 => CharacterWeaponCollectionStatus.AccessDenied,
+                _ => CharacterWeaponCollectionStatus.SourceRejected,
+            };
+            return new(status, ProviderCode: exception.ProviderCode);
+        }
+        catch (HttpRequestException exception)
+        {
+            var status = exception.StatusCode switch
+            {
+                System.Net.HttpStatusCode.Unauthorized => CharacterWeaponCollectionStatus.AuthenticationRequired,
+                System.Net.HttpStatusCode.Forbidden => CharacterWeaponCollectionStatus.AccessDenied,
+                System.Net.HttpStatusCode.TooManyRequests => CharacterWeaponCollectionStatus.RateLimited,
+                _ => CharacterWeaponCollectionStatus.Unavailable,
+            };
+            return new(status, HttpStatus: (int?)exception.StatusCode);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return new(CharacterWeaponCollectionStatus.Unavailable);
+        }
+        catch (JsonException)
+        {
+            return new(CharacterWeaponCollectionStatus.InvalidResponse);
+        }
+        if (roles.Count(candidate => Matches(candidate, role)) != 1)
         {
             return new(CharacterWeaponCollectionStatus.RoleNotBound);
         }

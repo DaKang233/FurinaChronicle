@@ -200,6 +200,26 @@ public sealed class CharacterWeaponCollectionTests
         Assert.Equal(TimeSpan.FromSeconds(15), limited.RetryAfter);
     }
 
+    [Theory]
+    [InlineData(-100, CharacterWeaponCollectionStatus.AuthenticationRequired)]
+    [InlineData(5003, CharacterWeaponCollectionStatus.VerificationRequired)]
+    public async Task RoleBindingRejectionReportsCodeWithoutReadingOrSavingDetails(
+        int code, CharacterWeaponCollectionStatus expected)
+    {
+        await using var context = SqliteRepositoryTestContext.Create();
+        var target = await AddAccountAsync(context, "target");
+        var source = new TestSource(RosterBody);
+        var profile = new TestProfile(new PassportGameRole("hk4e_cn", "cn_gf01", target.Uid, "fixture", 60, "fixture"), code);
+        var collector = new CollectCharacterWeapon(context.Accounts, profile, source, context.AtomicGacha, source.Time);
+
+        var result = await collector.ExecuteAsync(target.PlayerArchiveId, target.Id, CreatePassport());
+
+        Assert.Equal(expected, result.Status);
+        Assert.Equal(code, result.ProviderCode);
+        Assert.Equal(0, source.RequestCount);
+        Assert.Empty(await context.AtomicGacha.GetItemObservationsAsync(target.Id));
+    }
+
     private static CollectCharacterWeapon CreateCollector(
         SqliteRepositoryTestContext context,
         TestSource source,
@@ -235,13 +255,20 @@ public sealed class CharacterWeaponCollectionTests
             DateTimeOffset.UnixEpoch,
             DateTimeOffset.UnixEpoch);
 
-    private sealed class TestProfile(PassportGameRole role)
+    private sealed class TestProfile(PassportGameRole role, int? bindingError = null)
         : IMiHoYoAccountProfileClient
     {
         public Task<PassportAccountProfile> GetAsync(
             PassportAccount account,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(new PassportAccountProfile("fixture", null, [role]));
+
+        public Task<IReadOnlyList<PassportGameRole>> GetGameRolesAsync(
+            PassportAccount account,
+            CancellationToken cancellationToken = default) =>
+            bindingError is int code
+                ? Task.FromException<IReadOnlyList<PassportGameRole>>(new PassportProfileRequestException("game roles", code))
+                : Task.FromResult<IReadOnlyList<PassportGameRole>>([role]);
     }
 
     private sealed class TestSource(string body) : ICharacterWeaponSource

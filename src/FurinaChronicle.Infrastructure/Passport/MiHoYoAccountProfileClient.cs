@@ -84,13 +84,39 @@ public sealed class MiHoYoAccountProfileClient :
             ? parsedAvatar
             : null;
 
+        return new PassportAccountProfile(displayName, avatarUrl, ParseGameRoles(rolesRoot.GetProperty("data"), isOversea));
+    }
+
+    public async Task<IReadOnlyList<PassportGameRole>> GetGameRolesAsync(
+        PassportAccount account,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+        bool isOversea = account.Realm == PassportRealm.Oversea;
+        using JsonDocument document = await GetDocumentAsync(
+            isOversea ? OverseaGameRolesUrl : GameRolesUrl,
+            BuildCookie(account),
+            account,
+            cancellationToken);
+        JsonElement rolesRoot = document.RootElement;
+        EnsureSuccess(rolesRoot, "game roles");
+        if (!rolesRoot.TryGetProperty("data", out JsonElement data) || data.ValueKind != JsonValueKind.Object ||
+            !data.TryGetProperty("list", out JsonElement list) || list.ValueKind != JsonValueKind.Array)
+            throw new JsonException("Missing game role list.");
+
+        return ParseGameRoles(data, isOversea);
+    }
+
+    private static IReadOnlyList<PassportGameRole> ParseGameRoles(JsonElement rolesData, bool isOversea)
+    {
         var roles = new List<PassportGameRole>();
-        JsonElement rolesData = rolesRoot.GetProperty("data");
         if (rolesData.TryGetProperty("list", out JsonElement list) &&
             list.ValueKind == JsonValueKind.Array)
         {
             foreach (JsonElement role in list.EnumerateArray())
             {
+                if (role.ValueKind != JsonValueKind.Object)
+                    throw new JsonException("Invalid game role.");
                 string? uid = OptionalString(role, "game_uid");
                 if (string.IsNullOrWhiteSpace(uid))
                 {
@@ -108,7 +134,7 @@ public sealed class MiHoYoAccountProfileClient :
             }
         }
 
-        return new PassportAccountProfile(displayName, avatarUrl, roles);
+        return roles;
     }
 
     private async Task<JsonDocument> GetDocumentAsync(
@@ -208,12 +234,12 @@ public sealed class MiHoYoAccountProfileClient :
 
     private static void EnsureSuccess(JsonElement root, string operation)
     {
-        int retcode = root.GetProperty("retcode").GetInt32();
+        if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("retcode", out JsonElement code) ||
+            code.ValueKind != JsonValueKind.Number || !code.TryGetInt32(out int retcode))
+            throw new JsonException("Missing provider status.");
         if (retcode != 0)
         {
-            string message = OptionalString(root, "message") ?? "Unknown error";
-            throw new InvalidOperationException(
-                $"MiHoYo {operation} request failed ({retcode}): {message}");
+            throw new PassportProfileRequestException(operation, retcode);
         }
     }
 

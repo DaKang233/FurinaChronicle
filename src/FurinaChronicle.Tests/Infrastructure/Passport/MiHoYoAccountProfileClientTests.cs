@@ -6,6 +6,7 @@ using System.Net;
 using System.Text;
 using FurinaChronicle.Core.Passport;
 using FurinaChronicle.Infrastructure.Passport;
+using FurinaChronicle.Services.Passport;
 
 namespace FurinaChronicle.Tests.Infrastructure.Passport;
 
@@ -73,6 +74,25 @@ public sealed class MiHoYoAccountProfileClientTests
                 "stabledevice",
                 request.Headers.GetValues("x-rpc-device_id").Single());
         });
+    }
+
+    [Fact]
+    public async Task GetGameRolesAsync_OnlyRequestsBindingAndRetainsNumericRejection()
+    {
+        int requestCount = 0;
+        using var httpClient = new HttpClient(new StubHttpHandler(request =>
+        {
+            Assert.Equal(MiHoYoAccountProfileClient.GameRolesUrl, request.RequestUri!.AbsoluteUri);
+            return Task.FromResult(JsonResponse(++requestCount == 1
+                ? """{"retcode":0,"data":{"list":[{"game_uid":"100000001","region":"cn_gf01"}]}}"""
+                : """{"retcode":-100,"message":"untrusted server text"}"""));
+        }));
+        using var client = new MiHoYoAccountProfileClient(httpClient);
+
+        Assert.Equal("100000001", Assert.Single(await client.GetGameRolesAsync(CreateAccount())).Uid);
+        var error = await Assert.ThrowsAsync<PassportProfileRequestException>(() => client.GetGameRolesAsync(CreateAccount()));
+        Assert.Equal(-100, error.ProviderCode);
+        Assert.DoesNotContain("untrusted server text", error.Message);
     }
 
     private static PassportAccount CreateAccount()
