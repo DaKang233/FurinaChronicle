@@ -137,6 +137,28 @@ public sealed class HoYoGameRecordCharacterWeaponSourceTests
         Assert.Null(result.Snapshot);
     }
 
+    [Fact]
+    public async Task MissingCharacterAscensionUsesValidatedOfficialCalculatorEntry()
+    {
+        var details = BuildDetails();
+        details["data"]!["list"]![0]!["base"]!["promote_level"] = null;
+        using var client = new HttpClient(new RecordingHandler(request =>
+        {
+            string path = request.RequestUri!.AbsolutePath;
+            if (path.EndsWith("/character/detail", StringComparison.Ordinal)) return Json(details.ToJsonString());
+            if (path.EndsWith("/character/list", StringComparison.Ordinal)) return Json(RosterBody);
+            Assert.Equal("api-takumi.mihoyo.com", request.RequestUri.Host);
+            Assert.EndsWith("/sync/avatar/list", path, StringComparison.Ordinal);
+            return Json("""{"retcode":0,"data":{"total":1,"list":[{"id":10000093,"promote_level":6,"level_current":90,"max_level":90}]}}""");
+        }));
+        using var source = new HoYoGameRecordCharacterWeaponSource(TimeProvider.System, client);
+        var result = await source.FetchAsync(Passport(), Role);
+
+        var detail = Assert.IsType<CharacterDetail>(result.Snapshot?.Characters[0].CharacterDetail);
+        Assert.Equal(6, detail.Ascension);
+        Assert.Equal(90, detail.AscensionEvidence?.CurrentLevel);
+    }
+
     private static JsonNode BuildDetails()
     {
         var data = JsonNode.Parse(RosterBody)!;
@@ -146,6 +168,7 @@ public sealed class HoYoGameRecordCharacterWeaponSourceTests
         entries[0]["base"]!["name"] = "Fixture";
         entries[0]["base"]!["fetter"] = 10;
         entries[0]["base"]!["promote_level"] = 6;
+        entries[1]["base"]!["promote_level"] = 5;
         var sample = JsonNode.Parse("""
             {
               "constellations": [{"id": 1, "pos": 1, "is_actived": false, "name": "Fixture constellation", "effect": "<b>Effect</b>"}],

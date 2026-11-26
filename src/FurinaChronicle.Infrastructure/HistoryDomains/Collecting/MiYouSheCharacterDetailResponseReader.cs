@@ -43,13 +43,15 @@ internal sealed class MiYouSheCharacterDetailResponseReader
             await using var stream = await response.Content.ReadAsStreamAsync(token);
             using var json = await JsonDocument.ParseAsync(stream,
                 new JsonDocumentOptions { MaxDepth = 32, AllowDuplicateProperties = false }, token);
-            if (!json.RootElement.TryGetProperty("retcode", out var code) || !code.TryGetInt32(out int retcode))
+            if (json.RootElement.ValueKind != JsonValueKind.Object || !json.RootElement.TryGetProperty("retcode", out var code) || !code.TryGetInt32(out int retcode))
                 return new(CharacterWeaponCollectionStatus.InvalidResponse, httpStatus);
             if (retcode != 0)
                 return new(MapRejection(retcode), httpStatus, retcode);
 
+            if (ContainsNullArrayItem(json.RootElement))
+                return new(CharacterWeaponCollectionStatus.InvalidResponse, httpStatus, retcode);
             var envelope = json.RootElement.Deserialize<Envelope>(Options);
-            if (envelope?.Data is not { List: { } list } data)
+            if (envelope?.Data is not { List: { } list } data || data.PropertyMap?.Values.Any(value => value is null) == true)
                 return new(CharacterWeaponCollectionStatus.InvalidResponse, httpStatus, retcode);
 
             var items = new Dictionary<int, Entry>();
@@ -62,7 +64,7 @@ internal sealed class MiYouSheCharacterDetailResponseReader
 
             var catalog = new CharacterResponseMetadata(
                 data.PropertyMap?.OrderBy(pair => pair.Key, StringComparer.Ordinal).ToDictionary(pair => pair.Key, pair =>
-                    new CharacterPropertyMetadata(pair.Value.PropertyType, pair.Value.Name, pair.Value.Icon, pair.Value.FilterName),
+                    new CharacterPropertyMetadata(pair.Value!.PropertyType, pair.Value.Name, pair.Value.Icon, pair.Value.FilterName),
                     StringComparer.Ordinal),
                 data.RelicPropertyOptions?.ToDomain(), data.RelicWiki, data.WeaponWiki, data.AvatarWiki);
             return new(CharacterWeaponCollectionStatus.Received, httpStatus, retcode, items, catalog);
@@ -72,6 +74,13 @@ internal sealed class MiYouSheCharacterDetailResponseReader
             return new(CharacterWeaponCollectionStatus.InvalidResponse, httpStatus);
         }
     }
+
+    internal static bool ContainsNullArrayItem(JsonElement value) => value.ValueKind switch
+    {
+        JsonValueKind.Array => value.EnumerateArray().Any(item => item.ValueKind == JsonValueKind.Null || ContainsNullArrayItem(item)),
+        JsonValueKind.Object => value.EnumerateObject().Any(property => ContainsNullArrayItem(property.Value)),
+        _ => false,
+    };
 
     private static CharacterWeaponCollectionStatus MapRejection(int code) => code switch
     {
@@ -121,7 +130,7 @@ internal sealed class MiYouSheCharacterDetailResponseReader
         TimeSpan? RetryAfter = null);
 
     private sealed record Envelope(int Retcode, string? Message, Payload? Data);
-    private sealed record Payload(Detail?[]? List, Dictionary<string, PropertyMetadata>? PropertyMap,
+    private sealed record Payload(Detail?[]? List, Dictionary<string, PropertyMetadata?>? PropertyMap,
         RecommendedStats? RelicPropertyOptions, Dictionary<string, string>? RelicWiki,
         Dictionary<string, string>? WeaponWiki, Dictionary<string, string>? AvatarWiki);
     private sealed record PropertyMetadata(int PropertyType, string? Name, string? Icon, string? FilterName);

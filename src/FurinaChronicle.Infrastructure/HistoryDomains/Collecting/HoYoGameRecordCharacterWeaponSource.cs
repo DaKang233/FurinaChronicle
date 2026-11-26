@@ -19,7 +19,7 @@ namespace FurinaChronicle.Infrastructure.HistoryDomains.Collecting;
 /// It is deliberately single-attempt: a duplicate risky request is worse than
 /// reporting the first failure, and the caller may retry explicitly.
 /// </summary>
-public sealed class HoYoGameRecordCharacterWeaponSource
+public sealed partial class HoYoGameRecordCharacterWeaponSource
     : ICharacterWeaponSource, IDisposable
 {
     private const string Host = "https://api-takumi-record.mihoyo.com";
@@ -151,6 +151,21 @@ public sealed class HoYoGameRecordCharacterWeaponSource
                     InventoryFieldCoverage.Level | InventoryFieldCoverage.Progression,
                     FurinaChronicle.Core.Records.DataCompleteness.Complete,
                     entry.Detail with { Roster = roster[id], Ascension = entry.Detail.Ascension ?? roster[id].Ascension }));
+            }
+        }
+
+        if (characters.Any(entry => entry.CharacterDetail?.Ascension is null))
+        {
+            var calculator = await FetchAscensionAsync(passport, role, cancellationToken);
+            for (int index = 0; index < characters.Count; index++)
+            {
+                var entry = characters[index];
+                if (!int.TryParse(entry.TypeId, CultureInfo.InvariantCulture, out int id) ||
+                    !calculator.TryGetValue(id, out var evidence) || entry.CharacterDetail is not { } detail)
+                    continue;
+                characters[index] = new(entry.Kind, entry.TypeId, entry.InstanceId, entry.Quantity, entry.Level,
+                    entry.Progression, entry.FieldCoverage, entry.FieldCompleteness,
+                    detail with { Ascension = detail.Ascension ?? evidence.Stage, AscensionEvidence = evidence });
             }
         }
 

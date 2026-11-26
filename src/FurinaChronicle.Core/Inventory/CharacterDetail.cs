@@ -1,6 +1,8 @@
 // Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
+using System.Text.Json.Serialization;
+
 namespace FurinaChronicle.Core.Inventory;
 
 /// <summary>Player state and the descriptive fields returned with one character.</summary>
@@ -19,7 +21,9 @@ public sealed record CharacterDetail(
     CharacterArtifactRecommendation? ArtifactRecommendation,
     bool? IsTpsUnlocked, CharacterWeaponSkin? WeaponSkin,
     CharacterWeaponDetail? BaseWeapon = null,
-    CharacterRosterEntry? Roster = null);
+    CharacterRosterEntry? Roster = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    CharacterAscensionEvidence? AscensionEvidence = null);
 
 public sealed record CharacterRosterEntry(
     int Level, int ConstellationCount, string? Name, string? Element, int? Rarity,
@@ -62,3 +66,14 @@ public sealed record CharacterResponseMetadata(
     IReadOnlyDictionary<string, string>? ArtifactWiki,
     IReadOnlyDictionary<string, string>? WeaponWiki,
     IReadOnlyDictionary<string, string>? AvatarWiki);
+
+public sealed record CharacterAscensionEvidence(string? Name, string? Icon, int? WeaponType, int? Rarity, int? ElementId,
+    int? MaximumLevel, int? CurrentLevel, int? TargetLevel, int? Stage, int? ConstellationCount, int? Friendship,
+    string? WikiUrl, string? RecommendedWeaponWikiUrl, IReadOnlyList<CharacterCalculatorSkill>? Skills,
+    CharacterCalculatorWeapon? Weapon, IReadOnlyList<CharacterCalculatorArtifact>? Artifacts);
+public sealed record CharacterCalculatorSkill(int Id, int? GroupId, string? Name, string? Icon, int? CurrentLevel,
+    int? TargetLevel, int? MaximumLevel);
+public sealed record CharacterCalculatorWeapon(int Id, string? Name, string? Icon, int? Type, int? Rarity,
+    int? CurrentLevel, int? TargetLevel, int? MaximumLevel);
+public sealed record CharacterCalculatorArtifact(int Id, string? Name, string? Icon, int? Slot, int? Rarity,
+    int? CurrentLevel, int? TargetLevel, int? MaximumLevel);
