@@ -82,6 +82,8 @@ public partial class CharacterHistoryPage : ContentPage
     protected override void OnDisappearing()
     {
         operation?.Cancel();
+        profileMetadataRequest?.Cancel();
+        CloseCharacterSheet();
         base.OnDisappearing();
     }
 

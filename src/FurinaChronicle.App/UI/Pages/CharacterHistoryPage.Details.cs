@@ -164,10 +164,19 @@ public partial class CharacterHistoryPage
         IReadOnlyList<CharacterTalentValue>? attributes)
     {
         var tile = new Grid { WidthRequest = 47, HeightRequest = 47 };
-        tile.Add(ProfileArtwork(icon, 38) ?? ProfileLabel(badge));
+        if (ProfileArtwork(icon, 38) is { } artwork)
+        {
+            tile.Add(new Border { Padding = 2, StrokeThickness = 0,
+                StrokeShape = new RoundRectangle { CornerRadius = 7 }, Content = artwork,
+                BackgroundColor = Color.FromArgb("#4B505E"), Margin = 3 });
+        }
+        else tile.Add(ProfileLabel(badge));
         if (unlocked == false)
         {
             var lockIcon = LocalIcon("ui_icon_locked.png", 16);
+            if (icon is null)
+                lockIcon.SetAppTheme(Image.SourceProperty,
+                    ImageSource.FromFile("ui_icon_locked_dark.png"), ImageSource.FromFile("ui_icon_locked.png"));
             lockIcon.HorizontalOptions = LayoutOptions.End;
             lockIcon.VerticalOptions = LayoutOptions.End;
             tile.Add(lockIcon);

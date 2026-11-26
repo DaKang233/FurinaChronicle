@@ -15,7 +15,6 @@
     <Grid>
     <Grid Padding="16" RowDefinitions="Auto,*,Auto" RowSpacing="12">
         <VerticalStackLayout x:Name="Filters" Spacing="8">
-            <Label Text="角色与武器" FontSize="24" FontAttributes="Bold" />
             <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
                 <Picker x:Name="ArchivePicker" Title="档案"
                         SelectedIndexChanged="OnArchiveChanged"
@@ -24,21 +23,21 @@
                         SelectedIndexChanged="OnAccountChanged"
                         AutomationId="CharacterAccountPicker" />
             </Grid>
-            <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8">
-                <Picker x:Name="KindPicker" Title="类型"
-                        SelectedIndexChanged="OnKindChanged"
-                        AutomationId="CharacterKindPicker" />
-                <Button x:Name="CompareButton" Grid.Column="1" Text="比较最近两次"
-                        Clicked="OnCompareClicked" AutomationId="CompareCharacterObservations" />
-                <Button x:Name="RefreshButton" Grid.Column="2" Text="刷新到当前档案"
+            <Grid ColumnDefinitions="*,*,*" ColumnSpacing="6">
+                <Button x:Name="RefreshButton" Text="采集最新" FontSize="13"
                         Clicked="OnRefreshClicked" AutomationId="RefreshCharacterCollection" />
-                <Button x:Name="ValidateButton" Grid.Column="3" Text="隔离刷新验证"
+                <Button x:Name="CompareButton" Grid.Column="1" Text="比较快照" FontSize="13"
+                        Clicked="OnCompareClicked" AutomationId="CompareCharacterObservations" />
+                <Button x:Name="ValidateButton" Grid.Column="2" Text="隔离验证" FontSize="13"
                         Clicked="OnValidateClicked" AutomationId="ValidateCharacterCollection" />
             </Grid>
             <Label x:Name="StatusLabel" AutomationId="CharacterCollectionStatus" />
-            <Picker x:Name="ObservationPicker" Title="历史观察（最新在前）"
-                    SelectedIndexChanged="OnObservationChanged"
-                    AutomationId="CharacterObservationPicker" />
+            <Grid ColumnDefinitions="*,2*" ColumnSpacing="8">
+                <Picker x:Name="KindPicker" Title="类型"
+                        SelectedIndexChanged="OnKindChanged" AutomationId="CharacterKindPicker" />
+                <Picker x:Name="ObservationPicker" Grid.Column="1" Title="历史观察"
+                        SelectedIndexChanged="OnObservationChanged" AutomationId="CharacterObservationPicker" />
+            </Grid>
             <Label x:Name="ObservationDetailLabel" AutomationId="CharacterObservationDetail" />
             <Picker x:Name="ProfilePicker" Title="选择角色" IsVisible="False"
                     SelectedIndexChanged="OnProfileChanged" AutomationId="CharacterProfilePicker" />
