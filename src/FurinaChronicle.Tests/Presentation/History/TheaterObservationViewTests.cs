@@ -31,8 +31,8 @@ public sealed class TheaterObservationViewTests
             theaterStatistics: snapshot.TheaterStatistics);
         var service = new Metadata();
         var view = await HistoryObservationViewBuilder.ChallengeAsync(observation, service, "合成账号");
-        Assert.Equal(new[] { "第 1 幕", "第 2 幕", "第 10 幕", "塔罗挑战 1" },
-            view.DetailSections.Select(section => section.Title).Where(title => title.StartsWith("第 ", StringComparison.Ordinal) || title.StartsWith("塔罗挑战", StringComparison.Ordinal)));
+        Assert.Equal(new[] { "第 1 幕", "第 2 幕", "第 10 幕", "圣牌挑战 1" },
+            view.DetailSections.Select(section => section.Title).Where(title => title.StartsWith("第 ", StringComparison.Ordinal) || title.StartsWith("圣牌挑战", StringComparison.Ordinal)));
         var summary = Assert.Single(view.DetailSections, section => section.Title == "演出总览");
         Assert.Contains("演出总时长：90761 秒（25:12:41）", summary.Lines);
         Assert.Contains("准入元素：火、风", view.DetailSections[0].Lines);

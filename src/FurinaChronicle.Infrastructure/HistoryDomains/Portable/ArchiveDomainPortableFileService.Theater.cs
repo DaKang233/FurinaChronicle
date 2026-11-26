@@ -43,7 +43,7 @@ public sealed partial class ArchiveDomainPortableFileService
         if (statistics.CoinCount is int coins) await destination.WriteLineAsync($"  - 消耗「幻剧之花」：{coins}");
         if (statistics.AvatarBonusCount is int bonus) await destination.WriteLineAsync($"  - 场外声援：{bonus}");
         if (statistics.RentCount is int rents) await destination.WriteLineAsync($"  - 助演次数：{rents}");
-        if (statistics.TarotFinishedCount is int tarot) await destination.WriteLineAsync($"  - 完成塔罗挑战：{tarot}");
+        if (statistics.TarotFinishedCount is int tarot) await destination.WriteLineAsync($"  - 完成圣牌挑战：{tarot}");
         if (statistics.TotalUseTime is int seconds) await destination.WriteLineAsync($"  - 演出总时长：{seconds} 秒");
         if (statistics.MedalRounds.Count > 0) await destination.WriteLineAsync("  - 获奖章幕次：" + string.Join("、", statistics.MedalRounds));
         if (statistics.TotalCoinsConsumed is { } consumed) await destination.WriteLineAsync("  - 消耗「幻剧之花」（战斗统计）：" + EscapeMarkdown(consumed));

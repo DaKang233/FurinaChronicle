@@ -151,7 +151,7 @@ public sealed class HistoryObservationViewTests
 
         Assert.StartsWith("发生于", view.OccurredText, StringComparison.Ordinal);
         Assert.Equal(view.OccurredText, view.ListTimeText);
-        Assert.Equal("难度：卓越模式（4）", view.DifficultyText);
+        Assert.Equal("难度：卓越模式", view.DifficultyText);
         Assert.Equal("奖章：9", view.MedalText);
         Assert.Contains("10000002", view.Detail);
         Assert.Contains("攻击提升", view.Detail);

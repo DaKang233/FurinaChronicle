@@ -1,6 +1,9 @@
 // Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
+// Copyright (c) 2026 DaKang233.
+// SPDX-License-Identifier: MIT
+
 using System.Globalization;
 using FurinaChronicle.Core.Challenges;
 using FurinaChronicle.Core.Metadata;
@@ -20,7 +23,7 @@ public sealed partial record ChallengeObservationCard
 
     private static string TheaterStageTitle(ChallengeStageResult stage) =>
         stage.TheaterRound?.IsTarot == true
-            ? $"塔罗挑战 {(stage.TheaterRound.TarotSerialNumber is > 0 ? stage.TheaterRound.TarotSerialNumber.Value.ToString(CultureInfo.InvariantCulture) : stage.StageId)}"
+            ? $"圣牌挑战 {(stage.TheaterRound.TarotSerialNumber is > 0 ? stage.TheaterRound.TarotSerialNumber.Value.ToString(CultureInfo.InvariantCulture) : stage.StageId)}"
             : int.TryParse(stage.StageId, out int id) ? $"第 {id} 幕" : stage.StageId;
 
     private static string DescribeParticipant(ChallengeParticipant participant, string? name = null) =>
@@ -58,7 +61,7 @@ public sealed partial record ChallengeObservationCard
         if (statistics.CoinCount is int coins) lines.Add($"消耗「幻剧之花」：{coins}");
         if (statistics.AvatarBonusCount is int bonus) lines.Add($"场外声援：{bonus}");
         if (statistics.RentCount is int rents) lines.Add($"助演次数：{rents}");
-        if (statistics.TarotFinishedCount is int tarot) lines.Add($"完成塔罗挑战：{tarot}");
+        if (statistics.TarotFinishedCount is int tarot) lines.Add($"完成圣牌挑战：{tarot}");
         if (statistics.MedalRounds.Count > 0) lines.Add("获奖章幕次：" + string.Join("、", statistics.MedalRounds));
         if (statistics.TotalUseTime is int seconds)
         {
@@ -145,9 +148,18 @@ public sealed partial record ChallengeObservationCard
 
     internal static string TheaterDifficultyName(int? difficulty) => difficulty switch
     {
-        1 => "轻简模式（1）", 2 => "普通模式（2）", 3 => "困难模式（3）",
-        4 => "卓越模式（4）", 5 => "月谕模式（5）", 0 => "未定级（0）",
+        1 => "轻简模式", 2 => "普通模式", 3 => "困难模式",
+        4 => "卓越模式", 5 => "月谕模式", 0 => "未定级",
         null => "未知", _ => $"未知难度（{difficulty}）",
+    };
+
+    internal static string TheaterTarotDifficultyName(int? difficulty) => difficulty switch
+    {
+        0 => "",
+        1 => " 圣牌 1",
+        2 => " 圣牌 2",
+        null => "",
+        _ => "",
     };
 
     private static string ElementName(int element) => element switch
