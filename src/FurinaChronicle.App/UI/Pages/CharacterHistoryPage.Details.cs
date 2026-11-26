@@ -100,13 +100,13 @@ public partial class CharacterHistoryPage
         var constellations = ProfileWrap();
         foreach (var item in (detail.Constellations ?? []).OrderBy(item => item.Position))
             constellations.Add(ProfileSkill(item.Name ?? $"命座 {item.Position}", item.Icon, item.Unlocked,
-                item.Position is int pos ? $"C{pos}" : "命座", item.Description, null));
+                item.Position is int pos ? $"C{pos}" : "命座", "命座详情", item.Description, null));
         if (constellations.Children.Count != 0) ProfileContent.Add(ProfileCard("命座", constellations));
 
         var talents = ProfileWrap();
         foreach (var item in detail.Talents ?? [])
             talents.Add(ProfileSkill(item.Name ?? $"天赋 {item.Id}", item.Icon, item.Unlocked,
-                item.Level is int level ? $"Lv.{level}" : "天赋", item.Description, item.Attributes));
+                item.Level is int level ? $"Lv.{level}" : "天赋", "天赋详情", item.Description, item.Attributes));
         if (talents.Children.Count != 0) ProfileContent.Add(ProfileCard("天赋", talents));
 
         var attributes = new VerticalStackLayout { Spacing = 3 };
@@ -160,17 +160,11 @@ public partial class CharacterHistoryPage
         }
     }
 
-    private View ProfileSkill(string name, string? icon, bool? unlocked, string badge, string? description,
+    private View ProfileSkill(string name, string? icon, bool? unlocked, string badge, string sheetTitle, string? description,
         IReadOnlyList<CharacterTalentValue>? attributes)
     {
         var tile = new Grid { WidthRequest = 47, HeightRequest = 47 };
-        if (ProfileArtwork(icon, 38) is { } artwork)
-        {
-            tile.Add(new Border { Padding = 2, StrokeThickness = 0,
-                StrokeShape = new RoundRectangle { CornerRadius = 7 }, Content = artwork,
-                BackgroundColor = Color.FromArgb("#4B505E"), Margin = 3 });
-        }
-        else tile.Add(ProfileLabel(badge));
+        tile.Add(SkillArtwork(icon, 38) ?? ProfileLabel(badge));
         if (unlocked == false)
         {
             var lockIcon = LocalIcon("ui_icon_locked.png", 16);
@@ -186,7 +180,7 @@ public partial class CharacterHistoryPage
         gesture.Tapped += async (_, _) =>
         {
             var panel = new VerticalStackLayout { Spacing = 8 };
-            panel.Add(ProfileArtwork(icon, 56) ?? ProfileLabel(badge));
+            if (SkillArtwork(icon, 56) is { } sheetArtwork) panel.Add(sheetArtwork);
             panel.Add(ProfileLabel(name + " · " + badge, 18, true));
             var intro = ProfileRichLabel(description ?? "暂无机制说明");
             panel.Add(intro);
@@ -207,14 +201,23 @@ public partial class CharacterHistoryPage
                     values.IsVisible = true;
                     return Task.CompletedTask;
                 }), 1, 0);
-                panel.Children.Insert(2, tabs);
+                panel.Children.Insert(panel.Children.IndexOf(intro), tabs);
                 panel.Add(values);
             }
-            await ShowCharacterSheetAsync(name, panel);
+            await ShowCharacterSheetAsync(sheetTitle, panel);
         };
         tile.GestureRecognizers.Add(gesture);
         return tile;
     }
+
+    private static View? SkillArtwork(string? icon, double size) => ProfileArtwork(icon, size) is { } artwork
+        ? new Border
+        {
+            Padding = 2, StrokeThickness = 0, Margin = 3, HorizontalOptions = LayoutOptions.Start,
+            StrokeShape = new RoundRectangle { CornerRadius = 7 },
+            Content = artwork, BackgroundColor = Color.FromArgb("#4B505E"),
+        }
+        : null;
 
     private async Task ShowCharacterSheetAsync(string title, View content)
     {
