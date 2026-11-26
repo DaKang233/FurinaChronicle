@@ -99,7 +99,7 @@ public sealed partial class HoYoGameRecordCharacterWeaponSource
                 item.ReliquaryCatId, item.ReliquaryLevel, item.LevelCurrent, item.LevelTarget, item.MaxLevel)).ToArray());
     }
 
-    private sealed record CalculatorSkill(int Id, int? GroupId, string? Name, string? Icon, int? LevelCurrent, int? LevelTarget, int? MaxLevel);
-    private sealed record CalculatorWeapon(int Id, string? Name, string? Icon, int? WeaponCatId, int? WeaponLevel, int? LevelCurrent, int? LevelTarget, int? MaxLevel);
-    private sealed record CalculatorRelic(int Id, string? Name, string? Icon, int? ReliquaryCatId, int? ReliquaryLevel, int? LevelCurrent, int? LevelTarget, int? MaxLevel);
+    private sealed record CalculatorSkill([property: JsonRequired] int Id, int? GroupId, string? Name, string? Icon, int? LevelCurrent, int? LevelTarget, int? MaxLevel);
+    private sealed record CalculatorWeapon([property: JsonRequired] int Id, string? Name, string? Icon, int? WeaponCatId, int? WeaponLevel, int? LevelCurrent, int? LevelTarget, int? MaxLevel);
+    private sealed record CalculatorRelic([property: JsonRequired] int Id, string? Name, string? Icon, int? ReliquaryCatId, int? ReliquaryLevel, int? LevelCurrent, int? LevelTarget, int? MaxLevel);
 }

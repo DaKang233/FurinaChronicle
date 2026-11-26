@@ -122,6 +122,7 @@ public sealed class MiYouSheCharacterWeaponResponseReader(TimeProvider timeProvi
         foreach (MiYouSheCharacterDetailResponseReader.Character? character in characters)
         {
             if (character is not { Id: > 0, Level: >= 0, ActivedConstellationNum: >= 0 and <= 6 } ||
+                character.Fetter is < 0 || character.PromoteLevel is < 0 or > 6 ||
                 !roster.TryAdd(character.Id, character.ToRoster()))
             {
                 return new(CharacterWeaponCollectionStatus.InvalidResponse);
@@ -142,7 +143,7 @@ public sealed class MiYouSheCharacterWeaponResponseReader(TimeProvider timeProvi
             {
                 continue;
             }
-            if (weapon.Id <= 0 ||
+            if (MiYouSheCharacterDetailResponseReader.IsInvalidWeapon(weapon) ||
                 weapon.Level is not >= 0 ||
                 weapon.AffixLevel is not >= 0)
             {

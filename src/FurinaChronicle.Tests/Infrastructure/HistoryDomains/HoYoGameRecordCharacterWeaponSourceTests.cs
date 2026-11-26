@@ -117,6 +117,11 @@ public sealed class HoYoGameRecordCharacterWeaponSourceTests
     [InlineData("unknown")]
     [InlineData("missing")]
     [InlineData("duplicate")]
+    [InlineData("missing stat type")]
+    [InlineData("missing artifact type")]
+    [InlineData("mismatched property key")]
+    [InlineData("negative hit count")]
+    [InlineData("invalid weapon ascension")]
     public async Task InvalidDetailsDoNotExposeARosterAsSuccessfulCollection(string defect)
     {
         var details = BuildDetails();
@@ -126,6 +131,11 @@ public sealed class HoYoGameRecordCharacterWeaponSourceTests
             case "unknown": list[0]!["relics"]![0]!["sub_property_list"]![0]!["future_field"] = 1; break;
             case "missing": list.RemoveAt(1); break;
             case "duplicate": list.Add(list[0]!.DeepClone()); break;
+            case "missing stat type": list[0]!["base_properties"]![0]!.AsObject().Remove("property_type"); break;
+            case "missing artifact type": list[0]!["relics"]![0]!["sub_property_list"]![0]!.AsObject().Remove("property_type"); break;
+            case "mismatched property key": details["data"]!["property_map"]!["2001"]!["property_type"] = 2002; break;
+            case "negative hit count": list[0]!["relics"]![0]!["sub_property_list"]![0]!["times"] = -1; break;
+            case "invalid weapon ascension": list[0]!["base"]!["weapon"]!["promote_level"] = 7; break;
         }
         using var client = new HttpClient(new RecordingHandler(request =>
             Json(request.RequestUri!.AbsolutePath.EndsWith("/detail", StringComparison.Ordinal) ?
@@ -135,6 +145,24 @@ public sealed class HoYoGameRecordCharacterWeaponSourceTests
 
         Assert.Equal(CharacterWeaponCollectionStatus.InvalidResponse, result.Status);
         Assert.Null(result.Snapshot);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(0)]
+    public async Task ArtifactHitCountPreservesUnavailableAndExplicitZero(int? hits)
+    {
+        var details = BuildDetails();
+        details["data"]!["list"]![0]!["relics"]![0]!["sub_property_list"]![0]!["times"] = hits;
+        using var client = new HttpClient(new RecordingHandler(request =>
+            Json(request.RequestUri!.AbsolutePath.EndsWith("/detail", StringComparison.Ordinal) ?
+                details.ToJsonString() : RosterBody)));
+        using var source = new HoYoGameRecordCharacterWeaponSource(TimeProvider.System, client);
+        var result = await source.FetchAsync(Passport(), Role);
+
+        Assert.Equal(CharacterWeaponCollectionStatus.Received, result.Status);
+        var detail = Assert.IsType<CharacterDetail>(result.Snapshot?.Characters[0].CharacterDetail);
+        Assert.Equal(hits, Assert.Single(Assert.Single(detail.Artifacts!).SubStats!).Hits);
     }
 
     [Fact]

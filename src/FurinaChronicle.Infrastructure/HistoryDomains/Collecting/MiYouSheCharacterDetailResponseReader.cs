@@ -1,6 +1,7 @@
 // Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
+using System.Globalization;
 using System.Net;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -51,7 +52,9 @@ internal sealed class MiYouSheCharacterDetailResponseReader
             if (ContainsNullArrayItem(json.RootElement))
                 return new(CharacterWeaponCollectionStatus.InvalidResponse, httpStatus, retcode);
             var envelope = json.RootElement.Deserialize<Envelope>(Options);
-            if (envelope?.Data is not { List: { } list } data || data.PropertyMap?.Values.Any(value => value is null) == true)
+            if (envelope?.Data is not { List: { } list } data ||
+                data.PropertyMap?.Any(pair => pair.Value is not { } property ||
+                    pair.Key != property.PropertyType.ToString(CultureInfo.InvariantCulture)) == true)
                 return new(CharacterWeaponCollectionStatus.InvalidResponse, httpStatus, retcode);
 
             var items = new Dictionary<int, Entry>();
@@ -94,9 +97,10 @@ internal sealed class MiYouSheCharacterDetailResponseReader
     private static CharacterDetail Map(Detail value)
     {
         Character basic = value.Base!;
-        if (basic.Fetter is < 0 || basic.PromoteLevel is < 0 ||
-            value.Weapon is { Id: <= 0 } || basic.Weapon is { Id: <= 0 } ||
-            value.Relics?.Any(relic => relic.Id <= 0 || relic.Level is < 0) == true ||
+        if (basic.Fetter is < 0 || basic.PromoteLevel is < 0 or > 6 ||
+            IsInvalidWeapon(value.Weapon) || IsInvalidWeapon(basic.Weapon) ||
+            value.Relics?.Any(relic => relic.Id <= 0 || relic.Level is < 0 || relic.MainProperty?.Times is < 0 ||
+                relic.SubPropertyList?.Any(stat => stat.Times is < 0) == true) == true ||
             value.Constellations?.Any(constellation => constellation.Id <= 0 || constellation.Pos is < 1 or > 6) == true ||
             value.Skills?.Any(skill => skill.SkillId <= 0 || skill.Level is < 0) == true)
             throw new ArgumentException("Invalid official character detail.");
@@ -121,6 +125,9 @@ internal sealed class MiYouSheCharacterDetailResponseReader
             basic.Weapon?.ToDomain());
     }
 
+    internal static bool IsInvalidWeapon(Weapon? weapon) => weapon is { Id: <= 0 } or
+        { Level: < 0 } or { AffixLevel: < 0 } or { PromoteLevel: < 0 or > 6 };
+
     private static CharacterStat[]? MapProperties(Stat[]? properties) =>
         properties?.Select(item => item.ToDomain()).ToArray();
 
@@ -133,7 +140,7 @@ internal sealed class MiYouSheCharacterDetailResponseReader
     private sealed record Payload(Detail?[]? List, Dictionary<string, PropertyMetadata?>? PropertyMap,
         RecommendedStats? RelicPropertyOptions, Dictionary<string, string>? RelicWiki,
         Dictionary<string, string>? WeaponWiki, Dictionary<string, string>? AvatarWiki);
-    private sealed record PropertyMetadata(int PropertyType, string? Name, string? Icon, string? FilterName);
+    private sealed record PropertyMetadata([property: JsonRequired] int PropertyType, string? Name, string? Icon, string? FilterName);
     internal sealed record Character(int Id, int? Level, int? ActivedConstellationNum,
         string? Name, string? Element, int? Rarity, int? Fetter, int? PromoteLevel, int? WeaponType,
         string? Icon, string? SideIcon, string? Image, string? CardImage, bool? IsChosen, Weapon? Weapon)
@@ -154,12 +161,12 @@ internal sealed class MiYouSheCharacterDetailResponseReader
     }
 
     private sealed record Skin(string? WeaponSkinName, string? WeaponSkinIcon, int? WeaponSkinRarity);
-    private sealed record Costume(int Id, string? Name, string? Icon);
+    private sealed record Costume([property: JsonRequired] int Id, string? Name, string? Icon);
     private sealed record Constellation(int Id, string? Name, string? Icon, string? Effect, bool? IsActived, int? Pos);
     private sealed record Skill(int SkillId, int? SkillType, int? Level, string? Desc, SkillAffix[]? SkillAffixList,
         string? Icon, bool? IsUnlock, string? Name);
     private sealed record SkillAffix(string? Name, string? Value);
-    internal sealed record Stat(int PropertyType, string? Base, string? Add, string? Final)
+    internal sealed record Stat([property: JsonRequired] int PropertyType, string? Base, string? Add, string? Final)
     {
         public CharacterStat ToDomain() => new(PropertyType, Base, Add, Final);
     }
@@ -173,9 +180,9 @@ internal sealed class MiYouSheCharacterDetailResponseReader
             MainProperty?.ToDomain(), SubPropertyList?.Select(item => item.ToDomain()).ToArray());
     }
 
-    private sealed record RelicSet(int Id, string? Name, RelicAffix[]? Affixes);
+    private sealed record RelicSet([property: JsonRequired] int Id, string? Name, RelicAffix[]? Affixes);
     private sealed record RelicAffix(int? ActivationNumber, string? Effect);
-    private sealed record RelicStat(int PropertyType, string? Value, int? Times)
+    private sealed record RelicStat([property: JsonRequired] int PropertyType, string? Value, int? Times)
     {
         public CharacterArtifactStat ToDomain() => new(PropertyType, Value, Times);
     }
