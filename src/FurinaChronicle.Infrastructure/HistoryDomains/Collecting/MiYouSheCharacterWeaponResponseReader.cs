@@ -23,6 +23,8 @@ public sealed class MiYouSheCharacterWeaponResponseReader(TimeProvider timeProvi
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
         NumberHandling = JsonNumberHandling.AllowReadingFromString,
         MaxDepth = 32,
+        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
+        AllowDuplicateProperties = false,
     };
 
     public async Task<CharacterWeaponSourceResult> ReadAsync(
@@ -116,18 +118,18 @@ public sealed class MiYouSheCharacterWeaponResponseReader(TimeProvider timeProvi
 
         var characterEntries = new List<InventoryStateEntry>(characters.Length);
         var equipped = new Dictionary<int, List<WeaponCopy>>();
-        foreach (Character? character in characters)
+        var roster = new Dictionary<int, CharacterRosterEntry>();
+        foreach (MiYouSheCharacterDetailResponseReader.Character? character in characters)
         {
-            if (character is not { Id: > 0 } ||
-                character.Level is not >= 0 ||
-                character.ActivedConstellationNum is not >= 0)
+            if (character is not { Id: > 0, Level: >= 0, ActivedConstellationNum: >= 0 and <= 6 } ||
+                !roster.TryAdd(character.Id, character.ToRoster()))
             {
                 return new(CharacterWeaponCollectionStatus.InvalidResponse);
             }
 
             characterEntries.Add(new InventoryStateEntry(
                 InventoryItemKind.Character,
-                character.Id.Value.ToString(
+                character.Id.ToString(
                     System.Globalization.CultureInfo.InvariantCulture),
                 instanceId: null,
                 quantity: 1,
@@ -140,17 +142,17 @@ public sealed class MiYouSheCharacterWeaponResponseReader(TimeProvider timeProvi
             {
                 continue;
             }
-            if (weapon.Id is not > 0 ||
+            if (weapon.Id <= 0 ||
                 weapon.Level is not >= 0 ||
                 weapon.AffixLevel is not >= 0)
             {
                 return new(CharacterWeaponCollectionStatus.InvalidResponse);
             }
 
-            if (!equipped.TryGetValue(weapon.Id.Value, out List<WeaponCopy>? copies))
+            if (!equipped.TryGetValue(weapon.Id, out List<WeaponCopy>? copies))
             {
                 copies = [];
-                equipped[weapon.Id.Value] = copies;
+                equipped[weapon.Id] = copies;
             }
             copies.Add(new WeaponCopy(weapon.Level.Value, weapon.AffixLevel.Value));
         }
@@ -187,20 +189,11 @@ public sealed class MiYouSheCharacterWeaponResponseReader(TimeProvider timeProvi
                 DataCompleteness.Complete,
                 weaponEntries,
                 DataCompleteness.Partial,
-                fetchedAt));
+                fetchedAt), Roster: roster);
     }
 
-    private sealed record Envelope(int? Retcode, CharacterList? Data);
-
-    private sealed record CharacterList(Character?[]? List);
-
-    private sealed record Character(
-        int? Id,
-        int? Level,
-        int? ActivedConstellationNum,
-        Weapon? Weapon);
-
-    private sealed record Weapon(int? Id, int? Level, int? AffixLevel);
+    private sealed record Envelope(int? Retcode, string? Message, CharacterList? Data);
+    private sealed record CharacterList(MiYouSheCharacterDetailResponseReader.Character?[]? List);
 
     private readonly record struct WeaponCopy(int Level, int Refinement);
 }

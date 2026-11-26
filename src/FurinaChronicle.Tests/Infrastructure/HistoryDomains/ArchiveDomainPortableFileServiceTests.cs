@@ -17,14 +17,16 @@ namespace FurinaChronicle.Tests.Infrastructure.HistoryDomains;
 
 public sealed partial class ArchiveDomainPortableFileServiceTests
 {
-    [Fact]
-    public async Task CharacterWeaponDataset_RoundTripsIntoNewDatabase()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CharacterWeaponDataset_RoundTripsIntoNewDatabase(bool includeDetails)
     {
         await using PortableContext source = await PortableContext.CreateAsync();
         PlayerArchive archive = await source.AddArchiveAndAccountAsync();
         GameAccount account = Assert.Single(
             await source.Accounts.GetByArchiveIdAsync(archive.Id));
-        ItemStateObservation observation = CharacterObservation(account.Id);
+        ItemStateObservation observation = CharacterObservation(account.Id, includeDetails);
         ManualAcquisition acquisition = Manual(account.Id);
         Assert.Equal(
             ChangeExecutionStatus.Applied,
@@ -72,6 +74,8 @@ public sealed partial class ArchiveDomainPortableFileServiceTests
         exported.Position = 0;
         ArchiveDomainPortablePackage package =
             await source.Files.ReadAsync(exported);
+        Assert.Equal(includeDetails ? 2 : 1, package.FormatMajor);
+        if (includeDetails) Assert.False((package with { FormatMajor = 1 }).SupportsVersion());
 
         await using PortableContext target = await PortableContext.CreateAsync();
         ArchiveDomainPortablePlan plan = await target.Files.PlanAsync(package);
@@ -84,8 +88,18 @@ public sealed partial class ArchiveDomainPortableFileServiceTests
         Assert.Equal(ChangeExecutionStatus.Applied, applied.Status);
         GameAccount importedAccount = Assert.Single(
             await target.Accounts.GetByArchiveIdAsync(plan.TargetArchiveId));
-        Assert.Single(await target.Store.GetItemObservationsAsync(
-            importedAccount.Id));
+        var reopenedObservation = Assert.Single(await target.Store.GetItemObservationsAsync(importedAccount.Id));
+        var reopenedCharacter = Assert.Single(reopenedObservation.Entries);
+        if (includeDetails)
+        {
+            Assert.Equal(3, reopenedCharacter.CharacterDetail?.Artifacts?.Single().SubStats?.Single().Hits);
+            Assert.Equal("暴击率", reopenedObservation.CharacterMetadata?.Properties?["20"].Name);
+        }
+        else
+        {
+            Assert.Null(reopenedCharacter.CharacterDetail);
+            Assert.Null(reopenedObservation.CharacterMetadata);
+        }
         Assert.Single(await target.Store.GetManualAcquisitionsAsync(
             importedAccount.Id));
         Assert.Equal(
@@ -470,7 +484,7 @@ public sealed partial class ArchiveDomainPortableFileServiceTests
             TestTime().AddSeconds(1),
             observations);
 
-    private static ItemStateObservation CharacterObservation(Guid accountId) =>
+    private static ItemStateObservation CharacterObservation(Guid accountId, bool includeDetails = false) =>
         new(
             ItemObservationId.New(),
             accountId,
@@ -486,7 +500,13 @@ public sealed partial class ArchiveDomainPortableFileServiceTests
                 InventoryFieldCoverage.Quantity |
                     InventoryFieldCoverage.Level |
                     InventoryFieldCoverage.Progression,
-                DataCompleteness.Complete)],
+                DataCompleteness.Complete,
+                includeDetails ? new CharacterDetail(
+                    "Fixture", "Hydro", 5, 10, 6, null, null, null, null, null, null, null,
+                    [], [], [], [], [], [],
+                    [new CharacterArtifact(15001, 1, "花", "Fixture relic", null, 5, 20, null, null,
+                        [new CharacterArtifactStat(20, "10.5%", 3)])],
+                    [], null, null, null) : null)],
             new RecordProvenance(
                 DataOrigin.OfficialApi,
                 new RecordTimestamps(
@@ -495,7 +515,10 @@ public sealed partial class ArchiveDomainPortableFileServiceTests
                 new DataSourceReference(
                     "miyoushe",
                     sourceSnapshotId: "snapshot-1"),
-                AcquisitionBatchId.New()));
+                AcquisitionBatchId.New()),
+            includeDetails ? new CharacterResponseMetadata(
+                new Dictionary<string, CharacterPropertyMetadata> { ["20"] = new(20, "暴击率", null, null) },
+                null, null, null, null) : null);
 
     private static ManualAcquisition Manual(Guid accountId) =>
         new(

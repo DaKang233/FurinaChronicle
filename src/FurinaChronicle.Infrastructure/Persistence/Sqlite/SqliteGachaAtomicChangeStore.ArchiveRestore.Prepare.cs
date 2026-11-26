@@ -324,7 +324,7 @@ public sealed partial class SqliteGachaAtomicChangeStore
             source.Kind,
             source.CollectionCompleteness,
             source.Entries,
-            source.Provenance);
+            source.Provenance, source.CharacterMetadata);
         string payload = JsonSerializer.Serialize(
             ItemObservationPayload.FromDomain(mapped),
             DomainJsonOptions);

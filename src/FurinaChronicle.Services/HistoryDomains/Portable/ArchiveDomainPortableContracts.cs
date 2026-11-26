@@ -44,13 +44,18 @@ public sealed record ArchiveDomainPortablePackage(
 {
     public bool SupportsVersion() => FormatMajor switch
     {
-        1 => FormatMinor >= 0 && !ContainsDetailedChallenges(Accounts),
+        1 => FormatMinor >= 0 && !ContainsDetailedChallenges(Accounts) && !ContainsCharacterDetails(Accounts),
+        2 when DatasetKind == ArchiveDomainDatasetKind.CharacterWeaponHistory => FormatMinor == 0 && ContainsCharacterDetails(Accounts),
         2 => DatasetKind == ArchiveDomainDatasetKind.ChallengeHistory &&
             (FormatMinor == 3 || FormatMinor is 0 or 1 or 2 && !ContainsTheaterBuffDetails(Accounts) &&
                 (FormatMinor == 2 || !ContainsStygianDetails(Accounts) &&
                     (FormatMinor == 1 || !ContainsTheaterDetails(Accounts)))),
         _ => false,
     };
+
+    public static bool ContainsCharacterDetails(IEnumerable<ArchiveDomainPortableAccount> accounts) =>
+        accounts.SelectMany(account => account.ItemObservations).Any(observation =>
+            observation.CharacterMetadata is not null || observation.Entries.Any(entry => entry.CharacterDetail is not null));
 
     public static bool ContainsTheaterBuffDetails(IEnumerable<ArchiveDomainPortableAccount> accounts) =>
         accounts.SelectMany(account => account.ChallengeObservations).Any(observation => observation.HasTheaterBuffDetails);

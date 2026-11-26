@@ -172,7 +172,7 @@ public sealed partial class SqliteGachaAtomicChangeStore
                     observation.Kind,
                     observation.CollectionCompleteness,
                     observation.Entries,
-                    observation.Provenance);
+                    observation.Provenance, observation.CharacterMetadata);
                 proposals.Add(DomainProposal.Immutable(
                     ItemObservationEntityKind,
                     mapped.ObservationId.ToString(),
@@ -2274,7 +2274,9 @@ public sealed partial class SqliteGachaAtomicChangeStore
         int Kind,
         int CollectionCompleteness,
         InventoryEntryPayload[] Entries,
-        ProvenancePayload Provenance)
+        ProvenancePayload Provenance,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        CharacterResponseMetadata? CharacterMetadata = null)
     {
         public static ItemObservationPayload FromDomain(
             ItemStateObservation observation) =>
@@ -2287,7 +2289,7 @@ public sealed partial class SqliteGachaAtomicChangeStore
                     .OrderBy(entry => entry.StableItemKey)
                     .Select(InventoryEntryPayload.FromDomain)
                     .ToArray(),
-                ProvenancePayload.FromDomain(observation.Provenance));
+                ProvenancePayload.FromDomain(observation.Provenance), observation.CharacterMetadata);
 
         public ItemStateObservation ToDomain() =>
             new(
@@ -2296,7 +2298,7 @@ public sealed partial class SqliteGachaAtomicChangeStore
                 (InventoryItemKind)Kind,
                 (DataCompleteness)CollectionCompleteness,
                 Entries.Select(entry => entry.ToDomain()),
-                Provenance.ToDomain());
+                Provenance.ToDomain(), CharacterMetadata);
     }
 
     private sealed record InventoryEntryPayload(
@@ -2307,7 +2309,9 @@ public sealed partial class SqliteGachaAtomicChangeStore
         int? Level,
         int? Progression,
         int FieldCoverage,
-        int FieldCompleteness)
+        int FieldCompleteness,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        CharacterDetail? CharacterDetail = null)
     {
         public static InventoryEntryPayload FromDomain(
             InventoryStateEntry entry) =>
@@ -2319,7 +2323,8 @@ public sealed partial class SqliteGachaAtomicChangeStore
                 entry.Level,
                 entry.Progression,
                 (int)entry.FieldCoverage,
-                (int)entry.FieldCompleteness);
+                (int)entry.FieldCompleteness,
+                entry.CharacterDetail);
 
         public InventoryStateEntry ToDomain() =>
             new(
@@ -2330,7 +2335,8 @@ public sealed partial class SqliteGachaAtomicChangeStore
                 Level,
                 Progression,
                 (InventoryFieldCoverage)FieldCoverage,
-                (DataCompleteness)FieldCompleteness);
+                (DataCompleteness)FieldCompleteness,
+                CharacterDetail);
     }
 
     private sealed record ManualAcquisitionPayload(

@@ -393,14 +393,18 @@ public sealed class ArchivePackageWriter(ArchivePortableLimits? limits = null)
                 acquisitions,
                 accountRevisions.Select(ToPortableRevision).ToArray()));
         }
+        string version = accounts.SelectMany(account => account.ItemObservations)
+            .Any(observation => observation.CharacterMetadata is not null ||
+                observation.Entries.Any(item => item.CharacterDetail is not null))
+            ? "1.5" : "1.0";
         string path = GetDomainPath(archive.ArchiveReference, "character-weapon-history");
         EntryDescriptor entry = await WriteJsonEntryAsync(
             zip,
             path,
             new ArchiveCharacterWeaponDataset(
-                "furina-domain-history", "1.0", archive.ArchiveReference, accounts),
+                "furina-domain-history", version, archive.ArchiveReference, accounts),
             cancellationToken);
-        return new DomainWriteResult(entry, facts, revisions);
+        return new DomainWriteResult(entry, facts, revisions, version);
     }
 
     private static PortableManualAcquisitionRevision ToPortableRevision(

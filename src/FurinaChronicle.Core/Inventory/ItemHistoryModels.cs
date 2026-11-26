@@ -1,6 +1,7 @@
 // Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
+using System.Text.Json.Serialization;
 using FurinaChronicle.Core.Records;
 
 namespace FurinaChronicle.Core.Inventory;
@@ -51,7 +52,8 @@ public sealed record InventoryStateEntry
         int? level,
         int? progression,
         InventoryFieldCoverage fieldCoverage,
-        DataCompleteness fieldCompleteness)
+        DataCompleteness fieldCompleteness,
+        CharacterDetail? characterDetail = null)
     {
         if (!Enum.IsDefined(kind))
         {
@@ -82,6 +84,12 @@ public sealed record InventoryStateEntry
                 nameof(quantity));
         }
 
+        if (characterDetail is not null && kind != InventoryItemKind.Character)
+        {
+            throw new ArgumentException("Only character entries can carry character detail.", nameof(characterDetail));
+        }
+
+        CharacterDetail = characterDetail;
         Kind = kind;
         TypeId = typeId.Trim();
         InstanceId = string.IsNullOrWhiteSpace(instanceId)
@@ -111,6 +119,9 @@ public sealed record InventoryStateEntry
 
     public DataCompleteness FieldCompleteness { get; }
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public CharacterDetail? CharacterDetail { get; }
+
     public string StableItemKey => InstanceId is null
         ? $"{(int)Kind}:{TypeId}"
         : $"{(int)Kind}:{TypeId}:{InstanceId}";
@@ -124,7 +135,8 @@ public sealed record ItemStateObservation
         InventoryItemKind kind,
         DataCompleteness collectionCompleteness,
         IEnumerable<InventoryStateEntry> entries,
-        RecordProvenance provenance)
+        RecordProvenance provenance,
+        CharacterResponseMetadata? characterMetadata = null)
     {
         if (gameAccountId == Guid.Empty)
         {
@@ -162,8 +174,14 @@ public sealed record ItemStateObservation
         GameAccountId = gameAccountId;
         Kind = kind;
         CollectionCompleteness = collectionCompleteness;
+        if (characterMetadata is not null && kind != InventoryItemKind.Character)
+        {
+            throw new ArgumentException("Only character observations can carry character metadata.", nameof(characterMetadata));
+        }
+
         Entries = normalized;
         Provenance = provenance;
+        CharacterMetadata = characterMetadata;
     }
 
     public ItemObservationId ObservationId { get; }
@@ -175,6 +193,9 @@ public sealed record ItemStateObservation
     public DataCompleteness CollectionCompleteness { get; }
 
     public IReadOnlyList<InventoryStateEntry> Entries { get; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public CharacterResponseMetadata? CharacterMetadata { get; }
 
     public RecordProvenance Provenance { get; }
 }

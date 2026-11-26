@@ -1,6 +1,7 @@
 // Copyright (c) 2026 DaKang233.
 // SPDX-License-Identifier: MIT
 
+using System.Text.Json;
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.History;
 using FurinaChronicle.Core.Inventory;
@@ -38,14 +39,16 @@ public sealed record CharacterWeaponSnapshot(
     DataCompleteness CharacterCompleteness,
     IReadOnlyList<InventoryStateEntry> Weapons,
     DataCompleteness WeaponCompleteness,
-    DateTimeOffset FetchedAt);
+    DateTimeOffset FetchedAt,
+    CharacterResponseMetadata? CharacterMetadata = null);
 
 public sealed record CharacterWeaponSourceResult(
     CharacterWeaponCollectionStatus Status,
     CharacterWeaponSnapshot? Snapshot = null,
     TimeSpan? RetryAfter = null,
     int? HttpStatus = null,
-    int? ProviderCode = null);
+    int? ProviderCode = null,
+    IReadOnlyDictionary<int, CharacterRosterEntry>? Roster = null);
 
 public sealed record CharacterWeaponCollectionResult(
     CharacterWeaponCollectionStatus Status,
@@ -143,7 +146,7 @@ public sealed class CollectCharacterWeapon(
                     Limit: 1),
                 cancellationToken)).Items.FirstOrDefault();
         bool charactersChanged = latestCharacters is null || !IsSameState(
-            latestCharacters, snapshot.CharacterCompleteness, snapshot.Characters);
+            latestCharacters, snapshot.CharacterCompleteness, snapshot.Characters, snapshot.CharacterMetadata);
         bool weaponsChanged = latestWeapons is null || !IsSameState(
             latestWeapons, snapshot.WeaponCompleteness, snapshot.Weapons);
         if (!charactersChanged && !weaponsChanged)
@@ -175,7 +178,7 @@ public sealed class CollectCharacterWeapon(
                 InventoryItemKind.Character,
                 snapshot.CharacterCompleteness,
                 snapshot.Characters,
-                provenance));
+                provenance, snapshot.CharacterMetadata));
         }
         if (weaponsChanged)
         {
@@ -208,10 +211,11 @@ public sealed class CollectCharacterWeapon(
     private static bool IsSameState(
         ItemStateObservation previous,
         DataCompleteness completeness,
-        IReadOnlyList<InventoryStateEntry> entries)
+        IReadOnlyList<InventoryStateEntry> entries,
+        CharacterResponseMetadata? metadata = null)
     {
         if (previous.CollectionCompleteness != completeness ||
-            previous.Entries.Count != entries.Count)
+            previous.Entries.Count != entries.Count || !SamePayload(previous.CharacterMetadata, metadata))
         {
             return false;
         }
@@ -226,13 +230,18 @@ public sealed class CollectCharacterWeapon(
                 now.Level != earlier.Level ||
                 now.Progression != earlier.Progression ||
                 now.FieldCoverage != earlier.FieldCoverage ||
-                now.FieldCompleteness != earlier.FieldCompleteness)
+                now.FieldCompleteness != earlier.FieldCompleteness ||
+                !SamePayload(now.CharacterDetail, earlier.CharacterDetail))
             {
                 return false;
             }
         }
         return true;
     }
+
+    private static bool SamePayload<T>(T? first, T? second) where T : class
+        => ReferenceEquals(first, second) || first is not null && second is not null &&
+            JsonSerializer.Serialize(first) == JsonSerializer.Serialize(second);
 
     private static bool Matches(
         PassportGameRole candidate,

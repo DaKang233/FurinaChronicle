@@ -88,10 +88,11 @@ public sealed partial class ArchiveDomainPortableFileService(
         }
 
         bool hasDetailedChallenges = ArchiveDomainPortablePackage.ContainsDetailedChallenges(portableAccounts);
+        bool hasCharacterDetails = ArchiveDomainPortablePackage.ContainsCharacterDetails(portableAccounts);
         var package = new ArchiveDomainPortablePackage(
             datasetKind,
-            FormatMajor: hasDetailedChallenges ? 2 : 1,
-            FormatMinor: ArchiveDomainPortablePackage.ContainsTheaterBuffDetails(portableAccounts) ? 3 :
+            FormatMajor: hasDetailedChallenges || hasCharacterDetails ? 2 : 1,
+            FormatMinor: hasCharacterDetails ? 0 : ArchiveDomainPortablePackage.ContainsTheaterBuffDetails(portableAccounts) ? 3 :
                 ArchiveDomainPortablePackage.ContainsStygianDetails(portableAccounts) ? 2 :
                 ArchiveDomainPortablePackage.ContainsTheaterDetails(portableAccounts) ? 1 : hasDetailedChallenges ? 0 : 1,
             PackageFingerprint: string.Empty,
@@ -513,7 +514,7 @@ public sealed partial class ArchiveDomainPortableFileService(
                     item.Kind,
                     item.CollectionCompleteness,
                     item.Entries,
-                    item.Provenance);
+                    item.Provenance, item.CharacterMetadata);
                 CountComparison(
                     existingItems.TryGetValue(
                         item.ObservationId,
@@ -960,7 +961,9 @@ public sealed partial class ArchiveDomainPortableFileService(
         InventoryItemKind Kind,
         DataCompleteness CollectionCompleteness,
         IReadOnlyList<InventoryStateEntry> Entries,
-        RecordProvenance Provenance);
+        RecordProvenance Provenance,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        CharacterResponseMetadata? CharacterMetadata = null);
 
     private sealed record GameRoleIdentityWire(
         Guid Id,
@@ -1207,7 +1210,7 @@ public sealed partial class ArchiveDomainPortableFileService(
                 wire.Kind,
                 wire.CollectionCompleteness,
                 wire.Entries,
-                wire.Provenance);
+                wire.Provenance, wire.CharacterMetadata);
         }
 
         public override void Write(
@@ -1222,7 +1225,7 @@ public sealed partial class ArchiveDomainPortableFileService(
                     value.Kind,
                     value.CollectionCompleteness,
                     value.Entries,
-                    value.Provenance),
+                    value.Provenance, value.CharacterMetadata),
                 options);
     }
 

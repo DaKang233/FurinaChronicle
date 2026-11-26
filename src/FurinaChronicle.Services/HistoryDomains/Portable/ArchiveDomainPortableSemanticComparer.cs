@@ -4,6 +4,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Challenges;
 using FurinaChronicle.Core.History;
@@ -140,7 +141,7 @@ public static class ArchiveDomainPortableSemanticComparer
                 observation.Entries
                     .OrderBy(entry => entry.StableItemKey, StringComparer.Ordinal)
                     .ToArray(),
-                observation.Provenance))
+                observation.Provenance, observation.CharacterMetadata))
             .OrderBy(observation => observation.ObservationId.ToString(), StringComparer.Ordinal)
             .ToArray(),
         account.ManualAcquisitions
@@ -218,7 +219,9 @@ public static class ArchiveDomainPortableSemanticComparer
         InventoryItemKind Kind,
         DataCompleteness CollectionCompleteness,
         IReadOnlyList<InventoryStateEntry> Entries,
-        RecordProvenance Provenance);
+        RecordProvenance Provenance,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        CharacterResponseMetadata? CharacterMetadata);
 
     private sealed record ManualAcquisitionSemantics(
         ManualAcquisitionId AcquisitionId,

@@ -756,7 +756,14 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
                 await ReadJsonAsync<ArchiveCharacterWeaponDataset>(
                     entry, limits.MaximumEntryBytes, cancellationToken);
             ValidateDomainHeader(value.Format, value.FormatVersion,
-                value.ArchiveReference, entry.FullName, catalog, expectedVersion: "1.0");
+                value.ArchiveReference, entry.FullName, catalog, expectedVersion: version);
+            if (version is not ("1.0" or "1.5") ||
+                version == "1.0" && value.Accounts.SelectMany(account => account.ItemObservations)
+                    .Any(fact => fact.CharacterMetadata is not null || fact.Entries.Any(item => item.CharacterDetail is not null)))
+            {
+                throw Error(ArchivePackageErrorCode.UnsupportedVersion,
+                    "Character detail requires character/weapon dataset version 1.5.", entry.FullName);
+            }
             if (value.Accounts.Select(item => item.AccountReference).Distinct().Count() !=
                     value.Accounts.Count ||
                 value.Accounts.Any(item =>
@@ -783,6 +790,9 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
         }
         if (kind == "challenge-history")
         {
+            if (version is not ("1.0" or "1.1" or "1.2" or "1.3" or "1.4"))
+                throw Error(ArchivePackageErrorCode.UnsupportedVersion,
+                    "The challenge dataset version is not supported.", entry.FullName);
             ArchiveChallengeDataset value = await ReadJsonAsync<ArchiveChallengeDataset>(
                 entry, limits.MaximumEntryBytes, cancellationToken);
             ValidateDomainHeader(value.Format, value.FormatVersion,

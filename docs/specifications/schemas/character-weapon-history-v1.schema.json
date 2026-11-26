@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://www.dakang233.com/schemas/furina-character-weapon-history/1/dataset.schema.json",
-  "title": "Furina character and weapon history Portable v1",
+  "title": "Furina character and weapon history Portable v1 and v2",
   "type": "object",
   "required": ["format", "package"],
   "properties": {
@@ -11,7 +11,7 @@
       "required": ["dataset_kind", "format_major", "format_minor", "package_fingerprint", "source_archive_id", "source_archive_name", "exported_at", "accounts"],
       "properties": {
         "dataset_kind": { "const": 1 },
-        "format_major": { "const": 1 },
+        "format_major": { "enum": [1, 2] },
         "format_minor": { "type": "integer", "minimum": 0 },
         "package_fingerprint": { "$ref": "#/$defs/sha256" },
         "source_archive_id": { "$ref": "#/$defs/guid" },
@@ -28,6 +28,23 @@
   },
   "additionalProperties": true,
   "$defs": {
+    "character_detail": {"type": "object", "properties": {"name": {"anyOf": [{"type": "string"}, {"type": "null"}]}, "element": {"anyOf": [{"type": "string"}, {"type": "null"}]}, "rarity": {"anyOf": [{"type": "integer"}, {"type": "null"}]}, "friendship": {"anyOf": [{"type": "integer"}, {"type": "null"}]}, "ascension": {"anyOf": [{"type": "integer"}, {"type": "null"}]}, "icon": {"anyOf": [{"type": "string"}, {"type": "null"}]}, "side_icon": {"anyOf": [{"type": "string"}, {"type": "null"}]}, "portrait": {"anyOf": [{"type": "string"}, {"type": "null"}]}, "card_image": {"anyOf": [{"type": "string"}, {"type": "null"}]}, "is_featured": {"anyOf": [{"type": "boolean"}, {"type": "null"}]}, "weapon_type": {"anyOf": [{"type": "integer"}, {"type": "null"}]}, "weapon": {"anyOf": [{"$ref": "#/$defs/character_weapon_detail"}, {"type": "null"}]}, "constellations": {"anyOf": [{"type": "array", "items": {"$ref": "#/$defs/character_constellation"}}, {"type": "null"}]}, "talents": {"anyOf": [{"type": "array", "items": {"$ref": "#/$defs/character_talent"}}, {"type": "null"}]}, "selected_stats": {"anyOf": [{"type": "array", "items": {"$ref": "#/$defs/character_stat"}}, {"type": "null"}]}, "base_stats": {"anyOf": [{"type": "array", "items": {"$ref": "#/$defs/character_stat"}}, {"type": "null"}]}, "advanced_stats": {"anyOf": [{"type": "array", "items": {"$ref": "#/$defs/character_stat"}}, {"type": "null"}]}, "elemental_stats": {"anyOf": [{"type": "array", "items": {"$ref": "#/$defs/character_stat"}}, {"type": "null"}]}, "artifacts": {"anyOf": [{"type": "array", "items": {"$ref": "#/$defs/character_artifact"}}, {"type": "null"}]}, "costumes": {"anyOf": [{"type": "array", "items": {"$ref": "#/$defs/character_costume"}}, {"type": "null"}]}, "artifact_recommendation": {"anyOf": [{"$ref": "#/$defs/character_artifact_recommendation"}, {"type": "null"}]}, "is_tps_unlocked": {"anyOf": [{"type": "boolean"}, {"type": "null"}]}, "weapon_skin": {"anyOf": [{"$ref": "#/$defs/character_weapon_skin"}, {"type": "null"}]}, "base_weapon": {"anyOf": [{"$ref": "#/$defs/character_weapon_detail"}, {"type": "null"}]}, "roster": {"anyOf": [{"$ref": "#/$defs/character_roster_entry"}, {"type": "null"}]}}, "additionalProperties": false},
+    "character_roster_entry": {"type": "object", "properties": {"level": {"type": "integer"}, "constellation_count": {"type": "integer"}, "name": {"anyOf": [{"type": "string"}, {"type": "null"}]}, "element": {"anyOf": [{"type": "string"}, {"type": "null"}]}, "rarity": {"anyOf": [{"type": "integer"}, {"type": "null"}]}, "friendship": {"anyOf": [{"type": "integer"}, {"type": "null"}]}, "ascension": {"anyOf": [{"type": "integer"}, {"type": "null"}]}, "weapon_type": {"anyOf": [{"type": "integer"}, {"type": "null"}]}, "icon": {"anyOf": [{"type": "string"}, {"type": "null"}]}, "side_icon": {"anyOf": [{"type": "string"}, {"type": "null"}]}, "portrait": {"anyOf": [{"type": "string"}, {"type": "null"}]}, "card_image": {"anyOf": [{"type": "string"}, {"type": "null"}]}, "is_featured": {"anyOf": [{"type": "boolean"}, {"type": "null"}]}, "weapon": {"anyOf": [{"$ref": "#/$defs/character_weapon_detail"}, {"type": "null"}]}}, "additionalProperties": false, "required": ["level", "constellation_count"]},
+    "character_stat": {"type": "object", "properties": {"property_id": {"type": "integer"}, "base": {"anyOf": [{"type": "string"}, {"type": "null"}]}, "bonus": {"anyOf": [{"type": "string"}, {"type": "null"}]}, "total": {"anyOf": [{"type": "string"}, {"type": "null"}]}}, "additionalProperties": false, "required": ["property_id"]},
+    "character_property_metadata": {"type": "object", "properties": {"property_id": {"type": "integer"}, "name": {"anyOf": [{"type": "string"}, {"type": "null"}]}, "icon": {"anyOf": [{"type": "string"}, {"type": "null"}]}, "filter_name": {"anyOf": [{"type": "string"}, {"type": "null"}]}}, "additionalProperties": false, "required": ["property_id"]},
+    "character_weapon_detail": {"type": "object", "properties": {"id": {"type": "integer"}, "name": {"anyOf": [{"type": "string"}, {"type": "null"}]}, "icon": {"anyOf": [{"type": "string"}, {"type": "null"}]}, "type": {"anyOf": [{"type": "integer"}, {"type": "null"}]}, "type_name": {"anyOf": [{"type": "string"}, {"type": "null"}]}, "rarity": {"anyOf": [{"type": "integer"}, {"type": "null"}]}, "level": {"anyOf": [{"type": "integer"}, {"type": "null"}]}, "refinement": {"anyOf": [{"type": "integer"}, {"type": "null"}]}, "ascension": {"anyOf": [{"type": "integer"}, {"type": "null"}]}, "description": {"anyOf": [{"type": "string"}, {"type": "null"}]}, "main_stat": {"anyOf": [{"$ref": "#/$defs/character_stat"}, {"type": "null"}]}, "secondary_stat": {"anyOf": [{"$ref": "#/$defs/character_stat"}, {"type": "null"}]}}, "additionalProperties": false, "required": ["id"]},
+    "character_weapon_skin": {"type": "object", "properties": {"name": {"anyOf": [{"type": "string"}, {"type": "null"}]}, "icon": {"anyOf": [{"type": "string"}, {"type": "null"}]}, "rarity": {"anyOf": [{"type": "integer"}, {"type": "null"}]}}, "additionalProperties": false},
+    "character_costume": {"type": "object", "properties": {"id": {"type": "integer"}, "name": {"anyOf": [{"type": "string"}, {"type": "null"}]}, "icon": {"anyOf": [{"type": "string"}, {"type": "null"}]}}, "additionalProperties": false, "required": ["id"]},
+    "character_constellation": {"type": "object", "properties": {"id": {"type": "integer"}, "position": {"anyOf": [{"type": "integer"}, {"type": "null"}]}, "name": {"anyOf": [{"type": "string"}, {"type": "null"}]}, "icon": {"anyOf": [{"type": "string"}, {"type": "null"}]}, "unlocked": {"anyOf": [{"type": "boolean"}, {"type": "null"}]}, "description": {"anyOf": [{"type": "string"}, {"type": "null"}]}}, "additionalProperties": false, "required": ["id"]},
+    "character_talent": {"type": "object", "properties": {"id": {"type": "integer"}, "type": {"anyOf": [{"type": "integer"}, {"type": "null"}]}, "level": {"anyOf": [{"type": "integer"}, {"type": "null"}]}, "name": {"anyOf": [{"type": "string"}, {"type": "null"}]}, "icon": {"anyOf": [{"type": "string"}, {"type": "null"}]}, "unlocked": {"anyOf": [{"type": "boolean"}, {"type": "null"}]}, "description": {"anyOf": [{"type": "string"}, {"type": "null"}]}, "attributes": {"anyOf": [{"type": "array", "items": {"$ref": "#/$defs/character_talent_value"}}, {"type": "null"}]}}, "additionalProperties": false, "required": ["id"]},
+    "character_talent_value": {"type": "object", "properties": {"name": {"anyOf": [{"type": "string"}, {"type": "null"}]}, "value": {"anyOf": [{"type": "string"}, {"type": "null"}]}}, "additionalProperties": false},
+    "character_artifact": {"type": "object", "properties": {"id": {"type": "integer"}, "slot": {"anyOf": [{"type": "integer"}, {"type": "null"}]}, "slot_name": {"anyOf": [{"type": "string"}, {"type": "null"}]}, "name": {"anyOf": [{"type": "string"}, {"type": "null"}]}, "icon": {"anyOf": [{"type": "string"}, {"type": "null"}]}, "rarity": {"anyOf": [{"type": "integer"}, {"type": "null"}]}, "level": {"anyOf": [{"type": "integer"}, {"type": "null"}]}, "set": {"anyOf": [{"$ref": "#/$defs/character_artifact_set"}, {"type": "null"}]}, "main_stat": {"anyOf": [{"$ref": "#/$defs/character_artifact_stat"}, {"type": "null"}]}, "sub_stats": {"anyOf": [{"type": "array", "items": {"$ref": "#/$defs/character_artifact_stat"}}, {"type": "null"}]}}, "additionalProperties": false, "required": ["id"]},
+    "character_artifact_stat": {"type": "object", "properties": {"property_id": {"type": "integer"}, "value": {"anyOf": [{"type": "string"}, {"type": "null"}]}, "hits": {"anyOf": [{"type": "integer"}, {"type": "null"}]}}, "additionalProperties": false, "required": ["property_id"]},
+    "character_artifact_set": {"type": "object", "properties": {"id": {"type": "integer"}, "name": {"anyOf": [{"type": "string"}, {"type": "null"}]}, "bonuses": {"anyOf": [{"type": "array", "items": {"$ref": "#/$defs/character_set_bonus"}}, {"type": "null"}]}}, "additionalProperties": false, "required": ["id"]},
+    "character_set_bonus": {"type": "object", "properties": {"pieces": {"anyOf": [{"type": "integer"}, {"type": "null"}]}, "description": {"anyOf": [{"type": "string"}, {"type": "null"}]}}, "additionalProperties": false},
+    "character_artifact_recommendation": {"type": "object", "properties": {"recommended": {"anyOf": [{"$ref": "#/$defs/character_recommended_stats"}, {"type": "null"}]}, "custom": {"anyOf": [{"$ref": "#/$defs/character_recommended_stats"}, {"type": "null"}]}, "has_set_recommendation": {"anyOf": [{"type": "boolean"}, {"type": "null"}]}}, "additionalProperties": false},
+    "character_recommended_stats": {"type": "object", "properties": {"sands": {"anyOf": [{"type": "array", "items": {"type": "integer"}}, {"type": "null"}]}, "goblet": {"anyOf": [{"type": "array", "items": {"type": "integer"}}, {"type": "null"}]}, "circlet": {"anyOf": [{"type": "array", "items": {"type": "integer"}}, {"type": "null"}]}, "sub_stats": {"anyOf": [{"type": "array", "items": {"type": "integer"}}, {"type": "null"}]}}, "additionalProperties": false},
+    "character_response_metadata": {"type": "object", "properties": {"properties": {"anyOf": [{"type": "object", "additionalProperties": {"$ref": "#/$defs/character_property_metadata"}}, {"type": "null"}]}, "artifact_property_options": {"anyOf": [{"$ref": "#/$defs/character_recommended_stats"}, {"type": "null"}]}, "artifact_wiki": {"anyOf": [{"type": "object", "additionalProperties": {"type": "string"}}, {"type": "null"}]}, "weapon_wiki": {"anyOf": [{"type": "object", "additionalProperties": {"type": "string"}}, {"type": "null"}]}, "avatar_wiki": {"anyOf": [{"type": "object", "additionalProperties": {"type": "string"}}, {"type": "null"}]}}, "additionalProperties": false},
     "guid": { "type": "string", "format": "uuid" },
     "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
     "identity": {
@@ -79,7 +96,8 @@
         "level": { "type": ["integer", "null"], "minimum": 0 },
         "progression": { "type": ["integer", "null"], "minimum": 0 },
         "field_coverage": { "type": "integer", "minimum": 0, "maximum": 7 },
-        "field_completeness": { "enum": [0, 1, 2] }
+        "field_completeness": { "enum": [0, 1, 2] },
+        "character_detail": { "$ref": "#/$defs/character_detail" }
       },
       "additionalProperties": true
     },
@@ -92,6 +110,7 @@
         "kind": { "enum": [1, 2] },
         "collection_completeness": { "enum": [0, 1, 2] },
         "entries": { "type": "array", "items": { "$ref": "#/$defs/entry" } },
+        "character_metadata": { "$ref": "#/$defs/character_response_metadata" },
         "provenance": { "$ref": "#/$defs/provenance" }
       },
       "additionalProperties": true

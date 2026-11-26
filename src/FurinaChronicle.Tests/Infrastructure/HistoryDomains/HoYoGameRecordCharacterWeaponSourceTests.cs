@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Net;
+using System.Text.Json.Nodes;
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Inventory;
 using FurinaChronicle.Core.Passport;
@@ -45,6 +46,13 @@ public sealed class HoYoGameRecordCharacterWeaponSourceTests
         using var client = new HttpClient(new RecordingHandler(request =>
         {
             Assert.Equal(HttpMethod.Post, request.Method);
+            if (request.RequestUri!.AbsolutePath.EndsWith("/character/detail", StringComparison.Ordinal))
+            {
+                string payload = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+                var ids = JsonNode.Parse(payload)!["character_ids"]!.AsArray();
+                Assert.Equal(new[] { 10000093, 10000103 }, ids.Select(value => value!.GetValue<int>()));
+                return Json(BuildDetails().ToJsonString());
+            }
             Assert.Equal("api-takumi-record.mihoyo.com", request.RequestUri!.Host);
             Assert.Equal(
                 "/game_record/app/genshin/api/character/list",
@@ -84,6 +92,16 @@ public sealed class HoYoGameRecordCharacterWeaponSourceTests
         CharacterWeaponSnapshot snapshot = Assert.IsType<CharacterWeaponSnapshot>(
             result.Snapshot);
         Assert.Equal(2, snapshot.Characters.Count);
+        var detail = Assert.IsType<CharacterDetail>(snapshot.Characters[0].CharacterDetail);
+        Assert.Equal("Fixture", detail.Name);
+        Assert.Equal(10, detail.Friendship);
+        Assert.Equal(6, detail.Ascension);
+        Assert.False(Assert.Single(detail.Constellations!).Unlocked);
+        Assert.Equal("124.5%", Assert.Single(Assert.Single(detail.Talents!).Attributes!).Value);
+        Assert.Equal("1016", Assert.Single(detail.BaseStats!).Base);
+        Assert.Equal(4, Assert.Single(Assert.Single(detail.Artifacts!).SubStats!).Hits);
+        Assert.Equal(5, detail.Weapon?.Refinement);
+        Assert.Equal("攻击力", snapshot.CharacterMetadata?.Properties?["2001"].Name);
         Assert.Equal(DataCompleteness.Complete, snapshot.CharacterCompleteness);
         Assert.Equal(DataCompleteness.Partial, snapshot.WeaponCompleteness);
         InventoryStateEntry duplicated = Assert.Single(
@@ -93,6 +111,53 @@ public sealed class HoYoGameRecordCharacterWeaponSourceTests
         Assert.Null(duplicated.Level);
         Assert.Null(duplicated.Progression);
         Assert.Equal(InventoryFieldCoverage.Quantity, duplicated.FieldCoverage);
+    }
+
+    [Theory]
+    [InlineData("unknown")]
+    [InlineData("missing")]
+    [InlineData("duplicate")]
+    public async Task InvalidDetailsDoNotExposeARosterAsSuccessfulCollection(string defect)
+    {
+        var details = BuildDetails();
+        var list = details["data"]!["list"]!.AsArray();
+        switch (defect)
+        {
+            case "unknown": list[0]!["relics"]![0]!["sub_property_list"]![0]!["future_field"] = 1; break;
+            case "missing": list.RemoveAt(1); break;
+            case "duplicate": list.Add(list[0]!.DeepClone()); break;
+        }
+        using var client = new HttpClient(new RecordingHandler(request =>
+            Json(request.RequestUri!.AbsolutePath.EndsWith("/detail", StringComparison.Ordinal) ?
+                details.ToJsonString() : RosterBody)));
+        using var source = new HoYoGameRecordCharacterWeaponSource(TimeProvider.System, client);
+        var result = await source.FetchAsync(Passport(), Role);
+
+        Assert.Equal(CharacterWeaponCollectionStatus.InvalidResponse, result.Status);
+        Assert.Null(result.Snapshot);
+    }
+
+    private static JsonNode BuildDetails()
+    {
+        var data = JsonNode.Parse(RosterBody)!;
+        var list = data["data"]!["list"]!.AsArray();
+        var entries = list.Select(value => new JsonObject { ["base"] = value!.DeepClone() }).ToArray();
+        list.Clear();
+        entries[0]["base"]!["name"] = "Fixture";
+        entries[0]["base"]!["fetter"] = 10;
+        entries[0]["base"]!["promote_level"] = 6;
+        var sample = JsonNode.Parse("""
+            {
+              "constellations": [{"id": 1, "pos": 1, "is_actived": false, "name": "Fixture constellation", "effect": "<b>Effect</b>"}],
+              "skills": [{"skill_id": 1, "level": 10, "skill_affix_list": [{"name": "Damage", "value": "124.5%"}]}],
+              "base_properties": [{"property_type": 2001, "base": "1016", "add": "2542", "final": "3558"}],
+              "relics": [{"id": 15001, "pos": 1, "level": 20, "sub_property_list": [{"property_type": 20, "value": "15.5%", "times": 4}]}]
+            }
+            """)!.AsObject();
+        foreach (var property in sample) entries[0][property.Key] = property.Value!.DeepClone();
+        foreach (var entry in entries) list.Add(entry);
+        data["data"]!["property_map"] = JsonNode.Parse("""{"2001":{"property_type":2001,"name":"攻击力"}}""");
+        return data;
     }
 
     [Fact]

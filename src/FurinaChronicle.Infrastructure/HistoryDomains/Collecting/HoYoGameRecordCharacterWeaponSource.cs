@@ -6,6 +6,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using FurinaChronicle.Core.Archives;
+using FurinaChronicle.Core.Inventory;
 using FurinaChronicle.Core.Passport;
 using FurinaChronicle.Infrastructure.MiHoYo;
 using FurinaChronicle.Services.HistoryDomains.Collecting;
@@ -24,6 +25,8 @@ public sealed class HoYoGameRecordCharacterWeaponSource
     private const string Host = "https://api-takumi-record.mihoyo.com";
     private const string OverseaHost = "https://bbs-api-os.hoyolab.com";
     private const string CharacterPath = "/game_record/app/genshin/api/character/list";
+    private const string DetailPath = "/game_record/app/genshin/api/character/detail";
+    private const int DetailBatchSize = 32;
     private const string OverseaAppVersion = "2.54.0";
     private const string AppVersion = "2.115.0";
     private const string GameRecordSalt = "xV8v4Qu54lUKrEYFZkJhB8cuOh9Asafs";
@@ -31,11 +34,14 @@ public sealed class HoYoGameRecordCharacterWeaponSource
     private readonly HttpClient httpClient;
     private readonly bool ownsClient;
     private readonly MiYouSheCharacterWeaponResponseReader reader;
+    private readonly MiYouSheCharacterDetailResponseReader detailReader = new();
+    private readonly TimeProvider timeProvider;
 
     public HoYoGameRecordCharacterWeaponSource(
         TimeProvider timeProvider,
         HttpClient? httpClient = null)
     {
+        this.timeProvider = timeProvider;
         ownsClient = httpClient is null;
         this.httpClient = httpClient ?? new HttpClient(new HttpClientHandler
         {
@@ -79,7 +85,7 @@ public sealed class HoYoGameRecordCharacterWeaponSource
         });
         string cookie = BuildCookie(passport, token, isOversea);
         using var request = CreateRequest(
-            body, passport, cookie, isOversea);
+            CharacterPath, body, passport, cookie, isOversea);
         try
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(
@@ -89,7 +95,11 @@ public sealed class HoYoGameRecordCharacterWeaponSource
                 request,
                 HttpCompletionOption.ResponseHeadersRead,
                 timeout.Token);
-            return await reader.ReadAsync(response, timeout.Token);
+            CharacterWeaponSourceResult rosterResult = await reader.ReadAsync(response, timeout.Token);
+            if (isOversea || rosterResult.Status != CharacterWeaponCollectionStatus.Received)
+                return rosterResult;
+
+            return await FetchDetailsAsync(passport, role, cookie, rosterResult, cancellationToken);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -99,6 +109,100 @@ public sealed class HoYoGameRecordCharacterWeaponSource
         {
             return new(CharacterWeaponCollectionStatus.Unavailable);
         }
+    }
+
+    private async Task<CharacterWeaponSourceResult> FetchDetailsAsync(
+        PassportAccount passport, GameRoleNaturalIdentity role, string cookie,
+        CharacterWeaponSourceResult rosterResult, CancellationToken cancellationToken)
+    {
+        if (rosterResult.Snapshot is not { } snapshot || rosterResult.Roster is not { Count: > 0 and <= 400 } roster)
+            return new(CharacterWeaponCollectionStatus.InvalidResponse);
+
+        var characters = new List<InventoryStateEntry>(roster.Count);
+        CharacterResponseMetadata? metadata = null;
+        foreach (int[] batch in roster.Keys.Chunk(DetailBatchSize))
+        {
+            string body = JsonSerializer.Serialize(new
+            {
+                role_id = role.Uid,
+                server = role.Server,
+                sort_type = 1,
+                character_ids = batch,
+            });
+            using var request = CreateRequest(DetailPath, body, passport, cookie, isOversea: false);
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            deadline.CancelAfter(TimeSpan.FromSeconds(30));
+            using HttpResponseMessage response = await httpClient.SendAsync(
+                request, HttpCompletionOption.ResponseHeadersRead, deadline.Token);
+            var result = await detailReader.ReadAsync(response, deadline.Token);
+            if (result.Status != CharacterWeaponCollectionStatus.Received)
+                return new(result.Status, RetryAfter: result.RetryAfter,
+                    HttpStatus: result.HttpStatus, ProviderCode: result.ProviderCode);
+
+            if (result.Entries is not { } entries || !batch.ToHashSet().SetEquals(entries.Keys) ||
+                !TryMergeMetadata(ref metadata, result.Metadata))
+                return new(CharacterWeaponCollectionStatus.InvalidResponse, HttpStatus: result.HttpStatus);
+
+            foreach (int id in batch)
+            {
+                var entry = entries[id];
+                characters.Add(new(InventoryItemKind.Character, id.ToString(CultureInfo.InvariantCulture),
+                    instanceId: null, quantity: 1, entry.Level, entry.ConstellationCount,
+                    InventoryFieldCoverage.Level | InventoryFieldCoverage.Progression,
+                    FurinaChronicle.Core.Records.DataCompleteness.Complete,
+                    entry.Detail with { Roster = roster[id], Ascension = entry.Detail.Ascension ?? roster[id].Ascension }));
+            }
+        }
+
+        return rosterResult with
+        {
+            Roster = null,
+            Snapshot = snapshot with
+            {
+                Characters = characters,
+                CharacterMetadata = metadata,
+                FetchedAt = timeProvider.GetUtcNow(),
+            },
+        };
+    }
+
+    private static bool TryMergeMetadata(ref CharacterResponseMetadata? current, CharacterResponseMetadata? incoming)
+    {
+        if (incoming is null) return true;
+        if (current is null)
+        {
+            current = incoming;
+            return true;
+        }
+        if (!TryMerge(current.Properties, incoming.Properties, out var properties) ||
+            !TryMerge(current.ArtifactWiki, incoming.ArtifactWiki, out var artifacts) ||
+            !TryMerge(current.WeaponWiki, incoming.WeaponWiki, out var weapons) ||
+            !TryMerge(current.AvatarWiki, incoming.AvatarWiki, out var avatars) ||
+            current.ArtifactPropertyOptions is { } existing && incoming.ArtifactPropertyOptions is { } options &&
+                JsonSerializer.Serialize(existing) != JsonSerializer.Serialize(options))
+            return false;
+
+        current = new(properties, current.ArtifactPropertyOptions ?? incoming.ArtifactPropertyOptions,
+            artifacts, weapons, avatars);
+        return true;
+    }
+
+    private static bool TryMerge<T>(IReadOnlyDictionary<string, T>? first, IReadOnlyDictionary<string, T>? second,
+        out IReadOnlyDictionary<string, T>? result)
+    {
+        result = first ?? second;
+        if (first is null || second is null) return true;
+        var merged = new SortedDictionary<string, T>(StringComparer.Ordinal);
+        foreach (var pair in first) merged.Add(pair.Key, pair.Value);
+        foreach (var pair in second)
+        {
+            if (merged.TryGetValue(pair.Key, out var existing) &&
+                !EqualityComparer<T>.Default.Equals(existing, pair.Value))
+                return false;
+            merged[pair.Key] = pair.Value;
+        }
+        result = merged;
+        return true;
     }
 
     private static string BuildCookie(
@@ -121,6 +225,7 @@ public sealed class HoYoGameRecordCharacterWeaponSource
     }
 
     private static HttpRequestMessage CreateRequest(
+        string path,
         string body,
         PassportAccount passport,
         string cookie,
@@ -128,7 +233,7 @@ public sealed class HoYoGameRecordCharacterWeaponSource
     {
         var request = new HttpRequestMessage(
             HttpMethod.Post,
-            (isOversea ? OverseaHost : Host) + CharacterPath)
+            (isOversea ? OverseaHost : Host) + path)
         {
             Content = new StringContent(body, Encoding.UTF8, "application/json"),
         };
