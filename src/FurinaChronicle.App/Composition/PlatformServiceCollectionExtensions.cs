@@ -3,6 +3,8 @@
 
 using FurinaChronicle.App.UI.TechnicalPreview;
 using FurinaChronicle.App.Persistence;
+using FurinaChronicle.Presentation.Gacha;
+using FurinaChronicle.Presentation.Notifications;
 
 namespace FurinaChronicle.App.Composition;
 
@@ -12,6 +14,8 @@ internal static class PlatformServiceCollectionExtensions
         this IServiceCollection services)
     {
         services.AddSingleton(TimeProvider.System);
+        services.AddSingleton<IUiDispatcher>(new MauiUiDispatcher());
+        services.AddSingleton<INotificationCenter, NotificationCenter>();
 #if WINDOWS && (PHASE8C_VALIDATION || PHASE8B_VALIDATION)
         _ = PlatformStoragePaths.AppDataDirectory;
         services.AddSingleton<IPreferences, ValidationPreferences>();
@@ -31,5 +35,9 @@ internal static class PlatformServiceCollectionExtensions
 #endif
 
         return services;
+    }
+    private sealed class MauiUiDispatcher : IUiDispatcher
+    {
+        public Task InvokeAsync(Action action) => MainThread.InvokeOnMainThreadAsync(action);
     }
 }
