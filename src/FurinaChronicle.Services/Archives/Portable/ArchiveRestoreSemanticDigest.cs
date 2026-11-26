@@ -45,16 +45,40 @@ public static class ArchiveRestoreSemanticDigest
         value.CreatedAt,
     });
 
-    public static string ForItemObservation(ItemStateObservation value) => Compute(new
+    public static string ForItemObservation(ItemStateObservation value)
     {
-        value.ObservationId,
-        value.Kind,
-        value.CollectionCompleteness,
-        Entries = value.Entries
-            .OrderBy(item => item.StableItemKey, StringComparer.Ordinal)
-            .ToArray(),
-        value.Provenance,
-    });
+        var observation = new
+        {
+            value.ObservationId,
+            value.Kind,
+            value.CollectionCompleteness,
+            Entries = value.Entries
+                .OrderBy(item => item.StableItemKey, StringComparer.Ordinal)
+                .ToArray(),
+            value.Provenance,
+        };
+        if (value.CharacterMetadata is not { } metadata)
+        {
+            return Compute(observation);
+        }
+
+        return Compute(new
+        {
+            Observation = observation,
+            CharacterMetadata = metadata with
+            {
+                Properties = OrderByKey(metadata.Properties),
+                ArtifactWiki = OrderByKey(metadata.ArtifactWiki),
+                WeaponWiki = OrderByKey(metadata.WeaponWiki),
+                AvatarWiki = OrderByKey(metadata.AvatarWiki),
+            },
+        });
+    }
+
+    private static IReadOnlyDictionary<string, T>? OrderByKey<T>(
+        IReadOnlyDictionary<string, T>? values) =>
+        values?.OrderBy(pair => pair.Key, StringComparer.Ordinal)
+            .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
 
     public static string ForManualAcquisition(ManualAcquisitionState value) =>
         ForManualAcquisition(value.Acquisition);
