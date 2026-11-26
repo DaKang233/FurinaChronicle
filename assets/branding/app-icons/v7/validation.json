@@ -1,0 +1,60 @@
+{
+  "date": "2026-11-23",
+  "version": "v7",
+  "builds": [
+    {
+      "host": "WinUI",
+      "release_build": "passed, 0 warnings/errors",
+      "exe": "src/FurinaChronicle.Windows/bin/x64/Release/net10.0-windows10.0.19041.0/win-x64/FurinaChronicle.Windows.exe",
+      "embedded_icon_sizes": [
+        [
+          16,
+          20,
+          24,
+          32,
+          40,
+          48,
+          64,
+          96,
+          128,
+          256
+        ]
+      ]
+    },
+    {
+      "host": "MAUI Windows",
+      "release_build": "passed, 0 warnings/errors",
+      "exe": "src/FurinaChronicle.App/bin/x64/Release/net10.0-windows10.0.19041.0/win-x64/FurinaChronicle.App.exe",
+      "embedded_icon_sizes": [
+        [
+          16,
+          20,
+          24,
+          32,
+          40,
+          48,
+          64,
+          96,
+          128,
+          256
+        ]
+      ]
+    },
+    {
+      "host": "MAUI Android",
+      "release_build": "passed, 0 warnings/errors",
+      "apk": "src\\FurinaChronicle.App\\bin\\Release\\net10.0-android\\com.companyname.furinachronicle.app-Signed.apk",
+      "checks": [
+        "Adaptive icon declaration packaged",
+        "Packaged foreground/background pixels match generated v7 resources"
+      ]
+    }
+  ],
+  "additional_checks": [
+    "Source export keeps v7 Windows pixels",
+    "Android safe-zone and circular-mask checks passed",
+    "Canonical copyright headers passed",
+    "git diff --check passed"
+  ],
+  "device_or_interactive_launch_tested": false
+}

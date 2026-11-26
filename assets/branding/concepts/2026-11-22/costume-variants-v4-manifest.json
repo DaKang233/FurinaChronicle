@@ -1,0 +1,102 @@
+{
+  "version": "v4",
+  "date": "2026-11-22",
+  "status": "design concepts",
+  "generation": "built-in image_gen",
+  "variants": {
+    "pneuma": {
+      "label": "芒性",
+      "hair": "long",
+      "theme": "white",
+      "logo": "furina-pneuma-logo-v4.png",
+      "app_icon": "furina-pneuma-app-icon-rounded-v4.png"
+    },
+    "ousia": {
+      "label": "荒性",
+      "hair": "short",
+      "theme": "black",
+      "logo": "furina-ousia-logo-v4.png",
+      "app_icon": "furina-ousia-app-icon-rounded-v4.png"
+    }
+  },
+  "verification": [
+    {
+      "file": "furina-pneuma-logo-v4.png",
+      "width": 1283,
+      "height": 1226,
+      "mode": "RGBA",
+      "alpha_range": [
+        0,
+        255
+      ],
+      "corner_alpha_8bit": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "center_alpha_8bit": 253
+    },
+    {
+      "file": "furina-pneuma-app-icon-rounded-v4.png",
+      "width": 1254,
+      "height": 1254,
+      "mode": "RGBA",
+      "alpha_range": [
+        0,
+        255
+      ],
+      "corner_alpha_8bit": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "center_alpha_8bit": 253
+    },
+    {
+      "file": "furina-ousia-logo-v4.png",
+      "width": 1283,
+      "height": 1226,
+      "mode": "RGBA",
+      "alpha_range": [
+        0,
+        255
+      ],
+      "corner_alpha_8bit": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "center_alpha_8bit": 253
+    },
+    {
+      "file": "furina-ousia-app-icon-rounded-v4.png",
+      "width": 1254,
+      "height": 1254,
+      "mode": "RGBA",
+      "alpha_range": [
+        0,
+        255
+      ],
+      "corner_alpha_8bit": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "center_alpha_8bit": 253
+    }
+  ],
+  "visual_review": [
+    "Pneuma long back hair and pale lapels/vest; white hat feather",
+    "Ousia short bob with no long back hair; dark lapels/vest and hat feather",
+    "Both retain reverse-color waterdrop pupils, purple rim on deep-blue iris, black right glove and white left glove",
+    "Refined jabot, central drop pendant, asymmetric chest ornaments, cuff motifs, glove details and hat crown/drop ornaments",
+    "Rounded icon backgrounds with transparent outer corners"
+  ],
+  "alpha_note": "Generated alpha preserved without manual processing: near-opaque artwork samples around 252-253/255; one outer corner in pale icon has residual alpha 1/255. These are design concepts, not platform packaging exports.",
+  "source_model_directory": "G:\\米哈游\\原神\\角色模型\\芙宁娜",
+  "implementation": "No source code or platform application assets replaced; no model files or source textures copied into repository."
+}

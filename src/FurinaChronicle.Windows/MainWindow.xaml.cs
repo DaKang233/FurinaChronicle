@@ -51,6 +51,8 @@ public sealed partial class MainWindow : Window
         this.composition = composition;
         InitializeComponent();
         Title = composition.Version.UserVisibleName;
+        AppWindow.SetIcon(Path.Combine(
+            AppContext.BaseDirectory, "Assets", "AppIcon", "FurinaChronicle.ico"));
 
         // Only platform services that cannot touch the data directory are resolved here. Page
         // states, the gacha coordinators and the isolated environment are built after the startup

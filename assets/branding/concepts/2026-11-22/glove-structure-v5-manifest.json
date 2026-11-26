@@ -1,0 +1,103 @@
+{
+  "version": "v5",
+  "status": "design concepts",
+  "tool": "built-in image_gen",
+  "variants": {
+    "ousia": {
+      "label": "荒性",
+      "logo": "furina-ousia-logo-v5.png",
+      "app_icon": "furina-ousia-app-icon-rounded-v5.png",
+      "hair": "short",
+      "theme": "black"
+    },
+    "pneuma": {
+      "label": "芒性",
+      "logo": "furina-pneuma-logo-v5.png",
+      "app_icon": "furina-pneuma-app-icon-rounded-v5.png",
+      "hair": "long",
+      "theme": "white"
+    }
+  },
+  "changes": [
+    "Black right glove: covered fingers, broad exposed hand, narrow wrist band and connecting blue teardrop fastener",
+    "White left glove: covered hand and fingers, centered proximal dorsal blue teardrop",
+    "Removed invented diamond glove patches and corrected Ousia icon ornament placement",
+    "Retained variant hair/costume, droplet pupils, face, book, quill, backgrounds and rounded corners as editing invariants",
+    "Additional pale-icon exterior edge cleanup"
+  ],
+  "verification": [
+    {
+      "file": "furina-ousia-logo-v5.png",
+      "size": [
+        1283,
+        1226
+      ],
+      "mode": "RGBA",
+      "alpha_range": [
+        0,
+        255
+      ],
+      "corner_alpha": [
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "file": "furina-ousia-app-icon-rounded-v5.png",
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "alpha_range": [
+        0,
+        255
+      ],
+      "corner_alpha": [
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "file": "furina-pneuma-logo-v5.png",
+      "size": [
+        1283,
+        1226
+      ],
+      "mode": "RGBA",
+      "alpha_range": [
+        0,
+        255
+      ],
+      "corner_alpha": [
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "file": "furina-pneuma-app-icon-rounded-v5.png",
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "alpha_range": [
+        0,
+        255
+      ],
+      "corner_alpha": [
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  ],
+  "implementation": "No application code or platform icon configuration changed. Previous v4 files retained."
+}

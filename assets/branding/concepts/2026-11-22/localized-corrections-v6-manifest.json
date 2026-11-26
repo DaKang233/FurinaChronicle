@@ -1,0 +1,96 @@
+{
+  "version": "v6",
+  "status": "design concepts",
+  "tool": "built-in image_gen",
+  "variants": {
+    "ousia": {
+      "logo": "furina-ousia-logo-v6.png",
+      "app_icon": "furina-ousia-app-icon-rounded-v6.png"
+    },
+    "pneuma": {
+      "logo": "furina-pneuma-logo-v6.png",
+      "app_icon": "furina-pneuma-app-icon-rounded-v6.png"
+    }
+  },
+  "source_version": "v5",
+  "localized_edits": {
+    "ousia_logo": "Added narrow right black wrist band and connector to existing drop",
+    "ousia_app_icon": "Removed isolated skin wedge / stray wrist patches and made wrist connection coherent",
+    "pneuma_logo_and_app_icon": "Replaced exaggerated scroll-shaped cuffs with compact fabric cuffs and restrained gold fleur-de-lis; thinned white glove wrist boundary"
+  },
+  "preservation_constraints": "Existing face, eyes, hair variant, costume outside intended cuff edits, hand silhouettes, book, quill, composition and background were locked by edit instructions. Previous files preserved for visual comparison.",
+  "verification": [
+    {
+      "file": "furina-ousia-logo-v6.png",
+      "size": [
+        1283,
+        1226
+      ],
+      "mode": "RGBA",
+      "alpha_range": [
+        0,
+        255
+      ],
+      "corner_alpha_8bit": [
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "file": "furina-ousia-app-icon-rounded-v6.png",
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "alpha_range": [
+        0,
+        255
+      ],
+      "corner_alpha_8bit": [
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "file": "furina-pneuma-logo-v6.png",
+      "size": [
+        1283,
+        1226
+      ],
+      "mode": "RGBA",
+      "alpha_range": [
+        0,
+        255
+      ],
+      "corner_alpha_8bit": [
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "file": "furina-pneuma-app-icon-rounded-v6.png",
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "alpha_range": [
+        0,
+        255
+      ],
+      "corner_alpha_8bit": [
+        1,
+        0,
+        0,
+        0
+      ]
+    }
+  ]
+}

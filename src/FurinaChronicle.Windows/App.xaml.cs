@@ -93,6 +93,8 @@ public partial class App : Application
         try
         {
             fatalWindow = new Window { Title = "FurinaChronicle · 致命错误" };
+            fatalWindow.AppWindow.SetIcon(Path.Combine(
+                AppContext.BaseDirectory, "Assets", "AppIcon", "FurinaChronicle.ico"));
             if (composition?.Services.GetService<IFilePickerService>() is { } picker)
             {
                 picker.SetOwner(fatalWindow);

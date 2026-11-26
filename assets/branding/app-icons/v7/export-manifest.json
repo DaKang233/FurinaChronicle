@@ -1,0 +1,39 @@
+{
+  "source": "assets/branding/concepts/2026-11-22",
+  "version": "v7",
+  "generation": "Deterministic export and layer composition only",
+  "source_logo_sha256": "d9467ddbe0c1984d793df8b0d3dc7b8e2923ccfbe5d8173bed5a27a733487137",
+  "winui": {
+    "ico_sizes": [
+      16,
+      20,
+      24,
+      32,
+      40,
+      48,
+      64,
+      96,
+      128,
+      256
+    ],
+    "file": "src/FurinaChronicle.Windows/Assets/AppIcon/FurinaChronicle.ico"
+  },
+  "maui": {
+    "windows": "Resources/AppIcon/Windows/appicon.png",
+    "windows_ico": "Resources/AppIcon/Windows/FurinaChronicle.ico",
+    "android_background": "Resources/AppIcon/Android/appicon.png",
+    "android_foreground": "Resources/AppIcon/Android/appiconfg.png",
+    "foreground_scale": 0.58,
+    "adaptive_foreground_bbox_1024": [
+      323,
+      254,
+      701,
+      770
+    ]
+  },
+  "checks": [
+    "Windows PNG equals v7 image pixels",
+    "ICO contains every requested size",
+    "Android foreground fits 66/108 safe area and circular launcher mask"
+  ]
+}

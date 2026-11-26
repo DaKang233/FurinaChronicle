@@ -1,0 +1,55 @@
+{
+  "version": "v7",
+  "status": "design concept",
+  "variant": "Ousia only",
+  "lighting_edit": "Built-in image_gen; preferred v6 geometry and first mascot v1 lighting reference",
+  "background": "Generated independently using built-in image_gen, no mascot",
+  "alpha_cleanup": {
+    "method": "Keep largest 8-connected alpha component with one-pixel antialias margin; only disconnected exterior pixels removed; no RGB recoloring of retained artwork",
+    "removed_pixels": 23455
+  },
+  "logo": {
+    "file": "furina-ousia-logo-v7.png",
+    "size": [
+      1283,
+      1226
+    ],
+    "alpha_bbox": [
+      213,
+      0,
+      1111,
+      1226
+    ],
+    "sha256": "d9467ddbe0c1984d793df8b0d3dc7b8e2923ccfbe5d8173bed5a27a733487137"
+  },
+  "icon": {
+    "file": "furina-ousia-app-icon-layered-v7.png",
+    "size": [
+      1024,
+      1024
+    ],
+    "method": "Deterministic Pillow alpha compositing; no generative mascot composition",
+    "corner_radius_px": 205,
+    "background_layer": "ousia-v7-layers/background-rounded.png",
+    "foreground_layer": "ousia-v7-layers/foreground-logo.png",
+    "placed_logo_size": [
+      645,
+      881
+    ],
+    "placed_logo_offset": [
+      189,
+      71
+    ]
+  },
+  "checks": [
+    "PNG decode successful",
+    "Four icon corner alpha values are zero",
+    "Foreground fits inside rounded tile",
+    "Final icon equals saved background-plus-foreground alpha composite byte for byte"
+  ],
+  "source_versions": {
+    "ousia": "v6",
+    "lighting_only": "furina-chronicler-mascot-v1.png"
+  },
+  "scope": "Pneuma images and application source code unchanged"
+}
