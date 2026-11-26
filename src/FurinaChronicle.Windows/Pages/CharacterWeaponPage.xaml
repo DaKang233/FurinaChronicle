@@ -117,8 +117,9 @@
 
         <Grid Grid.Row="3" ColumnSpacing="16">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="2*" />
-                <ColumnDefinition Width="3*" />
+                <ColumnDefinition Width="1.15*" MinWidth="145" />
+                <ColumnDefinition Width="1.1*" MinWidth="140" />
+                <ColumnDefinition Width="3.75*" />
             </Grid.ColumnDefinitions>
             <ListView
                 x:Name="ObservationList"
@@ -138,7 +139,10 @@
                 </ListView.ItemTemplate>
             </ListView>
 
-            <Grid Grid.Column="1" RowSpacing="8">
+            <ListView x:Name="CharacterList" Grid.Column="1" SelectionMode="Single"
+                      SelectionChanged="OnCharacterChanged" DisplayMemberPath="Label"
+                      AutomationProperties.Name="当前快照角色" />
+            <Grid Grid.Column="2" RowSpacing="8">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
@@ -148,12 +152,14 @@
                     FontWeight="SemiBold"
                     TextWrapping="Wrap"
                     AutomationProperties.AutomationId="Ui5CharacterWeaponDetailTitle" />
-                <ScrollViewer Grid.Row="1">
+                <ScrollViewer x:Name="CharacterDetailScroll" Grid.Row="1">
+                    <StackPanel x:Name="CharacterDetailStack" Spacing="12">
                     <TextBlock
                         x:Name="DetailBodyText"
                         TextWrapping="Wrap"
                         IsTextSelectionEnabled="True"
                         AutomationProperties.AutomationId="Ui5CharacterWeaponDetail" />
+                    </StackPanel>
                 </ScrollViewer>
             </Grid>
         </Grid>

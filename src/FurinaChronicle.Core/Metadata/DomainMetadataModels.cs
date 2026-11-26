@@ -39,3 +39,6 @@ public sealed record TheaterScheduleMetadata(
     IReadOnlyList<string> SpecialAvatarIds);
 
 public sealed record ChallengeBlessingMetadata(string? Name, IReadOnlyList<string> Descriptions);
+
+public sealed record CharacterMechanicsMetadata(
+    IReadOnlyList<CharacterTalent> Talents, IReadOnlyList<CharacterConstellation> Constellations);

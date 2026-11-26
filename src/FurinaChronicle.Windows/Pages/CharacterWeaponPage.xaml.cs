@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 using FurinaChronicle.Core.Inventory;
+using FurinaChronicle.Services.Abstractions;
 using FurinaChronicle.Presentation.Diagnostics;
 using FurinaChronicle.Presentation.History;
 using FurinaChronicle.Presentation.Notifications;
@@ -17,6 +18,7 @@ public sealed partial class CharacterWeaponPage : UserControl
     private readonly IDiagnosticService diagnostics;
     private readonly CharacterWeaponHistoryState state;
     private readonly WindowsHistoryCollection collection;
+    private readonly IDomainMetadataService characterMetadata;
     private bool rendering;
     private string? lastReportedFailure;
     private CancellationTokenSource? activeCollection;
@@ -24,10 +26,12 @@ public sealed partial class CharacterWeaponPage : UserControl
     public CharacterWeaponPage(
         CharacterWeaponHistoryState state,
         WindowsHistoryCollection collection,
-        IDiagnosticService diagnostics)
+        IDiagnosticService diagnostics,
+        IDomainMetadataService characterMetadata)
     {
         this.state = state ?? throw new ArgumentNullException(nameof(state));
         this.collection = collection;
+        this.characterMetadata = characterMetadata;
         this.diagnostics = diagnostics ??
             throw new ArgumentNullException(nameof(diagnostics));
         InitializeComponent();
@@ -52,6 +56,7 @@ public sealed partial class CharacterWeaponPage : UserControl
     public void Leave()
     {
         activeCollection?.Cancel();
+        CancelCharacterMetadata();
         state.Cancel();
     }
 
@@ -200,6 +205,7 @@ public sealed partial class CharacterWeaponPage : UserControl
         AutomationProperties.SetName(
             DetailBodyText,
             view is null ? "观察详情" : $"观察详情：{view.Title}");
+        RenderCharacterChoices(view?.Observation);
     }
 
     private async Task RunAsync(Func<Task> operation)

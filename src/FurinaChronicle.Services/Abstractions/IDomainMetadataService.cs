@@ -19,6 +19,10 @@ public interface IDomainMetadataService
         string typeId,
         CancellationToken cancellationToken = default);
 
+    ValueTask<CharacterMechanicsMetadata?> ResolveCharacterMechanicsAsync(
+        string typeId, IReadOnlyList<CharacterTalent> observedTalents,
+        CancellationToken cancellationToken = default) => ValueTask.FromResult<CharacterMechanicsMetadata?>(null);
+
     ValueTask<ChallengeScheduleMetadata?> ResolveScheduleAsync(
         ChallengeMode mode,
         string seasonId,

@@ -283,6 +283,7 @@ public partial class CharacterHistoryPage : ContentPage
         if (loadedCards.Count == 0)
         {
             ObservationDetailLabel.Text = string.Empty;
+            RenderProfilePicker(null);
             return;
         }
         int index = ObservationPicker.SelectedIndex >= 0 &&
@@ -291,6 +292,7 @@ public partial class CharacterHistoryPage : ContentPage
             : 0;
         CharacterObservationCard card = loadedCards[index];
         ObservationDetailLabel.Text = $"{card.Evidence}\n{card.Detail}";
+        RenderProfilePicker(loadedObservations[index]);
     }
 
     private static string DescribeObservationChoice(
@@ -368,6 +370,7 @@ public partial class CharacterHistoryPage : ContentPage
         loadedCards = Array.Empty<CharacterObservationCard>();
         ObservationPicker.ItemsSource = null;
         ObservationDetailLabel.Text = string.Empty;
+        RenderProfilePicker(null);
         offset = total = 0;
     }
 

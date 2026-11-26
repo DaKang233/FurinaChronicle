@@ -12,6 +12,7 @@
     xmlns:history="clr-namespace:FurinaChronicle.Presentation.History;assembly=FurinaChronicle.Presentation"
     SafeAreaEdges="All"
     Title="角色与武器">
+    <Grid>
     <Grid Padding="16" RowDefinitions="Auto,*,Auto" RowSpacing="12">
         <VerticalStackLayout x:Name="Filters" Spacing="8">
             <Label Text="角色与武器" FontSize="24" FontAttributes="Bold" />
@@ -39,6 +40,8 @@
                     SelectedIndexChanged="OnObservationChanged"
                     AutomationId="CharacterObservationPicker" />
             <Label x:Name="ObservationDetailLabel" AutomationId="CharacterObservationDetail" />
+            <Picker x:Name="ProfilePicker" Title="选择角色" IsVisible="False"
+                    SelectedIndexChanged="OnProfileChanged" AutomationId="CharacterProfilePicker" />
         </VerticalStackLayout>
 
         <CollectionView x:Name="HistoryList" Grid.Row="1" SelectionMode="None"
@@ -59,11 +62,32 @@
             </CollectionView.ItemTemplate>
         </CollectionView>
 
+        <ScrollView x:Name="ProfileScroll" Grid.Row="1" IsVisible="False">
+            <VerticalStackLayout x:Name="ProfileContent" Spacing="10" />
+        </ScrollView>
+
         <Grid x:Name="Paging" Grid.Row="2" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
             <Button x:Name="PreviousButton" Text="上一页" Clicked="OnPreviousClicked" />
             <Label x:Name="PageLabel" Grid.Column="1" HorizontalTextAlignment="Center"
                    VerticalTextAlignment="Center" />
             <Button x:Name="NextButton" Grid.Column="2" Text="下一页" Clicked="OnNextClicked" />
         </Grid>
+    </Grid>
+    <Grid x:Name="CharacterOverlay" IsVisible="False"
+          BackgroundColor="#99000000" RowDefinitions="1*,9*">
+        <Border x:Name="CharacterSheet" Grid.Row="1" Padding="16,10,16,12"
+                StrokeThickness="0" StrokeShape="RoundRectangle 20,20,0,0"
+                BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#22252C}">
+            <Grid RowDefinitions="Auto,*" ColumnDefinitions="*,Auto" RowSpacing="10">
+                <Label x:Name="CharacterSheetTitle" VerticalOptions="Center"
+                       FontSize="20" FontAttributes="Bold" />
+                <Button Grid.Column="1" Text="×" Clicked="OnCloseCharacterSheet"
+                        SemanticProperties.Description="关闭详情" AutomationId="CloseCharacterSheet" />
+                <ScrollView Grid.Row="1" Grid.ColumnSpan="2" x:Name="CharacterSheetScroll">
+                    <VerticalStackLayout x:Name="CharacterSheetContent" Spacing="10" />
+                </ScrollView>
+            </Grid>
+        </Border>
+    </Grid>
     </Grid>
 </ContentPage>

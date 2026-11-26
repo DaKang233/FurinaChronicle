@@ -60,6 +60,11 @@ public sealed class CompositeDomainMetadataService(
                 "GenshinCalculator");
     }
 
+    public ValueTask<CharacterMechanicsMetadata?> ResolveCharacterMechanicsAsync(
+        string typeId, IReadOnlyList<CharacterTalent> observedTalents,
+        CancellationToken cancellationToken = default) =>
+        new(snap.ResolveCharacterMechanicsAsync(typeId, observedTalents, cancellationToken));
+
     public ValueTask<ChallengeScheduleMetadata?> ResolveScheduleAsync(
         ChallengeMode mode,
         string seasonId,

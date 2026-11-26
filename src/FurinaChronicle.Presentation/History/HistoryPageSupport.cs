@@ -120,6 +120,8 @@ public sealed record CharacterWeaponObservationView
 {
     public required Guid ObservationId { get; init; }
 
+    public ItemStateObservation? Observation { get; init; }
+
     public required string Title { get; init; }
 
     public required string Evidence { get; init; }
@@ -314,6 +316,7 @@ public static class HistoryObservationViewBuilder
         return new CharacterWeaponObservationView
         {
             ObservationId = observation.ObservationId.Value,
+            Observation = observation,
             Title = card.Title,
             Evidence = card.Evidence,
             Detail = card.Detail,

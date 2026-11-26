@@ -317,7 +317,8 @@ public sealed partial class MainWindow : Window
         characterWeaponPage = new CharacterWeaponPage(
             composition.Services.GetRequiredService<CharacterWeaponHistoryState>(),
             composition.Services.GetRequiredService<WindowsHistoryCollection>(),
-            diagnostics)
+            diagnostics,
+            composition.Services.GetRequiredService<FurinaChronicle.Services.Abstractions.IDomainMetadataService>())
         {
             Visibility = Visibility.Collapsed
         };

@@ -111,6 +111,14 @@
     </Content>
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="..\FurinaChronicle.App\Resources\Images\ui_gcg_buff_common_element_*.png;..\FurinaChronicle.App\Resources\Images\ui_icon*.png">
+      <Link>Assets\Character\%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
   <Import Project="..\..\build\FurinaVersion.targets" />
 
   <!-- The unpackaged publish must carry the current resource index, including embedded XBF. -->
