@@ -7,6 +7,7 @@ using System.Text.Json.Serialization;
 using FurinaChronicle.Core.Archives;
 using FurinaChronicle.Core.Inventory;
 using FurinaChronicle.Core.Passport;
+using FurinaChronicle.Services.Passport;
 
 namespace FurinaChronicle.Infrastructure.HistoryDomains.Collecting;
 
@@ -49,7 +50,9 @@ public sealed partial class HoYoGameRecordCharacterWeaponSource
                     }),
                 };
                 request.Headers.Referrer = new Uri("https://webstatic.mihoyo.com/");
-                request.Headers.Add("Cookie", $"account_id={passport.Aid}; cookie_token={credential}");
+                request.Headers.Add(
+                    "Cookie",
+                    PassportCookieComposer.ForWebToken(passport, credential));
                 using var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, deadline.Token);
                 if (!response.IsSuccessStatusCode) break;
                 await response.Content.LoadIntoBufferAsync(1024 * 1024, deadline.Token);

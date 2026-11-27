@@ -48,6 +48,23 @@ public sealed class HoYoGameRecordSpiralAbyssSource : ISpiralAbyssSource, IDispo
         "acw_tc", "aliyungf_tc",
     };
 
+    /// <summary>
+    /// One credential is sent under both its v1 and v2 cookie names, so a value
+    /// rotated by the registration response has to replace every name in its
+    /// group; leaving a stale sibling would let the service keep reading the
+    /// old token.
+    /// </summary>
+    private static readonly string[][] CredentialCookieAliases =
+    [
+        ["stoken", "stoken_v2"],
+        ["ltoken", "ltoken_v2"],
+        ["cookie_token", "cookie_token_v2"],
+        ["account_id", "account_id_v2"],
+        ["ltuid", "ltuid_v2"],
+        ["stuid"],
+        ["mid", "ltmid_v2", "account_mid_v2"],
+    ];
+
     private static readonly JsonSerializerOptions VerificationJson = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
@@ -100,16 +117,10 @@ public sealed class HoYoGameRecordSpiralAbyssSource : ISpiralAbyssSource, IDispo
             $"role_id={role.Uid}&schedule_type={(int)period}&server={role.Server}");
         string indexQuery = string.Create(CultureInfo.InvariantCulture,
             $"role_id={role.Uid}&server={role.Server}");
-        string suffix = isOversea ? "_v2" : string.Empty;
-        string cookie = $"ltuid{suffix}={passport.Aid}; ltoken{suffix}={token}";
-        if (passport.Credentials.CookieToken is { } cookieToken && IsHeaderToken(cookieToken))
-        {
-            cookie += $"; account_id{suffix}={passport.Aid}; cookie_token{suffix}={cookieToken}";
-        }
-        if (isOversea && passport.Mid is { } mid && IsHeaderToken(mid))
-        {
-            cookie += $"; account_mid_v2={mid}";
-        }
+        string cookie = PassportCookieComposer.ForGameRecord(
+            passport,
+            token,
+            isOversea);
         GameRecordVerificationStage? stage = null;
         try
         {
@@ -437,6 +448,7 @@ public sealed class HoYoGameRecordSpiralAbyssSource : ISpiralAbyssSource, IDispo
         }
 
         bool containsSessionCookie = false;
+        List<string> rotated = [];
         foreach (Cookie issued in verificationCookies.GetCookies(VerificationSubmissionUri).Cast<Cookie>())
         {
             if (string.IsNullOrEmpty(issued.Name))
@@ -450,9 +462,34 @@ public sealed class HoYoGameRecordSpiralAbyssSource : ISpiralAbyssSource, IDispo
             bool differs = !merged.TryGetValue(issued.Name, out string? previous) ||
                 !string.Equals(previous, issued.Value, StringComparison.Ordinal);
             merged[issued.Name] = issued.Value;
-            if (differs && !NonSessionCookieNames.Contains(issued.Name))
+            if (differs)
             {
-                containsSessionCookie = true;
+                rotated.Add(issued.Name);
+                if (!NonSessionCookieNames.Contains(issued.Name))
+                {
+                    containsSessionCookie = true;
+                }
+            }
+        }
+
+        foreach (string name in rotated)
+        {
+            foreach (string[] group in CredentialCookieAliases)
+            {
+                if (!group.Contains(name, StringComparer.OrdinalIgnoreCase) ||
+                    !merged.TryGetValue(name, out string? value))
+                {
+                    continue;
+                }
+
+                foreach (string alias in group)
+                {
+                    if (!string.Equals(alias, name, StringComparison.OrdinalIgnoreCase) &&
+                        merged.ContainsKey(alias))
+                    {
+                        merged[alias] = value;
+                    }
+                }
             }
         }
 

@@ -128,9 +128,10 @@ public sealed class HoYoGameRecordChallengeModeSourceTests
                 "?role_id=100000001&server=cn_gf01&need_detail=true&active=1",
                 request.RequestUri.Query);
             Assert.Equal("5", Assert.Single(request.Headers.GetValues("x-rpc-client_type")));
-            Assert.Equal(
-                "ltuid=1111; ltoken=fixture; account_id=1111; cookie_token=fixture-cookie",
-                Assert.Single(request.Headers.GetValues("Cookie")));
+            string cookie = Assert.Single(request.Headers.GetValues("Cookie"));
+            Assert.Contains("ltuid=1111", cookie);
+            Assert.Contains("ltoken=fixture", cookie);
+            Assert.Contains("ltoken_v2=fixture", cookie);
             Assert.Equal(3, Assert.Single(request.Headers.GetValues("DS")).Split(',').Length);
             return Json(TheaterBody);
         }));

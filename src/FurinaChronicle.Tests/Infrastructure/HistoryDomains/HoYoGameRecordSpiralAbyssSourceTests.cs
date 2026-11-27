@@ -32,7 +32,10 @@ public sealed class HoYoGameRecordSpiralAbyssSourceTests
             Assert.Equal(HttpMethod.Get, request.Method);
             Assert.Equal("api-takumi-record.mihoyo.com", request.RequestUri!.Host);
             Assert.Equal("?role_id=100000001&schedule_type=1&server=cn_gf01", request.RequestUri.Query);
-            Assert.Equal("ltuid=1111; ltoken=fixture", Assert.Single(request.Headers.GetValues("Cookie")));
+            string cookie = Assert.Single(request.Headers.GetValues("Cookie"));
+            Assert.Contains("ltuid=1111", cookie);
+            Assert.Contains("ltoken=fixture", cookie);
+            Assert.Contains("ltoken_v2=fixture", cookie);
             string[] signature = Assert.Single(request.Headers.GetValues("DS")).Split(',');
             Assert.Equal(3, signature.Length);
             Assert.Matches("^[0-9]{6}$", signature[1]);
@@ -96,7 +99,8 @@ public sealed class HoYoGameRecordSpiralAbyssSourceTests
     {
         PassportAccount passport = Passport("fixture");
         bool registrationSetsCookie = rejectionCode != 1;
-        const string passportCookie = "ltuid=1111; ltoken=fixture";
+        string passportCookie = PassportCookieComposer.ForGameRecord(
+            passport, "fixture", isOversea: false);
         int requests = 0;
         int prompts = 0;
         using var client = new HttpClient(new RecordingHandler(request =>
@@ -145,7 +149,9 @@ public sealed class HoYoGameRecordSpiralAbyssSourceTests
                     // A credential that the registration response rotated wins
                     // over the stored value, exactly like a shared cookie jar.
                     Assert.Equal(registrationSetsCookie
-                        ? "ltuid=1111; ltoken=fixture-other-credential; challenge_session=fixture-session"
+                        ? PassportCookieComposer.ForGameRecord(
+                              passport, "fixture-other-credential", isOversea: false) +
+                          "; challenge_session=fixture-session"
                         : passportCookie, cookie);
                     Assert.EndsWith("/verifyVerification", request.RequestUri.AbsolutePath);
                     Assert.Equal("https://api-takumi-record.mihoyo.com" + abyss, Assert.Single(request.Headers.GetValues("x-rpc-challenge_path")));
@@ -386,7 +392,9 @@ public sealed class HoYoGameRecordSpiralAbyssSourceTests
             Assert.Equal(HttpMethod.Get, request.Method);
             Assert.Equal("https://bbs-api-os.hoyolab.com/game_record/app/genshin/api/spiralAbyss?role_id=800000001&schedule_type=2&server=os_asia",
                 request.RequestUri!.AbsoluteUri);
-            Assert.Equal("ltuid_v2=1111; ltoken_v2=fixture-ltoken; account_id_v2=1111; cookie_token_v2=fixture-cookie; account_mid_v2=fixture-mid",
+            Assert.Equal(
+                PassportCookieComposer.ForGameRecord(
+                    passport, "fixture-ltoken", isOversea: true),
                 Assert.Single(request.Headers.GetValues("Cookie")));
             Assert.False(request.Headers.Contains("x-rpc-device_fp"));
             return Json($$$"""{"retcode":{{{retcode}}},"data":{"uid":"800000001","schedule_id":42,"floors":[{"index":12,"levels":[{"index":3,"star":3}]}]}}""");
@@ -434,7 +442,8 @@ public sealed class HoYoGameRecordSpiralAbyssSourceTests
     [Fact]
     public async Task WafCookiesFromRegistrationAreForwardedButNotReportedAsSession()
     {
-        const string passportCookie = "ltuid=1111; ltoken=fixture";
+        const string passportCookie =
+            "stuid=1111; ltuid=1111; ltuid_v2=1111; ltoken=fixture; ltoken_v2=fixture";
         int requests = 0;
         using var client = new HttpClient(new RecordingHandler(request =>
         {

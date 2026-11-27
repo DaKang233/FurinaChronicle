@@ -4,6 +4,7 @@
 using System.Text;
 using FurinaChronicle.Core.Passport;
 using FurinaChronicle.Infrastructure.MiHoYo;
+using FurinaChronicle.Services.Passport;
 
 namespace FurinaChronicle.Infrastructure.HistoryDomains.Collecting;
 
@@ -90,18 +91,6 @@ internal static class GameRecordRequestFactory
                 "The passport has no usable LToken.", nameof(passport));
         }
 
-        string suffix = isOversea ? "_v2" : string.Empty;
-        string cookie = $"ltuid{suffix}={passport.Aid}; ltoken{suffix}={token}";
-        if (passport.Credentials.CookieToken is { } cookieToken &&
-            IsHeaderToken(cookieToken))
-        {
-            cookie +=
-                $"; account_id{suffix}={passport.Aid}; cookie_token{suffix}={cookieToken}";
-        }
-        if (isOversea && passport.Mid is { } mid && IsHeaderToken(mid))
-        {
-            cookie += $"; account_mid_v2={mid}";
-        }
-        return cookie;
+        return PassportCookieComposer.ForGameRecord(passport, token, isOversea);
     }
 }

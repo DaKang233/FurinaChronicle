@@ -66,9 +66,13 @@ public sealed class HoYoGameRecordCharacterWeaponSourceTests
             Assert.Equal(
                 "fixture-fingerprint",
                 Assert.Single(request.Headers.GetValues("x-rpc-device_fp")));
-            Assert.Equal(
-                "ltuid=1111; ltoken=fixture; account_id=1111; cookie_token=fixture-cookie",
-                Assert.Single(request.Headers.GetValues("Cookie")));
+            string rosterCookie = Assert.Single(request.Headers.GetValues("Cookie"));
+            Assert.Contains("ltuid=1111", rosterCookie);
+            Assert.Contains("ltoken=fixture", rosterCookie);
+            Assert.Contains("account_id=1111", rosterCookie);
+            Assert.Contains("cookie_token=fixture-cookie", rosterCookie);
+            Assert.Contains("ltoken_v2=fixture", rosterCookie);
+            Assert.Contains("cookie_token_v2=fixture-cookie", rosterCookie);
             string[] signature = Assert.Single(request.Headers.GetValues("DS")).Split(',');
             Assert.Equal(3, signature.Length);
             Assert.Matches("^[0-9]{6}$", signature[1]);

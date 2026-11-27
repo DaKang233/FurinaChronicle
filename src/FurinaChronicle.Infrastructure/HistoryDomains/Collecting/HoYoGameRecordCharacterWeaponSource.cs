@@ -225,18 +225,7 @@ public sealed partial class HoYoGameRecordCharacterWeaponSource
         string token,
         bool isOversea)
     {
-        string suffix = isOversea ? "_v2" : string.Empty;
-        string cookie = $"ltuid{suffix}={passport.Aid}; ltoken{suffix}={token}";
-        if (passport.Credentials.CookieToken is { } cookieToken &&
-            IsHeaderToken(cookieToken))
-        {
-            cookie += $"; account_id{suffix}={passport.Aid}; cookie_token{suffix}={cookieToken}";
-        }
-        if (isOversea && passport.Mid is { } mid && IsHeaderToken(mid))
-        {
-            cookie += $"; account_mid_v2={mid}";
-        }
-        return cookie;
+        return PassportCookieComposer.ForGameRecord(passport, token, isOversea);
     }
 
     private static HttpRequestMessage CreateRequest(
