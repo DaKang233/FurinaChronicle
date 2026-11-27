@@ -105,12 +105,12 @@ public sealed partial class PassportPage
         content.Children.Add(new Image { Source = source, Width = 240, Height = 240 });
         content.Children.Add(status);
         ContentDialog dialog = LoginDialog("米游社扫码登录", content);
-        var completion = dialog.ShowAsync();
-        Task<ContentDialogResult> dismissed = completion.AsTask();
         dialog.Closing += (_, _) => cancellation.Cancel();
+        // WinRT permits a single completion handler for the dialog operation.
+        Task<ContentDialogResult> dismissed = dialog.ShowAsync().AsTask();
         try
         {
-            while (completion.Status == global::Windows.Foundation.AsyncStatus.Started)
+            while (!dismissed.IsCompleted)
             {
                 Task delay = Task.Delay(TimeSpan.FromSeconds(2), cancellation.Token);
                 if (await Task.WhenAny(delay, dismissed) != delay) return null;
@@ -120,7 +120,7 @@ public sealed partial class PassportPage
                 if (result == PassportQrStatus.Expired)
                 {
                     status.Text = "二维码已过期，请关闭后重新生成。";
-                    await completion;
+                    await dismissed;
                     return null;
                 }
                 if (result == PassportQrStatus.Scanned) status.Text = "已扫描，请在手机上确认登录。";
@@ -129,10 +129,10 @@ public sealed partial class PassportPage
         }
         finally
         {
-            if (completion.Status == global::Windows.Foundation.AsyncStatus.Started)
+            if (!dismissed.IsCompleted)
             {
                 dialog.Hide();
-                await completion;
+                await dismissed;
             }
         }
     }
