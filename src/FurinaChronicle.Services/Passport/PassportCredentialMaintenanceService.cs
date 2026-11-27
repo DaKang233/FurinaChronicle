@@ -46,6 +46,20 @@ public sealed class PassportCredentialMaintenanceService(
             failures);
     }
 
+    public async Task<PassportAccount?> MaintainAccountAsync(
+        Guid accountId,
+        CancellationToken cancellationToken = default)
+    {
+        PassportAccount? account = await accountStore.GetByIdAsync(accountId, cancellationToken);
+        if (account is null)
+        {
+            return null;
+        }
+
+        await MaintainAsync(account, cancellationToken);
+        return await accountStore.GetByIdAsync(accountId, cancellationToken);
+    }
+
     private async Task<MaintenanceOutcome> MaintainAsync(
         PassportAccount original,
         CancellationToken cancellationToken)

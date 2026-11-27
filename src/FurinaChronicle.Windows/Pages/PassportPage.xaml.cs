@@ -19,6 +19,7 @@ public sealed partial class PassportPage : UserControl
     private readonly MainlandPassportLoginService mainland;
     private readonly HoYoLabPassportLoginService overseas;
     private readonly IMiHoYoAccountProfileClient profiles;
+    private readonly PassportCredentialMaintenanceService credentialMaintenance;
     private readonly DpapiPassportCredentialStore credentials;
     private readonly INotificationCenter notifications;
     private bool rendering;
@@ -26,7 +27,8 @@ public sealed partial class PassportPage : UserControl
     private string? lastLoadIssue;
 
     public PassportPage(PassportCredentialState state, MainlandPassportLoginService mainland,
-        HoYoLabPassportLoginService overseas, IMiHoYoAccountProfileClient profiles,
+        HoYoLabPassportLoginService overseas, PassportCredentialMaintenanceService credentialMaintenance,
+        IMiHoYoAccountProfileClient profiles,
         DpapiPassportCredentialStore credentials, INotificationCenter notifications,
         IDiagnosticService diagnostics)
     {
@@ -34,6 +36,7 @@ public sealed partial class PassportPage : UserControl
         this.mainland = mainland;
         this.overseas = overseas;
         this.profiles = profiles;
+        this.credentialMaintenance = credentialMaintenance;
         this.credentials = credentials;
         this.notifications = notifications;
         this.diagnostics = diagnostics;
@@ -225,11 +228,13 @@ public sealed partial class PassportPage : UserControl
         string? notice = null;
         try
         {
-            if (selected is Guid id && await credentials.GetByIdAsync(id) is { Credentials.LToken: not null } account)
+            if (selected is Guid id && await credentialMaintenance.MaintainAccountAsync(id) is { } account)
             {
-                var profile = await profiles.GetAsync(account);
-                await credentials.UpdateRolesAsync(account, profile.Roles);
-                notice = $"已更新 {profile.Roles.Count} 个角色。";
+                var roles = await profiles.GetGameRolesAsync(account);
+                await credentials.UpdateRolesAsync(account, roles);
+                notice = account.Credentials.LToken is null
+                    ? $"已更新 {roles.Count} 个角色。战绩查询凭据暂不可用。"
+                    : $"已更新 {roles.Count} 个角色。";
             }
             await state.RefreshAsync();
         }

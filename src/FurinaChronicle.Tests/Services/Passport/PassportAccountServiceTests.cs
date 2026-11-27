@@ -185,6 +185,31 @@ public sealed class PassportAccountServiceTests
     }
 
     [Fact]
+    public async Task MaintainAccountAsync_ReturnsRefreshedSelectionAndLeavesOtherAccountsAlone()
+    {
+        var store = new MemoryAccountStore();
+        PassportAccount selected = CreateAccount("1", Now - TimeSpan.FromDays(8));
+        PassportAccount other = CreateAccount("2", Now - TimeSpan.FromDays(8));
+        await store.SaveAsync(selected);
+        await store.SaveAsync(other);
+        var client = new StubPassportClient
+        {
+            Verification = new PassportSessionVerification("rotated-token"),
+            DerivedTokens = new PassportDerivedTokens("new-ltoken", "new-cookie")
+        };
+        var service = CreateService(store, client);
+
+        PassportAccount actual = Assert.IsType<PassportAccount>(await service.MaintainAccountAsync(selected.Id));
+        Assert.Equal(selected.Id, actual.Id);
+        Assert.Equal("new-ltoken", actual.Credentials.LToken);
+        Assert.Equal("new-cookie", actual.Credentials.CookieToken);
+        Assert.Equal(other, await store.GetByIdAsync(other.Id));
+        Assert.Null(await service.MaintainAccountAsync(Guid.NewGuid()));
+        Assert.Equal(1, client.VerificationCallCount);
+        Assert.Equal(1, client.DerivedTokenCallCount);
+    }
+
+    [Fact]
     public async Task MaintainAllAsync_NetworkFailureDoesNotDeleteCredentialsOrStopOtherAccounts()
     {
         var store = new MemoryAccountStore();
@@ -615,6 +640,9 @@ public sealed class PassportAccountServiceTests
         public Task<(PassportQrStatus Status, PassportAccount? Account)> PollQrLoginAsync(
             PassportQrSession session) =>
             mainland.PollQrLoginAsync(session);
+
+        public Task<PassportAccount?> MaintainAccountAsync(Guid accountId) =>
+            maintenance.MaintainAccountAsync(accountId);
 
         public Task<PassportMaintenanceResult> MaintainAllAsync() =>
             maintenance.MaintainAllAsync();

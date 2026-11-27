@@ -345,6 +345,7 @@ public sealed partial class MainWindow : Window
             composition.Services.GetRequiredService<PassportCredentialState>(),
             composition.Services.GetRequiredService<MainlandPassportLoginService>(),
             composition.Services.GetRequiredService<HoYoLabPassportLoginService>(),
+            composition.Services.GetRequiredService<PassportCredentialMaintenanceService>(),
             composition.Services.GetRequiredService<IMiHoYoAccountProfileClient>(),
             composition.Services.GetRequiredService<DpapiPassportCredentialStore>(),
             notificationCenter,

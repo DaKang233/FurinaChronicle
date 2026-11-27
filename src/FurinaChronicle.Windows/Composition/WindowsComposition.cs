@@ -204,6 +204,7 @@ public sealed class WindowsComposition : IAsyncDisposable
         services.AddSingleton<IHoYoLabPassportClient, HoYoLabPassportClient>();
         services.AddSingleton<IMiHoYoAccountProfileClient, MiHoYoAccountProfileClient>();
         services.AddTransient<PassportAccountWriter>();
+        services.AddTransient<PassportCredentialMaintenanceService>();
         services.AddTransient<MainlandPassportLoginService>();
         services.AddTransient<HoYoLabPassportLoginService>();
         services.AddSingleton<ISpiralAbyssSource, HoYoGameRecordSpiralAbyssSource>();
