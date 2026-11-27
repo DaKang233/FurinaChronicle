@@ -393,10 +393,12 @@ public sealed class ArchivePackageWriter(ArchivePortableLimits? limits = null)
                 acquisitions,
                 accountRevisions.Select(ToPortableRevision).ToArray()));
         }
-        string version = accounts.SelectMany(account => account.ItemObservations)
-            .Any(observation => observation.CharacterMetadata is not null ||
-                observation.Entries.Any(item => item.CharacterDetail is not null))
-            ? "1.5" : "1.0";
+        var observationsForVersion = accounts.SelectMany(account => account.ItemObservations);
+        string version = observationsForVersion.Any(observation =>
+            observation.Entries.Any(item => item.CharacterDetail?.HasEnhancementData == true))
+            ? "1.6"
+            : observationsForVersion.Any(observation => observation.CharacterMetadata is not null ||
+                observation.Entries.Any(item => item.CharacterDetail is not null)) ? "1.5" : "1.0";
         string path = GetDomainPath(archive.ArchiveReference, "character-weapon-history");
         EntryDescriptor entry = await WriteJsonEntryAsync(
             zip,

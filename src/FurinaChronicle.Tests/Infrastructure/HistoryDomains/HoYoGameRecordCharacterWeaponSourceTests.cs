@@ -102,6 +102,11 @@ public sealed class HoYoGameRecordCharacterWeaponSourceTests
         Assert.Equal(6, detail.Ascension);
         Assert.False(Assert.Single(detail.Constellations!).Unlocked);
         Assert.Equal("124.5%", Assert.Single(Assert.Single(detail.Talents!).Attributes!).Value);
+        var enhancedTalent = Assert.Single(detail.Talents!);
+        Assert.Equal(new CharacterEnhancement(true, false, "<b>Enhanced</b>"), Assert.Single(detail.Constellations!).Enhancement);
+        Assert.Equal(new CharacterEnhancement(true, true, "Enhanced skill"), enhancedTalent.Enhancement);
+        Assert.Empty(enhancedTalent.BeforeEnhancementIndexes!);
+        Assert.Equal(0, Assert.Single(enhancedTalent.AfterEnhancementIndexes!));
         Assert.Equal("1016", Assert.Single(detail.BaseStats!).Base);
         Assert.Equal(4, Assert.Single(Assert.Single(detail.Artifacts!).SubStats!).Hits);
         Assert.Equal(5, detail.Weapon?.Refinement);
@@ -203,8 +208,8 @@ public sealed class HoYoGameRecordCharacterWeaponSourceTests
         entries[1]["base"]!["promote_level"] = 5;
         var sample = JsonNode.Parse("""
             {
-              "constellations": [{"id": 1, "pos": 1, "is_actived": false, "name": "Fixture constellation", "effect": "<b>Effect</b>"}],
-              "skills": [{"skill_id": 1, "level": 10, "skill_affix_list": [{"name": "Damage", "value": "124.5%"}]}],
+              "constellations": [{"id": 1, "pos": 1, "is_actived": false, "name": "Fixture constellation", "effect": "<b>Effect</b>", "can_enhanced": true, "is_enhanced": false, "enhanced_effect": "<b>Enhanced</b>"}],
+              "skills": [{"skill_id": 1, "level": 10, "can_enhanced": true, "is_enhanced": true, "enhanced_desc": "Enhanced skill", "before_enhanced_skill_attr_index": [], "after_enhanced_skill_attr_index": [0], "skill_affix_list": [{"name": "Damage", "value": "124.5%"}]}],
               "base_properties": [{"property_type": 2001, "base": "1016", "add": "2542", "final": "3558"}],
               "relics": [{"id": 15001, "pos": 1, "level": 20, "sub_property_list": [{"property_type": 20, "value": "15.5%", "times": 4}]}]
             }

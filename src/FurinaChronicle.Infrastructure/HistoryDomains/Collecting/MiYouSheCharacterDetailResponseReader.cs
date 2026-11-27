@@ -109,10 +109,13 @@ internal sealed class MiYouSheCharacterDetailResponseReader
             basic.Icon, basic.SideIcon, basic.Image, basic.CardImage, basic.IsChosen, basic.WeaponType,
             (value.Weapon ?? basic.Weapon)?.ToDomain(),
             value.Constellations?.Select(item =>
-                new CharacterConstellation(item.Id, item.Pos, item.Name, item.Icon, item.IsActived, item.Effect)).ToArray(),
+                new CharacterConstellation(item.Id, item.Pos, item.Name, item.Icon, item.IsActived, item.Effect,
+                    MapEnhancement(item.CanEnhanced, item.IsEnhanced, item.EnhancedEffect))).ToArray(),
             value.Skills?.Select(item => new CharacterTalent(item.SkillId, item.SkillType, item.Level,
                 item.Name, item.Icon, item.IsUnlock, item.Desc, item.SkillAffixList?.Select(affix =>
-                    new CharacterTalentValue(affix.Name, affix.Value)).ToArray())).ToArray(),
+                    new CharacterTalentValue(affix.Name, affix.Value)).ToArray(),
+                MapEnhancement(item.CanEnhanced, item.IsEnhanced, item.EnhancedDesc),
+                item.BeforeEnhancedSkillAttrIndex, item.AfterEnhancedSkillAttrIndex)).ToArray(),
             MapProperties(value.SelectedProperties), MapProperties(value.BaseProperties),
             MapProperties(value.ExtraProperties), MapProperties(value.ElementProperties),
             value.Relics?.Select(item => item.ToDomain()).ToArray(),
@@ -127,6 +130,10 @@ internal sealed class MiYouSheCharacterDetailResponseReader
 
     internal static bool IsInvalidWeapon(Weapon? weapon) => weapon is { Id: <= 0 } or
         { Level: < 0 } or { AffixLevel: < 0 } or { PromoteLevel: < 0 or > 6 };
+
+    private static CharacterEnhancement? MapEnhancement(bool? canEnhance, bool? isEnhanced, string? description) =>
+        canEnhance is null && isEnhanced is null && description is null ? null :
+            new CharacterEnhancement(canEnhance, isEnhanced, description);
 
     private static CharacterStat[]? MapProperties(Stat[]? properties) =>
         properties?.Select(item => item.ToDomain()).ToArray();
@@ -162,9 +169,11 @@ internal sealed class MiYouSheCharacterDetailResponseReader
 
     private sealed record Skin(string? WeaponSkinName, string? WeaponSkinIcon, int? WeaponSkinRarity);
     private sealed record Costume([property: JsonRequired] int Id, string? Name, string? Icon);
-    private sealed record Constellation(int Id, string? Name, string? Icon, string? Effect, bool? IsActived, int? Pos);
+    private sealed record Constellation(int Id, string? Name, string? Icon, string? Effect, bool? IsActived, int? Pos,
+        bool? CanEnhanced, bool? IsEnhanced, string? EnhancedEffect);
     private sealed record Skill(int SkillId, int? SkillType, int? Level, string? Desc, SkillAffix[]? SkillAffixList,
-        string? Icon, bool? IsUnlock, string? Name);
+        string? Icon, bool? IsUnlock, string? Name, bool? CanEnhanced, bool? IsEnhanced, string? EnhancedDesc,
+        int[]? BeforeEnhancedSkillAttrIndex, int[]? AfterEnhancedSkillAttrIndex);
     private sealed record SkillAffix(string? Name, string? Value);
     internal sealed record Stat([property: JsonRequired] int PropertyType, string? Base, string? Add, string? Final)
     {

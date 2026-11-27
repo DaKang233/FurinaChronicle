@@ -115,14 +115,14 @@ public sealed partial class CharacterWeaponPage
         var constellations = new ChallengeWrapPanel();
         foreach (var item in (detail.Constellations ?? []).OrderBy(item => item.Position))
             constellations.Children.Add(SkillButton(item.Name ?? $"命座 {item.Position}", item.Icon,
-                item.Unlocked, item.Description, null, item.Position is int pos ? $"C{pos}" : null));
+                item.Unlocked, CharacterDetailPresentation.Mechanics(item.Description, item.Enhancement), null, item.Position is int pos ? $"C{pos}" : null));
         if (constellations.Children.Count > 0)
             CharacterDetailStack.Children.Add(CharacterCard("命座", constellations));
 
         var talents = new ChallengeWrapPanel();
         foreach (var item in detail.Talents ?? [])
             talents.Children.Add(SkillButton(item.Name ?? $"天赋 {item.Id}", item.Icon, item.Unlocked,
-                item.Description, item.Attributes, item.Level is int level ? $"Lv.{level}" : null));
+                CharacterDetailPresentation.Mechanics(item.Description, item.Enhancement), item.Attributes, item.Level is int level ? $"Lv.{level}" : null));
         if (talents.Children.Count > 0)
             CharacterDetailStack.Children.Add(CharacterCard("天赋", talents));
 

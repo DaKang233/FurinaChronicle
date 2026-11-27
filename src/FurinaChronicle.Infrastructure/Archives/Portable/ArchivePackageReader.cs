@@ -757,12 +757,15 @@ public sealed class ArchivePackageReader(ArchivePortableLimits? limits = null)
                     entry, limits.MaximumEntryBytes, cancellationToken);
             ValidateDomainHeader(value.Format, value.FormatVersion,
                 value.ArchiveReference, entry.FullName, catalog, expectedVersion: version);
-            if (version is not ("1.0" or "1.5") ||
-                version == "1.0" && value.Accounts.SelectMany(account => account.ItemObservations)
-                    .Any(fact => fact.CharacterMetadata is not null || fact.Entries.Any(item => item.CharacterDetail is not null)))
+            var observationsForVersion = value.Accounts.SelectMany(account => account.ItemObservations);
+            if (version is not ("1.0" or "1.5" or "1.6") ||
+                version == "1.0" && observationsForVersion
+                    .Any(fact => fact.CharacterMetadata is not null || fact.Entries.Any(item => item.CharacterDetail is not null)) ||
+                version != "1.6" && observationsForVersion.SelectMany(fact => fact.Entries)
+                    .Any(item => item.CharacterDetail?.HasEnhancementData == true))
             {
                 throw Error(ArchivePackageErrorCode.UnsupportedVersion,
-                    "Character detail requires character/weapon dataset version 1.5.", entry.FullName);
+                    "Character detail requires dataset version 1.5, and enhancements require 1.6.", entry.FullName);
             }
             if (value.Accounts.Select(item => item.AccountReference).Distinct().Count() !=
                     value.Accounts.Count ||

@@ -40,7 +40,7 @@ public static class ArchiveVersionDispatcher
             ("furina-archive-catalog", "1.0") => true,
             ("uigf", "v4.2") => true,
             ("furina-archive-gacha-history", "1.0") => true,
-            ("furina-domain-history", "1.0" or "1.1" or "1.2" or "1.3" or "1.4" or "1.5") => true,
+            ("furina-domain-history", "1.0" or "1.1" or "1.2" or "1.3" or "1.4" or "1.5" or "1.6") => true,
             ("furina-portable-settings", "1.0") => true,
             _ => false,
         };

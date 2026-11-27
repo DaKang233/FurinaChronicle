@@ -100,13 +100,13 @@ public partial class CharacterHistoryPage
         var constellations = ProfileWrap();
         foreach (var item in (detail.Constellations ?? []).OrderBy(item => item.Position))
             constellations.Add(ProfileSkill(item.Name ?? $"命座 {item.Position}", item.Icon, item.Unlocked,
-                item.Position is int pos ? $"C{pos}" : "命座", "命座详情", item.Description, null));
+                item.Position is int pos ? $"C{pos}" : "命座", "命座详情", CharacterDetailPresentation.Mechanics(item.Description, item.Enhancement), null));
         if (constellations.Children.Count != 0) ProfileContent.Add(ProfileCard("命座", constellations));
 
         var talents = ProfileWrap();
         foreach (var item in detail.Talents ?? [])
             talents.Add(ProfileSkill(item.Name ?? $"天赋 {item.Id}", item.Icon, item.Unlocked,
-                item.Level is int level ? $"Lv.{level}" : "天赋", "天赋详情", item.Description, item.Attributes));
+                item.Level is int level ? $"Lv.{level}" : "天赋", "天赋详情", CharacterDetailPresentation.Mechanics(item.Description, item.Enhancement), item.Attributes));
         if (talents.Children.Count != 0) ProfileContent.Add(ProfileCard("天赋", talents));
 
         var attributes = new VerticalStackLayout { Spacing = 3 };

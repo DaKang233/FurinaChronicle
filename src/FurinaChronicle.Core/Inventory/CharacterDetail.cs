@@ -23,7 +23,13 @@ public sealed record CharacterDetail(
     CharacterWeaponDetail? BaseWeapon = null,
     CharacterRosterEntry? Roster = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    CharacterAscensionEvidence? AscensionEvidence = null);
+    CharacterAscensionEvidence? AscensionEvidence = null)
+{
+    [JsonIgnore]
+    public bool HasEnhancementData => Constellations?.Any(item => item.Enhancement is not null) == true ||
+        Talents?.Any(item => item.Enhancement is not null || item.BeforeEnhancementIndexes is not null ||
+            item.AfterEnhancementIndexes is not null) == true;
+}
 
 public sealed record CharacterRosterEntry(
     int Level, int ConstellationCount, string? Name, string? Element, int? Rarity,
@@ -40,10 +46,20 @@ public sealed record CharacterWeaponDetail(
 public sealed record CharacterWeaponSkin(string? Name, string? Icon, int? Rarity);
 public sealed record CharacterCostume(int Id, string? Name, string? Icon);
 public sealed record CharacterConstellation(
-    int Id, int? Position, string? Name, string? Icon, bool? Unlocked, string? Description);
+    int Id, int? Position, string? Name, string? Icon, bool? Unlocked, string? Description,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    CharacterEnhancement? Enhancement = null);
 public sealed record CharacterTalent(
     int Id, int? Type, int? Level, string? Name, string? Icon, bool? Unlocked,
-    string? Description, IReadOnlyList<CharacterTalentValue>? Attributes);
+    string? Description, IReadOnlyList<CharacterTalentValue>? Attributes,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    CharacterEnhancement? Enhancement = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<int>? BeforeEnhancementIndexes = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<int>? AfterEnhancementIndexes = null);
+
+public sealed record CharacterEnhancement(bool? CanEnhance, bool? IsEnhanced, string? Description);
 public sealed record CharacterTalentValue(string? Name, string? Value);
 
 public sealed record CharacterArtifact(

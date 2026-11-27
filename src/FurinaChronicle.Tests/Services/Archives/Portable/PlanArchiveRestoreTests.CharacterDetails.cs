@@ -18,8 +18,10 @@ namespace FurinaChronicle.Tests.Services.Archives.Portable;
 
 public sealed partial class PlanArchiveRestoreTests
 {
-    [Fact]
-    public async Task CharacterDetailArchiveRetainsSnapshotAndDetectsMetadataOnlyConflicts()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CharacterDetailArchiveRetainsSnapshotAndDetectsMetadataOnlyConflicts(bool includeEnhancements)
     {
         await using var context = SqliteRepositoryTestContext.Create();
         string root = CreateRestoreSnapshotRoot();
@@ -43,7 +45,8 @@ public sealed partial class PlanArchiveRestoreTests
                 Weapon: new(11501, "合成武器", null, 1, null, 5, 90, 3, 6, null,
                     new CharacterStat(4, null, null, "542"), null),
                 Constellations: [new(1, 1, "合成命座", null, false, "{LINK#N1}电涌{/LINK}")],
-                Talents: [new(2, 1, 10, "合成天赋", null, true, "<b>技能</b>", [new("伤害", "124.5%")])],
+                Talents: [new(2, 1, 10, "合成天赋", null, true, "<b>技能</b>", [new("伤害", "124.5%")],
+                    includeEnhancements ? new(true, true, "强化") : null, null, includeEnhancements ? [0] : null)],
                 SelectedStats: null, BaseStats: [new(2000, "10000", "2000", "12000")],
                 AdvancedStats: [new(20, null, null, "35.5%")], ElementalStats: null,
                 Artifacts: [new(15001, 1, "花", "合成圣遗物", null, 5, 20, null, null,
@@ -68,7 +71,7 @@ public sealed partial class PlanArchiveRestoreTests
                 new ArchivePackageReader(), new ArchiveRestoreStorageOptions(root)).StageAsync(package);
             var descriptor = Assert.Single(staged.Summary.Manifest.Datasets,
                 dataset => dataset.Kind == "character-weapon-history");
-            Assert.Equal("1.5", descriptor.FormatVersion);
+            Assert.Equal(includeEnhancements ? "1.6" : "1.5", descriptor.FormatVersion);
             Assert.True(descriptor.Required);
             var planner = new PlanArchiveRestore(CreateTargetFactory(context, root), TimeProvider.System);
             var plan = await planner.PlanAsync(new ArchiveRestorePlanRequest(staged));
@@ -86,6 +89,8 @@ public sealed partial class PlanArchiveRestoreTests
             Assert.Equal(property, actual.CharacterMetadata!.Properties!["20"]);
             var restored = Assert.Single(actual.Entries).CharacterDetail!;
             Assert.Equal("124.5%", Assert.Single(Assert.Single(restored.Talents!).Attributes!).Value);
+            if (includeEnhancements)
+                Assert.Equal("强化", Assert.Single(restored.Talents!).Enhancement?.Description);
             Assert.Equal(6, restored.Weapon!.Ascension);
             Assert.Equal(new int?[] { 3, 0 }, Assert.Single(restored.Artifacts!).SubStats!.Select(stat => stat.Hits));
 

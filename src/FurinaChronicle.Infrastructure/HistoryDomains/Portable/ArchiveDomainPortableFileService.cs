@@ -92,7 +92,7 @@ public sealed partial class ArchiveDomainPortableFileService(
         var package = new ArchiveDomainPortablePackage(
             datasetKind,
             FormatMajor: hasDetailedChallenges || hasCharacterDetails ? 2 : 1,
-            FormatMinor: hasCharacterDetails ? 0 : ArchiveDomainPortablePackage.ContainsTheaterBuffDetails(portableAccounts) ? 3 :
+            FormatMinor: hasCharacterDetails ? (ArchiveDomainPortablePackage.ContainsCharacterEnhancements(portableAccounts) ? 1 : 0) : ArchiveDomainPortablePackage.ContainsTheaterBuffDetails(portableAccounts) ? 3 :
                 ArchiveDomainPortablePackage.ContainsStygianDetails(portableAccounts) ? 2 :
                 ArchiveDomainPortablePackage.ContainsTheaterDetails(portableAccounts) ? 1 : hasDetailedChallenges ? 0 : 1,
             PackageFingerprint: string.Empty,

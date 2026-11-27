@@ -18,15 +18,16 @@ namespace FurinaChronicle.Tests.Infrastructure.HistoryDomains;
 public sealed partial class ArchiveDomainPortableFileServiceTests
 {
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task CharacterWeaponDataset_RoundTripsIntoNewDatabase(bool includeDetails)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task CharacterWeaponDataset_RoundTripsIntoNewDatabase(bool includeDetails, bool includeEnhancements)
     {
         await using PortableContext source = await PortableContext.CreateAsync();
         PlayerArchive archive = await source.AddArchiveAndAccountAsync();
         GameAccount account = Assert.Single(
             await source.Accounts.GetByArchiveIdAsync(archive.Id));
-        ItemStateObservation observation = CharacterObservation(account.Id, includeDetails);
+        ItemStateObservation observation = CharacterObservation(account.Id, includeDetails, includeEnhancements);
         ManualAcquisition acquisition = Manual(account.Id);
         Assert.Equal(
             ChangeExecutionStatus.Applied,
@@ -76,6 +77,11 @@ public sealed partial class ArchiveDomainPortableFileServiceTests
             await source.Files.ReadAsync(exported);
         Assert.Equal(includeDetails ? 2 : 1, package.FormatMajor);
         if (includeDetails) Assert.False((package with { FormatMajor = 1 }).SupportsVersion());
+        if (includeEnhancements)
+        {
+            Assert.Equal(1, package.FormatMinor);
+            Assert.False((package with { FormatMinor = 0 }).SupportsVersion());
+        }
 
         await using PortableContext target = await PortableContext.CreateAsync();
         ArchiveDomainPortablePlan plan = await target.Files.PlanAsync(package);
@@ -94,6 +100,12 @@ public sealed partial class ArchiveDomainPortableFileServiceTests
         {
             Assert.Equal(3, reopenedCharacter.CharacterDetail?.Artifacts?.Single().SubStats?.Single().Hits);
             Assert.Equal("暴击率", reopenedObservation.CharacterMetadata?.Properties?["20"].Name);
+            if (includeEnhancements)
+            {
+                var talent = Assert.Single(reopenedCharacter.CharacterDetail!.Talents!);
+                Assert.True(talent.Enhancement!.IsEnhanced);
+                Assert.Equal(0, Assert.Single(talent.AfterEnhancementIndexes!));
+            }
         }
         else
         {
@@ -484,7 +496,7 @@ public sealed partial class ArchiveDomainPortableFileServiceTests
             TestTime().AddSeconds(1),
             observations);
 
-    private static ItemStateObservation CharacterObservation(Guid accountId, bool includeDetails = false) =>
+    private static ItemStateObservation CharacterObservation(Guid accountId, bool includeDetails = false, bool includeEnhancements = false) =>
         new(
             ItemObservationId.New(),
             accountId,
@@ -503,7 +515,9 @@ public sealed partial class ArchiveDomainPortableFileServiceTests
                 DataCompleteness.Complete,
                 includeDetails ? new CharacterDetail(
                     "Fixture", "Hydro", 5, 10, 6, null, null, null, null, null, null, null,
-                    [], [], [], [], [], [],
+                    [], includeEnhancements
+                        ? [new(2, 1, 10, "Fixture talent", null, true, null, null, new(true, true, "Enhanced"), [], [0])]
+                        : [], [], [], [], [],
                     [new CharacterArtifact(15001, 1, "花", "Fixture relic", null, 5, 20, null, null,
                         [new CharacterArtifactStat(20, "10.5%", 3)])],
                     [], null, null, null) : null)],

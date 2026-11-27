@@ -33,6 +33,14 @@ public static class CharacterDetailPresentation
 
     public static string? First(params string?[] values) => values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
 
+    public static string? Mechanics(string? description, CharacterEnhancement? enhancement)
+    {
+        if (enhancement?.Description is not { Length: > 0 } enhanced || enhanced == description)
+            return description;
+        string label = enhancement.IsEnhanced == true ? "强化效果（已强化）" : "强化效果";
+        return string.Join("\n\n", new[] { description, label + "\n" + enhanced }.Where(text => !string.IsNullOrWhiteSpace(text)));
+    }
+
     public static string Level(int? level) => level is int number ? $"Lv. {number}" : "等级未知";
 
     public static string Ascension(int? stage) => stage is >= 0 and <= 6
