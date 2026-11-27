@@ -319,15 +319,24 @@ public sealed class MiHoYoPassportClient : IDisposable
     {
         ArgumentNullException.ThrowIfNull(challenge);
         ArgumentNullException.ThrowIfNull(result);
-        ArgumentException.ThrowIfNullOrWhiteSpace(result.Challenge);
-        ArgumentException.ThrowIfNullOrWhiteSpace(result.Validate);
-        string sessionId = ParseSessionId(challenge.State);
-        string proof = JsonSerializer.Serialize(new
+        string sessionId = challenge.SessionId ?? ParseSessionId(challenge.State);
+        string proof;
+        if (challenge.IsVersion4)
         {
-            geetest_challenge = result.Challenge,
-            geetest_validate = result.Validate,
-            geetest_seccode = result.Seccode ?? $"{result.Validate}|jordan"
-        });
+            proof = RequireVersion4Proof(result.Payload);
+        }
+        else
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(result.Challenge);
+            ArgumentException.ThrowIfNullOrWhiteSpace(result.Validate);
+            proof = JsonSerializer.Serialize(new
+            {
+                geetest_challenge = result.Challenge,
+                geetest_validate = result.Validate,
+                geetest_seccode = result.Seccode ?? $"{result.Validate}|jordan"
+            });
+        }
+
         return $"{sessionId};{Convert.ToBase64String(Encoding.UTF8.GetBytes(proof))}";
     }
 
@@ -335,6 +344,39 @@ public sealed class MiHoYoPassportClient : IDisposable
     {
         using JsonDocument session = JsonDocument.Parse(state);
         return RequiredString(session.RootElement, "session_id");
+    }
+
+    /// <summary>
+    /// A V4 proof is the SDK object itself; the service rejects a payload that
+    /// misses one of its four fields.
+    /// </summary>
+    private static string RequireVersion4Proof(string? payload)
+    {
+        if (string.IsNullOrWhiteSpace(payload))
+        {
+            throw new ArgumentException(
+                "GeeTest V4 没有返回完整的验证结果。",
+                nameof(payload));
+        }
+
+        using JsonDocument document = JsonDocument.Parse(payload);
+        JsonElement root = document.RootElement;
+        if (root.ValueKind != JsonValueKind.Object)
+        {
+            throw new FormatException("GeeTest V4 返回的验证结果不是对象。");
+        }
+
+        foreach (string name in (string[])
+                 ["lot_number", "captcha_output", "pass_token", "gen_time"])
+        {
+            if (string.IsNullOrWhiteSpace(OptionalString(root, name)))
+            {
+                throw new FormatException(
+                    $"GeeTest V4 返回的验证结果缺少 {name}。");
+            }
+        }
+
+        return payload;
     }
 
     public async Task<PassportAccountVerificationChallenge> PrepareAccountVerificationAsync(
@@ -956,10 +998,27 @@ public sealed class MiHoYoPassportClient : IDisposable
             string data = RequiredString(session, "data");
             using JsonDocument verificationDocument = JsonDocument.Parse(data);
             JsonElement verification = verificationDocument.RootElement;
+            string? gt = OptionalString(verification, "gt");
+            string? challenge = OptionalString(verification, "challenge");
+            string? captchaId = OptionalString(verification, "captcha_id");
+            // A V4 challenge can carry the CAPTCHA id in `gt` and omit the V3
+            // challenge string, so the version follows the effective id.
+            captchaId ??= string.IsNullOrWhiteSpace(challenge) ? gt : null;
+            if (captchaId is null &&
+                (string.IsNullOrWhiteSpace(gt) || string.IsNullOrWhiteSpace(challenge)))
+            {
+                throw new FormatException(
+                    "GeeTest 挑战既没有 captcha_id 也没有 gt/challenge。");
+            }
+
             return new PassportGeetestChallenge(
                 state,
-                RequiredString(verification, "gt"),
-                RequiredString(verification, "challenge"));
+                gt ?? captchaId!,
+                challenge ?? string.Empty,
+                IsOversea: true,
+                CaptchaId: captchaId,
+                RiskType: OptionalString(verification, "risk_type"),
+                SessionId: sessionId);
         }
         catch (JsonException exception)
         {

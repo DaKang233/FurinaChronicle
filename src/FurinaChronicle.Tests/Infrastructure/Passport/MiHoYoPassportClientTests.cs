@@ -573,6 +573,98 @@ public sealed class MiHoYoPassportClientTests
         Assert.Contains(MiHoYoPassportClient.GetCookieTokenUrl, urls);
     }
 
+    [Fact]
+    public async Task OverseaPasswordLogin_ParsesVersion4ChallengeAndReplaysItsProof()
+    {
+        int calls = 0;
+        var handler = new StubHttpHandler(request =>
+        {
+            calls++;
+            if (calls == 1)
+            {
+                var response = JsonResponse(
+                    """{"retcode":-3101,"message":"Risk verification required","data":null}""");
+                response.Headers.TryAddWithoutValidation(
+                    "X-Rpc-Aigis",
+                    """
+                    {"session_id":"session-v4","mmt_type":1,"data":"{\"success\":1,\"gt\":\"captcha-id-1\",\"captcha_id\":\"captcha-id-1\",\"risk_type\":\"slide\"}"}
+                    """);
+                return Task.FromResult(response);
+            }
+
+            string aigis = Assert.Single(request.Headers.GetValues("x-rpc-aigis"));
+            string[] parts = aigis.Split(';', 2);
+            Assert.Equal("session-v4", parts[0]);
+            using JsonDocument proof = JsonDocument.Parse(
+                Convert.FromBase64String(parts[1]));
+            Assert.Equal(
+                "lot-1",
+                proof.RootElement.GetProperty("lot_number").GetString());
+            Assert.Equal(
+                "out-1",
+                proof.RootElement.GetProperty("captcha_output").GetString());
+            Assert.Equal(
+                "pass-1",
+                proof.RootElement.GetProperty("pass_token").GetString());
+            Assert.Equal(
+                "1700000000",
+                proof.RootElement.GetProperty("gen_time").GetString());
+            Assert.False(proof.RootElement.TryGetProperty(
+                "geetest_challenge",
+                out _));
+            return Task.FromResult(SuccessfulOverseaLoginResponse());
+        });
+        using var httpClient = new HttpClient(handler);
+        using var client = new MiHoYoPassportClient(httpClient);
+        var device = new PassportDeviceIdentity("oversea-device", null);
+
+        OverseaPasswordLoginAttempt first = await client.AttemptOverseaPasswordLoginAsync(
+            "traveler@example.com",
+            "secret-password",
+            device);
+
+        PassportGeetestChallenge challenge = first.GeetestChallenge!;
+        Assert.True(challenge.IsVersion4);
+        Assert.Equal("captcha-id-1", challenge.CaptchaId);
+        Assert.Equal("slide", challenge.RiskType);
+        Assert.Equal("session-v4", challenge.SessionId);
+
+        const string payload =
+            """{"lot_number":"lot-1","captcha_output":"out-1","pass_token":"pass-1","gen_time":"1700000000"}""";
+        string aigis = client.CompleteGeetestChallenge(
+            challenge,
+            new PassportGeetestResult(string.Empty, string.Empty, Payload: payload));
+
+        OverseaPasswordLoginAttempt second = await client.AttemptOverseaPasswordLoginAsync(
+            "traveler@example.com",
+            "secret-password",
+            device,
+            aigis);
+
+        Assert.True(second.IsSuccess);
+        Assert.Equal(2, calls);
+    }
+
+    [Fact]
+    public async Task CompleteGeetestChallenge_RejectsIncompleteVersion4Proof()
+    {
+        var challenge = new PassportGeetestChallenge(
+            """{"session_id":"session-v4","data":"{}"}""",
+            "captcha-id-1",
+            string.Empty,
+            CaptchaId: "captcha-id-1",
+            SessionId: "session-v4");
+        using var client = new MiHoYoPassportClient(new HttpClient(new StubHttpHandler(
+            _ => throw new InvalidOperationException("Unexpected network request."))));
+
+        Assert.Throws<FormatException>(() => client.CompleteGeetestChallenge(
+            challenge,
+            new PassportGeetestResult(
+                string.Empty,
+                string.Empty,
+                Payload: """{"lot_number":"lot-1"}""")));
+    }
+
     private static PassportAccount CreateMainlandAccount()
     {
         DateTimeOffset now = DateTimeOffset.UnixEpoch;

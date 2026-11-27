@@ -31,6 +31,27 @@ public sealed class WindowsPassportVerification(XamlRoot root) : IPassportSecuri
             if (!open || args.Source != "about:blank") return;
             try
             {
+                if (challenge.IsVersion4)
+                {
+                    string payload = args.WebMessageAsJson;
+                    using JsonDocument proof = JsonDocument.Parse(payload);
+                    if (proof.RootElement.ValueKind != JsonValueKind.Object ||
+                        !HasText(proof.RootElement, "lot_number") ||
+                        !HasText(proof.RootElement, "captcha_output") ||
+                        !HasText(proof.RootElement, "pass_token") ||
+                        !HasText(proof.RootElement, "gen_time"))
+                    {
+                        return;
+                    }
+
+                    result = new PassportGeetestResult(
+                        string.Empty,
+                        string.Empty,
+                        Payload: payload);
+                    dialog.Hide();
+                    return;
+                }
+
                 using JsonDocument message = JsonDocument.Parse(args.WebMessageAsJson);
                 var value = message.RootElement;
                 string? proofChallenge = value.GetProperty("geetest_challenge").GetString();
@@ -99,6 +120,11 @@ public sealed class WindowsPassportVerification(XamlRoot root) : IPassportSecuri
 
     private static string BuildHtml(PassportGeetestChallenge challenge)
     {
+        if (challenge.IsVersion4)
+        {
+            return BuildVersion4Html(challenge);
+        }
+
         string gt = JsonSerializer.Serialize(challenge.Gt);
         string value = JsonSerializer.Serialize(challenge.Challenge);
         string server = challenge.IsOversea ? "api-na.geetest.com" : "api.geetest.com";
@@ -123,4 +149,40 @@ public sealed class WindowsPassportVerification(XamlRoot root) : IPassportSecuri
             </script></html>
             """;
     }
+
+    private static string BuildVersion4Html(PassportGeetestChallenge challenge)
+    {
+        string captchaId = JsonSerializer.Serialize(challenge.CaptchaId);
+        string riskType = JsonSerializer.Serialize(challenge.RiskType);
+        string sessionId = JsonSerializer.Serialize(challenge.SessionId);
+        return $$"""
+            <!doctype html>
+            <html lang="zh-CN"><meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <script src="https://static.geetest.com/v4/gt4.js"></script>
+            <div id="geetest"></div>
+            <script>
+            initGeetest4({
+                captchaId: {{captchaId}},
+                riskType: {{riskType}} || undefined,
+                userInfo: JSON.stringify({ session_id: {{sessionId}} }),
+                protocol: 'https://',
+                https: true,
+                product: 'bind'
+            }, function (captcha) {
+                captcha.appendTo('#geetest');
+                captcha.onReady(function () { captcha.showCaptcha(); });
+                captcha.onSuccess(function () {
+                    const proof = captcha.getValidate();
+                    if (proof) window.chrome.webview.postMessage(proof);
+                });
+            });
+            </script></html>
+            """;
+    }
+
+    private static bool HasText(JsonElement element, string name) =>
+        element.TryGetProperty(name, out JsonElement value) &&
+        value.ValueKind == JsonValueKind.String &&
+        !string.IsNullOrWhiteSpace(value.GetString());
 }

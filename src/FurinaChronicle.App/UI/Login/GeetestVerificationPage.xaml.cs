@@ -11,12 +11,14 @@ public partial class GeetestVerificationPage : ContentPage
     private const string CallbackScheme = "furinachronicle-geetest";
     private readonly TaskCompletionSource<PassportGeetestResult?> completion =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly bool isVersion4;
     private int isCompleted;
 
     public GeetestVerificationPage(PassportGeetestChallenge challenge)
     {
         ArgumentNullException.ThrowIfNull(challenge);
         InitializeComponent();
+        isVersion4 = challenge.IsVersion4;
         VerificationPromptLabel.Text = challenge.IsOversea
             ? "请完成 HoYoLAB 安全验证"
             : "请完成米游社安全验证";
@@ -64,6 +66,22 @@ public partial class GeetestVerificationPage : ContentPage
                 throw new FormatException();
             }
             IReadOnlyDictionary<string, string> query = ParseQuery(uri.Query);
+            if (isVersion4)
+            {
+                if (!query.TryGetValue("payload", out string? payload) ||
+                    string.IsNullOrWhiteSpace(payload) ||
+                    !IsVersion4Proof(payload))
+                {
+                    throw new FormatException("GeeTest 没有返回完整验证结果。");
+                }
+
+                _ = CompleteAsync(new PassportGeetestResult(
+                    string.Empty,
+                    string.Empty,
+                    Payload: payload));
+                return;
+            }
+
             if (!query.TryGetValue("challenge", out string? challenge) ||
                 !query.TryGetValue("validate", out string? validate) ||
                 !query.TryGetValue("seccode", out string? seccode) ||
@@ -105,6 +123,11 @@ public partial class GeetestVerificationPage : ContentPage
 
     private static string CreateHtml(PassportGeetestChallenge challenge)
     {
+        if (challenge.IsVersion4)
+        {
+            return CreateVersion4Html(challenge);
+        }
+
         string gt = JsonSerializer.Serialize(challenge.Gt);
         string initialChallenge = JsonSerializer.Serialize(challenge.Challenge);
         string apiServer = JsonSerializer.Serialize(
@@ -148,6 +171,72 @@ public partial class GeetestVerificationPage : ContentPage
             </html>
             """;
     }
+
+    private static string CreateVersion4Html(PassportGeetestChallenge challenge)
+    {
+        string captchaId = JsonSerializer.Serialize(challenge.CaptchaId);
+        string riskType = JsonSerializer.Serialize(challenge.RiskType);
+        string sessionId = JsonSerializer.Serialize(challenge.SessionId);
+        return $$"""
+            <!doctype html>
+            <html>
+            <head>
+                <meta charset="utf-8">
+                <meta name="viewport" content="width=device-width,initial-scale=1">
+                <style>
+                    html,body,#geetest { height:100%; margin:0; }
+                    body { display:flex; align-items:center; justify-content:center; background:transparent; }
+                </style>
+                <script src="https://static.geetest.com/v4/gt4.js"></script>
+            </head>
+            <body>
+                <div id="geetest"></div>
+                <script>
+                    initGeetest4({
+                        captchaId: {{captchaId}},
+                        riskType: {{riskType}} || undefined,
+                        userInfo: JSON.stringify({ session_id: {{sessionId}} }),
+                        protocol: 'https://',
+                        https: true,
+                        product: 'bind'
+                    }, function (captcha) {
+                        captcha.appendTo('#geetest');
+                        captcha.onReady(function () { captcha.showCaptcha(); });
+                        captcha.onSuccess(function () {
+                            var result = captcha.getValidate();
+                            if (!result) return;
+                            location.href = 'furinachronicle-geetest://complete?payload=' +
+                                encodeURIComponent(JSON.stringify(result));
+                        });
+                    });
+                </script>
+            </body>
+            </html>
+            """;
+    }
+
+    private static bool IsVersion4Proof(string payload)
+    {
+        try
+        {
+            using JsonDocument document = JsonDocument.Parse(payload);
+            JsonElement root = document.RootElement;
+            return root.ValueKind == JsonValueKind.Object &&
+                HasText(root, "lot_number") &&
+                HasText(root, "captcha_output") &&
+                HasText(root, "pass_token") &&
+                HasText(root, "gen_time");
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static bool HasText(JsonElement element, string name) =>
+        element.TryGetProperty(name, out JsonElement value) &&
+        value.ValueKind == JsonValueKind.String &&
+        !string.IsNullOrWhiteSpace(value.GetString());
 
     private static IReadOnlyDictionary<string, string> ParseQuery(string query)
     {

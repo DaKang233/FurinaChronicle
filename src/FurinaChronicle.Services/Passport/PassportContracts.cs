@@ -14,16 +14,33 @@ public sealed record PassportLoginTokens(
     string? DisplayName = null,
     string? DeviceFingerprint = null);
 
+/// <summary>
+/// A GeeTest challenge. Version 4 is identified by <see cref="CaptchaId"/>:
+/// it drops the V3 <c>challenge</c> string and answers with a different proof
+/// object (see <see cref="PassportGeetestResult.Payload"/>).
+/// </summary>
 public sealed record PassportGeetestChallenge(
     string State,
     string Gt,
     string Challenge,
-    bool IsOversea = true);
+    bool IsOversea = true,
+    string? CaptchaId = null,
+    string? RiskType = null,
+    string? SessionId = null)
+{
+    public bool IsVersion4 => !string.IsNullOrWhiteSpace(CaptchaId);
+}
 
+/// <summary>
+/// The answer to show the passport service. V3 fills
+/// <see cref="Challenge"/>/<see cref="Validate"/>/<see cref="Seccode"/>; V4
+/// returns the SDK proof object verbatim through <see cref="Payload"/>.
+/// </summary>
 public sealed record PassportGeetestResult(
     string Challenge,
     string Validate,
-    string? Seccode = null);
+    string? Seccode = null,
+    string? Payload = null);
 
 public sealed record PassportAccountVerificationChallenge(
     string State,
