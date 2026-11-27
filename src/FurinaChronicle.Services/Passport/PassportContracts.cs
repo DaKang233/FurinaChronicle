@@ -64,6 +64,20 @@ public sealed record PassportDerivedTokens(
 
 public sealed record PassportSessionVerification(string? RefreshedSToken);
 
+/// <summary>
+/// The service refused a token exchange. It is separate from a transport
+/// failure so the caller can record the provider code without exposing any
+/// credential material.
+/// </summary>
+public sealed class PassportTokenExchangeException(string operation, int providerCode)
+    : InvalidOperationException(
+        $"MiHoYo passport {operation} exchange failed ({providerCode}).")
+{
+    public string Operation { get; } = operation;
+
+    public int ProviderCode { get; } = providerCode;
+}
+
 public sealed record MobileCaptchaChallenge(
     string ActionType,
     string? Aigis,

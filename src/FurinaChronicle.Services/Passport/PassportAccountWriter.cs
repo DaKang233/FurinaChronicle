@@ -99,6 +99,14 @@ public sealed class PassportAccountWriter(
             {
                 throw;
             }
+            catch (PassportTokenExchangeException exception)
+            {
+                // A refused exchange must not fail the login, but it explains a
+                // later -100 from every derived-token endpoint, so the provider
+                // code is recorded without any credential material.
+                System.Diagnostics.Debug.WriteLine(
+                    $"Passport derived token exchange refused ({exception.Operation}/{exception.ProviderCode}) for realm {realm}; retained the root SToken.");
+            }
             catch
             {
                 // Persist the root SToken first; credential maintenance can

@@ -35,16 +35,22 @@ public sealed class MiHoYoPassportClient : IDisposable
         "https://passport-api.mihoyo.com/account/auth/api/getLTokenBySToken";
     public const string GetCookieTokenUrl =
         "https://passport-api.mihoyo.com/account/auth/api/getCookieAccountInfoBySToken";
+    public const string ExchangeTokenUrl =
+        "https://passport-api.mihoyo.com/account/ma-cn-session/app/exchange";
     public const string VerifySessionUrl =
         "https://passport-api.mihoyo.com/account/ma-cn-session/app/verify";
 
     private const string PassportAppId = "bll8iq97cem8";
     private const string SessionAppId = "ddxf5dufpuyo";
-    private const string AppVersion = "2.95.1";
-    private const string OverseaAppVersion = "2.54.0";
+    private const string AppVersion = "2.119.0";
+    private const string OverseaAppVersion = "4.20.0";
+    private const string PassportSdkVersion = "2.44.0";
+    private const string PassportAndroidVersion = "12";
     private readonly HttpClient httpClient;
     private readonly bool ownsHttpClient;
     private readonly string overseaVerifierDeviceId = Guid.NewGuid().ToString("D");
+    // The passport endpoints bind a request sequence to one process lifecycle.
+    private readonly string passportLifecycleId = Guid.NewGuid().ToString("D");
 
     public MiHoYoPassportClient(HttpClient? httpClient = null)
     {
@@ -158,7 +164,8 @@ public sealed class MiHoYoPassportClient : IDisposable
             device,
             aigis,
             useSessionApp: false,
-            cancellationToken);
+            cancellationToken,
+            referer: "https://user.miyoushe.com/");
         using JsonDocument document = await ReadSuccessAsync(response, cancellationToken);
         string? returnedAigis = response.Headers.TryGetValues(
             "X-Rpc-Aigis",
@@ -314,15 +321,20 @@ public sealed class MiHoYoPassportClient : IDisposable
         ArgumentNullException.ThrowIfNull(result);
         ArgumentException.ThrowIfNullOrWhiteSpace(result.Challenge);
         ArgumentException.ThrowIfNullOrWhiteSpace(result.Validate);
-        using JsonDocument state = JsonDocument.Parse(challenge.State);
-        string sessionId = RequiredString(state.RootElement, "session_id");
-        byte[] proof = JsonSerializer.SerializeToUtf8Bytes(new
+        string sessionId = ParseSessionId(challenge.State);
+        string proof = JsonSerializer.Serialize(new
         {
             geetest_challenge = result.Challenge,
             geetest_validate = result.Validate,
             geetest_seccode = result.Seccode ?? $"{result.Validate}|jordan"
         });
-        return $"{sessionId};{Convert.ToBase64String(proof)}";
+        return $"{sessionId};{Convert.ToBase64String(Encoding.UTF8.GetBytes(proof))}";
+    }
+
+    private static string ParseSessionId(string state)
+    {
+        using JsonDocument session = JsonDocument.Parse(state);
+        return RequiredString(session.RootElement, "session_id");
     }
 
     public async Task<PassportAccountVerificationChallenge> PrepareAccountVerificationAsync(
@@ -427,6 +439,19 @@ public sealed class MiHoYoPassportClient : IDisposable
                 overseaCookieToken);
         }
 
+        // Passport v2 first: the current session service issues derived tokens
+        // through the exchange endpoint and reports a refused session as -100.
+        PassportDerivedTokens? exchanged = await TryExchangeTokensAsync(
+            account,
+            cancellationToken);
+        if (exchanged is { } derived)
+        {
+            return derived;
+        }
+
+        // Legacy fallback: the v1 endpoints still answer for a session whose
+        // cookie is already accepted, and they are the only path left if the
+        // exchange refuses this process profile.
         string cookie = $"mid={mid};stoken={sToken};stuid={account.Aid}";
 
         string? lToken = await GetTokenAsync(
@@ -442,6 +467,124 @@ public sealed class MiHoYoPassportClient : IDisposable
             account.Device,
             cancellationToken);
         return new PassportDerivedTokens(lToken, cookieToken);
+    }
+
+    /// <summary>
+    /// Exchanges the root SToken for one derived token. The signed body must be
+    /// byte-identical to the body that is sent, so a single serialized string
+    /// feeds both the request and the signature.
+    /// </summary>
+    private async Task<string?> ExchangeTokenAsync(
+        PassportAccount account,
+        int destinationTokenType,
+        CancellationToken cancellationToken)
+    {
+        string body = JsonSerializer.Serialize(new
+        {
+            dst_token_type = destinationTokenType,
+            src_token = new
+            {
+                token = account.Credentials.SToken,
+                token_type = 1,
+            },
+            mid = account.Mid,
+        });
+        using var request = new HttpRequestMessage(HttpMethod.Post, ExchangeTokenUrl)
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/json")
+        };
+        request.Headers.TryAddWithoutValidation(
+            "User-Agent",
+            $"Mozilla/5.0 (Linux; Android {PassportAndroidVersion}) Mobile miHoYoBBS/{AppVersion}");
+        request.Headers.TryAddWithoutValidation("Accept", "application/json");
+        request.Headers.TryAddWithoutValidation("x-rpc-app_id", PassportAppId);
+        request.Headers.TryAddWithoutValidation("x-rpc-app_version", AppVersion);
+        request.Headers.TryAddWithoutValidation("x-rpc-client_type", "2");
+        request.Headers.TryAddWithoutValidation(
+            "x-rpc-device_id",
+            account.Device.DeviceId);
+        request.Headers.TryAddWithoutValidation(
+            "x-rpc-sdk_version",
+            PassportSdkVersion);
+        request.Headers.TryAddWithoutValidation(
+            "x-rpc-account_version",
+            PassportSdkVersion);
+        request.Headers.TryAddWithoutValidation(
+            "x-rpc-sys_version",
+            PassportAndroidVersion);
+        request.Headers.TryAddWithoutValidation(
+            "x-rpc-lifecycle_id",
+            passportLifecycleId);
+        if (!string.IsNullOrWhiteSpace(account.Device.DeviceFingerprint))
+        {
+            request.Headers.TryAddWithoutValidation(
+                "x-rpc-device_fp",
+                Uri.EscapeDataString(account.Device.DeviceFingerprint));
+        }
+
+        request.Headers.TryAddWithoutValidation(
+            "DS",
+            MiHoYoRequestSigning.CreateDsGen2(
+                MiHoYoRequestSigning.PassportSalt,
+                body));
+        using HttpResponseMessage response = await httpClient.SendAsync(
+            request,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken);
+        using JsonDocument document = await ReadResponseAsync(
+            response,
+            cancellationToken);
+        JsonElement root = document.RootElement;
+        int retcode = root.TryGetProperty("retcode", out JsonElement code) &&
+            code.ValueKind == JsonValueKind.Number
+            ? code.GetInt32()
+            : -1;
+        if (retcode != 0)
+        {
+            throw new PassportTokenExchangeException("derived token", retcode);
+        }
+
+        if (!root.TryGetProperty("data", out JsonElement data) ||
+            data.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        if (data.TryGetProperty("token", out JsonElement tokenElement) &&
+            tokenElement.ValueKind == JsonValueKind.Object)
+        {
+            return OptionalString(tokenElement, "token");
+        }
+
+        return OptionalString(
+            data,
+            destinationTokenType == 2 ? "ltoken" : "cookie_token");
+    }
+
+    private async Task<PassportDerivedTokens?> TryExchangeTokensAsync(
+        PassportAccount account,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            string? lToken = await ExchangeTokenAsync(
+                account,
+                destinationTokenType: 2,
+                cancellationToken);
+            string? cookieToken = await ExchangeTokenAsync(
+                account,
+                destinationTokenType: 4,
+                cancellationToken);
+            return lToken is null && cookieToken is null
+                ? null
+                : new PassportDerivedTokens(lToken, cookieToken);
+        }
+        catch (PassportTokenExchangeException)
+        {
+            // The legacy path below still gets a chance; the caller records the
+            // failure through the typed exception only when both paths fail.
+            return null;
+        }
     }
 
     private async Task<string?> GetOverseaTokenAsync(
@@ -550,14 +693,15 @@ public sealed class MiHoYoPassportClient : IDisposable
         PassportDeviceIdentity device,
         string? aigis,
         bool useSessionApp,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? referer = null)
     {
         string body = JsonSerializer.Serialize(payload);
         using var request = new HttpRequestMessage(HttpMethod.Post, url)
         {
             Content = new StringContent(body, Encoding.UTF8, "application/json")
         };
-        ApplyPassportHeaders(request, body, device, aigis, useSessionApp);
+        ApplyPassportHeaders(request, body, device, aigis, useSessionApp, referer);
         try
         {
             return await httpClient.SendAsync(
@@ -576,11 +720,18 @@ public sealed class MiHoYoPassportClient : IDisposable
         string body,
         PassportDeviceIdentity device,
         string? aigis,
-        bool useSessionApp = false)
+        bool useSessionApp = false,
+        string? referer = null)
     {
+        // The QR endpoints belong to the HoyoPlay session app; everything else
+        // speaks the passport app, which now reports its own SDK version and a
+        // mobile profile.
+        bool passportApp = !useSessionApp;
         request.Headers.TryAddWithoutValidation(
             "User-Agent",
-            $"Mozilla/5.0 (Windows NT 10.0; Win64; x64) miHoYoBBS/{AppVersion}");
+            passportApp
+                ? $"Mozilla/5.0 (Linux; Android {PassportAndroidVersion}) Mobile miHoYoBBS/{AppVersion}"
+                : $"Mozilla/5.0 (Windows NT 10.0; Win64; x64) miHoYoBBS/{AppVersion}");
         request.Headers.TryAddWithoutValidation("Accept", "application/json");
         request.Headers.TryAddWithoutValidation("Accept-Language", "zh-cn");
         request.Headers.TryAddWithoutValidation("x-rpc-aigis", aigis ?? string.Empty);
@@ -594,7 +745,24 @@ public sealed class MiHoYoPassportClient : IDisposable
         request.Headers.TryAddWithoutValidation("x-rpc-device_id", device.DeviceId);
         request.Headers.TryAddWithoutValidation("x-rpc-device_name", string.Empty);
         request.Headers.TryAddWithoutValidation("x-rpc-game_biz", "bbs_cn");
-        request.Headers.TryAddWithoutValidation("x-rpc-sdk_version", "2.16.0");
+        request.Headers.TryAddWithoutValidation(
+            "x-rpc-sdk_version",
+            passportApp ? PassportSdkVersion : "2.16.0");
+        if (passportApp)
+        {
+            request.Headers.TryAddWithoutValidation(
+                "x-rpc-account_version",
+                PassportSdkVersion);
+            request.Headers.TryAddWithoutValidation(
+                "x-rpc-sys_version",
+                PassportAndroidVersion);
+        }
+
+        if (referer is not null)
+        {
+            request.Headers.Referrer = new Uri(referer);
+        }
+
         request.Headers.TryAddWithoutValidation(
             "DS",
             MiHoYoRequestSigning.CreateDsGen2(
@@ -784,6 +952,7 @@ public sealed class MiHoYoPassportClient : IDisposable
         {
             using JsonDocument sessionDocument = JsonDocument.Parse(state);
             JsonElement session = sessionDocument.RootElement;
+            string sessionId = RequiredString(session, "session_id");
             string data = RequiredString(session, "data");
             using JsonDocument verificationDocument = JsonDocument.Parse(data);
             JsonElement verification = verificationDocument.RootElement;

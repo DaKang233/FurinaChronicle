@@ -492,6 +492,102 @@ public sealed class MiHoYoPassportClientTests
         Assert.Contains("不支持的账号验证方式", exception.Message);
     }
 
+    [Fact]
+    public async Task GetDerivedTokens_UsesThePassportV2Exchange()
+    {
+        var bodies = new List<string>();
+        using var httpClient = new HttpClient(new StubHttpHandler(async request =>
+        {
+            string body = await request.Content!.ReadAsStringAsync();
+            bodies.Add(body);
+            Assert.Equal(
+                MiHoYoPassportClient.ExchangeTokenUrl,
+                request.RequestUri!.AbsoluteUri);
+            Assert.Equal(
+                "bll8iq97cem8",
+                request.Headers.GetValues("x-rpc-app_id").Single());
+            Assert.Equal(
+                "2.44.0",
+                request.Headers.GetValues("x-rpc-sdk_version").Single());
+            Assert.Equal(
+                "2.44.0",
+                request.Headers.GetValues("x-rpc-account_version").Single());
+            Assert.Single(request.Headers.GetValues("x-rpc-lifecycle_id"));
+            Assert.Single(request.Headers.GetValues("DS"));
+            using JsonDocument payload = JsonDocument.Parse(body);
+            JsonElement root = payload.RootElement;
+            Assert.Equal(
+                1,
+                root.GetProperty("src_token").GetProperty("token_type").GetInt32());
+            Assert.Equal(
+                "root-token",
+                root.GetProperty("src_token").GetProperty("token").GetString());
+            Assert.Equal("mid-1", root.GetProperty("mid").GetString());
+            int destination = root.GetProperty("dst_token_type").GetInt32();
+            return JsonResponse(destination == 2
+                ? """{"retcode":0,"message":"OK","data":{"token":{"token":"derived-ltoken","token_type":2}}}"""
+                : """{"retcode":0,"message":"OK","data":{"token":{"token":"derived-cookie","token_type":4}}}""");
+        }));
+        using var client = new MiHoYoPassportClient(httpClient);
+
+        PassportDerivedTokens derived =
+            await client.GetDerivedTokensAsync(CreateMainlandAccount());
+
+        Assert.Equal("derived-ltoken", derived.LToken);
+        Assert.Equal("derived-cookie", derived.CookieToken);
+        Assert.Equal(2, bodies.Count);
+        Assert.Contains("\"dst_token_type\":2", bodies[0], StringComparison.Ordinal);
+        Assert.Contains("\"dst_token_type\":4", bodies[1], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GetDerivedTokens_FallsBackToLegacyEndpointsWhenExchangeIsRefused()
+    {
+        var urls = new List<string>();
+        using var httpClient = new HttpClient(new StubHttpHandler(request =>
+        {
+            string url = request.RequestUri!.AbsoluteUri;
+            urls.Add(url);
+            if (url == MiHoYoPassportClient.ExchangeTokenUrl)
+            {
+                return Task.FromResult(JsonResponse(
+                    """{"retcode":-100,"message":"登录状态失效，请重新登录"}"""));
+            }
+
+            return Task.FromResult(JsonResponse(
+                url == MiHoYoPassportClient.GetLTokenUrl
+                    ? """{"retcode":0,"data":{"ltoken":"legacy-ltoken"}}"""
+                    : """{"retcode":0,"data":{"cookie_token":"legacy-cookie"}}"""));
+        }));
+        using var client = new MiHoYoPassportClient(httpClient);
+
+        PassportDerivedTokens derived =
+            await client.GetDerivedTokensAsync(CreateMainlandAccount());
+
+        Assert.Equal("legacy-ltoken", derived.LToken);
+        Assert.Equal("legacy-cookie", derived.CookieToken);
+        // One refused exchange, then the two legacy token endpoints.
+        Assert.Equal(3, urls.Count);
+        Assert.Contains(MiHoYoPassportClient.ExchangeTokenUrl, urls);
+        Assert.Contains(MiHoYoPassportClient.GetLTokenUrl, urls);
+        Assert.Contains(MiHoYoPassportClient.GetCookieTokenUrl, urls);
+    }
+
+    private static PassportAccount CreateMainlandAccount()
+    {
+        DateTimeOffset now = DateTimeOffset.UnixEpoch;
+        return new PassportAccount(
+            Guid.NewGuid(),
+            "12345",
+            "mid-1",
+            null,
+            PassportLoginMethod.QrCode,
+            new PassportCredentials("root-token", null, null, now, null, null, now),
+            new PassportDeviceIdentity("device-1", null),
+            now,
+            now);
+    }
+
     private static HttpResponseMessage SuccessfulOverseaLoginResponse()
     {
         return JsonResponse(
