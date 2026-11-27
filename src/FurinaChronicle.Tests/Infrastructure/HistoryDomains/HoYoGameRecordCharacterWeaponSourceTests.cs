@@ -186,6 +186,11 @@ public sealed class HoYoGameRecordCharacterWeaponSourceTests
             if (path.EndsWith("/character/list", StringComparison.Ordinal)) return Json(RosterBody);
             Assert.Equal("api-takumi.mihoyo.com", request.RequestUri.Host);
             Assert.EndsWith("/sync/avatar/list", path, StringComparison.Ordinal);
+            Assert.Equal("fixture-device", Assert.Single(request.Headers.GetValues("x-rpc-device_id")));
+            Assert.Equal("fixture-fingerprint", Assert.Single(request.Headers.GetValues("x-rpc-device_fp")));
+            Assert.Contains("Mozilla/5.0", request.Headers.UserAgent.ToString(), StringComparison.Ordinal);
+            Assert.Contains(request.Headers.Accept, item => item.MediaType == "application/json");
+            Assert.Equal("https://webstatic.mihoyo.com/", request.Headers.Referrer?.AbsoluteUri);
             return Json("""{"retcode":0,"data":{"total":1,"list":[{"id":10000093,"promote_level":6,"level_current":90,"max_level":90}]}}""");
         }));
         using var source = new HoYoGameRecordCharacterWeaponSource(TimeProvider.System, client);

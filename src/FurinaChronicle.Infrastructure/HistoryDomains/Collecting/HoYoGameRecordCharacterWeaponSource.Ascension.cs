@@ -49,6 +49,12 @@ public sealed partial class HoYoGameRecordCharacterWeaponSource
                         element_attr_ids = Array.Empty<int>(), weapon_cat_ids = Array.Empty<int>(),
                     }),
                 };
+                request.Headers.UserAgent.ParseAdd(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36");
+                request.Headers.Accept.ParseAdd("application/json");
+                request.Headers.Add("x-rpc-device_id", passport.Device.DeviceId);
+                if (passport.Device.DeviceFingerprint is { } fingerprint && IsHeaderToken(fingerprint))
+                    request.Headers.Add("x-rpc-device_fp", fingerprint);
                 request.Headers.Referrer = new Uri("https://webstatic.mihoyo.com/");
                 request.Headers.Add(
                     "Cookie",
