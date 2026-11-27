@@ -77,22 +77,105 @@ public sealed class MiHoYoAccountProfileClientTests
     }
 
     [Fact]
-    public async Task GetGameRolesAsync_OnlyRequestsBindingAndRetainsNumericRejection()
+    public async Task GetGameRolesAsync_FallsBackToCookieRolesAndKeepsNumericRejection()
     {
-        int requestCount = 0;
+        var requested = new List<string>();
         using var httpClient = new HttpClient(new StubHttpHandler(request =>
         {
-            Assert.Equal(MiHoYoAccountProfileClient.GameRolesUrl, request.RequestUri!.AbsoluteUri);
-            return Task.FromResult(JsonResponse(++requestCount == 1
-                ? """{"retcode":0,"data":{"list":[{"game_uid":"100000001","region":"cn_gf01"}]}}"""
-                : """{"retcode":-100,"message":"untrusted server text"}"""));
+            requested.Add(request.RequestUri!.AbsoluteUri);
+            return Task.FromResult(JsonResponse(
+                """{"retcode":-100,"message":"untrusted server text"}"""));
         }));
         using var client = new MiHoYoAccountProfileClient(httpClient);
 
-        Assert.Equal("100000001", Assert.Single(await client.GetGameRolesAsync(CreateAccount())).Uid);
-        var error = await Assert.ThrowsAsync<PassportProfileRequestException>(() => client.GetGameRolesAsync(CreateAccount()));
+        var error = await Assert.ThrowsAsync<PassportProfileRequestException>(
+            () => client.GetGameRolesAsync(CreateAccount()));
+
         Assert.Equal(-100, error.ProviderCode);
         Assert.DoesNotContain("untrusted server text", error.Message);
+        Assert.Equal(
+            new[]
+            {
+                MiHoYoAccountProfileClient.GameRolesUrl,
+                MiHoYoAccountProfileClient.CookieGameRolesUrl,
+            },
+            requested);
+    }
+
+    [Fact]
+    public async Task GetGameRolesAsync_AcceptsCookieFallbackWhenSTokenEndpointRefused()
+    {
+        using var httpClient = new HttpClient(new StubHttpHandler(request =>
+        {
+            string url = request.RequestUri!.AbsoluteUri;
+            return Task.FromResult(JsonResponse(
+                url == MiHoYoAccountProfileClient.GameRolesUrl
+                    ? """{"retcode":-100,"message":"登录状态失效"}"""
+                    : """{"retcode":0,"data":{"list":[{"game_biz":"hk4e_cn","region":"cn_gf01","game_uid":"100000001","nickname":"旅行者","level":60}]}}"""));
+        }));
+        using var client = new MiHoYoAccountProfileClient(httpClient);
+
+        var roles = await client.GetGameRolesAsync(CreateAccount());
+
+        Assert.Equal("100000001", Assert.Single(roles).Uid);
+    }
+
+    [Fact]
+    public async Task GetGameRolesAsync_RequestsTheSTokenEndpointWithTheRootSession()
+    {
+        HttpRequestMessage? captured = null;
+        using var httpClient = new HttpClient(new StubHttpHandler(request =>
+        {
+            captured = request;
+            return Task.FromResult(JsonResponse(
+                """{"retcode":0,"data":{"list":[]}}"""));
+        }));
+        using var client = new MiHoYoAccountProfileClient(httpClient);
+
+        await client.GetGameRolesAsync(CreateAccount());
+
+        Assert.NotNull(captured);
+        Assert.Equal(
+            MiHoYoAccountProfileClient.GameRolesUrl,
+            captured!.RequestUri!.AbsoluteUri);
+        Assert.Equal(
+            "2",
+            Assert.Single(captured.Headers.GetValues("x-rpc-client_type")));
+        Assert.Equal(
+            "https://app.mihoyo.com/",
+            captured.Headers.Referrer!.AbsoluteUri);
+        string cookie = Assert.Single(captured.Headers.GetValues("Cookie"));
+        Assert.Contains("stoken=stoken-value", cookie);
+        Assert.Contains("stuid=12345", cookie);
+        Assert.DoesNotContain("ltoken", cookie);
+        Assert.Single(captured.Headers.GetValues("DS"));
+    }
+
+    [Fact]
+    public async Task GetAsync_KeepsRolesWhenTheProfileRequestIsRefused()
+    {
+        using var httpClient = new HttpClient(new StubHttpHandler(request =>
+        {
+            string url = request.RequestUri!.AbsoluteUri;
+            if (url.StartsWith(
+                MiHoYoAccountProfileClient.UserProfileUrl,
+                StringComparison.Ordinal))
+            {
+                return Task.FromResult(JsonResponse(
+                    """{"retcode":-100,"message":"登录失效，请重新登录"}"""));
+            }
+
+            return Task.FromResult(JsonResponse(
+                """{"retcode":0,"data":{"list":[{"game_biz":"hk4e_cn","region":"cn_gf01","game_uid":"100000001","nickname":"旅行者","level":60}]}}"""));
+        }));
+        using var client = new MiHoYoAccountProfileClient(httpClient);
+
+        var profile = await client.GetAsync(CreateAccount());
+
+        // The cosmetic half degrades; the role list still decides the sign-in.
+        Assert.Equal("米游社用户 12345", profile.DisplayName);
+        Assert.Null(profile.AvatarUrl);
+        Assert.Equal("100000001", Assert.Single(profile.Roles).Uid);
     }
 
     private static PassportAccount CreateAccount()
